@@ -1,0 +1,11 @@
+.env
+*.duckdb
+*.duckdb.wal
+__pycache__/
+*.pyc
+.venv/
+dist/
+.pytest_cache/
+playwright-report/
+test-results/
+screenshots/
