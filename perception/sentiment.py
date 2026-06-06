@@ -1,37 +1,30 @@
 from __future__ import annotations
 
-from openai import OpenAI
+import nltk
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
-from .config import settings
 from .models import SentimentLabel
 
-_client: OpenAI | None = None
+nltk.download("vader_lexicon", quiet=True)
+
+_analyzer: SentimentIntensityAnalyzer | None = None
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=settings.openai_api_key)
-    return _client
+def _get_analyzer() -> SentimentIntensityAnalyzer:
+    global _analyzer
+    if _analyzer is None:
+        _analyzer = SentimentIntensityAnalyzer()
+    return _analyzer
 
 
 def analyze(text: str) -> tuple[SentimentLabel, float]:
     """Return (label, score) where score is -1.0 (negative) to 1.0 (positive)."""
-    response = _get_client().chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a sentiment classifier for healthcare reviews. "
-                    "Respond with JSON only: {\"label\": \"positive\"|\"neutral\"|\"negative\", \"score\": <float -1.0 to 1.0>}"
-                ),
-            },
-            {"role": "user", "content": text},
-        ],
-        response_format={"type": "json_object"},
-        temperature=0,
-    )
-    import json
-    data = json.loads(response.choices[0].message.content)
-    return SentimentLabel(data["label"]), float(data["score"])
+    scores = _get_analyzer().polarity_scores(text)
+    compound = scores["compound"]
+    if compound >= 0.05:
+        label = SentimentLabel.positive
+    elif compound <= -0.05:
+        label = SentimentLabel.negative
+    else:
+        label = SentimentLabel.neutral
+    return label, compound
