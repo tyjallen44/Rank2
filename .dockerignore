@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.env
+build/
+dist/
+reports/
+*.duckdb
+.DS_Store
+rank2.spec
+rank2.entitlements
+Rank2-mac.zip

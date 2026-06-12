@@ -36,6 +36,7 @@ class Entity(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     zip: Optional[str] = None
+    specialty: Optional[str] = None    # e.g. "Orthopedics" — triggers focused analysis when set
 
 
 class Review(BaseModel):
@@ -58,3 +59,28 @@ class EntitySummary(BaseModel):
     positive_pct: Optional[float] = None
     negative_pct: Optional[float] = None
     as_of: Optional[date] = None
+
+
+class RankedProvider(BaseModel):
+    rank: int
+    name: str
+    overall_rating: str                    # e.g. "A" or "4.2/5 stars"
+    key_strengths: list[str] = Field(default_factory=list)
+    notable_weaknesses: list[str] = Field(default_factory=list)
+    best_suited_for: str = ""
+    recommendation_summary: str = ""
+
+
+class AnalysisResult(BaseModel):
+    """Structured result from a Claude-powered market analysis."""
+    run_id: str
+    location: str                          # e.g. "Mobile, Alabama"
+    specialty: Optional[str] = None        # None → broad hospital analysis
+    generated_at: date
+    top_recommendation: str = ""
+    practical_advice: list[str] = Field(default_factory=list)
+    disclaimer: str = ""
+    rankings: list[RankedProvider] = Field(default_factory=list)
+    report_markdown: str = ""              # full narrative report text
+    pdf_path: Optional[str] = None
+    md_path: Optional[str] = None

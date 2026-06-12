@@ -10,15 +10,34 @@ from .models import Entity, EntityType
 # Required columns and their accepted aliases (all matched case-insensitively)
 _COLUMN_ALIASES: dict[str, list[str]] = {
     "entity_type": ["entity_type", "type", "kind"],
-    "name":        ["name", "provider_name", "practice_name", "hospital_name", "doctor_name"],
+    "name":        ["name", "account_name", "provider_name", "practice_name", "hospital_name", "doctor_name"],
     "city":        ["city"],
     "state":       ["state", "st"],
+    "location":    ["main_location_city", "location", "city_state", "city,_state"],
     "zip":         ["zip", "zip_code", "postal_code"],
     "address":     ["address", "street", "street_address"],
     "npi":         ["npi", "npi_number"],
+    "specialty":   ["specialty", "speciality", "service_line"],
 }
 
-_REQUIRED = {"entity_type", "name", "city", "state"}
+# location is the only hard requirement (city+state or combined); everything else is optional
+_REQUIRED: set[str] = set()
+
+_STATE_ABBREVS: dict[str, str] = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+    "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+    "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
+    "wisconsin": "WI", "wyoming": "WY", "district of columbia": "DC",
+}
 
 
 def load(path: str | Path) -> list[Entity]:
@@ -40,20 +59,33 @@ def load(path: str | Path) -> list[Entity]:
 
     entities: list[Entity] = []
     for i, row in df.iterrows():
-        raw_type = _cell(row, col_map, "entity_type")
-        if not raw_type:
-            continue
-        try:
-            entity_type = EntityType(raw_type.lower().strip())
-        except ValueError:
-            raise ValueError(
-                f"Row {i + 2}: unknown entity_type '{raw_type}'. "
-                f"Must be one of: {', '.join(e.value for e in EntityType)}"
-            )
-
-        name = _cell(row, col_map, "name") or ""
         city = _cell(row, col_map, "city") or ""
         state = _cell(row, col_map, "state") or ""
+        if not city:
+            loc = _cell(row, col_map, "location") or ""
+            city, state = _parse_location(loc) if loc else (city, state)
+
+        if not city:
+            continue  # no location — skip
+
+        name = _cell(row, col_map, "name") or ""
+
+        raw_type = _cell(row, col_map, "entity_type")
+        specialty_val = _cell(row, col_map, "specialty")
+
+        if raw_type:
+            raw_type_lower = raw_type.lower().strip()
+            try:
+                entity_type = EntityType(raw_type_lower)
+            except ValueError:
+                # Unknown entity_type — treat it as a specialty indicator (e.g. "orthopedic")
+                if not specialty_val:
+                    specialty_val = raw_type.strip()
+                entity_type = EntityType("practice") if specialty_val else EntityType("hospital")
+        else:
+            entity_type = EntityType("doctor") if _cell(row, col_map, "npi") else (
+                EntityType("practice") if specialty_val else EntityType("hospital")
+            )
 
         entity_id = _make_id(entity_type.value, name, city, state)
 
@@ -66,6 +98,7 @@ def load(path: str | Path) -> list[Entity]:
             zip=_cell(row, col_map, "zip"),
             address=_cell(row, col_map, "address"),
             npi=_cell(row, col_map, "npi"),
+            specialty=specialty_val,
         ))
 
     return entities
@@ -76,8 +109,15 @@ def _resolve_columns(columns: list[str]) -> dict[str, str]:
     result: dict[str, str] = {}
     for field, aliases in _COLUMN_ALIASES.items():
         for alias in aliases:
+            # exact match first, then prefix match (handles "speciality_(blank_for_hospitals)" etc.)
             if alias in columns:
                 result[field] = alias
+                break
+            for col in columns:
+                if col.startswith(alias):
+                    result[field] = col
+                    break
+            if field in result:
                 break
     return result
 
@@ -89,6 +129,23 @@ def _check_required(col_map: dict[str, str]) -> None:
             f"Spreadsheet is missing required column(s): {', '.join(sorted(missing))}. "
             f"See entities_template.csv for the expected format."
         )
+    has_location = "location" in col_map or ("city" in col_map and "state" in col_map)
+    if not has_location:
+        raise ValueError(
+            "Spreadsheet must have either a 'Main Location City' column (e.g. 'Mobile, Alabama') "
+            "or separate 'city' and 'state' columns."
+        )
+
+
+def _parse_location(val: str) -> tuple[str, str]:
+    """Split 'City, State' into (city, state_abbrev). State can be full name or 2-letter code."""
+    parts = [p.strip() for p in val.split(",", 1)]
+    if len(parts) == 2:
+        city, state_raw = parts
+        state_key = state_raw.lower()
+        state = _STATE_ABBREVS.get(state_key, state_raw.upper())
+        return city, state
+    return val, ""
 
 
 def _cell(row: pd.Series, col_map: dict[str, str], field: str) -> str | None:

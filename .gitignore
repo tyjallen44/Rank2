@@ -9,3 +9,11 @@ dist/
 playwright-report/
 test-results/
 screenshots/
+reports/*.md
+reports/*.pdf
+build/
+dist/
+Rank2-mac/
+Rank2-mac.zip
+.DS_Store
+entities.csv

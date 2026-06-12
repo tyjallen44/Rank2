@@ -1,4 +1,4 @@
-entity_type,name,city,state,zip,address,npi
-hospital,Example General Hospital,Nashville,TN,37201,100 Main St,
-practice,Sunrise Family Medicine,Nashville,TN,37205,200 Oak Ave,
-doctor,Dr. Jane Smith,Nashville,TN,37205,200 Oak Ave,1234567890
+entity_type,name,city,state,zip,address,npi,specialty
+hospital,,Savannah,GA,,,,
+hospital,,Charlston,SC,,,,
+orthopeic,,Memphis,TN,,,,

@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rank2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* RLDatix brand palette */
+  --teal:      #0F4146;
+  --teal-mid:  #165258;
+  --seafoam:   #80F8E4;
+  --blue:      #73D2E1;
+  --blue-light:#DCF4F8;
+  --green:     #5ADCA0;
+  --pale:      #EEF7F1;
+
+  /* Layout roles */
+  --bg:        #F2F8F6;
+  --sidebar:   #0F4146;
+  --card:      #FFFFFF;
+  --card2:     #EEF7F1;
+  --border:    #C8E4DC;
+  --text:      #0F4146;
+  --muted:     #7a9095;
+  --accent:    #0F4146;
+  --accent-h:  #165258;
+  --seafoam-bg:rgba(128,248,228,0.18);
+  --red:       #C0392B;
+  --red-bg:    #FDF3F2;
+  --stream-bg: #0A2F34;
+  --r:         10px;
+  --sh:        0 2px 14px rgba(15,65,70,0.10);
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Login ───────────────────────────────────────────────────── */
+#login-screen {
+  height: 100vh; display: flex;
+  align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #0F4146 0%, #1a6068 100%);
+}
+.login-card {
+  width: 380px; background: #fff;
+  border-radius: 16px;
+  padding: 44px; box-shadow: 0 8px 40px rgba(0,0,0,0.22);
+}
+.login-logo { text-align: center; margin-bottom: 34px; }
+.wordmark {
+  font-family: 'Barlow Condensed', Impact, sans-serif;
+  font-size: 36px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--teal);
+}
+.wordmark span { color: var(--blue); }
+.login-logo .sub {
+  font-size: 11px; color: var(--muted); margin-top: 5px;
+  letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500;
+}
+/* accent bar under login wordmark */
+.login-logo .accent-line {
+  height: 3px; width: 48px; margin: 10px auto 0;
+  background: linear-gradient(to right, var(--seafoam), var(--blue), var(--green));
+  border-radius: 2px;
+}
+
+/* ── App shell ───────────────────────────────────────────────── */
+#app { display: none; height: 100vh; overflow: hidden; }
+#app.visible { display: flex; }
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+#sidebar {
+  width: 224px; min-width: 224px;
+  background: var(--sidebar);
+  display: flex; flex-direction: column;
+}
+.sb-logo {
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid rgba(128,248,228,0.15);
+}
+.sb-logo .wordmark {
+  font-family: 'Barlow Condensed', Impact, sans-serif;
+  font-size: 22px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: #fff;
+}
+.sb-logo .wordmark span { color: var(--seafoam); }
+.sb-logo .sub {
+  font-size: 10px; color: rgba(128,248,228,0.6); margin-top: 3px;
+  letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500;
+}
+/* gradient accent bar under sidebar logo */
+.sb-logo .accent-line {
+  height: 2px; width: 36px; margin-top: 10px;
+  background: linear-gradient(to right, var(--seafoam), var(--blue), var(--green));
+  border-radius: 2px;
+}
+.sb-nav { padding: 10px 10px; flex: 1; }
+.nav-btn {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 10px 12px; border: none; background: none;
+  border-radius: 8px; color: rgba(255,255,255,0.55); font: 500 14px 'Inter', sans-serif;
+  cursor: pointer; transition: all 0.15s; margin-bottom: 2px; text-align: left;
+}
+.nav-btn:hover  { background: rgba(255,255,255,0.08); color: #fff; }
+.nav-btn.active {
+  background: rgba(128,248,228,0.15);
+  color: var(--seafoam); font-weight: 600;
+  border-left: 3px solid var(--seafoam);
+  padding-left: 9px;
+}
+.nav-btn .ni { width: 20px; text-align: center; font-size: 15px; }
+
+/* ── Main ────────────────────────────────────────────────────── */
+#main { flex: 1; overflow-y: auto; background: var(--bg); }
+.page { display: none; padding: 36px; max-width: 920px; }
+.page.active { display: block; }
+.page-title {
+  font-family: 'Barlow Condensed', Impact, sans-serif;
+  font-size: 26px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--teal); margin-bottom: 4px;
+}
+.page-sub { font-size: 14px; color: var(--muted); margin-bottom: 26px; }
+
+/* ── Forms ───────────────────────────────────────────────────── */
+.fg { margin-bottom: 18px; }
+.fl {
+  display: block; font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--muted); margin-bottom: 7px;
+}
+.fi {
+  width: 100%; padding: 10px 14px;
+  background: #fff; border: 1.5px solid var(--border);
+  border-radius: 8px; color: var(--text); font: 15px 'Inter', sans-serif;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fi:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(115,210,225,0.18); }
+.fi::placeholder { color: #a8bfc2; }
+.fi-sm { padding: 8px 12px; font-size: 14px; }
+
+/* ── Toggle ──────────────────────────────────────────────────── */
+.tg-group {
+  display: flex; background: var(--pale);
+  border: 1.5px solid var(--border); border-radius: 8px; padding: 3px;
+}
+.tg-opt {
+  flex: 1; padding: 8px 12px; border: none; background: none;
+  color: var(--muted); font: 500 13px 'Inter', sans-serif;
+  border-radius: 6px; cursor: pointer; transition: all 0.15s;
+}
+.tg-opt.on {
+  background: var(--teal); color: #fff; font-weight: 600;
+  box-shadow: 0 1px 4px rgba(15,65,70,0.18);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  padding: 10px 20px; border-radius: 8px; border: none;
+  font: 600 14px 'Inter', sans-serif; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:active { opacity: 0.82; transform: scale(0.98); }
+.btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+.btn-primary  { background: var(--teal);    color: #fff; }
+.btn-primary:hover:not(:disabled)  { background: var(--teal-mid); }
+.btn-gold     { background: var(--seafoam); color: var(--teal); font-weight: 700; }
+.btn-gold:hover:not(:disabled) { opacity: 0.88; }
+.btn-secondary{ background: var(--card2);   color: var(--text); border: 1.5px solid var(--border); }
+.btn-secondary:hover:not(:disabled) { background: var(--blue-light); }
+.btn-ghost    { background: transparent;    color: var(--muted); border: 1.5px solid var(--border); }
+.btn-ghost:hover:not(:disabled) { color: var(--text); border-color: #9abfc4; }
+.btn-sm       { padding: 6px 13px; font-size: 13px; }
+.btn-full     { width: 100%; justify-content: center; }
+
+/* ── Cards ───────────────────────────────────────────────────── */
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px;
+  box-shadow: var(--sh);
+}
+.card + .card { margin-top: 14px; }
+
+/* ── Option cards ────────────────────────────────────────────── */
+.oc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+.oc {
+  background: var(--card); border: 2px solid var(--border);
+  border-radius: var(--r); padding: 24px 20px;
+  cursor: pointer; transition: all 0.15s; text-align: center;
+  box-shadow: var(--sh);
+}
+.oc:hover   { border-color: var(--blue); background: var(--blue-light); }
+.oc.on      { border-color: var(--teal); background: var(--pale); }
+.oc .oc-icon { font-size: 30px; margin-bottom: 10px; }
+.oc .oc-title { font-size: 15px; font-weight: 600; color: var(--teal); }
+.oc .oc-sub  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+/* ── Drop zone ───────────────────────────────────────────────── */
+.dz {
+  border: 2px dashed var(--border); border-radius: var(--r);
+  padding: 44px 20px; text-align: center; cursor: pointer;
+  transition: all 0.15s; background: #fff;
+}
+.dz:hover, .dz.over { border-color: var(--blue); background: var(--blue-light); }
+.dz .dz-icon { font-size: 34px; margin-bottom: 10px; }
+.dz .dz-text { color: var(--muted); font-size: 14px; }
+.dz .dz-hl   { color: var(--teal); font-weight: 600; cursor: pointer; }
+
+/* ── Table ───────────────────────────────────────────────────── */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th {
+  text-align: left; font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--muted); padding: 11px 16px;
+  border-bottom: 2px solid var(--pale);
+  background: #fafcfb;
+}
+.tbl td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: var(--blue-light); }
+.badge {
+  display: inline-block; padding: 2px 9px;
+  border-radius: 20px; font-size: 11px; font-weight: 700;
+}
+.bg-gold  { background: rgba(128,248,228,0.22); color: var(--teal); border: 1px solid rgba(128,248,228,0.6); }
+.bg-muted { background: var(--pale);            color: var(--muted); }
+.bg-green { background: rgba(90,220,160,0.15);  color: #1d6b4a; }
+
+/* ── Progress ────────────────────────────────────────────────── */
+.prog-layout { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
+.ph-list { list-style: none; }
+.ph-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 0; color: var(--muted); font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ph-item:last-child { border-bottom: none; }
+.ph-item.active { color: var(--teal); font-weight: 600; }
+.ph-item.done   { color: #1d6b4a; }
+.ph-dot {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid currentColor;
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+}
+.ph-item.active .ph-dot { background: var(--teal); border-color: var(--teal); animation: pulse 1.4s infinite; color: #fff; }
+.ph-item.done   .ph-dot { background: var(--green); border-color: var(--green); color: var(--teal); }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+.stream-box {
+  background: var(--stream-bg); border: 1px solid #1e4f58;
+  border-radius: var(--r); padding: 18px;
+  height: 420px; overflow-y: auto;
+  font: 12.5px/1.65 'SF Mono','Fira Code','Menlo','Consolas',monospace;
+  color: var(--seafoam); white-space: pre-wrap; word-break: break-word;
+}
+.stream-box::-webkit-scrollbar { width: 6px; }
+.stream-box::-webkit-scrollbar-track { background: transparent; }
+.stream-box::-webkit-scrollbar-thumb { background: #1e5560; border-radius: 3px; }
+
+/* ── Results ─────────────────────────────────────────────────── */
+.stat-row { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.stat-box {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 22px; text-align: center; min-width: 120px;
+  box-shadow: var(--sh);
+}
+.stat-val { font-family: 'Barlow Condensed', Impact, sans-serif; font-size: 34px; font-weight: 700; color: var(--teal); line-height: 1; }
+.stat-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.07em; }
+
+/* ── Misc ────────────────────────────────────────────────────── */
+.err { background: var(--red-bg); border: 1px solid #f5c6c2; color: var(--red); border-radius: 8px; padding: 11px 15px; font-size: 13px; }
+.empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty .ei { font-size: 40px; margin-bottom: 14px; }
+.spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.hidden { display: none !important; }
+.mt8 { margin-top: 8px; }
+.mt12 { margin-top: 12px; }
+.mt16 { margin-top: 16px; }
+.mt20 { margin-top: 20px; }
+.mt24 { margin-top: 24px; }
+.row-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<!-- ── Login ──────────────────────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="wordmark">Rank<span>2</span></div>
+      <div class="sub">Market Intelligence</div>
+      <div class="accent-line"></div>
+    </div>
+    <div id="login-err" class="err hidden mt12"></div>
+    <div class="fg">
+      <label class="fl">Password</label>
+      <input id="login-pw" class="fi" type="password" placeholder="Enter access password"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-primary btn-full mt8" id="login-btn" onclick="doLogin()">
+      Sign In
+    </button>
+  </div>
+</div>
+
+<!-- ── App ────────────────────────────────────────────────────────────────── -->
+<div id="app">
+  <nav id="sidebar">
+    <div class="sb-logo">
+      <div class="wordmark">Rank<span>2</span></div>
+      <div class="sub">Market Intelligence</div>
+      <div class="accent-line"></div>
+    </div>
+    <div class="sb-nav">
+      <button class="nav-btn active" id="nav-new" onclick="navigate('new')">
+        <span class="ni">✦</span> New Analysis
+      </button>
+      <button class="nav-btn" id="nav-history" onclick="navigate('history')">
+        <span class="ni">◷</span> History
+      </button>
+    </div>
+  </nav>
+
+  <div id="main">
+
+    <!-- ── New Analysis ─────────────────────────────────────────────────── -->
+    <div id="page-new" class="page active">
+      <div class="page-title">New Analysis</div>
+      <div class="page-sub">Generate a branded market intelligence report for a location.</div>
+
+      <div class="oc-grid">
+        <div class="oc on" id="oc-manual" onclick="setMode('manual')">
+          <div class="oc-icon">📍</div>
+          <div class="oc-title">Enter Location</div>
+          <div class="oc-sub">City, state, and analysis type</div>
+        </div>
+        <div class="oc" id="oc-csv" onclick="setMode('csv')">
+          <div class="oc-icon">📋</div>
+          <div class="oc-title">Upload Spreadsheet</div>
+          <div class="oc-sub">CSV or Excel with multiple locations</div>
+        </div>
+      </div>
+
+      <!-- Manual form -->
+      <div id="form-manual" class="card">
+        <div style="display:grid;grid-template-columns:1fr 120px;gap:14px">
+          <div class="fg" style="margin:0">
+            <label class="fl">City</label>
+            <input id="f-city" class="fi" type="text" placeholder="Salt Lake City"
+              onkeydown="if(event.key==='Enter')runManual()">
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fl">State</label>
+            <input id="f-state" class="fi" type="text" placeholder="UT" maxlength="2"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter')runManual()">
+          </div>
+        </div>
+        <div class="fg mt16" style="margin-bottom:0">
+          <label class="fl">Analysis Type</label>
+          <div class="tg-group">
+            <button class="tg-opt on" id="tg-hospital"  onclick="setType('hospital')">Hospital Market</button>
+            <button class="tg-opt"    id="tg-specialty" onclick="setType('specialty')">Specialty Practice</button>
+          </div>
+        </div>
+        <div id="specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
+          <label class="fl">Specialty</label>
+          <input id="f-specialty" class="fi" type="text"
+            placeholder="e.g. Orthopedics, Cardiology, Dermatology"
+            onkeydown="if(event.key==='Enter')runManual()">
+        </div>
+        <div id="manual-err" class="err hidden mt16"></div>
+        <div class="mt20">
+          <button class="btn btn-primary" id="run-manual-btn" onclick="runManual()">
+            Run Analysis →
+          </button>
+        </div>
+      </div>
+
+      <!-- CSV form -->
+      <div id="form-csv" class="hidden">
+        <div class="dz" id="dz"
+          onclick="document.getElementById('csv-file').click()"
+          ondragover="event.preventDefault();this.classList.add('over')"
+          ondragleave="this.classList.remove('over')"
+          ondrop="onDrop(event)">
+          <input id="csv-file" type="file" accept=".csv,.xlsx,.xls"
+            style="display:none" onchange="onFileSelect(this.files[0])">
+          <div class="dz-icon">📂</div>
+          <div class="dz-text">Drop your spreadsheet here, or
+            <span class="dz-hl">browse</span>
+          </div>
+          <div class="dz-text mt8" style="font-size:12px">CSV · XLSX · XLS</div>
+        </div>
+
+        <div id="csv-preview" class="hidden mt16">
+          <div class="card">
+            <div style="font-weight:600;margin-bottom:12px" id="csv-summary"></div>
+            <div style="overflow-x:auto">
+              <table class="tbl">
+                <thead><tr><th>City</th><th>State</th><th>Type</th></tr></thead>
+                <tbody id="csv-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="csv-err" class="err hidden mt12"></div>
+          <div class="row-actions mt16">
+            <button class="btn btn-primary" id="run-batch-btn" onclick="runBatch()">
+              Run All →
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="clearCsv()">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Progress ─────────────────────────────────────────────────────── -->
+    <div id="page-progress" class="page">
+      <div style="margin-bottom:22px">
+        <div style="font-size:20px;font-weight:700" id="prog-title">Analyzing…</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px" id="prog-sub"></div>
+      </div>
+
+      <div class="prog-layout">
+        <!-- Phase list -->
+        <div class="card" style="align-self:start">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:12px">
+            Progress
+          </div>
+          <ul class="ph-list">
+            <li class="ph-item" id="ph-starting">
+              <div class="ph-dot"></div><span>Starting</span>
+            </li>
+            <li class="ph-item" id="ph-generating">
+              <div class="ph-dot"></div><span>Generating analysis</span>
+            </li>
+            <li class="ph-item" id="ph-structured">
+              <div class="ph-dot"></div><span>Extracting data</span>
+            </li>
+            <li class="ph-item" id="ph-pdf">
+              <div class="ph-dot"></div><span>Rendering PDF</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Stream output -->
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:8px">
+            Live Output
+          </div>
+          <div class="stream-box" id="stream-box"></div>
+        </div>
+      </div>
+
+      <!-- Done -->
+      <div id="prog-done" class="hidden mt24">
+        <div class="card" style="border-color:var(--teal);border-width:2px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <div style="font-size:26px">✅</div>
+            <div>
+              <div style="font-weight:700;font-size:16px">Analysis Complete</div>
+              <div id="done-sub" style="color:var(--muted);font-size:13px;margin-top:2px"></div>
+            </div>
+          </div>
+          <div id="done-body"></div>
+          <div id="done-actions" class="row-actions mt16"></div>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div id="prog-err" class="hidden mt24">
+        <div class="err" id="prog-err-msg"></div>
+        <div class="mt12">
+          <button class="btn btn-secondary" onclick="navigate('new')">← Back to New Analysis</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── History ───────────────────────────────────────────────────────── -->
+    <div id="page-history" class="page">
+      <div class="page-title">History</div>
+      <div class="page-sub">All past analysis runs. Click Download to retrieve a PDF report.</div>
+      <div id="history-body">
+        <div class="empty"><div class="ei">◷</div><div>Loading…</div></div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+let _token    = localStorage.getItem('rk2') || '';
+let _mode     = 'manual';
+let _type     = 'hospital';
+let _groups   = [];       // parsed CSV groups
+let _es       = null;     // EventSource
+
+const PHASES = ['starting', 'generating', 'structured', 'pdf'];
+const PHASE_MAP = {
+  starting:  'starting',
+  generating:'generating',
+  structured:'structured',
+  pdf:       'pdf',
+  done_item: 'pdf',
+};
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const pw  = document.getElementById('login-pw').value.trim();
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-err');
+  if (!pw) return;
+  err.classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({password: pw}),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Invalid password');
+    const { token } = await r.json();
+    _token = token;
+    localStorage.setItem('rk2', token);
+    showApp();
+  } catch(e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  navigate('new');
+}
+
+function api(path, opts = {}) {
+  return fetch(path, {
+    ...opts,
+    headers: { 'Authorization': `Bearer ${_token}`, ...(opts.headers || {}) },
+  });
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────
+function navigate(p) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + p).classList.add('active');
+  const nb = document.getElementById('nav-' + p);
+  if (nb) nb.classList.add('active');
+  if (p === 'history') loadHistory();
+}
+
+// ── New Analysis — mode & type ─────────────────────────────────────────────
+function setMode(m) {
+  _mode = m;
+  ['manual','csv'].forEach(x => {
+    document.getElementById('oc-' + x).classList.toggle('on', x === m);
+    document.getElementById('form-' + x).classList.toggle('hidden', x !== m);
+  });
+}
+
+function setType(t) {
+  _type = t;
+  document.getElementById('tg-hospital').classList.toggle('on', t === 'hospital');
+  document.getElementById('tg-specialty').classList.toggle('on', t === 'specialty');
+  document.getElementById('specialty-wrap').classList.toggle('hidden', t !== 'specialty');
+}
+
+// ── Manual run ────────────────────────────────────────────────────────────
+async function runManual() {
+  const city      = document.getElementById('f-city').value.trim();
+  const state     = document.getElementById('f-state').value.trim().toUpperCase();
+  const specialty = _type === 'specialty'
+    ? (document.getElementById('f-specialty').value.trim() || null) : null;
+  const errEl = document.getElementById('manual-err');
+  errEl.classList.add('hidden');
+
+  if (!city)                             return showErr(errEl, 'Please enter a city.');
+  if (!state || state.length !== 2)      return showErr(errEl, 'Please enter a 2-letter state code.');
+  if (_type === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
+
+  const btn = document.getElementById('run-manual-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Starting…';
+  try {
+    const r = await api('/api/analyze', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({city, state, specialty}),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    const { job_id } = await r.json();
+    startProgress(job_id, `${city}, ${state}` + (specialty ? ` — ${specialty}` : ''), false);
+  } catch(e) { showErr(errEl, e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Run Analysis →'; }
+}
+
+// ── CSV upload ────────────────────────────────────────────────────────────
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dz').classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) onFileSelect(f);
+}
+
+async function onFileSelect(file) {
+  if (!file) return;
+  const dz = document.getElementById('dz');
+  dz.innerHTML = '<div class="dz-icon">⏳</div><div class="dz-text">Processing…</div>';
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const r = await api('/api/upload', {method:'POST', body: form});
+    if (!r.ok) throw new Error((await r.json()).detail || 'Upload failed');
+    const data = await r.json();
+    _groups = data.groups;
+
+    document.getElementById('csv-summary').textContent =
+      `${data.entity_count} entities · ${data.groups.length} analysis group${data.groups.length !== 1 ? 's' : ''}`;
+
+    document.getElementById('csv-tbody').innerHTML = data.groups.map(g => `
+      <tr>
+        <td>${g.city}</td>
+        <td>${g.state}</td>
+        <td>${g.specialty
+          ? `<span class="badge bg-gold">${g.specialty}</span>`
+          : `<span class="badge bg-muted">Hospitals</span>`}</td>
+      </tr>`).join('');
+
+    document.getElementById('csv-preview').classList.remove('hidden');
+    dz.innerHTML = `<div class="dz-icon">✅</div><div class="dz-text">${file.name}</div>`;
+  } catch(e) {
+    dz.innerHTML = `<div class="dz-icon">📂</div>
+      <div class="dz-text">Drop your spreadsheet here, or <span class="dz-hl" onclick="document.getElementById('csv-file').click()">browse</span></div>
+      <div class="dz-text mt8" style="font-size:12px">CSV · XLSX · XLS</div>`;
+    showErr(document.getElementById('csv-err'), e.message);
+  }
+}
+
+function clearCsv() {
+  _groups = [];
+  document.getElementById('csv-preview').classList.add('hidden');
+  document.getElementById('csv-err').classList.add('hidden');
+  document.getElementById('dz').innerHTML = `
+    <input id="csv-file" type="file" accept=".csv,.xlsx,.xls"
+      style="display:none" onchange="onFileSelect(this.files[0])">
+    <div class="dz-icon">📂</div>
+    <div class="dz-text">Drop your spreadsheet here, or
+      <span class="dz-hl" onclick="document.getElementById('csv-file').click()">browse</span>
+    </div>
+    <div class="dz-text mt8" style="font-size:12px">CSV · XLSX · XLS</div>`;
+}
+
+async function runBatch() {
+  if (!_groups.length) return;
+  const btn = document.getElementById('run-batch-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Starting…';
+  try {
+    const r = await api('/api/analyze/batch', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({groups: _groups}),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    const { job_id } = await r.json();
+    startProgress(job_id, `${_groups.length} locations`, true);
+  } catch(e) { showErr(document.getElementById('csv-err'), e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Run All →'; }
+}
+
+// ── Progress & SSE ────────────────────────────────────────────────────────
+function setPhase(name, state) {
+  const el = document.getElementById('ph-' + name);
+  if (!el) return;
+  el.className = 'ph-item ' + state;
+  const dot = el.querySelector('.ph-dot');
+  dot.textContent = state === 'done' ? '✓' : '';
+}
+
+function startProgress(jobId, title, isBatch) {
+  if (_es) _es.close();
+  document.getElementById('prog-title').textContent = title;
+  document.getElementById('prog-sub').textContent   = 'Analysis in progress…';
+  document.getElementById('stream-box').textContent  = '';
+  document.getElementById('prog-done').classList.add('hidden');
+  document.getElementById('prog-err').classList.add('hidden');
+  PHASES.forEach(p => setPhase(p, ''));
+  navigate('progress');
+
+  _es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
+  _es.onmessage = e => onSSE(JSON.parse(e.data));
+  _es.onerror   = () => {
+    _es.close();
+    document.getElementById('prog-err-msg').textContent =
+      'Connection lost. The analysis may still be running — check History when complete.';
+    document.getElementById('prog-err').classList.remove('hidden');
+  };
+}
+
+function onSSE(ev) {
+  const box = document.getElementById('stream-box');
+  if (ev.type === 'ping') return;
+
+  if (ev.type === 'phase') {
+    const idx = PHASES.indexOf(PHASE_MAP[ev.name] || '');
+    if (idx >= 0) {
+      PHASES.forEach((p, i) => setPhase(p, i < idx ? 'done' : i === idx ? 'active' : ''));
+    }
+    box.textContent += `\n──── ${ev.text} ────\n\n`;
+    box.scrollTop = box.scrollHeight;
+    return;
+  }
+
+  if (ev.type === 'text') {
+    box.textContent += ev.text;
+    box.scrollTop = box.scrollHeight;
+    return;
+  }
+
+  if (ev.type === 'batch_item') {
+    document.getElementById('prog-title').textContent =
+      `${ev.current} of ${ev.total}: ${ev.location}`;
+    box.textContent += `\n\n════ ${ev.current}/${ev.total}: ${ev.location} ════\n\n`;
+    box.scrollTop = box.scrollHeight;
+    PHASES.forEach(p => setPhase(p, ''));
+    return;
+  }
+
+  if (ev.type === 'done') {
+    _es.close();
+    PHASES.forEach(p => setPhase(p, 'done'));
+    document.getElementById('prog-sub').textContent = 'Complete';
+    ev.results ? showBatchDone(ev.results) : showSingleDone(ev);
+    return;
+  }
+
+  if (ev.type === 'error') {
+    _es.close();
+    document.getElementById('prog-err-msg').textContent = ev.message;
+    document.getElementById('prog-err').classList.remove('hidden');
+  }
+}
+
+function showSingleDone(r) {
+  document.getElementById('done-sub').textContent = `${r.provider_count || 0} providers analyzed`;
+  document.getElementById('done-body').innerHTML = `
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-val">${r.provider_count || 0}</div>
+        <div class="stat-lbl">Providers Ranked</div>
+      </div>
+    </div>`;
+  document.getElementById('done-actions').innerHTML = `
+    <button class="btn btn-gold" onclick="dlPdf('${r.run_id}')">⬇ Download PDF</button>
+    <button class="btn btn-secondary" onclick="navigate('new')">New Analysis</button>
+    <button class="btn btn-ghost btn-sm" onclick="navigate('history')">History</button>`;
+  document.getElementById('prog-done').classList.remove('hidden');
+}
+
+function showBatchDone(results) {
+  document.getElementById('prog-title').textContent = 'All analyses complete';
+  document.getElementById('done-sub').textContent = `${results.length} report${results.length !== 1 ? 's' : ''} ready`;
+  document.getElementById('done-body').innerHTML = `
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>Location</th><th>Specialty</th><th>Providers</th><th></th></tr></thead>
+        <tbody>
+          ${results.map(r => `
+            <tr>
+              <td style="font-weight:500">${r.location}</td>
+              <td>${r.specialty ? `<span class="badge bg-gold">${r.specialty}</span>` : `<span class="badge bg-muted">Hospitals</span>`}</td>
+              <td>${r.provider_count}</td>
+              <td><button class="btn btn-gold btn-sm" onclick="dlPdf('${r.run_id}')">⬇ PDF</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('done-actions').innerHTML = `
+    <button class="btn btn-secondary" onclick="navigate('new')">New Analysis</button>
+    <button class="btn btn-ghost btn-sm" onclick="navigate('history')">History</button>`;
+  document.getElementById('prog-done').classList.remove('hidden');
+}
+
+function dlPdf(runId) {
+  const a = document.createElement('a');
+  a.href = `/api/reports/${runId}/pdf?token=${encodeURIComponent(_token)}`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ── History ───────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const el = document.getElementById('history-body');
+  el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
+  try {
+    const r = await api('/api/history');
+    if (r.status === 401) { doLogout(); return; }
+    const runs = await r.json();
+    if (!runs.length) {
+      el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="tbl">
+          <thead><tr>
+            <th>Date</th>
+            <th>Location</th>
+            <th>Type</th>
+            <th style="text-align:right">Providers</th>
+            <th>Report</th>
+          </tr></thead>
+          <tbody>
+            ${runs.map(run => `
+              <tr>
+                <td style="color:var(--muted);font-size:13px;white-space:nowrap">${run.generated_at}</td>
+                <td style="font-weight:500">${run.location}</td>
+                <td>${run.specialty
+                  ? `<span class="badge bg-gold">${run.specialty}</span>`
+                  : `<span class="badge bg-muted">Hospitals</span>`}</td>
+                <td style="text-align:right">${run.provider_count}</td>
+                <td>${run.has_pdf
+                  ? `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`
+                  : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="err">${e.message}</div>`;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function showErr(el, msg) { el.textContent = msg; el.classList.remove('hidden'); }
+
+function doLogout() {
+  localStorage.removeItem('rk2');
+  _token = '';
+  location.reload();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+(async function init() {
+  if (_token) {
+    try {
+      const r = await fetch('/api/history', {headers:{'Authorization':`Bearer ${_token}`}});
+      if (r.ok) { showApp(); return; }
+    } catch(_) {}
+    localStorage.removeItem('rk2');
+    _token = '';
+  }
+  setMode('manual');
+  setType('hospital');
+})();
+</script>
+</body>
+</html>

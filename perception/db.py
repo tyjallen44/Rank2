@@ -6,6 +6,9 @@ from pathlib import Path
 from .config import settings
 
 
+from typing import Any
+
+
 def get_connection() -> duckdb.DuckDBPyConnection:
     return duckdb.connect(settings.db_path)
 
@@ -51,4 +54,60 @@ def init_db() -> None:
             PRIMARY KEY (entity_id, source)
         )
     """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS analysis_runs (
+            run_id              VARCHAR PRIMARY KEY,
+            location            VARCHAR NOT NULL,
+            specialty           VARCHAR,
+            generated_at        DATE NOT NULL,
+            top_recommendation  VARCHAR,
+            practical_advice    VARCHAR,
+            disclaimer          VARCHAR,
+            report_markdown     VARCHAR,
+            pdf_path            VARCHAR,
+            md_path             VARCHAR
+        )
+    """)
+    # Migrate older DBs that pre-date the path columns
+    for col in ("pdf_path", "md_path"):
+        try:
+            con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} VARCHAR")
+        except Exception:
+            pass
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS ranked_providers (
+            run_id                  VARCHAR NOT NULL,
+            rank                    INTEGER NOT NULL,
+            name                    VARCHAR NOT NULL,
+            overall_rating          VARCHAR,
+            key_strengths           VARCHAR,
+            notable_weaknesses      VARCHAR,
+            best_suited_for         VARCHAR,
+            recommendation_summary  VARCHAR,
+            PRIMARY KEY (run_id, rank)
+        )
+    """)
     con.close()
+
+
+def query_history() -> list[dict[str, Any]]:
+    """Return all past analysis runs, newest first, with provider counts."""
+    con = get_connection()
+    rows = con.execute("""
+        SELECT
+            a.run_id,
+            a.location,
+            a.specialty,
+            a.generated_at,
+            a.pdf_path,
+            a.md_path,
+            COUNT(p.rank) AS provider_count
+        FROM analysis_runs a
+        LEFT JOIN ranked_providers p ON p.run_id = a.run_id
+        GROUP BY a.run_id, a.location, a.specialty, a.generated_at, a.pdf_path, a.md_path
+        ORDER BY a.generated_at DESC, a.run_id DESC
+    """).fetchall()
+    cols = ["run_id", "location", "specialty", "generated_at",
+            "pdf_path", "md_path", "provider_count"]
+    con.close()
+    return [dict(zip(cols, row)) for row in rows]
