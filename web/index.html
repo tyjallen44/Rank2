@@ -279,6 +279,64 @@ html, body {
 .stat-val { font-family: 'Barlow Condensed', Impact, sans-serif; font-size: 34px; font-weight: 700; color: var(--teal); line-height: 1; }
 .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.07em; }
 
+/* ── Responsive sidebar ──────────────────────────────────────── */
+
+/* Tablet: icon-only sidebar */
+@media (max-width: 860px) {
+  #sidebar { width: 64px; min-width: 64px; }
+  .sb-logo { padding: 18px 0; text-align: center; border-bottom-color: rgba(128,248,228,0.12); }
+  .sb-logo .wordmark, .sb-logo .sub, .sb-logo .accent-line { display: none; }
+  .sb-logo::after {
+    content: 'R2';
+    font-family: 'Barlow Condensed', Impact, sans-serif;
+    font-size: 20px; font-weight: 700; letter-spacing: 0.06em;
+    color: #fff;
+  }
+  .sb-nav { padding: 8px 6px; }
+  .nav-btn { flex-direction: column; gap: 3px; padding: 10px 4px; justify-content: center; font-size: 10px; }
+  .nav-btn .ni { width: auto; font-size: 18px; }
+  .nav-btn .nb-lbl { display: none; }
+  .nav-btn.active { border-left: 3px solid var(--seafoam); padding-left: 1px; }
+  .page { padding: 28px 22px; }
+  .prog-layout { grid-template-columns: 1fr; }
+}
+
+/* Mobile: top bar */
+@media (max-width: 540px) {
+  #app { flex-direction: column; }
+  #sidebar {
+    width: 100%; min-width: 0;
+    flex-direction: row;
+    height: auto; min-height: 52px;
+  }
+  .sb-logo {
+    padding: 0 16px; border-bottom: none;
+    border-right: 1px solid rgba(128,248,228,0.15);
+    display: flex; align-items: center; flex-shrink: 0;
+  }
+  .sb-logo::after { display: none; }
+  .sb-logo .wordmark { display: block; font-size: 18px; }
+  .sb-logo .sub, .sb-logo .accent-line { display: none; }
+  .sb-nav { padding: 0 6px; display: flex; flex-direction: row; flex: 1; }
+  .nav-btn {
+    flex-direction: row; gap: 6px;
+    padding: 0 12px; height: 52px;
+    font-size: 13px; margin-bottom: 0;
+  }
+  .nav-btn .ni { font-size: 16px; width: auto; }
+  .nav-btn .nb-lbl { display: inline; }
+  .nav-btn.active {
+    border-left: none; padding-left: 12px;
+    border-bottom: 3px solid var(--seafoam);
+  }
+  #main { overflow-y: auto; }
+  .page { padding: 20px 16px; max-width: 100%; }
+  .oc-grid { grid-template-columns: 1fr; }
+  .prog-layout { grid-template-columns: 1fr; }
+  .stream-box { height: 280px; }
+  .stat-row { gap: 8px; }
+}
+
 /* ── Misc ────────────────────────────────────────────────────── */
 .err { background: var(--red-bg); border: 1px solid #f5c6c2; color: var(--red); border-radius: 8px; padding: 11px 15px; font-size: 13px; }
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
@@ -326,10 +384,10 @@ html, body {
     </div>
     <div class="sb-nav">
       <button class="nav-btn active" id="nav-new" onclick="navigate('new')">
-        <span class="ni">✦</span> New Analysis
+        <span class="ni">✦</span><span class="nb-lbl">New Analysis</span>
       </button>
       <button class="nav-btn" id="nav-history" onclick="navigate('history')">
-        <span class="ni">◷</span> History
+        <span class="ni">◷</span><span class="nb-lbl">History</span>
       </button>
     </div>
   </nav>
