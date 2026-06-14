@@ -69,11 +69,13 @@ def init_db() -> None:
         )
     """)
     # Migrate older DBs that pre-date the path columns
-    for col in ("pdf_path", "md_path"):
+    for col in ("pdf_path", "md_path", "user_role"):
         try:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} VARCHAR")
         except Exception:
             pass
+    # Tag pre-existing rows (before role isolation) as admin
+    con.execute("UPDATE analysis_runs SET user_role = 'admin' WHERE user_role IS NULL")
     con.execute("""
         CREATE TABLE IF NOT EXISTS ranked_providers (
             run_id                  VARCHAR NOT NULL,
@@ -90,8 +92,15 @@ def init_db() -> None:
     con.close()
 
 
-def query_history() -> list[dict[str, Any]]:
-    """Return all past analysis runs, newest first, with provider counts."""
+def set_run_role(run_id: str, role: str) -> None:
+    """Tag an analysis run with the role of the user who created it."""
+    con = get_connection()
+    con.execute("UPDATE analysis_runs SET user_role = ? WHERE run_id = ?", [role, run_id])
+    con.close()
+
+
+def query_history(role: str) -> list[dict[str, Any]]:
+    """Return analysis runs for the given role, newest first, with provider counts."""
     con = get_connection()
     rows = con.execute("""
         SELECT
@@ -104,9 +113,10 @@ def query_history() -> list[dict[str, Any]]:
             COUNT(p.rank) AS provider_count
         FROM analysis_runs a
         LEFT JOIN ranked_providers p ON p.run_id = a.run_id
+        WHERE a.user_role = ?
         GROUP BY a.run_id, a.location, a.specialty, a.generated_at, a.pdf_path, a.md_path
         ORDER BY a.generated_at DESC, a.run_id DESC
-    """).fetchall()
+    """, [role]).fetchall()
     cols = ["run_id", "location", "specialty", "generated_at",
             "pdf_path", "md_path", "provider_count"]
     con.close()

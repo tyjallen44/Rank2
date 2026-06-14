@@ -297,6 +297,8 @@ html, body {
   .nav-btn .ni { width: auto; font-size: 18px; }
   .nav-btn .nb-lbl { display: none; }
   .nav-btn.active { border-left: 3px solid var(--seafoam); padding-left: 1px; }
+  .sb-user-info { display: none; }
+  .sb-footer { padding: 8px 6px 10px; }
   .page { padding: 28px 22px; }
   .prog-layout { grid-template-columns: 1fr; }
 }
@@ -329,6 +331,18 @@ html, body {
     border-left: none; padding-left: 12px;
     border-bottom: 3px solid var(--seafoam);
   }
+  .sb-footer {
+    border-top: none; border-left: 1px solid rgba(128,248,228,0.15);
+    padding: 0; margin-left: auto;
+    display: flex; align-items: center;
+  }
+  .sb-user-info {
+    display: flex; align-items: center;
+    padding: 0 10px 0 14px; white-space: nowrap;
+  }
+  .sb-user-label { display: none; }
+  .sb-user-name { font-size: 12px; }
+  .sb-logout { height: 52px; margin-bottom: 0; padding: 0 14px; border-radius: 0; }
   #main { overflow-y: auto; }
   .page { padding: 20px 16px; max-width: 100%; }
   .oc-grid { grid-template-columns: 1fr; }
@@ -336,6 +350,26 @@ html, body {
   .stream-box { height: 280px; }
   .stat-row { gap: 8px; }
 }
+
+/* ── Sidebar footer (user + logout) ─────────────────────────── */
+.sb-footer {
+  border-top: 1px solid rgba(128,248,228,0.15);
+  padding: 12px 10px 16px;
+}
+.sb-user-info { padding: 2px 12px 10px; }
+.sb-user-name {
+  font-size: 12px; font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sb-user-label {
+  font-size: 10px; color: rgba(128,248,228,0.55);
+  text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px;
+}
+.sb-logout {
+  color: rgba(255,255,255,0.45);
+}
+.sb-logout:hover { background: rgba(220,70,70,0.15) !important; color: #ff9999 !important; }
 
 /* ── Misc ────────────────────────────────────────────────────── */
 .err { background: var(--red-bg); border: 1px solid #f5c6c2; color: var(--red); border-radius: 8px; padding: 11px 15px; font-size: 13px; }
@@ -388,6 +422,17 @@ html, body {
       </button>
       <button class="nav-btn" id="nav-history" onclick="navigate('history')">
         <span class="ni">◷</span><span class="nb-lbl">History</span>
+      </button>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-user-info">
+        <div>
+          <div class="sb-user-label">Signed in as</div>
+          <div class="sb-user-name" id="sb-user-name"></div>
+        </div>
+      </div>
+      <button class="nav-btn sb-logout" onclick="doLogout()">
+        <span class="ni">⎋</span><span class="nb-lbl">Sign Out</span>
       </button>
     </div>
   </nav>
@@ -561,11 +606,12 @@ html, body {
 
 <script>
 // ── State ─────────────────────────────────────────────────────────────────
-let _token    = localStorage.getItem('rk2') || '';
-let _mode     = 'manual';
-let _type     = 'hospital';
-let _groups   = [];       // parsed CSV groups
-let _es       = null;     // EventSource
+let _token       = localStorage.getItem('rk2') || '';
+let _displayName = localStorage.getItem('rk2_name') || '';
+let _mode        = 'manual';
+let _type        = 'hospital';
+let _groups      = [];       // parsed CSV groups
+let _es          = null;     // EventSource
 
 const PHASES = ['starting', 'generating', 'structured', 'pdf'];
 const PHASE_MAP = {
@@ -592,9 +638,11 @@ async function doLogin() {
       body: JSON.stringify({password: pw}),
     });
     if (!r.ok) throw new Error((await r.json()).detail || 'Invalid password');
-    const { token } = await r.json();
+    const { token, display_name } = await r.json();
     _token = token;
+    _displayName = display_name;
     localStorage.setItem('rk2', token);
+    localStorage.setItem('rk2_name', display_name);
     showApp();
   } catch(e) {
     err.textContent = e.message;
@@ -607,6 +655,7 @@ async function doLogin() {
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
+  document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
   navigate('new');
 }
 
@@ -914,7 +963,9 @@ function showErr(el, msg) { el.textContent = msg; el.classList.remove('hidden');
 
 function doLogout() {
   localStorage.removeItem('rk2');
+  localStorage.removeItem('rk2_name');
   _token = '';
+  _displayName = '';
   location.reload();
 }
 
@@ -922,11 +973,19 @@ function doLogout() {
 (async function init() {
   if (_token) {
     try {
-      const r = await fetch('/api/history', {headers:{'Authorization':`Bearer ${_token}`}});
-      if (r.ok) { showApp(); return; }
+      const r = await fetch('/api/auth/me', {headers:{'Authorization':`Bearer ${_token}`}});
+      if (r.ok) {
+        const { display_name } = await r.json();
+        _displayName = display_name;
+        localStorage.setItem('rk2_name', display_name);
+        showApp();
+        return;
+      }
     } catch(_) {}
     localStorage.removeItem('rk2');
+    localStorage.removeItem('rk2_name');
     _token = '';
+    _displayName = '';
   }
   setMode('manual');
   setType('hospital');

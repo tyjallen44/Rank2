@@ -47,8 +47,19 @@ REPORTS_DIR = Path(os.environ.get(
     str(Path.home() / "Documents" / "Rank2 Reports"),
 ))
 
+# password → (role_id, display_name); anything not listed defaults to admin
+_ROLE_MAP: dict[str, tuple[str, str]] = {
+    "RLD_Data_Access": ("rldatix", "RLDatix Team"),
+    "Partner_Access":  ("partner", "Partner User"),
+}
+_ROLE_DISPLAY: dict[str, str] = {v[0]: v[1] for v in _ROLE_MAP.values()}
+_ROLE_DISPLAY["admin"] = "Admin"
+
+def _password_role(pw: str) -> tuple[str, str]:
+    return _ROLE_MAP.get(pw, ("admin", "Admin"))
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
-_tokens: set[str] = set()
+_tokens: dict[str, str] = {}  # token → role_id
 
 
 class LoginRequest(BaseModel):
@@ -61,18 +72,25 @@ async def login(req: LoginRequest):
         raise HTTPException(500, "ACCESS_PASSWORD not configured in .env")
     if req.password not in ACCESS_PASSWORDS:
         raise HTTPException(401, "Invalid password")
+    role_id, display_name = _password_role(req.password)
     token = secrets.token_urlsafe(32)
-    _tokens.add(token)
-    return {"token": token}
+    _tokens[token] = role_id
+    return {"token": token, "role": role_id, "display_name": display_name}
 
 
 def require_auth(request: Request, token: Optional[str] = Query(None)) -> str:
-    """Accepts Bearer header or ?token= query param (needed for EventSource / FileResponse)."""
+    """Accepts Bearer header or ?token= query param. Returns the user's role_id."""
     hdr = request.headers.get("Authorization", "")
     t = hdr[7:] if hdr.startswith("Bearer ") else token
-    if t and t in _tokens:
-        return t
-    raise HTTPException(401, "Unauthorized")
+    role = _tokens.get(t) if t else None
+    if role is None:
+        raise HTTPException(401, "Unauthorized")
+    return role
+
+
+@app.get("/api/auth/me")
+async def me(role: str = Depends(require_auth)):
+    return {"role": role, "display_name": _ROLE_DISPLAY.get(role, "Admin")}
 
 
 # ── Job management ────────────────────────────────────────────────────────────
@@ -90,7 +108,7 @@ def _job_run_single(job_id: str, city: str, state: str, specialty: Optional[str]
     emit = lambda e: _put(loop, queue, e)
 
     try:
-        from perception.db import init_db
+        from perception.db import init_db, set_run_role
         from perception.analyzer import analyze_location
 
         init_db()
@@ -100,6 +118,7 @@ def _job_run_single(job_id: str, city: str, state: str, specialty: Optional[str]
             city=city, state=state, specialty=specialty,
             output_dir=REPORTS_DIR, on_event=emit,
         )
+        set_run_role(result.run_id, job["role"])
         job["status"] = "done"
         job["result"] = {
             "run_id": result.run_id,
@@ -121,7 +140,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
     emit = lambda e: _put(loop, queue, e)
 
     try:
-        from perception.db import init_db
+        from perception.db import init_db, set_run_role
         from perception.analyzer import analyze_location
 
         init_db()
@@ -138,6 +157,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
                 city=g["city"], state=g["state"], specialty=g.get("specialty"),
                 output_dir=REPORTS_DIR, on_event=emit,
             )
+            set_run_role(result.run_id, job["role"])
             results.append({
                 "run_id": result.run_id,
                 "location": result.location,
@@ -155,11 +175,11 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
         _put(loop, queue, None)
 
 
-def _new_job() -> str:
+def _new_job(role: str) -> str:
     job_id = str(uuid.uuid4())
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
-    _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue}
+    _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role}
     return job_id
 
 
@@ -176,15 +196,15 @@ class BatchRequest(BaseModel):
 
 
 @app.post("/api/analyze")
-async def start_analysis(req: AnalyzeRequest, _: str = Depends(require_auth)):
-    job_id = _new_job()
+async def start_analysis(req: AnalyzeRequest, role: str = Depends(require_auth)):
+    job_id = _new_job(role)
     _pool.submit(_job_run_single, job_id, req.city, req.state, req.specialty)
     return {"job_id": job_id}
 
 
 @app.post("/api/analyze/batch")
-async def start_batch(req: BatchRequest, _: str = Depends(require_auth)):
-    job_id = _new_job()
+async def start_batch(req: BatchRequest, role: str = Depends(require_auth)):
+    job_id = _new_job(role)
     _pool.submit(_job_run_batch, job_id, [g.dict() for g in req.groups])
     return {"job_id": job_id}
 
@@ -226,20 +246,20 @@ async def stream_job(job_id: str, _: str = Depends(require_auth)):
 
 
 @app.get("/api/history")
-async def get_history(_: str = Depends(require_auth)):
+async def get_history(role: str = Depends(require_auth)):
     from perception.db import init_db, query_history
     init_db()
     return [
         {**r, "generated_at": str(r["generated_at"]),
          "has_pdf": bool(r.get("pdf_path") and Path(r["pdf_path"]).exists())}
-        for r in query_history()
+        for r in query_history(role)
     ]
 
 
 @app.get("/api/reports/{run_id}/pdf")
-async def download_pdf(run_id: str, _: str = Depends(require_auth)):
+async def download_pdf(run_id: str, role: str = Depends(require_auth)):
     from perception.db import query_history
-    run = next((r for r in query_history() if r["run_id"] == run_id), None)
+    run = next((r for r in query_history(role) if r["run_id"] == run_id), None)
     if not run or not run.get("pdf_path"):
         raise HTTPException(404, "Report not found")
     pdf = Path(run["pdf_path"])
