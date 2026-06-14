@@ -40,7 +40,8 @@ from pydantic import BaseModel
 app = FastAPI(title="Rank2", docs_url=None, redoc_url=None)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ACCESS_PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
+_raw_pw = os.environ.get("ACCESS_PASSWORD", "")
+ACCESS_PASSWORDS: set[str] = {p.strip() for p in _raw_pw.split(",") if p.strip()}
 REPORTS_DIR = Path(os.environ.get(
     "REPORTS_DIR",
     str(Path.home() / "Documents" / "Rank2 Reports"),
@@ -56,9 +57,9 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/auth/login")
 async def login(req: LoginRequest):
-    if not ACCESS_PASSWORD:
+    if not ACCESS_PASSWORDS:
         raise HTTPException(500, "ACCESS_PASSWORD not configured in .env")
-    if req.password != ACCESS_PASSWORD:
+    if req.password not in ACCESS_PASSWORDS:
         raise HTTPException(401, "Invalid password")
     token = secrets.token_urlsafe(32)
     _tokens.add(token)
