@@ -100,23 +100,39 @@ def set_run_role(run_id: str, role: str) -> None:
 
 
 def query_history(role: str) -> list[dict[str, Any]]:
-    """Return analysis runs for the given role, newest first, with provider counts."""
+    """Return analysis runs for the given role, newest first. Admin sees all roles."""
     con = get_connection()
-    rows = con.execute("""
-        SELECT
-            a.run_id,
-            a.location,
-            a.specialty,
-            a.generated_at,
-            a.pdf_path,
-            a.md_path,
-            COUNT(p.rank) AS provider_count
-        FROM analysis_runs a
-        LEFT JOIN ranked_providers p ON p.run_id = a.run_id
-        WHERE a.user_role = ?
-        GROUP BY a.run_id, a.location, a.specialty, a.generated_at, a.pdf_path, a.md_path
-        ORDER BY a.generated_at DESC, a.run_id DESC
-    """, [role]).fetchall()
+    if role == "admin":
+        rows = con.execute("""
+            SELECT
+                a.run_id,
+                a.location,
+                a.specialty,
+                a.generated_at,
+                a.pdf_path,
+                a.md_path,
+                COUNT(p.rank) AS provider_count
+            FROM analysis_runs a
+            LEFT JOIN ranked_providers p ON p.run_id = a.run_id
+            GROUP BY a.run_id, a.location, a.specialty, a.generated_at, a.pdf_path, a.md_path
+            ORDER BY a.generated_at DESC, a.run_id DESC
+        """).fetchall()
+    else:
+        rows = con.execute("""
+            SELECT
+                a.run_id,
+                a.location,
+                a.specialty,
+                a.generated_at,
+                a.pdf_path,
+                a.md_path,
+                COUNT(p.rank) AS provider_count
+            FROM analysis_runs a
+            LEFT JOIN ranked_providers p ON p.run_id = a.run_id
+            WHERE a.user_role = ?
+            GROUP BY a.run_id, a.location, a.specialty, a.generated_at, a.pdf_path, a.md_path
+            ORDER BY a.generated_at DESC, a.run_id DESC
+        """, [role]).fetchall()
     cols = ["run_id", "location", "specialty", "generated_at",
             "pdf_path", "md_path", "provider_count"]
     con.close()
