@@ -288,6 +288,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
     print(f"\n  Rank2  →  http://localhost:{port}\n")
-    if not ACCESS_PASSWORD:
+    if not ACCESS_PASSWORDS:
         print("  ⚠  WARNING: ACCESS_PASSWORD not set in .env\n")
     uvicorn.run(app, host=host, port=port)
