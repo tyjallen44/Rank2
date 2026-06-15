@@ -1,0 +1,19 @@
+.env
+*.duckdb
+*.duckdb.wal
+__pycache__/
+*.pyc
+.venv/
+dist/
+.pytest_cache/
+playwright-report/
+test-results/
+screenshots/
+reports/*.md
+reports/*.pdf
+build/
+Rank2-mac/
+Rank2-mac.zip
+.DS_Store
+entities.csv
+# VERSION is intentionally included for build tagging
