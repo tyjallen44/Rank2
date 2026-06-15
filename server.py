@@ -96,6 +96,15 @@ async def me(role: str = Depends(require_auth)):
     return {"role": role, "display_name": _ROLE_DISPLAY.get(role, "Admin")}
 
 
+@app.get("/api/version")
+async def version():
+    try:
+        build = Path(__file__).parent.joinpath("VERSION").read_text().strip()
+    except Exception:
+        build = "dev"
+    return {"build": build}
+
+
 # ── Job management ────────────────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
 _pool = ThreadPoolExecutor(max_workers=2)

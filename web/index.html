@@ -370,6 +370,7 @@ html, body {
   color: rgba(255,255,255,0.45);
 }
 .sb-logout:hover { background: rgba(220,70,70,0.15) !important; color: #ff9999 !important; }
+.sb-build { text-align: center; font-size: 10px; color: rgba(255,255,255,0.2); padding: 6px 0 2px; letter-spacing: 0.05em; }
 
 /* ── Misc ────────────────────────────────────────────────────── */
 .err { background: var(--red-bg); border: 1px solid #f5c6c2; color: var(--red); border-radius: 8px; padding: 11px 15px; font-size: 13px; }
@@ -434,6 +435,7 @@ html, body {
       <button class="nav-btn sb-logout" onclick="doLogout()">
         <span class="ni">⎋</span><span class="nb-lbl">Sign Out</span>
       </button>
+      <div class="sb-build" id="sb-build"></div>
     </div>
   </nav>
 
@@ -656,6 +658,9 @@ function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
   document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
+  fetch('/api/version').then(r => r.json()).then(d => {
+    document.getElementById('sb-build').textContent = 'build ' + d.build;
+  }).catch(() => {});
   navigate('new');
 }
 

@@ -72,6 +72,9 @@ if [[ "$1" == "setup" ]]; then
 fi
 
 # ── Build & push ──────────────────────────────────────────────────────────────
+echo "==> Writing build version..."
+git rev-parse --short HEAD > VERSION 2>/dev/null || echo "dev" > VERSION
+
 echo "==> Building and pushing image via Cloud Build..."
 gcloud builds submit --tag "$IMAGE" --project "$PROJECT_ID" .
 
