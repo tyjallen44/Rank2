@@ -72,14 +72,8 @@ if [[ "$1" == "setup" ]]; then
 fi
 
 # ── Build & push ──────────────────────────────────────────────────────────────
-echo "==> Authenticating Docker with Artifact Registry..."
-gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-
-echo "==> Building image (this takes ~3 min first time — Chromium is large)..."
-docker build --platform linux/amd64 -t "$IMAGE" .
-
-echo "==> Pushing image..."
-docker push "$IMAGE"
+echo "==> Building and pushing image via Cloud Build..."
+gcloud builds submit --tag "$IMAGE" --project "$PROJECT_ID" .
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
 echo "==> Deploying to Cloud Run..."
