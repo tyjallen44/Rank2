@@ -49,8 +49,11 @@ REPORTS_DIR = Path(os.environ.get(
 
 # password → (role_id, display_name); anything not listed defaults to admin
 _ROLE_MAP: dict[str, tuple[str, str]] = {
-    "RLD_Data_Access": ("rldatix", "RLDatix Team"),
-    "Partner_Access":  ("partner", "Partner User"),
+    "RLD_Data_Access":  ("rldatix",         "RLDatix Team"),
+    "Partner_Access":   ("partner",          "Partner User"),
+    "CSRan2Access":     ("customersuccess",  "Customer Success"),
+    "SalesTeamRank2":   ("salesteam",        "Sales Team"),
+    "Rank2Marketing":   ("marketing",        "Marketing"),
 }
 _ROLE_DISPLAY: dict[str, str] = {v[0]: v[1] for v in _ROLE_MAP.values()}
 _ROLE_DISPLAY["admin"] = "Admin"
