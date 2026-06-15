@@ -51,7 +51,7 @@ REPORTS_DIR = Path(os.environ.get(
 _ROLE_MAP: dict[str, tuple[str, str]] = {
     "RLD_Data_Access":  ("rldatix",         "RLDatix Team"),
     "Partner_Access":   ("partner",          "Partner User"),
-    "CSRan2Access":     ("customersuccess",  "Customer Success"),
+    "CSRank2Access":    ("customersuccess",  "Customer Success"),
     "SalesTeamRank2":   ("salesteam",        "Sales Team"),
     "Rank2Marketing":   ("marketing",        "Marketing"),
 }
