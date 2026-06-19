@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     db_path: str = "rank2.duckdb"
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
 
 
 settings = Settings()

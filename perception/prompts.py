@@ -160,6 +160,37 @@ Analyze {specialty} care providers in {city}, {state} now.
 """
 
 
+SYNTHESIS_SYSTEM_PROMPT = """\
+You are a senior healthcare research analyst. You have received two independent \
+AI analyses of the same healthcare market — one from Anthropic Claude and one \
+from OpenAI GPT-4o. Your job is to synthesize them into a single authoritative \
+report.
+
+Guidelines:
+- Where both analyses agree, present those findings with confidence.
+- Where they differ, surface both perspectives and offer your best synthesis.
+- The final report should be more comprehensive and reliable than either \
+analysis alone.
+- Use the same report structure as the input analyses.
+- Do not mention which AI produced which finding — write as a unified expert voice.
+"""
+
+SYNTHESIS_USER_PROMPT = """\
+Below are two independent analyses of the same healthcare market. Please \
+synthesize them into one definitive report.
+
+## Analysis A (Claude):
+{claude_analysis}
+
+## Analysis B (GPT-4o):
+{gpt_analysis}
+
+Produce a single, well-structured synthesis report. Highlight high-confidence \
+findings where both analyses agree. Where they diverge, present the full \
+picture so patients have an accurate, balanced view.
+"""
+
+
 def build_hospital_prompt(city: str, state: str) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for a broad hospital market analysis."""
     user = HOSPITAL_USER_PROMPT.format(city=city, state=state)

@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir \
     "uvicorn[standard]>=0.29.0" \
     "python-multipart>=0.0.9" \
     "anthropic>=0.50" \
+    "openai>=1.0" \
     "duckdb>=0.10" \
     "pydantic>=2.7" \
     "pydantic-settings>=2.2" \
