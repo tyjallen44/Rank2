@@ -4,7 +4,6 @@ import json
 import re
 import sys
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 from typing import Callable
@@ -15,14 +14,11 @@ from .config import settings
 from .db import get_connection, init_db
 from .models import AnalysisResult, Entity, RankedProvider
 from .prompts import (
-    SYNTHESIS_SYSTEM_PROMPT,
-    SYNTHESIS_USER_PROMPT,
     build_hospital_prompt,
     build_specialty_prompt,
 )
 
 _MODEL = "claude-opus-4-8"
-_OPENAI_MODEL = "gpt-4o"
 
 # Tool that forces Claude to emit structured JSON alongside the narrative.
 _STRUCTURED_OUTPUT_TOOL = {
@@ -122,35 +118,6 @@ def _get_client() -> anthropic.Anthropic:
     return anthropic.Anthropic()
 
 
-def _openai_available() -> bool:
-    return bool(settings.openai_api_key)
-
-
-def _run_claude_analysis(client: anthropic.Anthropic, system_prompt: str, user_prompt: str) -> str:
-    response = client.messages.create(
-        model=_MODEL,
-        max_tokens=8000,
-        thinking={"type": "adaptive"},
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return "".join(b.text for b in response.content if hasattr(b, "text"))
-
-
-def _run_openai_analysis(system_prompt: str, user_prompt: str) -> str:
-    from openai import OpenAI
-    client = OpenAI(api_key=settings.openai_api_key)
-    response = client.chat.completions.create(
-        model=_OPENAI_MODEL,
-        max_tokens=8000,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-    )
-    return response.choices[0].message.content or ""
-
-
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
@@ -193,62 +160,22 @@ def analyze_location(
     client = _get_client()
     run_id = str(uuid.uuid4())
 
-    if _openai_available():
-        # --- Phase 1: gather Claude + GPT-4o in parallel ---
-        emit({"type": "phase", "name": "generating", "text": "Gathering perspectives from Claude & GPT-4o"})
-        console.print(Rule("[dim]Gathering Claude & GPT-4o analyses in parallel…[/dim]", style="dark_sea_green4"))
-
-        claude_narrative = openai_narrative = ""
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            claude_future = pool.submit(_run_claude_analysis, client, system_prompt, user_prompt)
-            openai_future = pool.submit(_run_openai_analysis, system_prompt, user_prompt)
-            for future in as_completed([claude_future, openai_future]):
-                if future is claude_future:
-                    claude_narrative = future.result()
-                    console.print("[green]✓[/green] Claude analysis complete")
-                else:
-                    openai_narrative = future.result()
-                    console.print("[green]✓[/green] GPT-4o analysis complete")
-
-        # --- Phase 2: stream synthesis ---
-        emit({"type": "phase", "name": "synthesizing", "text": "Synthesizing perspectives"})
-        console.print(Rule("[dim]Synthesizing perspectives…[/dim]", style="dark_sea_green4"))
-        synthesis_user = SYNTHESIS_USER_PROMPT.format(
-            claude_analysis=claude_narrative,
-            gpt_analysis=openai_narrative,
-        )
-        narrative_parts: list[str] = []
-        with client.messages.stream(
-            model=_MODEL,
-            max_tokens=8000,
-            system=SYNTHESIS_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": synthesis_user}],
-        ) as stream:
-            for text in stream.text_stream:
-                narrative_parts.append(text)
-                print(text, end="", flush=True, file=sys.stderr)
-                emit({"type": "text", "text": text})
-        report_markdown = "".join(narrative_parts)
-        print(file=sys.stderr)
-
-    else:
-        # --- Claude-only path (no OpenAI key configured) ---
-        emit({"type": "phase", "name": "generating", "text": "Generating analysis"})
-        console.print(Rule("[dim]Generating analysis[/dim]", style="dark_sea_green4"))
-        narrative_parts = []
-        with client.messages.stream(
-            model=_MODEL,
-            max_tokens=8000,
-            thinking={"type": "adaptive"},
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        ) as stream:
-            for text in stream.text_stream:
-                narrative_parts.append(text)
-                print(text, end="", flush=True, file=sys.stderr)
-                emit({"type": "text", "text": text})
-        report_markdown = "".join(narrative_parts)
-        print(file=sys.stderr)
+    emit({"type": "phase", "name": "generating", "text": "Generating analysis"})
+    console.print(Rule("[dim]Generating analysis[/dim]", style="dark_sea_green4"))
+    narrative_parts: list[str] = []
+    with client.messages.stream(
+        model=_MODEL,
+        max_tokens=8000,
+        thinking={"type": "adaptive"},
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    ) as stream:
+        for text in stream.text_stream:
+            narrative_parts.append(text)
+            print(text, end="", flush=True, file=sys.stderr)
+            emit({"type": "text", "text": text})
+    report_markdown = "".join(narrative_parts)
+    print(file=sys.stderr)
 
     # --- Phase 2: extract structured data via tool use ---
     emit({"type": "phase", "name": "structured", "text": "Extracting structured data"})

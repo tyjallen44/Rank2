@@ -91,7 +91,7 @@ gcloud run deploy "$SERVICE" \
   --min-instances=0 \
   --max-instances=2 \
   --set-env-vars="REPORTS_DIR=/data/reports,DB_PATH=/data/rank2.duckdb" \
-  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest" \
+  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest" \
   --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount="volume=rank2-data,mount-path=/data"
 
