@@ -87,16 +87,46 @@ specialist or specialty group for their specific condition.
 Your analysis focuses on specialty-specific quality metrics, physician \
 credentials, fellowship training, outcomes data, and patient experience within \
 that specialty. You are direct about trade-offs and honest about data gaps.
+
+A critical part of your analysis is classifying every practice or group as \
+either INDEPENDENT (privately owned and operated by the physicians themselves) \
+or HOSPITAL/ACADEMIC-AFFILIATED (physicians employed by, owned by, or \
+exclusively contracted to a hospital, health system, or medical school). These \
+two categories compete differently and serve patients differently — they must \
+be ranked in separate lists.
 """
 
 SPECIALTY_USER_PROMPT = """\
 I need a comprehensive analysis of {specialty} care quality and options in \
-{city}, {state}. Please research and evaluate the leading {specialty} groups, \
-practices, and physicians serving this area.
+{city}, {state} and the broader metropolitan area.
+
+**Your primary goal is to identify as many {specialty} practices and groups \
+as possible** — do not limit yourself to the most prominent or well-known \
+names. Cast a wide net using every available source: Healthgrades provider \
+directories, ZocDoc listings, Google Maps, CMS physician directories (NPI \
+registry), US News specialty rankings, Castle Connolly listings, and your \
+knowledge of the market. Include practices of all sizes — large multi-physician \
+groups, smaller boutique practices, and solo practitioners with a significant \
+presence. Search across the full greater {city} metropolitan area, not just \
+the city limits.
+
+**Classification Requirement — Apply to Every Practice**
+
+Before ranking, classify each practice or group as one of:
+- **Independent** — privately owned and operated by the physicians; the \
+physicians have ownership/partnership stakes and are not employees of a \
+hospital or health system. Example: a physician-owned orthopedic group.
+- **Hospital/Academic-Affiliated** — physicians employed by a hospital, \
+health system, or academic medical center; the practice operates as a \
+department or subsidiary of that institution. This includes university \
+hospital specialty departments and hospital-employed physician groups.
+
+Practices with formal hospital affiliations for admitting privileges but \
+who are independently owned still count as Independent.
 
 **Analysis Framework**
 
-For each major {specialty} group or practice in {city}, {state}, evaluate:
+For every identified {specialty} group or practice, evaluate:
 
 1. **Quality & Outcomes**
    - Specialty-specific certifications and accreditations \
@@ -107,6 +137,9 @@ in procedural specialties)
    - Any published or publicly reported quality indicators
 
 2. **Physician Credentials & Reputation**
+   - Number of surgeons / physicians in the group (provide a specific count \
+or best estimate, e.g. "~15 surgeons" or "3–5 physicians"; use "unknown" \
+only as a last resort)
    - Board certifications and fellowship training
    - Academic affiliations and research activity
    - Castle Connolly, US News, or Healthgrades recognitions
@@ -122,7 +155,7 @@ and what they consistently criticize
 4. **Practical Considerations**
    - Insurance and payer mix
    - Multiple locations / access
-   - Hospital affiliations (important for procedures)
+   - Ownership structure and what it means for patient experience
    - Urgent/same-week appointment availability
 
 **Required Output Format**
@@ -132,12 +165,29 @@ Provide your response in the following structure:
 ## {specialty} Care Analysis: {city}, {state}
 
 ### Overview
-[2–3 paragraph summary of the local {specialty} care landscape]
+[2–3 paragraph summary of the local {specialty} care landscape, including \
+how independent practices and hospital-affiliated groups differ in this market]
 
-### Rankings
+### Independent Practices (Privately Owned & Operated)
 
-For each major group or practice, provide a structured entry:
-**[Rank]. [Practice/Group Name]**
+Rank ALL identified independent {specialty} practices, from strongest to \
+weakest. Include every findable independent practice, not just the top few.
+
+For each independent practice, provide a structured entry:
+**[Rank]. [Practice/Group Name]** — Independent
+- Overall Rating: [letter grade or score]
+- Key Strengths: [bullet list]
+- Notable Weaknesses: [bullet list]
+- Best Suited For: [patient types or conditions]
+- Summary: [2–3 sentence recommendation]
+
+### Hospital & Academic-Affiliated Groups
+
+Rank ALL identified hospital-employed or academic-affiliated {specialty} \
+groups, from strongest to weakest.
+
+For each affiliated group, provide a structured entry:
+**[Rank]. [Group Name]** — Affiliated with [Hospital/System Name]
 - Overall Rating: [letter grade or score]
 - Key Strengths: [bullet list]
 - Notable Weaknesses: [bullet list]
@@ -145,10 +195,12 @@ For each major group or practice, provide a structured entry:
 - Summary: [2–3 sentence recommendation]
 
 ### Top Recommendation
-[Clear recommendation with rationale]
+[Clear recommendation — name the single best option for a typical patient, \
+noting whether it is independent or hospital-affiliated and why that matters]
 
 ### Practical Advice for Patients
-[3–5 actionable bullet points for someone seeking {specialty} care]
+[3–5 actionable bullet points for someone seeking {specialty} care, including \
+guidance on when to choose an independent practice vs. a hospital-affiliated group]
 
 ### Data Limitations & Disclaimer
 [Note data currency, methodology limitations, and recommendation to verify \
@@ -156,7 +208,9 @@ with insurance provider and treating physician]
 
 ---
 
-Analyze {specialty} care providers in {city}, {state} now.
+Analyze {specialty} care providers in the greater {city}, {state} metropolitan \
+area now. Prioritize completeness — it is better to include more practices with \
+less detail than to omit practices entirely.
 """
 
 
@@ -170,8 +224,11 @@ Guidelines:
 - Where both analyses agree, present those findings with confidence.
 - Where they differ, surface both perspectives and offer your best synthesis.
 - The final report should be more comprehensive and reliable than either \
-analysis alone.
-- Use the same report structure as the input analyses.
+analysis alone — if one analysis identified a practice the other missed, \
+include it.
+- Maintain the two-section ranking structure: Independent Practices in one \
+ranked list, Hospital & Academic-Affiliated Groups in a separate ranked list. \
+Never merge them into a single combined list.
 - Do not mention which AI produced which finding — write as a unified expert voice.
 """
 

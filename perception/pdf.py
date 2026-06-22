@@ -4,7 +4,7 @@ import base64
 import html as _html_lib
 from pathlib import Path
 
-from .models import AnalysisResult, RankedProvider
+from .models import AffiliationType, AnalysisResult, RankedProvider
 
 # RLDatix brand palette
 _TEAL        = "#0F4146"
@@ -55,19 +55,20 @@ def _rank_text_color(rank: int) -> str:
     return _TEAL if rank in (2, 3) else "#ffffff"
 
 
-def _provider_card(p: RankedProvider) -> str:
-    bg = _RANK_COLORS.get(p.rank, _RANK_DEFAULT)
-    text_color = _rank_text_color(p.rank)
+def _provider_card(p: RankedProvider, display_rank: int) -> str:
+    bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
+    text_color = _rank_text_color(display_rank)
     strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(f"<li>{_e(w)}</li>" for w in p.notable_weaknesses)
     return f"""
     <div class="card">
       <div class="card-rank" style="background:{bg}; color:{text_color}">
-        <span class="rank-num">{p.rank}</span>
+        <span class="rank-num">{display_rank}</span>
       </div>
       <div class="card-body">
         <div class="card-top">
           <h3 class="provider-name">{_e(p.name)}</h3>
+          {f'<span class="surgeon-pill">{_e(p.surgeon_count)} surgeons</span>' if p.surgeon_count and p.surgeon_count.lower() != "unknown" else ""}
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
         <div class="traits">
@@ -86,13 +87,38 @@ def _provider_card(p: RankedProvider) -> str:
     </div>"""
 
 
+def _rankings_section(providers: list[RankedProvider], title: str, subtitle: str) -> str:
+    if not providers:
+        return ""
+    cards = "\n".join(_provider_card(p, i + 1) for i, p in enumerate(providers))
+    return f"""
+  <div class="rankings">
+    <div class="section-title">{_e(title)}</div>
+    <div class="section-subtitle">{_e(subtitle)}</div>
+    {cards}
+  </div>"""
+
+
 def _build_html(result: AnalysisResult) -> str:
     location        = _e(result.location)
     specialty_label = _e(result.specialty or "Hospital Market")
     date_str        = result.generated_at.strftime("%B %d, %Y")
     logo_uri        = _logo_data_uri()
 
-    cards_html   = "\n".join(_provider_card(p) for p in result.rankings)
+    independent = [p for p in result.rankings if p.affiliation_type == AffiliationType.independent]
+    affiliated  = [p for p in result.rankings if p.affiliation_type == AffiliationType.hospital_affiliated]
+    unknown     = [p for p in result.rankings if p.affiliation_type == AffiliationType.unknown]
+
+    if independent or affiliated:
+        rankings_html = (
+            _rankings_section(independent, "Independent Practices", "Privately owned and operated by physicians")
+            + _rankings_section(affiliated, "Hospital & Academic-Affiliated Groups", "Employed by or owned by a hospital, health system, or academic medical center")
+            + _rankings_section(unknown, "Additional Providers", "Affiliation not classified")
+        )
+    else:
+        # Fallback for hospital analyses or unclassified results
+        rankings_html = _rankings_section(unknown or result.rankings, "Provider Rankings", "")
+
     advice_items = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
     logo_tag     = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
 
@@ -184,7 +210,15 @@ def _build_html(result: AnalysisResult) -> str:
     }}
 
     /* ── Provider cards ─────────────────────────────── */
-    .rankings {{ margin-bottom: 24px; }}
+    .rankings {{ margin-bottom: 28px; }}
+
+    .section-subtitle {{
+      font-size: 7.5pt;
+      color: #5a7880;
+      font-style: italic;
+      margin-top: -8px;
+      margin-bottom: 10px;
+    }}
 
     .card {{
       display: flex;
@@ -235,6 +269,16 @@ def _build_html(result: AnalysisResult) -> str:
       background: {_PALE_GREEN};
       color: {_TEAL};
       border: 1px solid {_SEAFOAM};
+      border-radius: 20px;
+      padding: 2px 9px;
+      white-space: nowrap;
+    }}
+    .surgeon-pill {{
+      font-size: 7pt;
+      font-weight: 500;
+      background: {_BLUE_LIGHT};
+      color: {_TEAL};
+      border: 1px solid {_BLUE};
       border-radius: 20px;
       padding: 2px 9px;
       white-space: nowrap;
@@ -329,10 +373,7 @@ def _build_html(result: AnalysisResult) -> str:
 
 <div class="content">
 
-  <div class="rankings">
-    <div class="section-title">Provider Rankings</div>
-    {cards_html}
-  </div>
+  {rankings_html}
 
   <div class="recommendation">
     <div class="section-title" style="margin-bottom:10px;">Top Recommendation</div>

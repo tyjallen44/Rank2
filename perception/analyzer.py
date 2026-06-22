@@ -12,7 +12,7 @@ from typing import Callable
 import anthropic
 
 from .config import settings
-from .db import get_connection
+from .db import get_connection, init_db
 from .models import AnalysisResult, Entity, RankedProvider
 from .prompts import (
     SYNTHESIS_SYSTEM_PROMPT,
@@ -49,12 +49,35 @@ _STRUCTURED_OUTPUT_TOOL = {
             },
             "rankings": {
                 "type": "array",
-                "description": "Ranked list of providers from best to worst.",
+                "description": (
+                    "All ranked providers across both lists. Assign globally unique "
+                    "sequential ranks (1, 2, 3, ...) — rank all independent practices "
+                    "first in quality order, then continue numbering for "
+                    "hospital/academic-affiliated groups. Set affiliation_type on each."
+                ),
                 "items": {
                     "type": "object",
                     "properties": {
                         "rank": {"type": "integer"},
                         "name": {"type": "string"},
+                        "affiliation_type": {
+                            "type": "string",
+                            "enum": ["independent", "hospital_affiliated", "unknown"],
+                            "description": (
+                                "independent = privately owned by physicians; "
+                                "hospital_affiliated = employed by or owned by a "
+                                "hospital, health system, or academic medical center."
+                            ),
+                        },
+                        "surgeon_count": {
+                            "type": "string",
+                            "description": (
+                                "Number of surgeons/physicians in the group. "
+                                "Use a specific number ('12'), an estimate ('~20'), "
+                                "or a range ('3–5'). Use 'unknown' only if truly "
+                                "not findable."
+                            ),
+                        },
                         "overall_rating": {"type": "string"},
                         "key_strengths": {
                             "type": "array",
@@ -70,6 +93,8 @@ _STRUCTURED_OUTPUT_TOOL = {
                     "required": [
                         "rank",
                         "name",
+                        "affiliation_type",
+                        "surgeon_count",
                         "overall_rating",
                         "key_strengths",
                         "notable_weaknesses",
@@ -158,6 +183,7 @@ def analyze_location(
     console = Console(force_terminal=True, stderr=True)
 
     emit({"type": "phase", "name": "starting", "text": "Starting analysis"})
+    init_db()
 
     if specialty:
         system_prompt, user_prompt = build_specialty_prompt(city, state, specialty)
@@ -231,7 +257,7 @@ def analyze_location(
     with console.status("[bold dark_sea_green4]Extracting structured data…[/bold dark_sea_green4]"):
         response = client.messages.create(
             model=_MODEL,
-            max_tokens=4000,
+            max_tokens=16000,
             system=system_prompt,
             tools=[_STRUCTURED_OUTPUT_TOOL],
             tool_choice={"type": "tool", "name": "submit_analysis_result"},
@@ -242,24 +268,33 @@ def analyze_location(
                     "role": "user",
                     "content": (
                         "Now call the submit_analysis_result tool with the structured "
-                        "version of your analysis above."
+                        "version of your analysis above. Include every provider mentioned "
+                        "in both the Independent Practices and Hospital & Academic-Affiliated "
+                        "sections."
                     ),
                 },
             ],
         )
+
+    if response.stop_reason == "max_tokens":
+        console.print("[yellow]⚠[/yellow] Structured extraction hit token limit — partial data only")
 
     for block in response.content:
         if block.type == "tool_use" and block.name == "submit_analysis_result":
             structured_data = block.input if isinstance(block.input, dict) else json.loads(block.input)
             break
 
-    console.print("[green]✓[/green] Structured data extracted")
+    provider_count = len(structured_data.get("rankings", []))
+    console.print(f"[green]✓[/green] Structured data extracted ({provider_count} providers)")
 
     # Build the result model
+    from .models import AffiliationType
     rankings = [
         RankedProvider(
             rank=r["rank"],
             name=r["name"],
+            affiliation_type=AffiliationType(r.get("affiliation_type", "unknown")),
+            surgeon_count=r.get("surgeon_count") or None,
             overall_rating=r.get("overall_rating", ""),
             key_strengths=r.get("key_strengths", []),
             notable_weaknesses=r.get("notable_weaknesses", []),
@@ -385,15 +420,17 @@ def _save_to_db(result: AnalysisResult) -> None:
         con.execute(
             """
             INSERT OR REPLACE INTO ranked_providers
-                (run_id, rank, name, overall_rating,
+                (run_id, rank, name, affiliation_type, surgeon_count, overall_rating,
                  key_strengths, notable_weaknesses,
                  best_suited_for, recommendation_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 result.run_id,
                 provider.rank,
                 provider.name,
+                provider.affiliation_type.value,
+                provider.surgeon_count,
                 provider.overall_rating,
                 json.dumps(provider.key_strengths),
                 json.dumps(provider.notable_weaknesses),
