@@ -389,6 +389,16 @@ html, body {
 </head>
 <body>
 
+<!-- ── Session expired overlay ────────────────────────────────────────────── -->
+<div id="session-expired-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,65,70,0.7);z-index:9999;display:none;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:36px 40px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.25)">
+    <div style="font-size:32px;margin-bottom:12px">🔒</div>
+    <div style="font-size:17px;font-weight:700;color:#0F4146;margin-bottom:8px">Session Expired</div>
+    <div style="font-size:14px;color:#5a7880;margin-bottom:24px;line-height:1.6">Your session has timed out. Please log in again to continue — any analysis in progress may still be running and will appear in History when complete.</div>
+    <button onclick="doLogout()" style="background:#0F4146;color:#fff;border:none;border-radius:8px;padding:11px 28px;font-size:14px;font-weight:600;cursor:pointer;width:100%">Log In Again</button>
+  </div>
+</div>
+
 <!-- ── Login ──────────────────────────────────────────────────────────────── -->
 <div id="login-screen">
   <div class="login-card">
@@ -664,11 +674,21 @@ function showApp() {
   navigate('new');
 }
 
-function api(path, opts = {}) {
-  return fetch(path, {
+function showSessionExpired() {
+  const el = document.getElementById('session-expired-overlay');
+  el.style.display = 'flex';
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
     ...opts,
     headers: { 'Authorization': `Bearer ${_token}`, ...(opts.headers || {}) },
   });
+  if (r.status === 401) {
+    showSessionExpired();
+    throw new Error('session_expired');
+  }
+  return r;
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────
@@ -819,8 +839,13 @@ function startProgress(jobId, title, isBatch) {
 
   _es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
   _es.onmessage = e => onSSE(JSON.parse(e.data));
-  _es.onerror   = () => {
+  _es.onerror   = async () => {
     _es.close();
+    // Check if the session is still valid before showing a generic error
+    try {
+      const r = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${_token}` } });
+      if (r.status === 401) { showSessionExpired(); return; }
+    } catch(_) {}
     document.getElementById('prog-err-msg').textContent =
       'Connection lost. The analysis may still be running — check History when complete.';
     document.getElementById('prog-err').classList.remove('hidden');
@@ -926,7 +951,6 @@ async function loadHistory() {
   el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
   try {
     const r = await api('/api/history');
-    if (r.status === 401) { doLogout(); return; }
     const runs = await r.json();
     if (!runs.length) {
       el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';

@@ -16,11 +16,15 @@ Optional:
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import hmac as _hmac
 import json
 import os
 import secrets
 import shutil
 import tempfile
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -62,7 +66,36 @@ def _password_role(pw: str) -> tuple[str, str]:
     return _ROLE_MAP.get(pw, ("admin", "Admin"))
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-_tokens: dict[str, str] = {}  # token → role_id
+_SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "30"))
+
+
+def _signing_key() -> bytes:
+    """Derive a consistent HMAC signing key from the access password."""
+    pw = next(iter(ACCESS_PASSWORDS), "rank2")
+    return _hmac.new(pw.encode(), b"rank2-session-v1", hashlib.sha256).digest()
+
+
+def _create_token(role_id: str) -> str:
+    payload = json.dumps({"role": role_id, "exp": int(time.time()) + _SESSION_TTL_DAYS * 86400})
+    b64 = base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+    sig = _hmac.new(_signing_key(), b64.encode(), hashlib.sha256).hexdigest()
+    return f"{b64}.{sig}"
+
+
+def _verify_token(token: str) -> str | None:
+    """Returns role_id if the token is valid and not expired, else None."""
+    try:
+        b64, sig = token.rsplit(".", 1)
+        expected = _hmac.new(_signing_key(), b64.encode(), hashlib.sha256).hexdigest()
+        if not _hmac.compare_digest(sig, expected):
+            return None
+        padded = b64 + "=" * (-len(b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded).decode())
+        if payload["exp"] < time.time():
+            return None
+        return payload["role"]
+    except Exception:
+        return None
 
 
 class LoginRequest(BaseModel):
@@ -76,8 +109,7 @@ async def login(req: LoginRequest):
     if req.password not in ACCESS_PASSWORDS:
         raise HTTPException(401, "Invalid password")
     role_id, display_name = _password_role(req.password)
-    token = secrets.token_urlsafe(32)
-    _tokens[token] = role_id
+    token = _create_token(role_id)
     return {"token": token, "role": role_id, "display_name": display_name}
 
 
@@ -85,9 +117,9 @@ def require_auth(request: Request, token: Optional[str] = Query(None)) -> str:
     """Accepts Bearer header or ?token= query param. Returns the user's role_id."""
     hdr = request.headers.get("Authorization", "")
     t = hdr[7:] if hdr.startswith("Bearer ") else token
-    role = _tokens.get(t) if t else None
+    role = _verify_token(t) if t else None
     if role is None:
-        raise HTTPException(401, "Unauthorized")
+        raise HTTPException(401, "Session expired — please log in again")
     return role
 
 
