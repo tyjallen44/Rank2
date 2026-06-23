@@ -88,6 +88,7 @@ def init_db() -> None:
             rank                    INTEGER NOT NULL,
             name                    VARCHAR NOT NULL,
             affiliation_type        VARCHAR DEFAULT 'unknown',
+            size_category           VARCHAR DEFAULT 'unknown',
             physician_count         VARCHAR,
             overall_rating          VARCHAR,
             key_strengths           VARCHAR,
@@ -101,6 +102,7 @@ def init_db() -> None:
     # Migrate older DBs
     for col, definition in [
         ("affiliation_type", "VARCHAR DEFAULT 'unknown'"),
+        ("size_category", "VARCHAR DEFAULT 'unknown'"),
         ("physician_count", "VARCHAR"),
         ("consolidated_locations", "VARCHAR DEFAULT '[]'"),
     ]:

@@ -4,7 +4,7 @@ import base64
 import html as _html_lib
 from pathlib import Path
 
-from .models import AffiliationType, AnalysisResult, RankedProvider
+from .models import AffiliationType, AnalysisResult, RankedProvider, SizeCategory
 
 # RLDatix brand palette
 _TEAL        = "#0F4146"
@@ -119,19 +119,26 @@ def _build_html(result: AnalysisResult) -> str:
     date_str        = result.generated_at.strftime("%B %d, %Y")
     logo_uri        = _logo_data_uri()
 
-    independent = [p for p in result.rankings if p.affiliation_type == AffiliationType.independent]
-    affiliated  = [p for p in result.rankings if p.affiliation_type == AffiliationType.hospital_affiliated]
-    unknown     = [p for p in result.rankings if p.affiliation_type == AffiliationType.unknown]
-
-    if independent or affiliated:
+    if result.specialty:
+        # Specialty analysis: split by affiliation type
+        independent = [p for p in result.rankings if p.affiliation_type == AffiliationType.independent]
+        affiliated  = [p for p in result.rankings if p.affiliation_type == AffiliationType.hospital_affiliated]
+        unclassified = [p for p in result.rankings if p.affiliation_type == AffiliationType.unknown]
         rankings_html = (
             _rankings_section(independent, "Independent Practices", "Privately owned and operated by physicians")
             + _rankings_section(affiliated, "Hospital & Academic-Affiliated Groups", "Employed by or owned by a hospital, health system, or academic medical center")
-            + _rankings_section(unknown, "Additional Providers", "Affiliation not classified")
+            + _rankings_section(unclassified, "Additional Providers", "Affiliation not classified")
         )
     else:
-        # Fallback for hospital analyses or unclassified results
-        rankings_html = _rankings_section(unknown or result.rankings, "Provider Rankings", "")
+        # Hospital analysis: split by size category
+        large     = [p for p in result.rankings if p.size_category == SizeCategory.large]
+        community = [p for p in result.rankings if p.size_category == SizeCategory.community]
+        unclassified = [p for p in result.rankings if p.size_category == SizeCategory.unknown]
+        rankings_html = (
+            _rankings_section(large, "Large & Major Hospitals", "Academic medical centers, major teaching hospitals, and large regional referral centers")
+            + _rankings_section(community, "Community & Smaller Hospitals", "Community hospitals, critical access hospitals, and specialty facilities")
+            + _rankings_section(unclassified, "Additional Hospitals", "Size not classified")
+        )
 
     advice_items = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
     logo_tag     = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""

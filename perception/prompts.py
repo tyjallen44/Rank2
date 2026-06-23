@@ -13,12 +13,46 @@ whenever available. You acknowledge data limitations honestly.
 
 HOSPITAL_USER_PROMPT = """\
 I need a comprehensive analysis of hospital quality and patient experience in \
-{city}, {state}. Please research and evaluate the major hospitals and health \
-systems serving this area.
+{city}, {state} and the broader metropolitan area.
+
+**Your primary goal is to identify as many hospitals and health systems as \
+possible** — do not limit yourself to the most prominent or well-known names. \
+Cast a wide net: CMS Hospital Compare, The Leapfrog Group, US News hospital \
+rankings, Joint Commission Quality Check, Healthgrades hospital directories, \
+and your knowledge of the market. Include all hospitals serving the greater \
+{city} metropolitan area — large academic medical centers, community hospitals, \
+specialty hospitals, and critical access hospitals alike.
+
+**Step 1 — Ownership Aggregation (always apply)**
+
+Before ranking, group hospitals by their actual ownership entity (not just \
+name similarity). If two or more hospitals are owned or operated by the same \
+parent health system or company, consolidate them into a single ranked entry:
+- Name the entry after the parent brand or health system \
+(e.g., "HCA Healthcare — Austin Division", "Ascension Seton", \
+"Baylor Scott & White Health")
+- List each individual campus or facility as a sub-location with its own \
+overall rating
+- Rate and describe the consolidated entry based on the system's overall \
+performance across all its locations in this market
+- Only aggregate where common ownership is confirmed — when uncertain, \
+keep hospitals separate
+
+**Step 2 — Size Classification (apply to every entry)**
+
+Classify each hospital entry (after any aggregation) as one of:
+- **Large / Major** — academic medical centers, major teaching hospitals, \
+large regional referral centers, and flagship multi-specialty hospitals of \
+large health systems (typically 200+ licensed beds; capable of handling \
+complex, high-acuity cases across many specialties)
+- **Community / Smaller** — community hospitals, critical access hospitals, \
+specialty hospitals (surgery centers, rehabilitation hospitals, long-term acute \
+care), and smaller regional facilities (typically under 200 beds or serving a \
+more limited clinical scope)
 
 **Analysis Framework**
 
-For each major hospital or health system in {city}, {state}, evaluate:
+For every identified hospital or consolidated health-system entry, evaluate:
 
 1. **Overall Quality & Safety**
    - CMS hospital star ratings and quality scores
@@ -46,28 +80,48 @@ be a better choice
 
 **Required Output Format**
 
-Provide your response in the following structure:
-
 ## Hospital Market Analysis: {city}, {state}
 
 ### Overview
-[2–3 paragraph summary of the local hospital landscape]
+[2–3 paragraph summary of the local hospital landscape, noting how ownership \
+consolidation shapes the market]
 
-### Rankings
+### Large & Major Hospitals
 
-For each major hospital, provide a structured entry:
-**[Rank]. [Hospital Name]**
+Rank ALL large/major hospital entries (consolidated by ownership where \
+applicable), from strongest to weakest.
+
+For each entry:
+**[Rank]. [Hospital or Health System Name]** — Large/Major
 - Overall Rating: [letter grade or score]
+- Locations: [list individual campuses if this is a consolidated entry, \
+each with its own rating — omit if single facility]
+- Key Strengths: [bullet list]
+- Notable Weaknesses: [bullet list]
+- Best Suited For: [patient types or conditions]
+- Summary: [2–3 sentence recommendation]
+
+### Community & Smaller Hospitals
+
+Rank ALL community/smaller hospital entries, from strongest to weakest.
+
+For each entry:
+**[Rank]. [Hospital Name]** — Community/Smaller
+- Overall Rating: [letter grade or score]
+- Locations: [list if consolidated — omit if single facility]
 - Key Strengths: [bullet list]
 - Notable Weaknesses: [bullet list]
 - Best Suited For: [patient types or conditions]
 - Summary: [2–3 sentence recommendation]
 
 ### Top Recommendation
-[Clear recommendation with rationale]
+[Clear recommendation — name the single best option for a typical patient \
+seeking acute care, and note when a community hospital might be the better \
+choice for simpler needs]
 
 ### Practical Advice for Patients
-[3–5 actionable bullet points]
+[3–5 actionable bullet points, including guidance on when to choose a major \
+hospital vs. a community facility]
 
 ### Data Limitations & Disclaimer
 [Note data currency, methodology limitations, and recommendation to verify \
@@ -75,7 +129,9 @@ with insurance provider and treating physician]
 
 ---
 
-Analyze the hospitals in {city}, {state} now.
+Analyze hospitals in the greater {city}, {state} metropolitan area now. \
+Prioritize completeness — it is better to include more hospitals with less \
+detail than to omit hospitals entirely.
 """
 
 SPECIALTY_SYSTEM_PROMPT = """\

@@ -13,7 +13,7 @@ import anthropic
 from .config import settings
 from .db import get_connection, init_db
 from .models import AnalysisResult, Entity, RankedProvider
-from .models import AffiliationType, ConsolidatedLocation
+from .models import AffiliationType, ConsolidatedLocation, SizeCategory
 from .prompts import (
     build_hospital_prompt,
     build_specialty_prompt,
@@ -61,9 +61,22 @@ _STRUCTURED_OUTPUT_TOOL = {
                             "type": "string",
                             "enum": ["independent", "hospital_affiliated", "unknown"],
                             "description": (
-                                "independent = privately owned by physicians; "
-                                "hospital_affiliated = employed by or owned by a "
-                                "hospital, health system, or academic medical center."
+                                "For specialty analyses: independent = privately owned "
+                                "by physicians; hospital_affiliated = employed by or "
+                                "owned by a hospital, health system, or academic "
+                                "medical center. Set unknown for hospital analyses."
+                            ),
+                        },
+                        "size_category": {
+                            "type": "string",
+                            "enum": ["large", "community", "unknown"],
+                            "description": (
+                                "For hospital analyses: large = academic medical "
+                                "centers, major teaching hospitals, large regional "
+                                "referral centers (typically 200+ beds); community = "
+                                "community hospitals, critical access hospitals, "
+                                "specialty hospitals, smaller facilities. Set unknown "
+                                "for specialty practice analyses."
                             ),
                         },
                         "physician_count": {
@@ -185,7 +198,7 @@ def analyze_location(
     narrative_parts: list[str] = []
     with client.messages.stream(
         model=_MODEL,
-        max_tokens=8000,
+        max_tokens=16000,
         thinking={"type": "adaptive"},
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
@@ -239,6 +252,7 @@ def analyze_location(
             rank=r["rank"],
             name=r["name"],
             affiliation_type=AffiliationType(r.get("affiliation_type", "unknown")),
+            size_category=SizeCategory(r.get("size_category", "unknown")),
             physician_count=r.get("physician_count") or None,
             overall_rating=r.get("overall_rating", ""),
             key_strengths=r.get("key_strengths", []),
@@ -373,16 +387,17 @@ def _save_to_db(result: AnalysisResult) -> None:
         con.execute(
             """
             INSERT OR REPLACE INTO ranked_providers
-                (run_id, rank, name, affiliation_type, physician_count, overall_rating,
-                 key_strengths, notable_weaknesses,
+                (run_id, rank, name, affiliation_type, size_category, physician_count,
+                 overall_rating, key_strengths, notable_weaknesses,
                  best_suited_for, recommendation_summary, consolidated_locations)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 result.run_id,
                 provider.rank,
                 provider.name,
                 provider.affiliation_type.value,
+                provider.size_category.value,
                 provider.physician_count,
                 provider.overall_rating,
                 json.dumps(provider.key_strengths),
