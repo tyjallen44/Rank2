@@ -60,6 +60,19 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
     text_color = _rank_text_color(display_rank)
     strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(f"<li>{_e(w)}</li>" for w in p.notable_weaknesses)
+
+    locations_html = ""
+    if p.consolidated_locations:
+        loc_parts = []
+        for loc in p.consolidated_locations:
+            rating_span = (
+                f'&thinsp;—&thinsp;<span class="loc-rating">{_e(loc.overall_rating)}</span>'
+                if loc.overall_rating else ""
+            )
+            loc_parts.append(f'<li><span class="loc-name">{_e(loc.name)}</span>{rating_span}</li>')
+        loc_items = "".join(loc_parts)
+        locations_html = f'<div class="locations-block"><div class="locations-label">Includes locations:</div><ul class="locations-list">{loc_items}</ul></div>'
+
     return f"""
     <div class="card">
       <div class="card-rank" style="background:{bg}; color:{text_color}">
@@ -71,6 +84,7 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
           {f'<span class="surgeon-pill">{_e(p.physician_count)} physicians</span>' if p.physician_count and p.physician_count.lower() != "unknown" else ""}
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
+        {locations_html}
         <div class="traits">
           <div class="trait-col">
             <div class="trait-label strengths-label">Strengths</div>
@@ -306,6 +320,33 @@ def _build_html(result: AnalysisResult) -> str:
       color: #2a5055;
     }}
     .trait-col li {{ margin-bottom: 2px; }}
+
+    .locations-block {{
+      background: {_BLUE_LIGHT};
+      border-radius: 4px;
+      padding: 5px 10px;
+      margin-bottom: 8px;
+      border-left: 3px solid {_BLUE};
+    }}
+    .locations-label {{
+      font-size: 6.5pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #4a7080;
+      margin-bottom: 3px;
+    }}
+    .locations-list {{
+      padding-left: 13px;
+      margin: 0;
+    }}
+    .locations-list li {{
+      font-size: 7.5pt;
+      color: #2a5055;
+      margin-bottom: 1px;
+    }}
+    .loc-name {{ font-weight: 500; }}
+    .loc-rating {{ color: #0F4146; font-weight: 600; }}
 
     .best-for {{
       font-size: 8pt;

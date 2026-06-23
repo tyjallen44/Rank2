@@ -59,6 +59,7 @@ def init_db() -> None:
             run_id              VARCHAR PRIMARY KEY,
             location            VARCHAR NOT NULL,
             specialty           VARCHAR,
+            aggregate           BOOLEAN DEFAULT FALSE,
             generated_at        DATE NOT NULL,
             top_recommendation  VARCHAR,
             practical_advice    VARCHAR,
@@ -69,9 +70,14 @@ def init_db() -> None:
         )
     """)
     # Migrate older DBs that pre-date the path columns
-    for col in ("pdf_path", "md_path", "user_role"):
+    for col, definition in [
+        ("pdf_path", "VARCHAR"),
+        ("md_path", "VARCHAR"),
+        ("user_role", "VARCHAR"),
+        ("aggregate", "BOOLEAN DEFAULT FALSE"),
+    ]:
         try:
-            con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} VARCHAR")
+            con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
         except Exception:
             pass
     # Tag pre-existing rows (before role isolation) as admin
@@ -88,6 +94,7 @@ def init_db() -> None:
             notable_weaknesses      VARCHAR,
             best_suited_for         VARCHAR,
             recommendation_summary  VARCHAR,
+            consolidated_locations  VARCHAR DEFAULT '[]',
             PRIMARY KEY (run_id, rank)
         )
     """)
@@ -95,6 +102,7 @@ def init_db() -> None:
     for col, definition in [
         ("affiliation_type", "VARCHAR DEFAULT 'unknown'"),
         ("physician_count", "VARCHAR"),
+        ("consolidated_locations", "VARCHAR DEFAULT '[]'"),
     ]:
         try:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")

@@ -249,13 +249,39 @@ picture so patients have an accurate, balanced view.
 """
 
 
-def build_hospital_prompt(city: str, state: str) -> tuple[str, str]:
+_AGGREGATE_INSTRUCTIONS = """\
+
+**System Aggregation (enabled)**
+
+Where multiple entries clearly belong to the same parent health system or \
+ownership group — identifiable by a shared name prefix (e.g., "St. David's \
+Medical Center," "St. David's North Austin Medical Center," and "St. David's \
+South Austin Medical Center" all belong to St. David's HealthCare) — \
+consolidate them into a single ranked entry representing the parent system.
+
+For each consolidated entry:
+- Use the parent system name as the entry name (e.g., "St. David's HealthCare")
+- List each constituent location under "Consolidated Locations" with its \
+  individual overall rating
+- Combine key strengths and notable weaknesses across all locations, noting \
+  any location-specific differences where meaningful
+- Set the overall rating to reflect the system as a whole
+- Only aggregate where the name relationship is unambiguous — when in doubt, \
+  keep entities separate
+"""
+
+
+def build_hospital_prompt(city: str, state: str, aggregate: bool = False) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for a broad hospital market analysis."""
     user = HOSPITAL_USER_PROMPT.format(city=city, state=state)
+    if aggregate:
+        user += _AGGREGATE_INSTRUCTIONS
     return HOSPITAL_SYSTEM_PROMPT, user
 
 
-def build_specialty_prompt(city: str, state: str, specialty: str) -> tuple[str, str]:
+def build_specialty_prompt(city: str, state: str, specialty: str, aggregate: bool = False) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for a focused specialty analysis."""
     user = SPECIALTY_USER_PROMPT.format(city=city, state=state, specialty=specialty)
+    if aggregate:
+        user += _AGGREGATE_INSTRUCTIONS
     return SPECIALTY_SYSTEM_PROMPT, user

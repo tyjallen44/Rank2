@@ -13,6 +13,7 @@ import anthropic
 from .config import settings
 from .db import get_connection, init_db
 from .models import AnalysisResult, Entity, RankedProvider
+from .models import AffiliationType, ConsolidatedLocation
 from .prompts import (
     build_hospital_prompt,
     build_specialty_prompt,
@@ -87,6 +88,23 @@ _STRUCTURED_OUTPUT_TOOL = {
                         },
                         "best_suited_for": {"type": "string"},
                         "recommendation_summary": {"type": "string"},
+                        "consolidated_locations": {
+                            "type": "array",
+                            "description": (
+                                "When aggregation is enabled, list each constituent "
+                                "location/campus that was merged into this parent-system "
+                                "entry. Leave empty if this entry was not aggregated."
+                            ),
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "overall_rating": {"type": "string"},
+                                },
+                                "required": ["name", "overall_rating"],
+                                "additionalProperties": False,
+                            },
+                        },
                     },
                     "required": [
                         "rank",
@@ -127,6 +145,7 @@ def analyze_location(
     city: str,
     state: str,
     specialty: str | None = None,
+    aggregate: bool = False,
     output_dir: str | Path = "reports",
     on_event: Callable | None = None,
 ) -> AnalysisResult:
@@ -154,9 +173,9 @@ def analyze_location(
     init_db()
 
     if specialty:
-        system_prompt, user_prompt = build_specialty_prompt(city, state, specialty)
+        system_prompt, user_prompt = build_specialty_prompt(city, state, specialty, aggregate=aggregate)
     else:
-        system_prompt, user_prompt = build_hospital_prompt(city, state)
+        system_prompt, user_prompt = build_hospital_prompt(city, state, aggregate=aggregate)
 
     client = _get_client()
     run_id = str(uuid.uuid4())
@@ -215,7 +234,6 @@ def analyze_location(
         return re.sub(r"</?parameter[^>]*>", "", text).strip()
 
     # Build the result model
-    from .models import AffiliationType
     rankings = [
         RankedProvider(
             rank=r["rank"],
@@ -227,6 +245,11 @@ def analyze_location(
             notable_weaknesses=r.get("notable_weaknesses", []),
             best_suited_for=r.get("best_suited_for", ""),
             recommendation_summary=r.get("recommendation_summary", ""),
+            consolidated_locations=[
+                ConsolidatedLocation(name=loc["name"], overall_rating=loc.get("overall_rating", ""))
+                for loc in r.get("consolidated_locations", [])
+                if isinstance(loc, dict) and loc.get("name")
+            ],
         )
         for r in structured_data.get("rankings", [])
     ]
@@ -235,6 +258,7 @@ def analyze_location(
         run_id=run_id,
         location=f"{city}, {state}",
         specialty=specialty,
+        aggregate=aggregate,
         generated_at=date.today(),
         top_recommendation=_clean(structured_data.get("top_recommendation", "")),
         practical_advice=[_clean(a) for a in structured_data.get("practical_advice", []) if isinstance(a, str)],
@@ -310,6 +334,7 @@ def analyze_entities(
             city=city,
             state=state,
             specialty=specialty,
+            aggregate=False,
             output_dir=output_dir,
             on_event=on_event,
         )
@@ -324,15 +349,16 @@ def _save_to_db(result: AnalysisResult) -> None:
     con.execute(
         """
         INSERT OR REPLACE INTO analysis_runs
-            (run_id, location, specialty, generated_at,
+            (run_id, location, specialty, aggregate, generated_at,
              top_recommendation, practical_advice, disclaimer, report_markdown,
              pdf_path, md_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             result.run_id,
             result.location,
             result.specialty,
+            result.aggregate,
             result.generated_at.isoformat(),
             result.top_recommendation,
             json.dumps(result.practical_advice),
@@ -349,8 +375,8 @@ def _save_to_db(result: AnalysisResult) -> None:
             INSERT OR REPLACE INTO ranked_providers
                 (run_id, rank, name, affiliation_type, physician_count, overall_rating,
                  key_strengths, notable_weaknesses,
-                 best_suited_for, recommendation_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 best_suited_for, recommendation_summary, consolidated_locations)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 result.run_id,
@@ -363,6 +389,7 @@ def _save_to_db(result: AnalysisResult) -> None:
                 json.dumps(provider.notable_weaknesses),
                 provider.best_suited_for,
                 provider.recommendation_summary,
+                json.dumps([{"name": l.name, "overall_rating": l.overall_rating} for l in provider.consolidated_locations]),
             ],
         )
 

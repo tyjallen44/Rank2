@@ -164,6 +164,21 @@ html, body {
   box-shadow: 0 1px 4px rgba(15,65,70,0.18);
 }
 
+/* ── Aggregate toggle ────────────────────────────────────────── */
+.aggregate-toggle {
+  display: flex; align-items: center; gap: 9px;
+  cursor: pointer; user-select: none;
+}
+.aggregate-toggle input[type=checkbox] {
+  width: 16px; height: 16px; accent-color: var(--teal);
+  cursor: pointer; flex-shrink: 0;
+}
+.agg-label {
+  font-size: 13px; color: var(--muted);
+  line-height: 1.4;
+}
+.aggregate-toggle:hover .agg-label { color: var(--teal); }
+
 /* ── Buttons ─────────────────────────────────────────────────── */
 .btn {
   padding: 10px 20px; border-radius: 8px; border: none;
@@ -497,6 +512,13 @@ html, body {
             placeholder="e.g. Orthopedics, Cardiology, Dermatology"
             onkeydown="if(event.key==='Enter')runManual()">
         </div>
+        <div class="fg mt16" style="margin-bottom:0">
+          <label class="fl">Options</label>
+          <label class="aggregate-toggle" title="When enabled, related facilities sharing a parent system name (e.g. multiple St. David's campuses) are merged into a single ranked entry.">
+            <input type="checkbox" id="agg-toggle">
+            <span class="agg-label">Aggregate related facilities into parent systems</span>
+          </label>
+        </div>
         <div id="manual-err" class="err hidden mt16"></div>
         <div class="mt20">
           <button class="btn btn-primary" id="run-manual-btn" onclick="runManual()">
@@ -730,13 +752,14 @@ async function runManual() {
   if (!state || state.length !== 2)      return showErr(errEl, 'Please enter a 2-letter state code.');
   if (_type === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
 
+  const aggregate = document.getElementById('agg-toggle').checked;
   const btn = document.getElementById('run-manual-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Starting…';
   try {
     const r = await api('/api/analyze', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({city, state, specialty}),
+      body: JSON.stringify({city, state, specialty, aggregate}),
     });
     if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
     const { job_id } = await r.json();

@@ -67,6 +67,11 @@ class AffiliationType(str, Enum):
     unknown = "unknown"
 
 
+class ConsolidatedLocation(BaseModel):
+    name: str
+    overall_rating: str = ""
+
+
 class RankedProvider(BaseModel):
     rank: int
     name: str
@@ -77,6 +82,7 @@ class RankedProvider(BaseModel):
     notable_weaknesses: list[str] = Field(default_factory=list)
     best_suited_for: str = ""
     recommendation_summary: str = ""
+    consolidated_locations: list[ConsolidatedLocation] = Field(default_factory=list)
 
 
 class AnalysisResult(BaseModel):
@@ -84,6 +90,7 @@ class AnalysisResult(BaseModel):
     run_id: str
     location: str                          # e.g. "Mobile, Alabama"
     specialty: Optional[str] = None        # None → broad hospital analysis
+    aggregate: bool = False                # whether parent/child entities were consolidated
     generated_at: date
     top_recommendation: str = ""
     practical_advice: list[str] = Field(default_factory=list)

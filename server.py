@@ -146,7 +146,7 @@ def _put(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, event: Any) -> N
     asyncio.run_coroutine_threadsafe(queue.put(event), loop)
 
 
-def _job_run_single(job_id: str, city: str, state: str, specialty: Optional[str]) -> None:
+def _job_run_single(job_id: str, city: str, state: str, specialty: Optional[str], aggregate: bool = False) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
@@ -159,7 +159,7 @@ def _job_run_single(job_id: str, city: str, state: str, specialty: Optional[str]
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
         result = analyze_location(
-            city=city, state=state, specialty=specialty,
+            city=city, state=state, specialty=specialty, aggregate=aggregate,
             output_dir=REPORTS_DIR, on_event=emit,
         )
         set_run_role(result.run_id, job["role"])
@@ -233,6 +233,7 @@ class AnalyzeRequest(BaseModel):
     city: str
     state: str
     specialty: Optional[str] = None
+    aggregate: bool = False
 
 
 class BatchRequest(BaseModel):
@@ -242,7 +243,7 @@ class BatchRequest(BaseModel):
 @app.post("/api/analyze")
 async def start_analysis(req: AnalyzeRequest, role: str = Depends(require_auth)):
     job_id = _new_job(role)
-    _pool.submit(_job_run_single, job_id, req.city, req.state, req.specialty)
+    _pool.submit(_job_run_single, job_id, req.city, req.state, req.specialty, req.aggregate)
     return {"job_id": job_id}
 
 
