@@ -71,7 +71,7 @@ class RankedProvider(BaseModel):
     rank: int
     name: str
     affiliation_type: AffiliationType = AffiliationType.unknown
-    surgeon_count: Optional[str] = None   # e.g. "12", "~20", "3–5", or None if unknown
+    physician_count: Optional[str] = None  # e.g. "12", "~20", "3–5", or None if unknown
     overall_rating: str = ""               # e.g. "A" or "4.2/5 stars"
     key_strengths: list[str] = Field(default_factory=list)
     notable_weaknesses: list[str] = Field(default_factory=list)

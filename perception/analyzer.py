@@ -65,13 +65,15 @@ _STRUCTURED_OUTPUT_TOOL = {
                                 "hospital, health system, or academic medical center."
                             ),
                         },
-                        "surgeon_count": {
+                        "physician_count": {
                             "type": "string",
                             "description": (
-                                "Number of surgeons/physicians in the group. "
-                                "Use a specific number ('12'), an estimate ('~20'), "
-                                "or a range ('3–5'). Use 'unknown' only if truly "
-                                "not findable."
+                                "Number of physicians in the practice, group, or "
+                                "hospital department. Use a specific number ('12'), "
+                                "an estimate ('~20'), or a range ('3–5'). Applies to "
+                                "independent practices, hospital-affiliated groups, and "
+                                "hospital departments alike. Use 'unknown' only if "
+                                "truly not findable."
                             ),
                         },
                         "overall_rating": {"type": "string"},
@@ -90,7 +92,6 @@ _STRUCTURED_OUTPUT_TOOL = {
                         "rank",
                         "name",
                         "affiliation_type",
-                        "surgeon_count",
                         "overall_rating",
                         "key_strengths",
                         "notable_weaknesses",
@@ -181,26 +182,21 @@ def analyze_location(
     emit({"type": "phase", "name": "structured", "text": "Extracting structured data"})
     structured_data: dict = {}
 
+    extraction_prompt = (
+        "The following is a completed healthcare market analysis report. "
+        "Your task is to extract the structured data from it by calling the "
+        "submit_analysis_result tool. Include every provider or hospital "
+        "mentioned in the rankings sections.\n\n"
+        f"--- REPORT ---\n{report_markdown}\n--- END REPORT ---"
+    )
+
     with console.status("[bold dark_sea_green4]Extracting structured data…[/bold dark_sea_green4]"):
         response = client.messages.create(
             model=_MODEL,
             max_tokens=16000,
-            system=system_prompt,
             tools=[_STRUCTURED_OUTPUT_TOOL],
             tool_choice={"type": "tool", "name": "submit_analysis_result"},
-            messages=[
-                {"role": "user", "content": user_prompt},
-                {"role": "assistant", "content": report_markdown},
-                {
-                    "role": "user",
-                    "content": (
-                        "Now call the submit_analysis_result tool with the structured "
-                        "version of your analysis above. Include every provider mentioned "
-                        "in both the Independent Practices and Hospital & Academic-Affiliated "
-                        "sections."
-                    ),
-                },
-            ],
+            messages=[{"role": "user", "content": extraction_prompt}],
         )
 
     if response.stop_reason == "max_tokens":
@@ -214,6 +210,10 @@ def analyze_location(
     provider_count = len(structured_data.get("rankings", []))
     console.print(f"[green]✓[/green] Structured data extracted ({provider_count} providers)")
 
+    def _clean(text: str) -> str:
+        """Strip any stray XML parameter tags that sometimes leak into tool call values."""
+        return re.sub(r"</?parameter[^>]*>", "", text).strip()
+
     # Build the result model
     from .models import AffiliationType
     rankings = [
@@ -221,7 +221,7 @@ def analyze_location(
             rank=r["rank"],
             name=r["name"],
             affiliation_type=AffiliationType(r.get("affiliation_type", "unknown")),
-            surgeon_count=r.get("surgeon_count") or None,
+            physician_count=r.get("physician_count") or None,
             overall_rating=r.get("overall_rating", ""),
             key_strengths=r.get("key_strengths", []),
             notable_weaknesses=r.get("notable_weaknesses", []),
@@ -236,9 +236,9 @@ def analyze_location(
         location=f"{city}, {state}",
         specialty=specialty,
         generated_at=date.today(),
-        top_recommendation=structured_data.get("top_recommendation", ""),
-        practical_advice=structured_data.get("practical_advice", []),
-        disclaimer=structured_data.get("disclaimer", ""),
+        top_recommendation=_clean(structured_data.get("top_recommendation", "")),
+        practical_advice=[_clean(a) for a in structured_data.get("practical_advice", []) if isinstance(a, str)],
+        disclaimer=_clean(structured_data.get("disclaimer", "")),
         rankings=rankings,
         report_markdown=report_markdown,
     )
@@ -347,7 +347,7 @@ def _save_to_db(result: AnalysisResult) -> None:
         con.execute(
             """
             INSERT OR REPLACE INTO ranked_providers
-                (run_id, rank, name, affiliation_type, surgeon_count, overall_rating,
+                (run_id, rank, name, affiliation_type, physician_count, overall_rating,
                  key_strengths, notable_weaknesses,
                  best_suited_for, recommendation_summary)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -357,7 +357,7 @@ def _save_to_db(result: AnalysisResult) -> None:
                 provider.rank,
                 provider.name,
                 provider.affiliation_type.value,
-                provider.surgeon_count,
+                provider.physician_count,
                 provider.overall_rating,
                 json.dumps(provider.key_strengths),
                 json.dumps(provider.notable_weaknesses),

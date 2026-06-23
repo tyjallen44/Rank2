@@ -82,7 +82,7 @@ def init_db() -> None:
             rank                    INTEGER NOT NULL,
             name                    VARCHAR NOT NULL,
             affiliation_type        VARCHAR DEFAULT 'unknown',
-            surgeon_count           VARCHAR,
+            physician_count         VARCHAR,
             overall_rating          VARCHAR,
             key_strengths           VARCHAR,
             notable_weaknesses      VARCHAR,
@@ -94,7 +94,7 @@ def init_db() -> None:
     # Migrate older DBs
     for col, definition in [
         ("affiliation_type", "VARCHAR DEFAULT 'unknown'"),
-        ("surgeon_count", "VARCHAR"),
+        ("physician_count", "VARCHAR"),
     ]:
         try:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")

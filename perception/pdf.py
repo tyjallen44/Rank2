@@ -68,7 +68,7 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
       <div class="card-body">
         <div class="card-top">
           <h3 class="provider-name">{_e(p.name)}</h3>
-          {f'<span class="surgeon-pill">{_e(p.surgeon_count)} surgeons</span>' if p.surgeon_count and p.surgeon_count.lower() != "unknown" else ""}
+          {f'<span class="surgeon-pill">{_e(p.physician_count)} physicians</span>' if p.physician_count and p.physician_count.lower() != "unknown" else ""}
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
         <div class="traits">

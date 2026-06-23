@@ -137,9 +137,10 @@ in procedural specialties)
    - Any published or publicly reported quality indicators
 
 2. **Physician Credentials & Reputation**
-   - Number of surgeons / physicians in the group (provide a specific count \
-or best estimate, e.g. "~15 surgeons" or "3–5 physicians"; use "unknown" \
-only as a last resort)
+   - Number of physicians in the group or hospital department (provide a \
+specific count or best estimate, e.g. "~15 physicians" or "3–5 doctors"; \
+applies to both independent practices and hospital-affiliated departments; \
+use "unknown" only as a last resort)
    - Board certifications and fellowship training
    - Academic affiliations and research activity
    - Castle Connolly, US News, or Healthgrades recognitions
