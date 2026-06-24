@@ -79,7 +79,7 @@ def init_db() -> None:
         try:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
         except Exception:
-            pass
+            con.rollback()
     # Tag pre-existing rows (before role isolation) as admin
     con.execute("UPDATE analysis_runs SET user_role = 'admin' WHERE user_role IS NULL")
     con.execute("""
@@ -109,7 +109,7 @@ def init_db() -> None:
         try:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")
         except Exception:
-            pass
+            con.rollback()
     con.close()
 
 
