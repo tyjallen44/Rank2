@@ -70,16 +70,17 @@ def init_db() -> None:
         )
     """)
     # Migrate older DBs that pre-date the path columns
+    existing_run_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='analysis_runs'"
+    ).fetchall()}
     for col, definition in [
         ("pdf_path", "VARCHAR"),
         ("md_path", "VARCHAR"),
         ("user_role", "VARCHAR"),
         ("aggregate", "BOOLEAN DEFAULT FALSE"),
     ]:
-        try:
+        if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
-        except Exception:
-            con.rollback()
     # Tag pre-existing rows (before role isolation) as admin
     con.execute("UPDATE analysis_runs SET user_role = 'admin' WHERE user_role IS NULL")
     con.execute("""
@@ -100,16 +101,17 @@ def init_db() -> None:
         )
     """)
     # Migrate older DBs
+    existing_provider_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='ranked_providers'"
+    ).fetchall()}
     for col, definition in [
         ("affiliation_type", "VARCHAR DEFAULT 'unknown'"),
         ("size_category", "VARCHAR DEFAULT 'unknown'"),
         ("physician_count", "VARCHAR"),
         ("consolidated_locations", "VARCHAR DEFAULT '[]'"),
     ]:
-        try:
+        if col not in existing_provider_cols:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")
-        except Exception:
-            con.rollback()
     con.close()
 
 
