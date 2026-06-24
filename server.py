@@ -128,13 +128,16 @@ async def me(role: str = Depends(require_auth)):
     return {"role": role, "display_name": _ROLE_DISPLAY.get(role, "Admin")}
 
 
+_SERVER_START = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+
+
 @app.get("/api/version")
 async def version():
     try:
         build = Path(__file__).parent.joinpath("VERSION").read_text().strip()
     except Exception:
         build = "dev"
-    return {"build": build}
+    return {"build": build, "deployed": _SERVER_START}
 
 
 # ── Job management ────────────────────────────────────────────────────────────

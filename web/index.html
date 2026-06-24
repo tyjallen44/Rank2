@@ -691,7 +691,9 @@ function showApp() {
   document.getElementById('app').classList.add('visible');
   document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
   fetch('/api/version').then(r => r.json()).then(d => {
-    document.getElementById('sb-build').textContent = 'build ' + d.build;
+    const el = document.getElementById('sb-build');
+    el.textContent = 'build ' + d.build;
+    if (d.deployed) el.textContent += '  ·  ' + d.deployed;
   }).catch(() => {});
   navigate('new');
 }
