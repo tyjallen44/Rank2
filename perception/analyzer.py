@@ -47,10 +47,13 @@ _STRUCTURED_OUTPUT_TOOL = {
             "rankings": {
                 "type": "array",
                 "description": (
-                    "All ranked providers across both lists. Assign globally unique "
-                    "sequential ranks (1, 2, 3, ...) — rank all independent practices "
-                    "first in quality order, then continue numbering for "
-                    "hospital/academic-affiliated groups. Set affiliation_type on each."
+                    "Every single hospital, health system, practice, or group mentioned "
+                    "anywhere in the report — include ALL of them, do not omit any. "
+                    "Assign globally sequential ranks (1, 2, 3, ...) across the full "
+                    "list. For specialty analyses, rank independent practices first then "
+                    "hospital-affiliated groups, continuing the numbering. For hospital "
+                    "analyses, rank large/major systems first then community hospitals. "
+                    "Set affiliation_type and size_category on every entry."
                 ),
                 "items": {
                     "type": "object",

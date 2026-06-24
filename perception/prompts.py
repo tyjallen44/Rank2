@@ -9,6 +9,11 @@ decisions about where to seek care.
 Your analysis is objective, evidence-based, and clearly structured. You cite \
 specific quality metrics, accreditation status, and patient-reported outcomes \
 whenever available. You acknowledge data limitations honestly.
+
+Completeness is a core requirement. You must identify and evaluate EVERY \
+hospital, health system, and hospital-owned facility in the market — not just \
+the most prominent ones. A report that omits hospitals is worse than one that \
+includes them with limited data.
 """
 
 HOSPITAL_USER_PROMPT = """\
@@ -143,6 +148,11 @@ specialist or specialty group for their specific condition.
 Your analysis focuses on specialty-specific quality metrics, physician \
 credentials, fellowship training, outcomes data, and patient experience within \
 that specialty. You are direct about trade-offs and honest about data gaps.
+
+Completeness is a core requirement. You must identify and rank EVERY \
+findable specialty practice, group, and hospital-affiliated department in the \
+market. A report that omits practices is worse than one that includes them \
+with limited data.
 
 A critical part of your analysis is classifying every practice or group as \
 either INDEPENDENT (privately owned and operated by the physicians themselves) \
