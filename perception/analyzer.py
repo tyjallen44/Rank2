@@ -13,7 +13,7 @@ import anthropic
 from . import scoring
 from .config import settings
 from .data import evidence as evidence_mod
-from .data import places
+from .data import places, reputation
 from .data.evidence import MarketEvidence, normalize_name
 from .db import get_connection, init_db
 from .models import (
@@ -25,12 +25,17 @@ from .models import (
     GoogleFrontDoor,
     RankedProvider,
     SizeCategory,
+    SystemAggregate,
     ThirdPartyAggregate,
     TierScores,
 )
 from .prompts import build_hospital_prompt, build_specialty_prompt
 
 _MODEL = "claude-opus-4-8"
+
+# Bound per-report cost: aggregate system-wide reputation for at most this many
+# multi-location systems (each enumerates up to system_reputation_max_locations).
+_SYSTEM_REP_CAP = 15
 
 # The AI Visibility disclaimer note that must appear in every client report.
 _AIVS_DISCLAIMER = (
@@ -40,6 +45,14 @@ _AIVS_DISCLAIMER = (
     "each assistant's usage. It is a market-perception measure, not a "
     "clinical-quality verdict."
 )
+
+# Web search is restricted to authoritative healthcare sources so the currency
+# layer (recognitions, rankings, recent events) never pulls a stray review number.
+_WEB_SEARCH_DOMAINS = [
+    "cms.gov", "medicare.gov", "usnews.com", "newsweek.com",
+    "leapfroggroup.org", "qualitycheck.org", "healthgrades.com",
+    "castleconnolly.com", "ncqa.org", "nursingworld.org",
+]
 
 # NPPES taxonomy_description expects clinical spellings; map a few common terms.
 _TAXONOMY_ALIASES = {
@@ -258,6 +271,52 @@ def _gather_evidence(
     return evidence_mod.gather_hospital_evidence(city, state, counties=counties)
 
 
+def _web_search_tool() -> dict | None:
+    """The Anthropic native web-search server tool, domain-restricted, or None."""
+    if not settings.enable_web_search:
+        return None
+    return {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": max(1, settings.web_search_max_uses),
+        "allowed_domains": _WEB_SEARCH_DOMAINS,
+    }
+
+
+def _stream_narrative(client, system_prompt, user_prompt, emit, console) -> str:
+    """Stream the analysis narrative. Adds the native web-search tool for
+    currency; if web search isn't enabled on the key, retries once without it."""
+    from rich.rule import Rule
+
+    def _run(tools: list) -> str:
+        parts: list[str] = []
+        with client.messages.stream(
+            model=_MODEL,
+            max_tokens=16000,
+            thinking={"type": "adaptive"},
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=tools,
+        ) as stream:
+            for text in stream.text_stream:
+                parts.append(text)
+                print(text, end="", flush=True, file=sys.stderr)
+                emit({"type": "text", "text": text})
+        print(file=sys.stderr)
+        return "".join(parts)
+
+    console.print(Rule("[dim]Generating analysis[/dim]", style="dark_sea_green4"))
+    tool = _web_search_tool()
+    if tool is None:
+        return _run([])
+    try:
+        return _run([tool])
+    except Exception as exc:  # web search not enabled for this key, etc.
+        console.print(f"[yellow]⚠[/yellow] Web search unavailable ({str(exc)[:80]}); continuing without it.")
+        emit({"type": "phase", "name": "generating", "text": "Generating analysis (no web search)"})
+        return _run([])
+
+
 def analyze_location(
     city: str,
     state: str,
@@ -281,7 +340,6 @@ def analyze_location(
             on_event(event)
 
     from rich.console import Console
-    from rich.rule import Rule
     console = Console(force_terminal=True, stderr=True)
 
     emit({"type": "phase", "name": "starting", "text": "Starting analysis"})
@@ -307,23 +365,9 @@ def analyze_location(
     else:
         system_prompt, user_prompt = build_hospital_prompt(city, state, evidence_block, aggregate=aggregate)
 
-    # --- Phase 1: stream the narrative ---
+    # --- Phase 1: stream the narrative (with web search for currency) ---
     emit({"type": "phase", "name": "generating", "text": "Generating analysis"})
-    console.print(Rule("[dim]Generating analysis[/dim]", style="dark_sea_green4"))
-    narrative_parts: list[str] = []
-    with client.messages.stream(
-        model=_MODEL,
-        max_tokens=16000,
-        thinking={"type": "adaptive"},
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    ) as stream:
-        for text in stream.text_stream:
-            narrative_parts.append(text)
-            print(text, end="", flush=True, file=sys.stderr)
-            emit({"type": "text", "text": text})
-    report_markdown = "".join(narrative_parts)
-    print(file=sys.stderr)
+    report_markdown = _stream_narrative(client, system_prompt, user_prompt, emit, console)
 
     # --- Phase 2: extract structured data via tool use ---
     emit({"type": "phase", "name": "structured", "text": "Extracting structured data"})
@@ -353,13 +397,28 @@ def analyze_location(
     run_profile = structured_data.get("weighting_profile") or scoring.classify_profile(specialty, evidence.mode)
     rankings = [_build_provider(r, run_profile) for r in structured_data.get("rankings", [])]
 
-    # --- Phase 3: inject verified Google + compute the composite score ---
+    # --- Phase 3: inject verified Google + system reputation + composite ---
     emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})
     google_index = evidence.google_index()
     footprint_index = evidence.footprint_index()
+    systems_done = 0
     for prov in rankings:
-        _ground_and_score(prov, city, state, google_index, footprint_index)
-    console.print(f"[green]✓[/green] Scored {len(rankings)} providers (AI Visibility composite computed)")
+        is_system = bool(prov.consolidated_locations) or prov.size_category == SizeCategory.large
+        do_system = (
+            settings.enable_system_reputation
+            and is_system
+            and systems_done < _SYSTEM_REP_CAP
+        )
+        _ground_and_score(prov, city, state, google_index, footprint_index, do_system=do_system)
+        if do_system and prov.google_footprint.system_aggregate.available:
+            systems_done += 1
+    capped_note = (
+        f" (system-wide reputation capped at {_SYSTEM_REP_CAP} systems this report)"
+        if settings.enable_system_reputation
+        and sum(1 for p in rankings if p.consolidated_locations or p.size_category == SizeCategory.large) > _SYSTEM_REP_CAP
+        else ""
+    )
+    console.print(f"[green]✓[/green] Scored {len(rankings)} providers ({systems_done} system aggregates){capped_note}")
 
     disclaimer = _clean(structured_data.get("disclaimer", ""))
     if "AI Visibility Score" not in disclaimer:
@@ -459,9 +518,11 @@ def _ground_and_score(
     state: str,
     google_index: dict,
     footprint_index: dict,
+    do_system: bool = False,
 ) -> None:
-    """Override the front door with a verified Google read, re-anchor the
-    Experience tier from it, then compute the deterministic composite score."""
+    """Override the front door with a verified Google read, optionally compute a
+    system-wide weighted reputation, re-anchor the Experience tier from the best
+    available signal, then compute the deterministic composite score."""
     key = normalize_name(prov.name)
     read = google_index.get(key)
     footprint = footprint_index.get(key)
@@ -491,6 +552,25 @@ def _ground_and_score(
     # Populate the numeric footprint range from Places (model keeps the qualitative read).
     if footprint and footprint.listings_sampled > 1 and not prov.google_footprint.rating_range:
         prov.google_footprint.rating_range = footprint.as_line()
+
+    # System-wide weighted reputation — the authoritative signal for a
+    # multi-location system. When available, it re-anchors the Experience tier
+    # (a single flagship listing under-represents a whole system).
+    if do_system:
+        rep = reputation.system_reputation(
+            prov.name, state, max_locations=settings.system_reputation_max_locations
+        )
+        if rep.available:
+            prov.google_footprint.system_aggregate = SystemAggregate(
+                rating=rep.weighted_rating,
+                total_reviews=rep.total_reviews,
+                location_count=rep.location_count,
+                confidence=rep.confidence,
+                capped=rep.capped,
+            )
+            band = scoring.experience_band(rep.weighted_rating, rep.total_reviews)
+            if band is not None:
+                prov.tier_scores.patient_experience_reviews = band
 
     profile = prov.weighting_profile or "procedural"
     prov.ai_visibility_score = scoring.composite_score(prov.tier_scores.as_dict(), profile)

@@ -75,6 +75,17 @@ say "limited data". NEVER source any rating from a review-management vendor.
 
 Flag the **reputation gap** explicitly: a clinically strong provider with a \
 mediocre or thin/stale Google front door is the clearest finding the report surfaces.
+
+**Use web search for CURRENCY, not for review numbers.** When web search is \
+available, use it to confirm or refresh time-sensitive facts the Credentials and \
+Outcomes tiers depend on — current U.S. News / Newsweek rankings, Leapfrog \
+grades, CMS star ratings, Magnet status, Castle Connolly recognitions, and any \
+recent market events (closures, mergers, sanctions). Cite what you find. **Do \
+NOT** use a web-searched rating as the Google front-door number — the verified \
+Google figure is supplied in the evidence block and is the only source for it. \
+When a provided system-wide weighted reputation is present in the evidence, treat \
+it as the authoritative reputation signal for that system and anchor the \
+Experience & Reviews tier to it rather than to a single flagship listing.
 """
 
 _VOICE = """\

@@ -257,6 +257,61 @@ def fetch_provider(
     return read, footprint
 
 
+@dataclass
+class Listing:
+    """A single Google listing with an identity, for census/dedup work."""
+    place_id: str
+    name: str
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+
+
+def search_listings(
+    query: str,
+    *,
+    api_key: str | None = None,
+    max_results: int = 20,
+    timeout: float = 20.0,
+) -> list[Listing]:
+    """Return up to ``max_results`` rated listings for a query, with place_ids.
+
+    Used by the system-reputation aggregator to enumerate a system's locations
+    and dedupe them by place_id before the review-count-weighted blend.
+    """
+    key = _api_key(api_key)
+    if not key:
+        return []
+    try:
+        resp = httpx.post(
+            _SEARCH_TEXT,
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": key,
+                "X-Goog-FieldMask": (
+                    "places.id,places.displayName,places.rating,places.userRatingCount"
+                ),
+            },
+            json={"textQuery": query, "maxResultCount": min(max_results, 20)},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        places = resp.json().get("places", [])
+    except (httpx.HTTPError, ValueError):
+        return []
+    out: list[Listing] = []
+    for p in places:
+        pid = p.get("id")
+        if not pid or p.get("rating") is None:
+            continue
+        out.append(Listing(
+            place_id=pid,
+            name=(p.get("displayName") or {}).get("text", ""),
+            rating=float(p["rating"]),
+            review_count=int(p.get("userRatingCount") or 0),
+        ))
+    return out
+
+
 def fetch_footprint(
     org: str,
     city: str | None = None,
