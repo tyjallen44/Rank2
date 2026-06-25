@@ -78,6 +78,43 @@ class ConsolidatedLocation(BaseModel):
     overall_rating: str = ""
 
 
+class TierScores(BaseModel):
+    """The four AI Visibility tiers, each 0–100. The first slot is labeled
+    'Outcomes & Safety' (procedural) or 'Quality & Coordination' (relationship)."""
+    clinical_outcomes_safety: Optional[int] = None
+    credentials_recognition: Optional[int] = None
+    patient_experience_reviews: Optional[int] = None
+    access_fit: Optional[int] = None
+
+    def as_dict(self) -> dict[str, Optional[int]]:
+        return self.model_dump()
+
+
+class GoogleFrontDoor(BaseModel):
+    """The provider's primary Google Business Profile — the real, fetched read."""
+    rating: Optional[float] = None
+    count: Optional[int] = None
+    responds_to_reviews: Optional[bool] = None  # not exposed by Places API → usually None
+    recency: Optional[str] = None
+    verified: bool = False
+    reason: Optional[str] = None                 # populated when not verified
+
+
+class GoogleFootprint(BaseModel):
+    front_door: GoogleFrontDoor = Field(default_factory=GoogleFrontDoor)
+    listings_estimate: str = ""   # breadth, sampled (e.g. "1 brand + ~6 locations")
+    rating_range: str = ""        # e.g. "3.2–4.6 across location listings"
+    consistency: str = ""         # "unified/claimed" vs "fragmented/unclaimed"
+    gap_note: str = ""            # one-line footprint opening vs. clinical quality
+
+
+class ThirdPartyAggregate(BaseModel):
+    """The 'Google vs. the rest of the web' contrast (Healthgrades/Vitals/WebMD)."""
+    rating: Optional[float] = None
+    sources: str = "Healthgrades, Vitals, WebMD"
+    note: str = ""
+
+
 class RankedProvider(BaseModel):
     rank: int
     name: str
@@ -85,6 +122,13 @@ class RankedProvider(BaseModel):
     size_category: SizeCategory = SizeCategory.unknown
     physician_count: Optional[str] = None  # e.g. "12", "~20", "3–5", or None if unknown
     overall_rating: str = ""               # e.g. "A" or "4.2/5 stars"
+    # AI Visibility Score (computed deterministically from tier_scores by profile)
+    ai_visibility_score: Optional[int] = None
+    weighting_profile: Optional[str] = None  # "procedural" | "relationship"
+    tier_scores: TierScores = Field(default_factory=TierScores)
+    google_footprint: GoogleFootprint = Field(default_factory=GoogleFootprint)
+    third_party_aggregate: ThirdPartyAggregate = Field(default_factory=ThirdPartyAggregate)
+    disqualifiers: list[str] = Field(default_factory=list)
     key_strengths: list[str] = Field(default_factory=list)
     notable_weaknesses: list[str] = Field(default_factory=list)
     best_suited_for: str = ""
@@ -99,6 +143,10 @@ class AnalysisResult(BaseModel):
     specialty: Optional[str] = None        # None → broad hospital analysis
     aggregate: bool = False                # whether parent/child entities were consolidated
     generated_at: date
+    weighting_profile: Optional[str] = None  # the profile used for the whole run
+    market_overview: str = ""              # 2–3 paragraph landscape narrative
+    ai_visibility_verdict: str = ""        # neutral analyst read on the market's AI visibility
+    coverage_note: str = ""                # "covered N of M registry facilities"
     top_recommendation: str = ""
     practical_advice: list[str] = Field(default_factory=list)
     disclaimer: str = ""

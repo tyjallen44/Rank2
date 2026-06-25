@@ -78,6 +78,11 @@ def init_db() -> None:
         ("md_path", "VARCHAR"),
         ("user_role", "VARCHAR"),
         ("aggregate", "BOOLEAN DEFAULT FALSE"),
+        # AI Visibility Score additions
+        ("weighting_profile", "VARCHAR"),
+        ("market_overview", "VARCHAR"),
+        ("ai_visibility_verdict", "VARCHAR"),
+        ("coverage_note", "VARCHAR"),
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -109,6 +114,13 @@ def init_db() -> None:
         ("size_category", "VARCHAR DEFAULT 'unknown'"),
         ("physician_count", "VARCHAR"),
         ("consolidated_locations", "VARCHAR DEFAULT '[]'"),
+        # AI Visibility Score additions
+        ("ai_visibility_score", "INTEGER"),
+        ("weighting_profile", "VARCHAR"),
+        ("tier_scores", "VARCHAR DEFAULT '{}'"),
+        ("google_footprint", "VARCHAR DEFAULT '{}'"),
+        ("third_party_aggregate", "VARCHAR DEFAULT '{}'"),
+        ("disqualifiers", "VARCHAR DEFAULT '[]'"),
     ]:
         if col not in existing_provider_cols:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")
