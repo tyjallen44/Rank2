@@ -88,6 +88,14 @@ def init_db() -> None:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
     # Tag pre-existing rows (before role isolation) as admin
     con.execute("UPDATE analysis_runs SET user_role = 'admin' WHERE user_role IS NULL")
+    # Cache for system-wide weighted reputation (ratings move slowly; TTL'd in code).
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS reputation_cache (
+            org_key     VARCHAR PRIMARY KEY,
+            payload     VARCHAR,
+            fetched_at  DATE
+        )
+    """)
     con.execute("""
         CREATE TABLE IF NOT EXISTS ranked_providers (
             run_id                  VARCHAR NOT NULL,

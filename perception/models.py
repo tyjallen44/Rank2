@@ -100,12 +100,27 @@ class GoogleFrontDoor(BaseModel):
     reason: Optional[str] = None                 # populated when not verified
 
 
+class SystemAggregate(BaseModel):
+    """Review-count-weighted Google rating across all of a system's locations."""
+    rating: Optional[float] = None
+    total_reviews: int = 0
+    location_count: int = 0
+    confidence: str = ""          # "registry" (NPPES-enumerated) | "sample"
+    capped: bool = False
+
+    @property
+    def available(self) -> bool:
+        return self.rating is not None and self.location_count > 0
+
+
 class GoogleFootprint(BaseModel):
     front_door: GoogleFrontDoor = Field(default_factory=GoogleFrontDoor)
     listings_estimate: str = ""   # breadth, sampled (e.g. "1 brand + ~6 locations")
     rating_range: str = ""        # e.g. "3.2–4.6 across location listings"
     consistency: str = ""         # "unified/claimed" vs "fragmented/unclaimed"
     gap_note: str = ""            # one-line footprint opening vs. clinical quality
+    # Authoritative system-wide weighted reputation (multi-location systems only)
+    system_aggregate: SystemAggregate = Field(default_factory=SystemAggregate)
 
 
 class ThirdPartyAggregate(BaseModel):

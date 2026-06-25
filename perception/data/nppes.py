@@ -89,3 +89,55 @@ def search_specialty_market(
     market.capped = skip >= max_records
     market.org_names = [name for name, _ in org_counter.most_common(40)]
     return market
+
+
+def enumerate_org_locations(
+    org_name: str,
+    state: str | None = None,
+    *,
+    max_records: int = 400,
+    timeout: float = 30.0,
+) -> list[tuple[str, str]]:
+    """Return distinct (city, state) practice locations for an organization.
+
+    Searches NPPES type-2 (organizational) NPIs by name; the registry's LOCATION
+    addresses give the authoritative-ish footprint of a system's sites, which the
+    reputation aggregator then resolves to Google listings.
+    """
+    org = org_name.strip()
+    if not org:
+        return []
+    seen: set[tuple[str, str]] = set()
+    locations: list[tuple[str, str]] = []
+    skip = 0
+    while skip < max_records:
+        params = {
+            "version": "2.1",
+            "organization_name": f"{org}*",
+            "enumeration_type": "NPI-2",
+            "limit": _PAGE,
+            "skip": skip,
+        }
+        if state:
+            params["state"] = state.strip().upper()
+        try:
+            resp = httpx.get(_BASE, params=params, timeout=timeout)
+            resp.raise_for_status()
+            results = resp.json().get("results", []) or []
+        except (httpx.HTTPError, ValueError):
+            break
+        if not results:
+            break
+        for rec in results:
+            for addr in rec.get("addresses", []) or []:
+                if addr.get("address_purpose") != "LOCATION":
+                    continue
+                city = (addr.get("city") or "").strip().title()
+                st = (addr.get("state") or "").strip().upper()
+                if city and st and (city, st) not in seen:
+                    seen.add((city, st))
+                    locations.append((city, st))
+        if len(results) < _PAGE:
+            break
+        skip += _PAGE
+    return locations
