@@ -5,6 +5,7 @@ import html as _html_lib
 from pathlib import Path
 
 from .models import AffiliationType, AnalysisResult, RankedProvider, SizeCategory
+from .scoring import TIER_LABELS
 
 # RLDatix brand palette
 _TEAL        = "#0F4146"
@@ -55,11 +56,74 @@ def _rank_text_color(rank: int) -> str:
     return _TEAL if rank in (2, 3) else "#ffffff"
 
 
+def _tier_row(label: str, value: int | None) -> str:
+    width = value if isinstance(value, int) else 0
+    val_txt = str(value) if isinstance(value, int) else "—"
+    return (
+        f'<div class="tier-row"><span class="tier-name">{_e(label)}</span>'
+        f'<span class="tier-track"><span class="tier-fill" style="width:{width}%"></span></span>'
+        f'<span class="tier-val">{val_txt}</span></div>'
+    )
+
+
+def _aivs_block(p: RankedProvider) -> str:
+    """AI Visibility score + the four tier bars (the headline of each card)."""
+    labels = TIER_LABELS.get(p.weighting_profile or "procedural", TIER_LABELS["procedural"])
+    ts = p.tier_scores
+    score_txt = str(p.ai_visibility_score) if p.ai_visibility_score is not None else "—"
+    rows = "".join([
+        _tier_row(labels["clinical_outcomes_safety"], ts.clinical_outcomes_safety),
+        _tier_row(labels["credentials_recognition"], ts.credentials_recognition),
+        _tier_row(labels["patient_experience_reviews"], ts.patient_experience_reviews),
+        _tier_row(labels["access_fit"], ts.access_fit),
+    ])
+    return f"""
+    <div class="aivs">
+      <div>
+        <div class="aivs-label">AI Visibility</div>
+        <div class="aivs-score">{score_txt}<span class="out">/100</span></div>
+      </div>
+      <div class="tier-bars">{rows}</div>
+    </div>"""
+
+
+def _google_stat(p: RankedProvider) -> str:
+    """Front door (verified) + footprint + third-party aggregate — the wedge."""
+    fd = p.google_footprint.front_door
+    if fd.verified and fd.rating is not None:
+        recency = f" · {_e(fd.recency)}" if fd.recency else ""
+        front = f"Google front door: <strong>{fd.rating:.1f}&#9733; · {fd.count or 0} reviews</strong>{recency}"
+    else:
+        front = f'Google front door: <strong>not verified</strong> <span class="google-gap">— {_e(fd.reason or "no rated listing")}</span>'
+
+    fp = p.google_footprint
+    footprint = _e(fp.rating_range or fp.listings_estimate or fp.consistency) or "single listing"
+    consistency = f" · {_e(fp.consistency)}" if fp.consistency and (fp.rating_range or fp.listings_estimate) else ""
+
+    tpa = p.third_party_aggregate
+    if tpa.rating is not None:
+        agg = f"{tpa.rating:.1f} avg"
+    else:
+        agg = _e(tpa.note) or "limited data"
+    gap = f' <span class="google-gap">{_e(fp.gap_note)}</span>' if fp.gap_note else ""
+
+    return f"""
+    <div class="google-stat">
+      {front}<br>
+      Footprint: {footprint}{consistency}<br>
+      Third-Party Aggregate <span style="font-size:6.5pt;color:#7a9095">(Healthgrades, Vitals, WebMD)</span>: <strong>{agg}</strong>{gap}
+    </div>"""
+
+
 def _provider_card(p: RankedProvider, display_rank: int) -> str:
     bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
     text_color = _rank_text_color(display_rank)
     strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(f"<li>{_e(w)}</li>" for w in p.notable_weaknesses)
+    disq_html = (
+        f'<div class="disqualifier">⚠ Disqualifiers: {_e("; ".join(p.disqualifiers))}</div>'
+        if p.disqualifiers else ""
+    )
 
     locations_html = ""
     if p.consolidated_locations:
@@ -84,6 +148,9 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
           {f'<span class="surgeon-pill">{_e(p.physician_count)} physicians</span>' if p.physician_count and p.physician_count.lower() != "unknown" else ""}
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
+        {_aivs_block(p)}
+        {_google_stat(p)}
+        {disq_html}
         {locations_html}
         <div class="traits">
           <div class="trait-col">
@@ -142,6 +209,22 @@ def _build_html(result: AnalysisResult) -> str:
 
     advice_items = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
     logo_tag     = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
+
+    def _paras(text: str) -> str:
+        return "".join(f"<p>{_e(para.strip())}</p>" for para in (text or "").split("\n") if para.strip())
+
+    overview_html = ""
+    if result.market_overview:
+        overview_html = (
+            '<div class="overview"><div class="section-title">Market Overview</div>'
+            + _paras(result.market_overview) + "</div>"
+        )
+    verdict_html = ""
+    if result.ai_visibility_verdict:
+        verdict_html = (
+            '<div class="verdict"><div class="section-title" style="margin-bottom:8px;">AI Visibility Verdict</div>'
+            + _paras(result.ai_visibility_verdict) + "</div>"
+        )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -367,6 +450,52 @@ def _build_html(result: AnalysisResult) -> str:
       line-height: 1.45;
     }}
 
+    /* ── Market overview + AI Visibility verdict ────── */
+    .overview p, .verdict p {{
+      font-size: 9pt;
+      color: {_TEAL};
+      line-height: 1.55;
+      margin-bottom: 7px;
+    }}
+    .verdict {{
+      background: {_PALE_GREEN};
+      border-radius: 6px;
+      padding: 11px 15px;
+      margin-bottom: 22px;
+      break-inside: avoid;
+    }}
+    .overview {{ margin-bottom: 22px; }}
+
+    /* ── AI Visibility score + tier bars ────────────── */
+    .aivs {{ display: flex; align-items: center; gap: 14px; margin: 2px 0 10px; }}
+    .aivs-score {{
+      font-size: 22pt; font-weight: 800; line-height: 1; color: {_TEAL};
+      min-width: 64px; text-align: center;
+    }}
+    .aivs-score .out {{ font-size: 9pt; font-weight: 600; color: #7a9095; }}
+    .aivs-label {{
+      font-size: 6.5pt; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: #177B6E; margin-bottom: 4px;
+    }}
+    .tier-bars {{ flex: 1; }}
+    .tier-row {{ display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }}
+    .tier-name {{ font-size: 6.5pt; color: #3a5a60; width: 110px; text-align: right; }}
+    .tier-track {{ flex: 1; height: 7px; background: #E3E8E8; border-radius: 4px; overflow: hidden; }}
+    .tier-fill {{ display: block; height: 7px; background: #177B6E; border-radius: 4px; }}
+    .tier-val {{ font-size: 6.5pt; font-weight: 700; color: {_TEAL}; width: 18px; }}
+
+    /* ── Google footprint stat line ─────────────────── */
+    .google-stat {{
+      font-size: 7.5pt; color: #3a5a60; margin-bottom: 6px;
+      padding: 3px 0 5px; border-bottom: 1px solid #E3E8E8;
+    }}
+    .google-stat strong {{ color: {_TEAL}; }}
+    .google-gap {{ color: #B45309; font-style: italic; }}
+    .disqualifier {{
+      font-size: 7pt; font-weight: 700; color: #B42318;
+      margin-bottom: 6px;
+    }}
+
     /* ── Top recommendation ────────────────────────── */
     .recommendation {{
       background: {_PALE_GREEN};
@@ -421,6 +550,8 @@ def _build_html(result: AnalysisResult) -> str:
 
 <div class="content">
 
+  {overview_html}
+  {verdict_html}
   {rankings_html}
 
   <div class="recommendation">

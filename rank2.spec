@@ -59,6 +59,10 @@ a = Analysis(
         "duckdb",
         "pydantic",
         "pydantic_settings",
+        # httpx now on a live path (perception.data clients ground the score in
+        # real CMS / NPPES / Google Places reads).
+        "httpx",
+        "certifi",
         "playwright",
         "playwright.sync_api",
         "playwright._impl._browser",
