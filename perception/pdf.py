@@ -100,6 +100,16 @@ def _google_stat(p: RankedProvider) -> str:
     footprint = _e(fp.rating_range or fp.listings_estimate or fp.consistency) or "single listing"
     consistency = f" · {_e(fp.consistency)}" if fp.consistency and (fp.rating_range or fp.listings_estimate) else ""
 
+    sa = fp.system_aggregate
+    system_line = ""
+    if sa.available:
+        conf = "registry-enumerated" if sa.confidence == "registry" else "sampled"
+        loc = f"{sa.location_count}{'+' if sa.capped else ''}"
+        system_line = (
+            f"System-wide: <strong>{sa.rating:.1f}&#9733; · {sa.total_reviews:,} reviews "
+            f"across {loc} locations</strong> (review-count-weighted, {conf})<br>"
+        )
+
     tpa = p.third_party_aggregate
     if tpa.rating is not None:
         agg = f"{tpa.rating:.1f} avg"
@@ -110,7 +120,7 @@ def _google_stat(p: RankedProvider) -> str:
     return f"""
     <div class="google-stat">
       {front}<br>
-      Footprint: {footprint}{consistency}<br>
+      {system_line}Footprint: {footprint}{consistency}<br>
       Third-Party Aggregate <span style="font-size:6.5pt;color:#7a9095">(Healthgrades, Vitals, WebMD)</span>: <strong>{agg}</strong>{gap}
     </div>"""
 
