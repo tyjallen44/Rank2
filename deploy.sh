@@ -63,8 +63,9 @@ if [[ "$1" == "setup" ]]; then
   echo ""
   echo "Setup complete. Now add your secrets:"
   echo ""
-  echo "  gcloud secrets create ANTHROPIC_API_KEY --data-file=- <<< 'your-key-here'"
-  echo "  gcloud secrets create ACCESS_PASSWORD    --data-file=- <<< 'BigBanana1!'"
+  echo "  gcloud secrets create ANTHROPIC_API_KEY     --data-file=- <<< 'your-anthropic-key'"
+  echo "  gcloud secrets create GOOGLE_PLACES_API_KEY --data-file=- <<< 'your-places-key'"
+  echo "  gcloud secrets create ACCESS_PASSWORD        --data-file=- <<< 'BigBanana1!'"
   echo ""
   echo "Then re-run without 'setup' to build and deploy:"
   echo "  bash deploy.sh"
@@ -91,7 +92,7 @@ gcloud run deploy "$SERVICE" \
   --min-instances=0 \
   --max-instances=2 \
   --set-env-vars="REPORTS_DIR=/data/reports,DB_PATH=/data/rank2.duckdb" \
-  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest" \
+  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest" \
   --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount="volume=rank2-data,mount-path=/data"
 

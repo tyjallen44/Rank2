@@ -78,11 +78,24 @@ def init_db() -> None:
         ("md_path", "VARCHAR"),
         ("user_role", "VARCHAR"),
         ("aggregate", "BOOLEAN DEFAULT FALSE"),
+        # AI Visibility Score additions
+        ("weighting_profile", "VARCHAR"),
+        ("market_overview", "VARCHAR"),
+        ("ai_visibility_verdict", "VARCHAR"),
+        ("coverage_note", "VARCHAR"),
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
     # Tag pre-existing rows (before role isolation) as admin
     con.execute("UPDATE analysis_runs SET user_role = 'admin' WHERE user_role IS NULL")
+    # Cache for system-wide weighted reputation (ratings move slowly; TTL'd in code).
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS reputation_cache (
+            org_key     VARCHAR PRIMARY KEY,
+            payload     VARCHAR,
+            fetched_at  DATE
+        )
+    """)
     con.execute("""
         CREATE TABLE IF NOT EXISTS ranked_providers (
             run_id                  VARCHAR NOT NULL,
@@ -109,6 +122,13 @@ def init_db() -> None:
         ("size_category", "VARCHAR DEFAULT 'unknown'"),
         ("physician_count", "VARCHAR"),
         ("consolidated_locations", "VARCHAR DEFAULT '[]'"),
+        # AI Visibility Score additions
+        ("ai_visibility_score", "INTEGER"),
+        ("weighting_profile", "VARCHAR"),
+        ("tier_scores", "VARCHAR DEFAULT '{}'"),
+        ("google_footprint", "VARCHAR DEFAULT '{}'"),
+        ("third_party_aggregate", "VARCHAR DEFAULT '{}'"),
+        ("disqualifiers", "VARCHAR DEFAULT '[]'"),
     ]:
         if col not in existing_provider_cols:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")
