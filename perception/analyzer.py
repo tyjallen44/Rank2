@@ -21,6 +21,9 @@ from .prompts import (
 
 _MODEL = "claude-opus-4-8"
 
+# Built-in server-side web search tool — Anthropic executes searches automatically.
+_WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search"}
+
 # Tool that forces Claude to emit structured JSON alongside the narrative.
 _STRUCTURED_OUTPUT_TOOL = {
     "name": "submit_analysis_result",
@@ -205,6 +208,8 @@ def analyze_location(
         thinking={"type": "adaptive"},
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
+        tools=[_WEB_SEARCH_TOOL],
+        extra_headers={"anthropic-beta": "web-search-2025-03-05"},
     ) as stream:
         for text in stream.text_stream:
             narrative_parts.append(text)
