@@ -157,6 +157,7 @@ _STRUCTURED_OUTPUT_TOOL = {
                     "properties": {
                         "rank": {"type": "integer"},
                         "name": {"type": "string"},
+                        "website_url": {"type": ["string", "null"], "description": "Primary public website URL (e.g. https://www.example.org) or null if unknown"},
                         "affiliation_type": {
                             "type": "string",
                             "enum": ["independent", "hospital_affiliated", "unknown"],
@@ -477,6 +478,7 @@ def _build_provider(r: dict, run_profile: str) -> RankedProvider:
     return RankedProvider(
         rank=r["rank"],
         name=_clean(r["name"]),
+        website_url=r.get("website_url") or None,
         affiliation_type=AffiliationType(r.get("affiliation_type", "unknown")),
         size_category=SizeCategory(r.get("size_category", "unknown")),
         physician_count=r.get("physician_count") or None,

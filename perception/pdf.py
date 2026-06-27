@@ -158,6 +158,7 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
           {f'<span class="surgeon-pill">{_e(p.physician_count)} physicians</span>' if p.physician_count and p.physician_count.lower() != "unknown" else ""}
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
+        {f'<div class="provider-url"><a href="{_e(p.website_url)}">{_e(p.website_url)}</a></div>' if p.website_url else ""}
         {_aivs_block(p)}
         {_google_stat(p)}
         {disq_html}
@@ -387,6 +388,14 @@ def _build_html(result: AnalysisResult) -> str:
       font-weight: 700;
       color: {_TEAL};
       flex: 1;
+    }}
+    .provider-url {{
+      font-size: 7.5pt;
+      margin: -4px 0 8px 0;
+    }}
+    .provider-url a {{
+      color: {_SEAFOAM};
+      text-decoration: none;
     }}
     .rating-pill {{
       font-size: 7pt;

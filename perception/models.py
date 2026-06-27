@@ -133,6 +133,7 @@ class ThirdPartyAggregate(BaseModel):
 class RankedProvider(BaseModel):
     rank: int
     name: str
+    website_url: Optional[str] = None
     affiliation_type: AffiliationType = AffiliationType.unknown
     size_category: SizeCategory = SizeCategory.unknown
     physician_count: Optional[str] = None  # e.g. "12", "~20", "3–5", or None if unknown
@@ -157,6 +158,8 @@ class AnalysisResult(BaseModel):
     location: str                          # e.g. "Mobile, Alabama"
     specialty: Optional[str] = None        # None → broad hospital analysis
     aggregate: bool = False                # whether parent/child entities were consolidated
+    zip_code: Optional[str] = None         # set when search was by ZIP code
+    radius_miles: Optional[int] = None     # set when search was by ZIP code
     generated_at: date
     weighting_profile: Optional[str] = None  # the profile used for the whole run
     market_overview: str = ""              # 2–3 paragraph landscape narrative
