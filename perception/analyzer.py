@@ -323,6 +323,7 @@ def analyze_location(
     specialty: str | None = None,
     aggregate: bool = False,
     radius_miles: int | None = None,
+    zip_code: str | None = None,
     output_dir: str | Path = "reports",
     on_event: Callable | None = None,
 ) -> AnalysisResult:
@@ -430,6 +431,8 @@ def analyze_location(
         location=f"{city}, {state}",
         specialty=specialty,
         aggregate=aggregate,
+        zip_code=zip_code,
+        radius_miles=radius_miles,
         generated_at=date.today(),
         weighting_profile=run_profile,
         market_overview=_clean(structured_data.get("market_overview", "")),

@@ -219,6 +219,10 @@ def _build_html(result: AnalysisResult) -> str:
 
     advice_items = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
     logo_tag     = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
+    zip_scope_html = (
+        f'<div class="cover-zip-scope">ZIP {_e(result.zip_code)} &middot; {result.radius_miles}-mile radius</div>'
+        if result.zip_code else ""
+    )
 
     def _paras(text: str) -> str:
         return "".join(f"<p>{_e(para.strip())}</p>" for para in (text or "").split("\n") if para.strip())
@@ -290,7 +294,14 @@ def _build_html(result: AnalysisResult) -> str:
       font-size: 13pt;
       font-weight: 300;
       color: {_PALE_GREEN};
-      margin-bottom: 34px;
+      margin-bottom: 12px;
+    }}
+    .cover-zip-scope {{
+      font-size: 10pt;
+      font-weight: 400;
+      color: {_SEAFOAM};
+      letter-spacing: 0.04em;
+      margin-bottom: 26px;
     }}
     .cover-meta {{
       font-size: 7.5pt;
@@ -550,6 +561,7 @@ def _build_html(result: AnalysisResult) -> str:
   <div class="cover-eyebrow">Market Intelligence Report</div>
   <div class="cover-location">{location}</div>
   <div class="cover-specialty">{specialty_label}</div>
+  {zip_scope_html}
   <div class="cover-meta">
     <span>Generated {date_str}</span>
     <span>Confidential — For Client Use Only</span>
