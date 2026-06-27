@@ -25,6 +25,7 @@ import secrets
 import shutil
 import tempfile
 import time
+import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -149,7 +150,10 @@ def _put(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, event: Any) -> N
     asyncio.run_coroutine_threadsafe(queue.put(event), loop)
 
 
-def _job_run_single(job_id: str, city: str, state: str, specialty: Optional[str], aggregate: bool = False) -> None:
+def _job_run_single(
+    job_id: str, city: str, state: str, specialty: Optional[str],
+    aggregate: bool = False, radius_miles: Optional[int] = None,
+) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
@@ -163,7 +167,7 @@ def _job_run_single(job_id: str, city: str, state: str, specialty: Optional[str]
 
         result = analyze_location(
             city=city, state=state, specialty=specialty, aggregate=aggregate,
-            output_dir=REPORTS_DIR, on_event=emit,
+            radius_miles=radius_miles, output_dir=REPORTS_DIR, on_event=emit,
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -232,9 +236,21 @@ def _new_job(role: str) -> str:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+def _zip_to_city_state(zip_code: str) -> tuple[str, str]:
+    """Resolve a US ZIP code to (city, state_abbr) using the free zippopotam.us API."""
+    url = f"https://api.zippopotam.us/us/{zip_code}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Rank2/1.0"})
+    with urllib.request.urlopen(req, timeout=6) as resp:
+        data = json.loads(resp.read())
+    place = data["places"][0]
+    return place["place name"], place["state abbreviation"]
+
+
 class AnalyzeRequest(BaseModel):
-    city: str
-    state: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    radius_miles: int = 25
     specialty: Optional[str] = None
     aggregate: bool = False
 
@@ -245,8 +261,20 @@ class BatchRequest(BaseModel):
 
 @app.post("/api/analyze")
 async def start_analysis(req: AnalyzeRequest, role: str = Depends(require_auth)):
+    city, state = req.city, req.state
+    radius = None
+
+    if req.zip_code:
+        try:
+            city, state = _zip_to_city_state(req.zip_code)
+            radius = req.radius_miles
+        except Exception as exc:
+            raise HTTPException(400, f"Could not resolve ZIP code {req.zip_code}: {exc}")
+    elif not city or not state:
+        raise HTTPException(400, "Provide either city+state or zip_code.")
+
     job_id = _new_job(role)
-    _pool.submit(_job_run_single, job_id, req.city, req.state, req.specialty, req.aggregate)
+    _pool.submit(_job_run_single, job_id, city, state, req.specialty, req.aggregate, radius)
     return {"job_id": job_id}
 
 

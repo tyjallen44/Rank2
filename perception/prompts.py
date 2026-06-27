@@ -328,18 +328,34 @@ the system. Only aggregate where the relationship is unambiguous.
 """
 
 
+_RADIUS_INSTRUCTIONS = """\
+
+**Geographic Scope — ZIP Code Radius Search**
+
+This analysis was requested for a specific radius around a ZIP code. Restrict \
+your provider search to facilities and practices located within approximately \
+{radius_miles} miles of the search origin. Do not expand beyond this radius \
+unless a market is so thin that no providers exist within it — in that case, \
+note the expansion explicitly.
+"""
+
+
 def build_hospital_prompt(
-    city: str, state: str, evidence_block: str = "", aggregate: bool = False
+    city: str, state: str, evidence_block: str = "", aggregate: bool = False,
+    radius_miles: int | None = None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for a hospital-market AI Visibility analysis."""
     user = HOSPITAL_USER_PROMPT.format(city=city, state=state, evidence_block=evidence_block)
     if aggregate:
         user += _AGGREGATE_INSTRUCTIONS
+    if radius_miles:
+        user += _RADIUS_INSTRUCTIONS.format(radius_miles=radius_miles)
     return HOSPITAL_SYSTEM_PROMPT, user
 
 
 def build_specialty_prompt(
-    city: str, state: str, specialty: str, evidence_block: str = "", aggregate: bool = False
+    city: str, state: str, specialty: str, evidence_block: str = "", aggregate: bool = False,
+    radius_miles: int | None = None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for a specialty-market AI Visibility analysis."""
     user = SPECIALTY_USER_PROMPT.format(
@@ -347,4 +363,6 @@ def build_specialty_prompt(
     )
     if aggregate:
         user += _AGGREGATE_INSTRUCTIONS
+    if radius_miles:
+        user += _RADIUS_INSTRUCTIONS.format(radius_miles=radius_miles)
     return SPECIALTY_SYSTEM_PROMPT, user

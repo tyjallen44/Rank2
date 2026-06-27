@@ -322,6 +322,7 @@ def analyze_location(
     state: str,
     specialty: str | None = None,
     aggregate: bool = False,
+    radius_miles: int | None = None,
     output_dir: str | Path = "reports",
     on_event: Callable | None = None,
 ) -> AnalysisResult:
@@ -361,9 +362,9 @@ def analyze_location(
     console.print(f"[green]✓[/green] Evidence: {evidence.coverage_note}")
 
     if specialty:
-        system_prompt, user_prompt = build_specialty_prompt(city, state, specialty, evidence_block, aggregate=aggregate)
+        system_prompt, user_prompt = build_specialty_prompt(city, state, specialty, evidence_block, aggregate=aggregate, radius_miles=radius_miles)
     else:
-        system_prompt, user_prompt = build_hospital_prompt(city, state, evidence_block, aggregate=aggregate)
+        system_prompt, user_prompt = build_hospital_prompt(city, state, evidence_block, aggregate=aggregate, radius_miles=radius_miles)
 
     # --- Phase 1: stream the narrative (with web search for currency) ---
     emit({"type": "phase", "name": "generating", "text": "Generating analysis"})

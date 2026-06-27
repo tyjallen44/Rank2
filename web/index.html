@@ -486,7 +486,16 @@ html, body {
 
       <!-- Manual form -->
       <div id="form-manual" class="card">
-        <div style="display:grid;grid-template-columns:1fr 120px;gap:14px">
+        <div class="fg" style="margin-bottom:16px">
+          <label class="fl">Location of Analysis</label>
+          <div class="tg-group">
+            <button class="tg-opt on" id="tg-bycity" onclick="setLocMode('city')">By City</button>
+            <button class="tg-opt"    id="tg-byzip"  onclick="setLocMode('zip')">By ZIP Code &amp; Radius</button>
+          </div>
+        </div>
+
+        <!-- City / State inputs -->
+        <div id="loc-city-row" style="display:grid;grid-template-columns:1fr 120px;gap:14px">
           <div class="fg" style="margin:0">
             <label class="fl">City</label>
             <input id="f-city" class="fi" type="text" placeholder="Salt Lake City"
@@ -497,6 +506,26 @@ html, body {
             <input id="f-state" class="fi" type="text" placeholder="UT" maxlength="2"
               oninput="this.value=this.value.toUpperCase()"
               onkeydown="if(event.key==='Enter')runManual()">
+          </div>
+        </div>
+
+        <!-- ZIP Code + Radius inputs -->
+        <div id="loc-zip-row" style="display:none;grid-template-columns:1fr 180px;gap:14px">
+          <div class="fg" style="margin:0">
+            <label class="fl">ZIP Code</label>
+            <input id="f-zip" class="fi" type="text" placeholder="78701" maxlength="5"
+              oninput="this.value=this.value.replace(/\D/g,'')"
+              onkeydown="if(event.key==='Enter')runManual()">
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fl">Radius</label>
+            <select id="f-radius" class="fi" style="height:42px;padding:0 10px">
+              <option value="5">5 miles</option>
+              <option value="10">10 miles</option>
+              <option value="15">15 miles</option>
+              <option value="25" selected>25 miles</option>
+              <option value="50">50 miles</option>
+            </select>
           </div>
         </div>
         <div class="fg mt16" style="margin-bottom:0">
@@ -741,31 +770,53 @@ function setType(t) {
   document.getElementById('specialty-wrap').classList.toggle('hidden', t !== 'specialty');
 }
 
+let _locMode = 'city';
+function setLocMode(m) {
+  _locMode = m;
+  document.getElementById('tg-bycity').classList.toggle('on', m === 'city');
+  document.getElementById('tg-byzip').classList.toggle('on', m === 'zip');
+  document.getElementById('loc-city-row').style.display = m === 'city' ? 'grid' : 'none';
+  document.getElementById('loc-zip-row').style.display  = m === 'zip'  ? 'grid' : 'none';
+}
+
 // ── Manual run ────────────────────────────────────────────────────────────
 async function runManual() {
-  const city      = document.getElementById('f-city').value.trim();
-  const state     = document.getElementById('f-state').value.trim().toUpperCase();
-  const specialty = _type === 'specialty'
-    ? (document.getElementById('f-specialty').value.trim() || null) : null;
   const errEl = document.getElementById('manual-err');
   errEl.classList.add('hidden');
 
-  if (!city)                             return showErr(errEl, 'Please enter a city.');
-  if (!state || state.length !== 2)      return showErr(errEl, 'Please enter a 2-letter state code.');
+  const specialty = _type === 'specialty'
+    ? (document.getElementById('f-specialty').value.trim() || null) : null;
   if (_type === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
 
   const aggregate = document.getElementById('agg-toggle').checked;
+  let body, label;
+
+  if (_locMode === 'city') {
+    const city  = document.getElementById('f-city').value.trim();
+    const state = document.getElementById('f-state').value.trim().toUpperCase();
+    if (!city)                        return showErr(errEl, 'Please enter a city.');
+    if (!state || state.length !== 2) return showErr(errEl, 'Please enter a 2-letter state code.');
+    body  = {city, state, specialty, aggregate};
+    label = `${city}, ${state}` + (specialty ? ` — ${specialty}` : '');
+  } else {
+    const zip    = document.getElementById('f-zip').value.trim();
+    const radius = parseInt(document.getElementById('f-radius').value);
+    if (!zip || !/^\d{5}$/.test(zip)) return showErr(errEl, 'Please enter a valid 5-digit ZIP code.');
+    body  = {zip_code: zip, radius_miles: radius, specialty, aggregate};
+    label = `ZIP ${zip} · ${radius} mi radius` + (specialty ? ` — ${specialty}` : '');
+  }
+
   const btn = document.getElementById('run-manual-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Starting…';
   try {
     const r = await api('/api/analyze', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({city, state, specialty, aggregate}),
+      body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
     const { job_id } = await r.json();
-    startProgress(job_id, `${city}, ${state}` + (specialty ? ` — ${specialty}` : ''), false);
+    startProgress(job_id, label, false);
   } catch(e) { showErr(errEl, e.message); }
   finally { btn.disabled = false; btn.innerHTML = 'Run Analysis →'; }
 }
