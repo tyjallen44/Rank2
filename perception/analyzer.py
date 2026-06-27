@@ -4,7 +4,7 @@ import json
 import re
 import sys
 import uuid
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Callable
 
@@ -446,15 +446,18 @@ def analyze_location(
     )
 
     # Save markdown + PDF
-    label = _slug(f"{city}-{state}-{specialty or 'hospitals'}")
-    report_path = output_dir / f"{label}-{run_id[:8]}.md"
+    _type = specialty.replace(" ", "-") if specialty else "Hospitals"
+    _ts   = datetime.utcnow().strftime("%Y-%m-%d_%H:%M_UTC")
+    _zip_part = f"-Zip_{zip_code}" if zip_code else ""
+    _stem = f"{city.replace(' ', '-')}_{state}_{_type}{_zip_part}-{_ts}"
+    report_path = output_dir / f"{_stem}.md"
     report_path.write_text(report_markdown, encoding="utf-8")
     console.print(f"[green]✓[/green] Report saved → [dim]{report_path}[/dim]")
 
     emit({"type": "phase", "name": "pdf", "text": "Rendering PDF"})
     with console.status("[bold dark_sea_green4]Rendering PDF…[/bold dark_sea_green4]"):
         from .pdf import render_pdf
-        pdf_path = output_dir / f"{label}-{run_id[:8]}.pdf"
+        pdf_path = output_dir / f"{_stem}.pdf"
         render_pdf(result, pdf_path)
     console.print(f"[green]✓[/green] PDF saved    → [dim]{pdf_path}[/dim]")
 
