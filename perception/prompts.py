@@ -162,6 +162,7 @@ observation. Reference the 0–100 scale.]
 ### Large & Major Hospitals
 Rank ALL large/major entries (consolidated by ownership), strongest to weakest:
 **[Rank]. [Hospital or Health System Name]** — Large/Major — AI Visibility: [NN]/100
+- Website: [primary public URL, e.g. https://www.seton.net]
 - Tier scores: Outcomes & Safety [NN] · Credentials & Recognition [NN] · Experience & Reviews [NN] · Access & Fit [NN]
 - Overall Rating: [letter grade or score]
 - Google front door: [rating ★ · N reviews · recency — verbatim from evidence, or "not verified"]
@@ -261,6 +262,7 @@ undersells its clinical quality. Reference the 0–100 scale.]
 ### Independent Practices (Privately Owned & Operated)
 Rank ALL independent {specialty} practices, strongest to weakest:
 **[Rank]. [Practice/Group Name]** — Independent — AI Visibility: [NN]/100
+- Website: [primary public URL, e.g. https://www.austinortho.com]
 - Tier scores: Outcomes & Safety [NN] · Credentials & Recognition [NN] · Experience & Reviews [NN] · Access & Fit [NN]
 - Physicians: [count or estimate]
 - Overall Rating: [letter grade or score]

@@ -157,7 +157,7 @@ _STRUCTURED_OUTPUT_TOOL = {
                     "properties": {
                         "rank": {"type": "integer"},
                         "name": {"type": "string"},
-                        "website_url": {"type": ["string", "null"], "description": "Primary public website URL (e.g. https://www.example.org) or null if unknown"},
+                        "website_url": {"type": ["string", "null"], "description": "Primary public website URL for this provider (e.g. https://www.seton.net). Include https://. Set to null only if completely unknown."},
                         "affiliation_type": {
                             "type": "string",
                             "enum": ["independent", "hospital_affiliated", "unknown"],
@@ -194,7 +194,7 @@ _STRUCTURED_OUTPUT_TOOL = {
                         },
                     },
                     "required": [
-                        "rank", "name", "affiliation_type", "overall_rating",
+                        "rank", "name", "website_url", "affiliation_type", "overall_rating",
                         "weighting_profile", "tier_scores", "google_footprint",
                         "key_strengths", "notable_weaknesses", "best_suited_for",
                         "recommendation_summary",
@@ -656,15 +656,15 @@ def _save_to_db(result: AnalysisResult) -> None:
         con.execute(
             """
             INSERT OR REPLACE INTO ranked_providers
-                (run_id, rank, name, affiliation_type, size_category, physician_count,
+                (run_id, rank, name, website_url, affiliation_type, size_category, physician_count,
                  overall_rating, ai_visibility_score, weighting_profile, tier_scores,
                  google_footprint, third_party_aggregate, disqualifiers,
                  key_strengths, notable_weaknesses, best_suited_for,
                  recommendation_summary, consolidated_locations)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                result.run_id, p.rank, p.name, p.affiliation_type.value,
+                result.run_id, p.rank, p.name, p.website_url, p.affiliation_type.value,
                 p.size_category.value, p.physician_count, p.overall_rating,
                 p.ai_visibility_score, p.weighting_profile,
                 p.tier_scores.model_dump_json(),

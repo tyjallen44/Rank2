@@ -130,6 +130,7 @@ def init_db() -> None:
         ("google_footprint", "VARCHAR DEFAULT '{}'"),
         ("third_party_aggregate", "VARCHAR DEFAULT '{}'"),
         ("disqualifiers", "VARCHAR DEFAULT '[]'"),
+        ("website_url", "VARCHAR"),
     ]:
         if col not in existing_provider_cols:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")
