@@ -452,7 +452,7 @@ def analyze_location(
 
     # Save markdown + PDF
     _type = specialty.replace(" ", "-") if specialty else "Hospitals"
-    _ts   = datetime.utcnow().strftime("%Y-%m-%d_%H-%M_UTC")
+    _ts   = datetime.utcnow().strftime("%y%m%d-%H%M")
     _zip_part = f"-Zip_{zip_code}" if zip_code else ""
     if teaser_report:
         _stem = f"{city.replace(' ', '-')}_{state}_{_type}_Summary-Report-{_ts}"
