@@ -168,6 +168,7 @@ def _job_run_single(
         result = analyze_location(
             city=city, state=state, specialty=specialty, aggregate=aggregate,
             radius_miles=radius_miles, zip_code=job.get("zip_code"),
+            patient_perspective=job.get("patient_perspective", False),
             output_dir=REPORTS_DIR, on_event=emit,
         )
         set_run_role(result.run_id, job["role"])
@@ -254,6 +255,7 @@ class AnalyzeRequest(BaseModel):
     radius_miles: int = 25
     specialty: Optional[str] = None
     aggregate: bool = False
+    patient_perspective: bool = False
 
 
 class BatchRequest(BaseModel):
@@ -276,6 +278,7 @@ async def start_analysis(req: AnalyzeRequest, role: str = Depends(require_auth))
 
     job_id = _new_job(role)
     _jobs[job_id]["zip_code"] = req.zip_code if req.zip_code else None
+    _jobs[job_id]["patient_perspective"] = req.patient_perspective
     _pool.submit(_job_run_single, job_id, city, state, req.specialty, req.aggregate, radius)
     return {"job_id": job_id}
 

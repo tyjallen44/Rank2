@@ -446,6 +446,9 @@ html, body {
       <button class="nav-btn active" id="nav-new" onclick="navigate('new')">
         <span class="ni">✦</span><span class="nb-lbl">New Analysis</span>
       </button>
+      <button class="nav-btn" id="nav-patient" onclick="navigate('patient')">
+        <span class="ni">⊙</span><span class="nb-lbl">Patient Perspective</span>
+      </button>
       <button class="nav-btn" id="nav-history" onclick="navigate('history')">
         <span class="ni">◷</span><span class="nb-lbl">History</span>
       </button>
@@ -599,6 +602,87 @@ html, body {
       </div>
     </div>
 
+    <!-- ── Patient Perspective ───────────────────────────────────────────── -->
+    <div id="page-patient" class="page">
+      <div class="page-title">Patient Perspective</div>
+      <div class="page-sub">Generate a report ranked as a patient would encounter providers when asking an AI assistant — no grouping by size or affiliation type, just ranked by AI Visibility Score.</div>
+
+      <div class="card">
+        <div class="fg" style="margin-bottom:16px">
+          <label class="fl">Location of Analysis</label>
+          <div class="tg-group">
+            <button class="tg-opt on" id="pp-tg-bycity" onclick="setPpLocMode('city')">By City</button>
+            <button class="tg-opt"    id="pp-tg-byzip"  onclick="setPpLocMode('zip')">By ZIP Code &amp; Radius</button>
+          </div>
+        </div>
+
+        <div id="pp-loc-city-row" style="display:grid;grid-template-columns:1fr 120px;gap:14px">
+          <div class="fg" style="margin:0">
+            <label class="fl">City</label>
+            <input id="pp-city" class="fi" type="text" placeholder="Salt Lake City"
+              onkeydown="if(event.key==='Enter')runPatient()">
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fl">State</label>
+            <input id="pp-state" class="fi" type="text" placeholder="UT" maxlength="2"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter')runPatient()">
+          </div>
+        </div>
+
+        <div id="pp-loc-zip-row" style="display:none;grid-template-columns:1fr 180px;gap:14px">
+          <div class="fg" style="margin:0">
+            <label class="fl">ZIP Code</label>
+            <input id="pp-zip" class="fi" type="text" placeholder="78701" maxlength="5"
+              oninput="this.value=this.value.replace(/\D/g,'')"
+              onkeydown="if(event.key==='Enter')runPatient()">
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fl">Radius</label>
+            <select id="pp-radius" class="fi" style="height:42px;padding:0 10px">
+              <option value="1">1 mile</option>
+              <option value="2">2 miles</option>
+              <option value="3">3 miles</option>
+              <option value="4">4 miles</option>
+              <option value="5">5 miles</option>
+              <option value="7">7 miles</option>
+              <option value="10">10 miles</option>
+              <option value="15">15 miles</option>
+              <option value="20">20 miles</option>
+              <option value="25" selected>25 miles</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="fg mt16" style="margin-bottom:0">
+          <label class="fl">Analysis Type</label>
+          <div class="tg-group">
+            <button class="tg-opt on" id="pp-tg-hospital"  onclick="setPpType('hospital')">Hospital Market</button>
+            <button class="tg-opt"    id="pp-tg-specialty" onclick="setPpType('specialty')">Specialty Practice</button>
+          </div>
+        </div>
+        <div id="pp-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
+          <label class="fl">Specialty</label>
+          <input id="pp-specialty" class="fi" type="text"
+            placeholder="e.g. Orthopedics, Cardiology, Dermatology"
+            onkeydown="if(event.key==='Enter')runPatient()">
+        </div>
+        <div class="fg mt16" style="margin-bottom:0">
+          <label class="fl">Options</label>
+          <label class="aggregate-toggle" title="When enabled, related facilities sharing a parent system name are merged into a single ranked entry.">
+            <input type="checkbox" id="pp-agg-toggle">
+            <span class="agg-label">Aggregate related facilities into parent systems</span>
+          </label>
+        </div>
+        <div id="pp-err" class="err hidden mt16"></div>
+        <div class="mt20">
+          <button class="btn btn-primary" id="pp-run-btn" onclick="runPatient()">
+            Run Patient Perspective →
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Progress ─────────────────────────────────────────────────────── -->
     <div id="page-progress" class="page">
       <div style="margin-bottom:22px">
@@ -681,6 +765,7 @@ let _mode        = 'manual';
 let _type        = 'hospital';
 let _groups      = [];       // parsed CSV groups
 let _es          = null;     // EventSource
+let _lastPage    = 'new';    // page that launched the current analysis
 
 const PHASES = ['starting', 'generating', 'structured', 'pdf'];
 const PHASE_MAP = {
@@ -785,6 +870,67 @@ function setLocMode(m) {
   document.getElementById('loc-zip-row').style.display  = m === 'zip'  ? 'grid' : 'none';
 }
 
+// ── Patient Perspective ───────────────────────────────────────────────────
+let _ppType    = 'hospital';
+let _ppLocMode = 'city';
+
+function setPpType(t) {
+  _ppType = t;
+  document.getElementById('pp-tg-hospital').classList.toggle('on', t === 'hospital');
+  document.getElementById('pp-tg-specialty').classList.toggle('on', t === 'specialty');
+  document.getElementById('pp-specialty-wrap').classList.toggle('hidden', t !== 'specialty');
+}
+
+function setPpLocMode(m) {
+  _ppLocMode = m;
+  document.getElementById('pp-tg-bycity').classList.toggle('on', m === 'city');
+  document.getElementById('pp-tg-byzip').classList.toggle('on', m === 'zip');
+  document.getElementById('pp-loc-city-row').style.display = m === 'city' ? 'grid' : 'none';
+  document.getElementById('pp-loc-zip-row').style.display  = m === 'zip'  ? 'grid' : 'none';
+}
+
+async function runPatient() {
+  const errEl = document.getElementById('pp-err');
+  errEl.classList.add('hidden');
+
+  const specialty = _ppType === 'specialty'
+    ? (document.getElementById('pp-specialty').value.trim() || null) : null;
+  if (_ppType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
+
+  const aggregate = document.getElementById('pp-agg-toggle').checked;
+  let body, label;
+
+  if (_ppLocMode === 'city') {
+    const city  = document.getElementById('pp-city').value.trim();
+    const state = document.getElementById('pp-state').value.trim().toUpperCase();
+    if (!city)                        return showErr(errEl, 'Please enter a city.');
+    if (!state || state.length !== 2) return showErr(errEl, 'Please enter a 2-letter state code.');
+    body  = {city, state, specialty, aggregate, patient_perspective: true};
+    label = `${city}, ${state}` + (specialty ? ` — ${specialty}` : '');
+  } else {
+    const zip    = document.getElementById('pp-zip').value.trim();
+    const radius = parseInt(document.getElementById('pp-radius').value);
+    if (!zip || !/^\d{5}$/.test(zip)) return showErr(errEl, 'Please enter a valid 5-digit ZIP code.');
+    body  = {zip_code: zip, radius_miles: radius, specialty, aggregate, patient_perspective: true};
+    label = `ZIP ${zip} · ${radius} mi radius` + (specialty ? ` — ${specialty}` : '');
+  }
+
+  const btn = document.getElementById('pp-run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Starting…';
+  try {
+    const r = await api('/api/analyze', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    const { job_id } = await r.json();
+    _lastPage = 'patient';
+    startProgress(job_id, label, false);
+  } catch(e) { showErr(errEl, e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Run Patient Perspective →'; }
+}
+
 // ── Manual run ────────────────────────────────────────────────────────────
 async function runManual() {
   const errEl = document.getElementById('manual-err');
@@ -822,6 +968,7 @@ async function runManual() {
     });
     if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
     const { job_id } = await r.json();
+    _lastPage = 'new';
     startProgress(job_id, label, false);
   } catch(e) { showErr(errEl, e.message); }
   finally { btn.disabled = false; btn.innerHTML = 'Run Analysis →'; }
@@ -987,9 +1134,10 @@ function showSingleDone(r) {
         <div class="stat-lbl">Providers Ranked</div>
       </div>
     </div>`;
+  const backLabel = _lastPage === 'patient' ? 'New Patient Perspective' : 'New Analysis';
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="dlPdf('${r.run_id}')">⬇ Download PDF</button>
-    <button class="btn btn-secondary" onclick="navigate('new')">New Analysis</button>
+    <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     <button class="btn btn-ghost btn-sm" onclick="navigate('history')">History</button>`;
   document.getElementById('prog-done').classList.remove('hidden');
 }

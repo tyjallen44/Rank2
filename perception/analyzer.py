@@ -325,6 +325,7 @@ def analyze_location(
     aggregate: bool = False,
     radius_miles: int | None = None,
     zip_code: str | None = None,
+    patient_perspective: bool = False,
     output_dir: str | Path = "reports",
     on_event: Callable | None = None,
 ) -> AnalysisResult:
@@ -434,6 +435,7 @@ def analyze_location(
         aggregate=aggregate,
         zip_code=zip_code,
         radius_miles=radius_miles,
+        patient_perspective=patient_perspective,
         generated_at=date.today(),
         weighting_profile=run_profile,
         market_overview=_clean(structured_data.get("market_overview", "")),
@@ -448,6 +450,8 @@ def analyze_location(
 
     # Save markdown + PDF
     _type = specialty.replace(" ", "-") if specialty else "Hospitals"
+    if patient_perspective:
+        _type += "_Patient-Perspective"
     _ts   = datetime.utcnow().strftime("%Y-%m-%d_%H:%M_UTC")
     _zip_part = f"-Zip_{zip_code}" if zip_code else ""
     _stem = f"{city.replace(' ', '-')}_{state}_{_type}{_zip_part}-{_ts}"

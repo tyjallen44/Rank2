@@ -197,7 +197,15 @@ def _build_html(result: AnalysisResult) -> str:
     date_str        = result.generated_at.strftime("%B %d, %Y")
     logo_uri        = _logo_data_uri()
 
-    if result.specialty:
+    if result.patient_perspective:
+        # Patient perspective: single flat list ordered purely by rank
+        all_ranked = sorted(result.rankings, key=lambda p: p.rank)
+        section_title = f"{result.specialty} Providers" if result.specialty else "Hospitals & Health Systems"
+        rankings_html = _rankings_section(
+            all_ranked, section_title,
+            "Ranked by AI Visibility Score — the order a patient is likely to encounter these providers when asking an AI assistant for guidance"
+        )
+    elif result.specialty:
         # Specialty analysis: split by affiliation type
         independent = [p for p in result.rankings if p.affiliation_type == AffiliationType.independent]
         affiliated  = [p for p in result.rankings if p.affiliation_type == AffiliationType.hospital_affiliated]
@@ -218,8 +226,9 @@ def _build_html(result: AnalysisResult) -> str:
             + _rankings_section(unclassified, "Additional Hospitals", "Size not classified")
         )
 
-    advice_items = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
-    logo_tag     = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
+    advice_items   = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
+    logo_tag       = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
+    cover_eyebrow  = "Patient Perspective Report" if result.patient_perspective else "Market Intelligence Report"
     zip_scope_html = (
         f'<div class="cover-zip-scope">ZIP {_e(result.zip_code)} &middot; {result.radius_miles}-mile radius</div>'
         if result.zip_code else ""
@@ -567,7 +576,7 @@ def _build_html(result: AnalysisResult) -> str:
 
 <div class="cover">
   {logo_tag}
-  <div class="cover-eyebrow">Market Intelligence Report</div>
+  <div class="cover-eyebrow">{cover_eyebrow}</div>
   <div class="cover-location">{location}</div>
   <div class="cover-specialty">{specialty_label}</div>
   {zip_scope_html}

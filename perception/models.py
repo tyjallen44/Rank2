@@ -158,6 +158,7 @@ class AnalysisResult(BaseModel):
     location: str                          # e.g. "Mobile, Alabama"
     specialty: Optional[str] = None        # None → broad hospital analysis
     aggregate: bool = False                # whether parent/child entities were consolidated
+    patient_perspective: bool = False      # flat ranking by score, no entity-type grouping
     zip_code: Optional[str] = None         # set when search was by ZIP code
     radius_miles: Optional[int] = None     # set when search was by ZIP code
     generated_at: date
