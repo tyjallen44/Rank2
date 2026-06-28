@@ -22,6 +22,21 @@ _RANK_DEFAULT = "#96DDE9"
 _LOGO_PATH = Path(__file__).parent / "assets" / "logo-white.svg"
 
 
+_PHYSICIAN_COUNT_MAP = {
+    "small":  "small number of",
+    "few":    "a few",
+    "large":  "large number of",
+    "many":   "many",
+    "several":"several",
+}
+
+def _physician_label(count: str) -> str:
+    """Turn raw physician_count into a readable pill label."""
+    normalized = count.strip().lower()
+    prefix = _PHYSICIAN_COUNT_MAP.get(normalized, count.strip())
+    return f"{prefix} physicians"
+
+
 def _logo_data_uri() -> str:
     if _LOGO_PATH.exists():
         data = base64.b64encode(_LOGO_PATH.read_bytes()).decode()
@@ -155,7 +170,7 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
       <div class="card-body">
         <div class="card-top">
           <h3 class="provider-name">{_e(p.name)}</h3>
-          {f'<span class="surgeon-pill">{_e(p.physician_count)} physicians</span>' if p.physician_count and p.physician_count.lower() != "unknown" else ""}
+          {f'<span class="surgeon-pill">{_e(_physician_label(p.physician_count))}</span>' if p.physician_count and p.physician_count.lower() not in ("unknown", "") else ""}
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
         {f'<div class="provider-url"><a href="{_e(p.website_url)}">{_e(p.website_url)}</a></div>' if p.website_url else ""}
