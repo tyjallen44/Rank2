@@ -136,7 +136,7 @@ def fetch_google_rating(
                     "places.userRatingCount,places.businessStatus"
                 ),
             },
-            json={"textQuery": query, "maxResultCount": 1},
+            json={"textQuery": query, "pageSize": 1},
             timeout=timeout,
         )
         resp.raise_for_status()
@@ -208,7 +208,7 @@ def fetch_provider(
                     "places.userRatingCount,places.businessStatus"
                 ),
             },
-            json={"textQuery": query, "maxResultCount": max_results},
+            json={"textQuery": query, "pageSize": max_results},
             timeout=timeout,
         )
         resp.raise_for_status()
@@ -291,7 +291,7 @@ def search_listings(
                     "places.id,places.displayName,places.rating,places.userRatingCount"
                 ),
             },
-            json={"textQuery": query, "maxResultCount": min(max_results, 20)},
+            json={"textQuery": query, "pageSize": min(max_results, 20)},
             timeout=timeout,
         )
         resp.raise_for_status()
@@ -335,7 +335,7 @@ def fetch_footprint(
                 "X-Goog-Api-Key": key,
                 "X-Goog-FieldMask": "places.displayName,places.rating",
             },
-            json={"textQuery": query, "maxResultCount": max_results},
+            json={"textQuery": query, "pageSize": max_results},
             timeout=timeout,
         )
         resp.raise_for_status()
