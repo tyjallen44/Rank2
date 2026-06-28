@@ -480,7 +480,7 @@ html, body {
         <div class="oc on" id="oc-manual" onclick="setMode('manual')">
           <div class="oc-icon">📍</div>
           <div class="oc-title">Enter Location</div>
-          <div class="oc-sub">City, state, and analysis type</div>
+          <div class="oc-sub">City + State or Zip Code + Radius</div>
         </div>
         <div class="oc" id="oc-csv" onclick="setMode('csv')">
           <div class="oc-icon">📋</div>
@@ -608,7 +608,21 @@ html, body {
       <div class="page-title">Patient Perspective</div>
       <div class="page-sub">Generate a report ranked as a patient would encounter providers when asking an AI assistant — no grouping by size or affiliation type, just ranked by AI Visibility Score.</div>
 
-      <div class="card" style="background:var(--bg);border-color:var(--border)">
+      <div class="oc-grid">
+        <div class="oc on" id="pp-oc-manual" onclick="setPpMode('manual')">
+          <div class="oc-icon">📍</div>
+          <div class="oc-title">Enter Location</div>
+          <div class="oc-sub">City + State or Zip Code + Radius</div>
+        </div>
+        <div class="oc" id="pp-oc-csv" onclick="setPpMode('csv')">
+          <div class="oc-icon">📋</div>
+          <div class="oc-title">Upload Spreadsheet</div>
+          <div class="oc-sub">CSV or Excel with multiple locations</div>
+        </div>
+      </div>
+
+      <!-- Patient Perspective manual form -->
+      <div id="pp-form-manual" class="card" style="background:var(--bg);border-color:var(--border)">
         <div class="fg" style="margin-bottom:16px">
           <label class="fl">Location of Analysis</label>
           <div class="tg-group">
@@ -680,6 +694,42 @@ html, body {
           <button class="btn btn-primary" id="pp-run-btn" onclick="runPatient()">
             Run Patient Perspective →
           </button>
+        </div>
+      </div>
+
+      <!-- Patient Perspective CSV form -->
+      <div id="pp-form-csv" class="hidden">
+        <div class="dz" id="pp-dz"
+          onclick="document.getElementById('pp-csv-file').click()"
+          ondragover="event.preventDefault();this.classList.add('over')"
+          ondragleave="this.classList.remove('over')"
+          ondrop="onPpDrop(event)">
+          <input id="pp-csv-file" type="file" accept=".csv,.xlsx,.xls"
+            style="display:none" onchange="onPpFileSelect(this.files[0])">
+          <div class="dz-icon">📂</div>
+          <div class="dz-text">Drop your spreadsheet here, or
+            <span class="dz-hl">browse</span>
+          </div>
+          <div class="dz-text mt8" style="font-size:12px">CSV · XLSX · XLS</div>
+        </div>
+
+        <div id="pp-csv-preview" class="hidden mt16">
+          <div class="card" style="background:var(--bg);border-color:var(--border)">
+            <div style="font-weight:600;margin-bottom:12px" id="pp-csv-summary"></div>
+            <div style="overflow-x:auto">
+              <table class="tbl">
+                <thead><tr><th>City</th><th>State</th><th>Type</th></tr></thead>
+                <tbody id="pp-csv-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="pp-csv-err" class="err hidden mt12"></div>
+          <div class="row-actions mt16">
+            <button class="btn btn-primary" id="pp-run-batch-btn" onclick="runBatchPatient()">
+              Run All →
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="clearPpCsv()">Clear</button>
+          </div>
         </div>
       </div>
     </div>
@@ -875,6 +925,87 @@ function setLocMode(m) {
 // ── Patient Perspective ───────────────────────────────────────────────────
 let _ppType    = 'hospital';
 let _ppLocMode = 'city';
+let _ppMode    = 'manual';
+let _ppGroups  = [];
+
+function setPpMode(m) {
+  _ppMode = m;
+  ['manual','csv'].forEach(x => {
+    document.getElementById('pp-oc-' + x).classList.toggle('on', x === m);
+    document.getElementById('pp-form-' + x).classList.toggle('hidden', x !== m);
+  });
+}
+
+function onPpDrop(e) {
+  e.preventDefault();
+  document.getElementById('pp-dz').classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) onPpFileSelect(f);
+}
+
+async function onPpFileSelect(file) {
+  if (!file) return;
+  const dz = document.getElementById('pp-dz');
+  dz.innerHTML = '<div class="dz-icon">⏳</div><div class="dz-text">Processing…</div>';
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const r = await api('/api/upload', {method:'POST', body: form});
+    if (!r.ok) throw new Error((await r.json()).detail || 'Upload failed');
+    const data = await r.json();
+    _ppGroups = data.groups;
+    document.getElementById('pp-csv-summary').textContent =
+      `${data.entity_count} entities · ${data.groups.length} analysis group${data.groups.length !== 1 ? 's' : ''}`;
+    document.getElementById('pp-csv-tbody').innerHTML = data.groups.map(g => `
+      <tr>
+        <td>${g.city}</td>
+        <td>${g.state}</td>
+        <td>${g.specialty
+          ? `<span class="badge bg-gold">${g.specialty}</span>`
+          : `<span class="badge bg-muted">Hospitals</span>`}</td>
+      </tr>`).join('');
+    document.getElementById('pp-csv-preview').classList.remove('hidden');
+    dz.innerHTML = `<div class="dz-icon">✅</div><div class="dz-text">${file.name}</div>`;
+  } catch(e) {
+    dz.innerHTML = `<div class="dz-icon">📂</div>
+      <div class="dz-text">Drop your spreadsheet here, or <span class="dz-hl" onclick="document.getElementById('pp-csv-file').click()">browse</span></div>
+      <div class="dz-text mt8" style="font-size:12px">CSV · XLSX · XLS</div>`;
+    showErr(document.getElementById('pp-csv-err'), e.message);
+  }
+}
+
+function clearPpCsv() {
+  _ppGroups = [];
+  document.getElementById('pp-csv-preview').classList.add('hidden');
+  document.getElementById('pp-csv-err').classList.add('hidden');
+  document.getElementById('pp-dz').innerHTML = `
+    <input id="pp-csv-file" type="file" accept=".csv,.xlsx,.xls"
+      style="display:none" onchange="onPpFileSelect(this.files[0])">
+    <div class="dz-icon">📂</div>
+    <div class="dz-text">Drop your spreadsheet here, or
+      <span class="dz-hl" onclick="document.getElementById('pp-csv-file').click()">browse</span>
+    </div>
+    <div class="dz-text mt8" style="font-size:12px">CSV · XLSX · XLS</div>`;
+}
+
+async function runBatchPatient() {
+  if (!_ppGroups.length) return;
+  const btn = document.getElementById('pp-run-batch-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Starting…';
+  try {
+    const groups = _ppGroups.map(g => ({...g, patient_perspective: true}));
+    const r = await api('/api/analyze/batch', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({groups}),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    const { job_id } = await r.json();
+    _lastPage = 'patient';
+    startProgress(job_id, `${_ppGroups.length} locations`, true);
+  } catch(e) { showErr(document.getElementById('pp-csv-err'), e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Run All →'; }
+}
 
 function setPpType(t) {
   _ppType = t;
