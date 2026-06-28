@@ -191,13 +191,65 @@ def _rankings_section(providers: list[RankedProvider], title: str, subtitle: str
   </div>"""
 
 
+_TEASER_DEMO_URL = "https://www.rldatix.com/en-nam/book-a-demo/"
+_TEASER_PHONE    = "(xxx)xxx-xxxx"
+
+
+def _teaser_card(p: RankedProvider, display_rank: int) -> str:
+    bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
+    text_color = _rank_text_color(display_rank)
+    physician_html = (
+        f'<span class="surgeon-pill">{_e(p.physician_count)} physicians</span>'
+        if p.physician_count and p.physician_count.lower() != "unknown" else ""
+    )
+    return f"""
+    <div class="card">
+      <div class="card-rank" style="background:{bg}; color:{text_color}">
+        <span class="rank-num">{display_rank}</span>
+      </div>
+      <div class="card-body">
+        <div class="card-top">
+          <h3 class="provider-name">{_e(p.name)}</h3>
+          {physician_html}
+          <span class="rating-pill">{_e(p.overall_rating)}</span>
+        </div>
+        {_aivs_block(p)}
+        <div class="teaser-cta">
+          Access to the full report and analysis is available upon request.
+          Contact the RLDatix team at {_TEASER_PHONE} or
+          <a href="{_TEASER_DEMO_URL}">Click Here</a>
+        </div>
+      </div>
+    </div>"""
+
+
+def _teaser_rankings_section(providers: list[RankedProvider], title: str, subtitle: str) -> str:
+    if not providers:
+        return ""
+    cards = "\n".join(_teaser_card(p, i + 1) for i, p in enumerate(providers))
+    return f"""
+  <div class="rankings">
+    <div class="section-title">{_e(title)}</div>
+    <div class="section-subtitle">{_e(subtitle)}</div>
+    {cards}
+  </div>"""
+
+
 def _build_html(result: AnalysisResult) -> str:
     location        = _e(result.location)
     specialty_label = _e(result.specialty or "Hospital Market")
     date_str        = result.generated_at.strftime("%B %d, %Y")
     logo_uri        = _logo_data_uri()
 
-    if result.patient_perspective:
+    if result.teaser_report:
+        # Teaser: summary-only cards, flat rank order
+        all_ranked = sorted(result.rankings, key=lambda p: p.rank)
+        section_title = f"{result.specialty} Providers" if result.specialty else "Hospitals & Health Systems"
+        rankings_html = _teaser_rankings_section(
+            all_ranked, section_title,
+            "Ranked by AI Visibility Score — contact RLDatix for the full report"
+        )
+    elif result.patient_perspective:
         # Patient perspective: single flat list ordered purely by rank
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
         section_title = f"{result.specialty} Providers" if result.specialty else "Hospitals & Health Systems"
@@ -228,7 +280,15 @@ def _build_html(result: AnalysisResult) -> str:
 
     advice_items   = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
     logo_tag       = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
-    cover_eyebrow  = "Patient Perspective Report" if result.patient_perspective else "Market Intelligence Report"
+    if result.teaser_report:
+        cover_eyebrow = (
+            f'Patient Perspective Report Summary &mdash; Request Full Report '
+            f'<a href="{_TEASER_DEMO_URL}" style="color:{_SEAFOAM};text-decoration:underline;">Here</a>'
+        )
+    elif result.patient_perspective:
+        cover_eyebrow = "Patient Perspective Report"
+    else:
+        cover_eyebrow = "Market Intelligence Report"
     zip_scope_html = (
         f'<div class="cover-zip-scope">ZIP {_e(result.zip_code)} &middot; {result.radius_miles}-mile radius</div>'
         if result.zip_code else ""
@@ -487,6 +547,21 @@ def _build_html(result: AnalysisResult) -> str:
       color: {_TEAL};
       font-style: italic;
       line-height: 1.45;
+    }}
+    .teaser-cta {{
+      font-size: 8pt;
+      color: {_TEAL};
+      background: {_PALE_GREEN};
+      border-left: 3px solid {_SEAFOAM};
+      border-radius: 0 4px 4px 0;
+      padding: 8px 12px;
+      margin-top: 10px;
+      line-height: 1.5;
+    }}
+    .teaser-cta a {{
+      color: #0a5c70;
+      font-weight: 600;
+      text-decoration: underline;
     }}
 
     /* ── Market overview + AI Visibility verdict ────── */

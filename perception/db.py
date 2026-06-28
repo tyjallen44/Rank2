@@ -79,6 +79,7 @@ def init_db() -> None:
         ("user_role", "VARCHAR"),
         ("aggregate", "BOOLEAN DEFAULT FALSE"),
         ("patient_perspective", "BOOLEAN DEFAULT FALSE"),
+        ("teaser_report", "BOOLEAN DEFAULT FALSE"),
         # AI Visibility Score additions
         ("weighting_profile", "VARCHAR"),
         ("market_overview", "VARCHAR"),

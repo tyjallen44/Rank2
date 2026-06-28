@@ -688,6 +688,10 @@ html, body {
             <input type="checkbox" id="pp-agg-toggle" checked>
             <span class="agg-label" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">Aggregate related facilities into parent systems</span>
           </label>
+          <label class="aggregate-toggle" style="margin-top:10px" title="Create a summary report to be sent to prospective customers">
+            <input type="checkbox" id="pp-teaser-toggle">
+            <span class="agg-label" title="Create a summary report to be sent to prospective customers">Create Teaser Report</span>
+          </label>
         </div>
         <div id="pp-err" class="err hidden mt16"></div>
         <div class="mt20">
@@ -1030,7 +1034,8 @@ async function runPatient() {
     ? (document.getElementById('pp-specialty').value.trim() || null) : null;
   if (_ppType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
 
-  const aggregate = document.getElementById('pp-agg-toggle').checked;
+  const aggregate       = document.getElementById('pp-agg-toggle').checked;
+  const teaser_report   = document.getElementById('pp-teaser-toggle').checked;
   let body, label;
 
   if (_ppLocMode === 'city') {
@@ -1038,13 +1043,13 @@ async function runPatient() {
     const state = document.getElementById('pp-state').value.trim().toUpperCase();
     if (!city)                        return showErr(errEl, 'Please enter a city.');
     if (!state || state.length !== 2) return showErr(errEl, 'Please enter a 2-letter state code.');
-    body  = {city, state, specialty, aggregate, patient_perspective: true};
+    body  = {city, state, specialty, aggregate, patient_perspective: true, teaser_report};
     label = `${city}, ${state}` + (specialty ? ` — ${specialty}` : '');
   } else {
     const zip    = document.getElementById('pp-zip').value.trim();
     const radius = parseInt(document.getElementById('pp-radius').value);
     if (!zip || !/^\d{5}$/.test(zip)) return showErr(errEl, 'Please enter a valid 5-digit ZIP code.');
-    body  = {zip_code: zip, radius_miles: radius, specialty, aggregate, patient_perspective: true};
+    body  = {zip_code: zip, radius_miles: radius, specialty, aggregate, patient_perspective: true, teaser_report};
     label = `ZIP ${zip} · ${radius} mi radius` + (specialty ? ` — ${specialty}` : '');
   }
 
