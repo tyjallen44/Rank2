@@ -374,20 +374,37 @@ def analyze_location(
     emit({"type": "phase", "name": "generating", "text": "Generating analysis"})
     report_markdown = _stream_narrative(client, system_prompt, user_prompt, emit, console)
 
-    # --- Phase 2: extract structured data via tool use ---
+    # --- Phase 2: extract structured data + deterministic scoring via tool use ---
+    # temperature=0 makes this call deterministic: same evidence data → same tier
+    # scores every time, regardless of how Phase 1 sampling varied.
     emit({"type": "phase", "name": "structured", "text": "Extracting structured data"})
     extraction_prompt = (
-        "The following is a completed healthcare market analysis report. Extract "
-        "the structured data by calling submit_analysis_result. Include every "
-        "provider in the rankings, each with its four tier scores, weighting "
-        "profile, Google footprint, third-party aggregate, and any disqualifiers.\n\n"
-        f"--- REPORT ---\n{report_markdown}\n--- END REPORT ---"
+        "Extract the structured data from the completed market analysis report below "
+        "by calling submit_analysis_result. Include every provider in the rankings.\n\n"
+        "TIER SCORES — compute all four fresh from the verified evidence block, using "
+        "the anchor rubric. Do NOT copy tier scores written in the report text (those "
+        "are from a different sampling pass and will differ from run to run).\n\n"
+        "Anchor rubric:\n"
+        "• Outcomes & Safety: CMS 5★→88, 4★→73, 3★→58, 2★→43, 1★→28, unrated→null. "
+        "Leapfrog A adds ~10, F subtracts ~15. Band up for recognized specialty volumes.\n"
+        "• Credentials & Recognition: U.S. News nationally ranked→85+ floor; "
+        "high-performing→70+; academic medical center / Level I trauma / fellowship "
+        "depth / Magnet→band up; board-certification alone is a floor (~60).\n"
+        "• Experience & Reviews: Google 4.5★+/high volume→85+, 4.0–4.4→70–84, "
+        "3.5–3.9→55–69, 3.0–3.4→40–54, <3.0 or thin/stale→<40. Fragmented or "
+        "largely unclaimed footprint caps this tier even with a strong flagship.\n"
+        "• Access & Fit: broad multi-payer network + many locations + active "
+        "new-patient availability + telehealth→70+; limited access→40–55.\n\n"
+        f"{evidence.to_prompt_block()}\n\n"
+        "--- REPORT (qualitative context — do NOT copy tier scores from here) ---\n"
+        f"{report_markdown}\n--- END REPORT ---"
     )
     structured_data: dict = {}
     with console.status("[bold dark_sea_green4]Extracting structured data…[/bold dark_sea_green4]"):
         response = client.messages.create(
             model=_MODEL,
             max_tokens=16000,
+            temperature=0,
             tools=[_STRUCTURED_OUTPUT_TOOL],
             tool_choice={"type": "tool", "name": "submit_analysis_result"},
             messages=[{"role": "user", "content": extraction_prompt}],
