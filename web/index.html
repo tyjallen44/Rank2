@@ -390,6 +390,21 @@ html, body {
 
 /* ── Misc ────────────────────────────────────────────────────── */
 .err { background: var(--red-bg); border: 1px solid #f5c6c2; color: var(--red); border-radius: 8px; padding: 11px 15px; font-size: 13px; }
+.rn-section { margin-bottom: 28px; }
+.rn-heading { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 10px; border-radius: 4px; display: inline-block; margin-bottom: 14px; }
+.rn-heading.new      { background: rgba(15,65,70,0.1);  color: var(--teal); }
+.rn-heading.improved { background: rgba(128,248,228,0.25); color: #0a5c70; }
+.rn-heading.fixed    { background: rgba(90,220,160,0.2); color: #1a6644; }
+.rn-item { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--pale); }
+.rn-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.rn-title { font-size: 14px; font-weight: 600; color: var(--teal); margin-bottom: 4px; }
+.rn-body  { font-size: 13px; color: var(--muted); line-height: 1.55; }
+.rn-body em { color: var(--text); font-style: normal; font-weight: 500; }
+.rn-body code { font-family: monospace; font-size: 12px; background: var(--pale); padding: 1px 5px; border-radius: 3px; color: var(--teal); }
+.rn-fixes { padding-left: 18px; margin: 0; }
+.rn-fixes li { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 8px; }
+.rn-fixes li:last-child { margin-bottom: 0; }
+.rn-fixes code { font-family: monospace; font-size: 12px; background: var(--pale); padding: 1px 5px; border-radius: 3px; color: var(--teal); }
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
 .empty .ei { font-size: 40px; margin-bottom: 14px; }
 .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
@@ -452,6 +467,9 @@ html, body {
       </button>
       <button class="nav-btn" id="nav-history" onclick="navigate('history')" title="Access to Previous Reports">
         <span class="ni">◷</span><span class="nb-lbl">History</span>
+      </button>
+      <button class="nav-btn" id="nav-release" onclick="navigate('release')" title="What's new in Rank2" style="margin-top:auto">
+        <span class="ni">◈</span><span class="nb-lbl">Release Notes</span>
       </button>
     </div>
     <div class="sb-footer">
@@ -806,6 +824,105 @@ html, body {
       <div class="page-sub">All past analysis runs. Click Download to retrieve a PDF report.</div>
       <div id="history-body">
         <div class="empty"><div class="ei">◷</div><div>Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- ── Release Notes ─────────────────────────────────────────────────── -->
+    <div id="page-release" class="page">
+      <div class="page-title">Release Notes</div>
+      <div class="page-sub">What's new in Rank2.</div>
+
+      <div class="card" style="max-width:820px">
+
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
+          <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.1</div>
+          <div style="font-size:13px;color:var(--muted)">Released June 28, 2026</div>
+        </div>
+
+        <div class="rn-section">
+          <div class="rn-heading new">New Features</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Patient Perspective Report</div>
+            <div class="rn-body">A new analysis mode accessible from the left navigation. Unlike Market Research reports (which group results by hospital size or practice affiliation), the Patient Perspective report ranks all providers in a single list ordered purely by AI Visibility Score — reflecting the order a real patient would encounter them when asking an AI assistant for guidance. Supports both city/state and ZIP + radius searches, and includes full spreadsheet upload for batch runs.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Teaser Report</div>
+            <div class="rn-body">A prospect-ready summary report available on the Patient Perspective page. Each provider entry shows only the name, physician count, overall grade, AI Visibility Score, and four tier bar charts. A call-to-action prompts the recipient to contact RLDatix at 801.998.2830 or book a demo. The cover is branded as a <em>Patient Perspective Report Summary</em> with a direct link to the RLDatix demo booking page.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">ZIP Code + Radius Search</div>
+            <div class="rn-body">Both Market Research and Patient Perspective now support location search by ZIP code and radius (1–25 miles). The system resolves the ZIP to the nearest city/state for the analysis, and the PDF cover displays both the resolved city and the original ZIP + radius used.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Provider Website URLs</div>
+            <div class="rn-body">Each provider card in the PDF now displays the organization's primary website URL as a clickable link, positioned just below the provider name.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Real-Time Web Search</div>
+            <div class="rn-body">Reports now use Anthropic's native web search to refresh time-sensitive data — current U.S. News rankings, Leapfrog safety grades, CMS star ratings, Magnet status, Castle Connolly recognitions, and recent market events — before generating the analysis.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">System-Wide Weighted Reputation</div>
+            <div class="rn-body">Hospital systems with multiple locations now display a review-count-weighted aggregate Google rating across all locations, giving a more accurate picture of system-wide patient experience than any single campus listing.</div>
+          </div>
+        </div>
+
+        <div class="rn-section">
+          <div class="rn-heading improved">Improvements</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Hospital Ownership Aggregation</div>
+            <div class="rn-body">Hospitals owned by the same parent entity (HCA, Ascension, BSW, etc.) are automatically consolidated into a single ranked entry with constituent campuses listed beneath. Enabled by default.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Hospital Size Classification</div>
+            <div class="rn-body">Hospital reports split into two sections: <em>Large &amp; Major Hospitals</em> (academic medical centers, major teaching hospitals, 200+ bed regional facilities) and <em>Community &amp; Smaller Hospitals</em> (community, critical access, and specialty facilities).</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Exhaustive Provider Discovery</div>
+            <div class="rn-body">The AI is now required to find and rank every hospital, practice, or group in the market — not just prominent ones. Reports that omit providers are explicitly flagged as incomplete.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Navigation Renamed &amp; Tooltips Added</div>
+            <div class="rn-body"><em>New Analysis</em> has been renamed to <em>Market Research</em>. Hover tooltips have been added to all three navigation items describing their intended audience.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Structured PDF Filenames</div>
+            <div class="rn-body">Reports are now named with a consistent, readable convention: <code>City_State_Type-YYMMDD-HHMM.pdf</code>. ZIP searches include the ZIP code; Teaser reports are labeled <em>Summary-Report</em>; Patient Perspective reports are labeled accordingly.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Version Label in Sidebar</div>
+            <div class="rn-body">The sidebar footer now shows <em>Rank2 Version 1.1</em> above the build ID and deploy timestamp.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Aggregate Checkbox On by Default</div>
+            <div class="rn-body">The "Aggregate related facilities into parent systems" option is checked by default on both pages, with an updated tooltip explaining exactly what aggregation does.</div>
+          </div>
+        </div>
+
+        <div class="rn-section">
+          <div class="rn-heading fixed">Bug Fixes</div>
+          <ul class="rn-fixes">
+            <li><strong>Google Places 400 error</strong> — Fixed API parameter name (<code>maxResultCount</code> → <code>pageSize</code>) after Google renamed it when Places API (New) exited preview.</li>
+            <li><strong>DuckDB startup crash</strong> — Fixed "transaction aborted" error on Cloud Run by pre-checking column existence before running migrations.</li>
+            <li><strong>Pydantic validation errors</strong> — Fixed crash when Claude returned <code>null</code> for optional string fields in the tool call response.</li>
+            <li><strong>"Small physicians" label</strong> — Vague physician count words (e.g. "small", "few") now render as readable phrases ("small number of physicians").</li>
+            <li><strong>Filename slashes on macOS</strong> — Colons in timestamps appeared as <code>/</code> in Finder; replaced with dashes.</li>
+          </ul>
+        </div>
+
       </div>
     </div>
 
