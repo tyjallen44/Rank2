@@ -643,15 +643,15 @@ def _build_html(result: AnalysisResult) -> str:
       overflow: hidden;
     }}
     .teaser-blur-content {{
-      filter: blur(4px);
+      filter: blur(2px);
       user-select: none;
       pointer-events: none;
-      opacity: 0.75;
+      opacity: 1;
     }}
     .teaser-blur-overlay {{
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(238,247,241,0.88);
+      background: rgba(238,247,241,0.26);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -660,6 +660,14 @@ def _build_html(result: AnalysisResult) -> str:
       padding: 14px 20px;
       border-radius: 6px;
       border: 1.5px dashed {_SEAFOAM};
+    }}
+    .teaser-blur-overlay .blur-lock,
+    .teaser-blur-overlay .blur-cta-heading,
+    .teaser-blur-overlay .blur-cta-sub,
+    .teaser-blur-overlay .blur-cta-actions {{
+      background: rgba(238,247,241,0.92);
+      border-radius: 4px;
+      padding: 2px 8px;
     }}
     .blur-lock {{
       font-size: 18pt;
@@ -754,7 +762,7 @@ def _build_html(result: AnalysisResult) -> str:
       line-height: 1.35;
     }}
     .roadmap-blur-content {{
-      filter: blur(3px);
+      filter: blur(2.1px);
       font-size: 7pt;
       color: {_TEAL};
       line-height: 1.4;
