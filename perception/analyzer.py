@@ -404,7 +404,6 @@ def analyze_location(
         response = client.messages.create(
             model=_MODEL,
             max_tokens=16000,
-            temperature=0,
             tools=[_STRUCTURED_OUTPUT_TOOL],
             tool_choice={"type": "tool", "name": "submit_analysis_result"},
             messages=[{"role": "user", "content": extraction_prompt}],
