@@ -233,6 +233,14 @@ names; enumerate as many real {specialty} practices and groups as possible \
 Every ranked practice's Google front-door number is fetched and supplied back to \
 you after you name it — use the provided numbers verbatim; do not invent ratings.
 
+**Rebrands and name changes.** NPI registry records are rarely updated when a \
+practice rebrands. If web search or your training knowledge indicates a candidate \
+name in the evidence block is a former name (the group now operates under a \
+different public name), use the CURRENT public name in the report and note the \
+former name in parentheses — e.g. "Mobility Bone & Joint Institute (formerly \
+Essex Orthopaedics & Sports Medicine)". This ensures the Google verification step \
+matches the listing patients and AI assistants actually find today.
+
 **Classification (apply to every practice).** Independent = physician-owned \
 (ownership/partnership stakes, not hospital employees; admitting privileges alone \
 still count as Independent). Hospital/Academic-Affiliated = employed/owned by a \
