@@ -214,9 +214,11 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
     bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
     text_color = _rank_text_color(display_rank)
     physician_html = (
-        f'<span class="surgeon-pill">{_e(p.physician_count)} physicians</span>'
-        if p.physician_count and p.physician_count.lower() != "unknown" else ""
+        f'<span class="surgeon-pill">{_e(_physician_label(p.physician_count))}</span>'
+        if p.physician_count and p.physician_count.lower() not in ("unknown", "") else ""
     )
+    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    weaknesses_html = "".join(f"<li>{_e(w)}</li>" for w in p.notable_weaknesses)
     return f"""
     <div class="card">
       <div class="card-rank" style="background:{bg}; color:{text_color}">
@@ -229,13 +231,82 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
         {_aivs_block(p)}
-        <div class="teaser-cta">
-          Access to the full report and analysis is available upon request.
-          Contact the RLDatix team at {_TEASER_PHONE} or
-          <a href="{_TEASER_DEMO_URL}">Click Here</a>
+        <div class="teaser-blur-wrapper">
+          <div class="teaser-blur-content">
+            {_google_stat(p)}
+            <div class="traits">
+              <div class="trait-col">
+                <div class="trait-label strengths-label">Strengths</div>
+                <ul>{strengths_html}</ul>
+              </div>
+              <div class="trait-col">
+                <div class="trait-label weaknesses-label">Areas to Note</div>
+                <ul>{weaknesses_html}</ul>
+              </div>
+            </div>
+            <div class="best-for"><strong>Best for:</strong> {_e(p.best_suited_for)}</div>
+            <div class="summary">{_e(p.recommendation_summary)}</div>
+          </div>
+          <div class="teaser-blur-overlay">
+            <div class="blur-lock">&#128274;</div>
+            <div class="blur-cta-heading">Full analysis available upon request</div>
+            <div class="blur-cta-sub">Access the complete competitive analysis, detailed signal breakdown, and your personalized AI Visibility Improvement Roadmap.</div>
+            <div class="blur-cta-actions">
+              <span class="blur-phone">{_TEASER_PHONE}</span>
+              &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+              <a href="{_TEASER_DEMO_URL}" class="blur-demo-link">Book a Demo &rarr;</a>
+            </div>
+          </div>
         </div>
       </div>
     </div>"""
+
+
+def _teaser_roadmap_section() -> str:
+    """Locked improvement roadmap appended after the provider cards."""
+    tiers = [
+        ("Outcomes &amp; Safety",       "Clinical quality metrics, safety grades, and performance indicators that AI assistants weight most heavily for hospital and surgical care."),
+        ("Credentials &amp; Recognition","Rankings, board certifications, accreditations, and academic affiliations that establish trust signals across AI platforms."),
+        ("Experience &amp; Reviews",     "Google rating strategy, review volume, recency, and footprint consistency — the reputation wedge most under management control."),
+        ("Access &amp; Fit",             "Network breadth, new-patient availability, location footprint, and telehealth presence that determine how patients can actually reach you."),
+    ]
+    items = ""
+    for tier_name, tier_desc in tiers:
+        items += f"""
+        <div class="roadmap-item">
+          <div class="roadmap-tier-header">
+            <span class="roadmap-tier-name">{tier_name}</span>
+            <span class="roadmap-locked-badge">&#128274; LOCKED</span>
+          </div>
+          <div class="roadmap-tier-desc">{tier_desc}</div>
+          <div class="roadmap-blur-content">
+            Priority action items and competitive benchmarks for this tier are included
+            in the full report. Contact RLDatix to receive your personalized improvement
+            roadmap with specific, ranked recommendations and projected score impact.
+          </div>
+        </div>"""
+
+    return f"""
+  <div class="roadmap-section">
+    <div class="roadmap-header">
+      <div class="roadmap-title">&#128274;&nbsp; AI Visibility Improvement Roadmap</div>
+      <div class="roadmap-subtitle">Your personalized action plan by tier &mdash; unlock the full report to see exactly where to focus and what moves the needle.</div>
+    </div>
+    <div class="roadmap-items">{items}</div>
+    <div class="roadmap-cta">
+      <div class="roadmap-cta-text">
+        Ready to improve how your organization surfaces to AI assistants?
+        The full report includes prioritized recommendations for each tier,
+        competitive gap analysis, and a clear path to ranking higher when
+        patients ask AI assistants for a recommendation.
+      </div>
+      <div class="roadmap-cta-actions">
+        <strong>{_TEASER_PHONE}</strong>
+        &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+        <a href="{_TEASER_DEMO_URL}">Book a Demo at rldatix.com &rarr;</a>
+      </div>
+    </div>
+  </div>"""
 
 
 def _teaser_rankings_section(providers: list[RankedProvider], title: str, subtitle: str) -> str:
@@ -247,7 +318,8 @@ def _teaser_rankings_section(providers: list[RankedProvider], title: str, subtit
     <div class="section-title">{_e(title)}</div>
     <div class="section-subtitle">{_e(subtitle)}</div>
     {cards}
-  </div>"""
+  </div>
+  {_teaser_roadmap_section()}"""
 
 
 def _build_html(result: AnalysisResult) -> str:
@@ -563,19 +635,149 @@ def _build_html(result: AnalysisResult) -> str:
       font-style: italic;
       line-height: 1.45;
     }}
-    .teaser-cta {{
-      font-size: 8pt;
-      color: {_TEAL};
-      background: {_PALE_GREEN};
-      border-left: 3px solid {_SEAFOAM};
-      border-radius: 0 4px 4px 0;
-      padding: 8px 12px;
+    /* ── Teaser blur mechanics ─────────────────────── */
+    .teaser-blur-wrapper {{
+      position: relative;
       margin-top: 10px;
-      line-height: 1.5;
+      border-radius: 6px;
+      overflow: hidden;
     }}
-    .teaser-cta a {{
-      color: #0a5c70;
+    .teaser-blur-content {{
+      filter: blur(4px);
+      user-select: none;
+      pointer-events: none;
+      opacity: 0.75;
+    }}
+    .teaser-blur-overlay {{
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(238,247,241,0.88);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 14px 20px;
+      border-radius: 6px;
+      border: 1.5px dashed {_SEAFOAM};
+    }}
+    .blur-lock {{
+      font-size: 18pt;
+      margin-bottom: 5px;
+    }}
+    .blur-cta-heading {{
+      font-size: 10pt;
+      font-weight: 700;
+      color: {_TEAL};
+      margin-bottom: 5px;
+    }}
+    .blur-cta-sub {{
+      font-size: 7.5pt;
+      color: #3a5a60;
+      line-height: 1.45;
+      margin-bottom: 9px;
+      max-width: 360px;
+    }}
+    .blur-cta-actions {{
+      font-size: 9pt;
       font-weight: 600;
+      color: {_TEAL};
+    }}
+    .blur-phone {{ font-weight: 700; }}
+    .blur-demo-link {{
+      color: #0a5c70;
+      font-weight: 700;
+      text-decoration: underline;
+    }}
+
+    /* ── Improvement Roadmap section ───────────────── */
+    .roadmap-section {{
+      margin: 20px 20px 8px;
+      background: {_PALE_GREEN};
+      border-radius: 8px;
+      border: 1.5px solid {_SEAFOAM};
+      padding: 16px 20px;
+      page-break-inside: avoid;
+    }}
+    .roadmap-header {{
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid {_SEAFOAM};
+    }}
+    .roadmap-title {{
+      font-size: 11pt;
+      font-weight: 700;
+      color: {_TEAL};
+      margin-bottom: 3px;
+    }}
+    .roadmap-subtitle {{
+      font-size: 7.5pt;
+      color: #3a5a60;
+      line-height: 1.4;
+    }}
+    .roadmap-items {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }}
+    .roadmap-item {{
+      background: #fff;
+      border-radius: 6px;
+      padding: 10px 12px;
+      border: 1px solid {_SEAFOAM};
+    }}
+    .roadmap-tier-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 3px;
+    }}
+    .roadmap-tier-name {{
+      font-size: 8pt;
+      font-weight: 700;
+      color: {_TEAL};
+    }}
+    .roadmap-locked-badge {{
+      font-size: 6pt;
+      font-weight: 700;
+      color: #0a5c70;
+      background: {_BLUE_LIGHT};
+      padding: 1px 5px;
+      border-radius: 3px;
+      white-space: nowrap;
+    }}
+    .roadmap-tier-desc {{
+      font-size: 6.5pt;
+      color: #7a9095;
+      margin-bottom: 6px;
+      line-height: 1.35;
+    }}
+    .roadmap-blur-content {{
+      filter: blur(3px);
+      font-size: 7pt;
+      color: {_TEAL};
+      line-height: 1.4;
+      user-select: none;
+    }}
+    .roadmap-cta {{
+      text-align: center;
+      border-top: 1px solid {_SEAFOAM};
+      padding-top: 12px;
+    }}
+    .roadmap-cta-text {{
+      font-size: 8pt;
+      color: #3a5a60;
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }}
+    .roadmap-cta-actions {{
+      font-size: 9pt;
+      font-weight: 600;
+      color: {_TEAL};
+    }}
+    .roadmap-cta-actions a {{
+      color: #0a5c70;
       text-decoration: underline;
     }}
 
