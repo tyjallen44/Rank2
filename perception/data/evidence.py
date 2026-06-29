@@ -128,13 +128,44 @@ def gather_specialty_context(
     specialty: str,
     *,
     taxonomy: str | None = None,
+    api_key: str | None = None,
+    rebrand_check_limit: int = 15,
 ) -> MarketEvidence:
     """NPPES market sizing for a specialty (no per-practice census up front).
 
     Practice-level Google reads are attached *after* the model names the
     practices (see analyzer), since NPPES enumerates clinicians, not practices.
+
+    As a pre-pass, the top NPPES candidate names are queried against Google
+    Places. When Google returns a business with a completely different name at
+    the same location, that is flagged in the evidence block as a likely rebrand
+    so Claude uses the current public name rather than the stale NPPES record.
     """
     market = nppes.search_specialty_market(city, state, taxonomy or specialty)
+
+    # Rebrand detection: NPPES records rarely update when a group renames.
+    # Query Google Places for each top candidate; a "none" name-match where
+    # Google returns a different real business is a strong rebrand signal.
+    rebrand_notes: list[str] = []
+    for name in market.org_names[:rebrand_check_limit]:
+        read = places.fetch_google_rating(name, city, state, api_key=api_key)
+        if (
+            read.matched_name
+            and read.name_match == "none"
+            and read.matched_name.strip().lower() != name.strip().lower()
+        ):
+            rebrand_notes.append(
+                f"'{name}' → Google Places returned '{read.matched_name}' "
+                f"(name mismatch — likely rebrand or name change; use current name)"
+            )
+
+    extra_context = market.as_context()
+    if rebrand_notes:
+        extra_context += (
+            "\n\nPossible rebrands detected (NPPES name → current Google Business name):\n"
+            + "\n".join(f"• {note}" for note in rebrand_notes)
+        )
+
     coverage = (
         f"NPPES enumerated ~{market.provider_count}{'+' if market.capped else ''} "
         f"individual '{specialty}' clinicians in {city}, {state}; practice grouping "
@@ -146,5 +177,5 @@ def gather_specialty_context(
         specialty=specialty,
         registry_total=market.provider_count,
         coverage_note=coverage,
-        extra_context=market.as_context(),
+        extra_context=extra_context,
     )
