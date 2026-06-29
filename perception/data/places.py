@@ -141,6 +141,9 @@ def fetch_google_rating(
         )
         resp.raise_for_status()
         places = resp.json().get("places", [])
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text[:400] if exc.response else ""
+        return GoogleRead(query=query, verified=False, reason=f"Places lookup failed: {exc} | {body}")
     except (httpx.HTTPError, ValueError) as exc:
         return GoogleRead(query=query, verified=False, reason=f"Places lookup failed: {exc}")
 
@@ -213,6 +216,12 @@ def fetch_provider(
         )
         resp.raise_for_status()
         places = resp.json().get("places", [])
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text[:400] if exc.response else ""
+        return (
+            GoogleRead(query=query, verified=False, reason=f"Places lookup failed: {exc} | {body}"),
+            Footprint(query=query, note="footprint sample unavailable"),
+        )
     except (httpx.HTTPError, ValueError) as exc:
         return (
             GoogleRead(query=query, verified=False, reason=f"Places lookup failed: {exc}"),
