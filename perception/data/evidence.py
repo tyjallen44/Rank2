@@ -146,7 +146,18 @@ def gather_specialty_context(
     # Rebrand detection: NPPES records rarely update when a group renames.
     # Query Google Places for each top candidate; a "none" name-match where
     # Google returns a different real business is a strong rebrand signal.
+    # When a rebrand is found, also flag other NPPES name variants that share
+    # significant tokens with the old name — they are the same entity, not
+    # separate practices.
+    _stop = {"inc", "llc", "pllc", "pc", "md", "pa", "associates", "and", "of", "the"}
+
+    def _simple_tokens(s: str) -> set[str]:
+        raw = re.findall(r"[a-z0-9]+", s.lower())
+        return {t for t in raw if t not in _stop and len(t) > 2}
+
     rebrand_notes: list[str] = []
+    rebranded_old_tokens: list[set[str]] = []  # track old-name tokens for variant detection
+
     for name in market.org_names[:rebrand_check_limit]:
         read = places.fetch_google_rating(name, city, state, api_key=api_key)
         if (
@@ -154,15 +165,31 @@ def gather_specialty_context(
             and read.name_match == "none"
             and read.matched_name.strip().lower() != name.strip().lower()
         ):
+            old_tokens = _simple_tokens(name)
+            rebranded_old_tokens.append(old_tokens)
+
+            # Find other NPPES names that are likely variants of the same old entity
+            variants = [
+                other for other in market.org_names
+                if other != name
+                and old_tokens
+                and _simple_tokens(other) & old_tokens
+                and len(_simple_tokens(other) & old_tokens) / max(len(old_tokens), 1) >= 0.5
+            ]
+            variant_note = (
+                f" Also treat these NPPES variants as the same entity: {', '.join(repr(v) for v in variants)}."
+                if variants else ""
+            )
             rebrand_notes.append(
                 f"'{name}' → Google Places returned '{read.matched_name}' "
-                f"(name mismatch — likely rebrand or name change; use current name)"
+                f"(likely rebrand — use '{read.matched_name}' as the name; "
+                f"do NOT list the old name as a separate practice).{variant_note}"
             )
 
     extra_context = market.as_context()
     if rebrand_notes:
         extra_context += (
-            "\n\nPossible rebrands detected (NPPES name → current Google Business name):\n"
+            "\n\nREBRAND ALERT — these NPPES names are stale; do NOT list them as separate practices:\n"
             + "\n".join(f"• {note}" for note in rebrand_notes)
         )
 
