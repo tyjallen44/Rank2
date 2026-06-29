@@ -910,6 +910,17 @@ html, body {
             <div class="rn-title">Aggregate Checkbox On by Default</div>
             <div class="rn-body">The "Aggregate related facilities into parent systems" option is checked by default on both pages, with an updated tooltip explaining exactly what aggregation does.</div>
           </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Deterministic AI Visibility Scores</div>
+            <div class="rn-body">AI Visibility tier scores are now computed from verified evidence data (CMS star ratings, Google reads) using the explicit anchor rubric, rather than being read from the narrative text generated in the analysis phase. Running the same market twice now produces the same scores every time.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Improved Google Places Error Diagnostics</div>
+            <div class="rn-body">When the Google Places API returns an error, the full API response body is now included in the message displayed in the report, making it easier to identify the root cause without inspecting server logs.</div>
+          </div>
+
         </div>
 
         <div class="rn-section">
@@ -920,8 +931,20 @@ html, body {
             <li><strong>Pydantic validation errors</strong> — Fixed crash when Claude returned <code>null</code> for optional string fields in the tool call response.</li>
             <li><strong>"Small physicians" label</strong> — Vague physician count words (e.g. "small", "few") now render as readable phrases ("small number of physicians").</li>
             <li><strong>Filename slashes on macOS</strong> — Colons in timestamps appeared as <code>/</code> in Finder; replaced with dashes.</li>
+            <li><strong>Deprecated API parameter</strong> — Removed <code>temperature</code> parameter that is not supported by <code>claude-opus-4-8</code>.</li>
           </ul>
         </div>
+
+      </div>
+
+      <div class="card" style="max-width:820px;margin-top:20px">
+
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
+          <div style="background:var(--seafoam);color:var(--teal);font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.2</div>
+          <div style="font-size:13px;color:var(--muted)">Coming Soon</div>
+        </div>
+
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">Release notes for version 1.2 will appear here.</div>
 
       </div>
     </div>
