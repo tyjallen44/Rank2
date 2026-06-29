@@ -156,19 +156,16 @@ def gather_specialty_context(
         return {t for t in raw if t not in _stop and len(t) > 2}
 
     rebrand_notes: list[str] = []
+    inactive_notes: list[str] = []
     rebranded_old_tokens: list[set[str]] = []  # track old-name tokens for variant detection
 
     for name in market.org_names[:rebrand_check_limit]:
         read = places.fetch_google_rating(name, city, state, api_key=api_key)
-        if (
-            read.matched_name
-            and read.name_match == "none"
-            and read.matched_name.strip().lower() != name.strip().lower()
-        ):
+        if read.matched_name and read.name_match == "none":
+            # Google returned a completely different business — clear rebrand signal
             old_tokens = _simple_tokens(name)
             rebranded_old_tokens.append(old_tokens)
 
-            # Find other NPPES names that are likely variants of the same old entity
             variants = [
                 other for other in market.org_names
                 if other != name
@@ -185,13 +182,31 @@ def gather_specialty_context(
                 f"(likely rebrand — use '{read.matched_name}' as the name; "
                 f"do NOT list the old name as a separate practice).{variant_note}"
             )
+        elif read.matched_name and read.name_match in ("strong", "weak") and read.rating is None:
+            # Google found a listing under this name but it has no rating —
+            # strongly suggests an inactive or defunct entity (closed, rebranded,
+            # or superseded). Do not list as an active practice.
+            inactive_notes.append(
+                f"'{name}' → Google listing exists as '{read.matched_name}' but has NO rating "
+                f"(inactive/unclaimed — likely a defunct or rebranded entity; "
+                f"do NOT list as an active practice unless independently confirmed current)"
+            )
 
     extra_context = market.as_context()
+    alerts: list[str] = []
     if rebrand_notes:
-        extra_context += (
-            "\n\nREBRAND ALERT — these NPPES names are stale; do NOT list them as separate practices:\n"
-            + "\n".join(f"• {note}" for note in rebrand_notes)
+        alerts.append(
+            "REBRAND ALERT — these NPPES names are stale; do NOT list them as separate practices:\n"
+            + "\n".join(f"  • {note}" for note in rebrand_notes)
         )
+    if inactive_notes:
+        alerts.append(
+            "INACTIVE ENTITY ALERT — these NPPES names resolve to unrated Google listings "
+            "(likely defunct or rebranded); do NOT list as active practices:\n"
+            + "\n".join(f"  • {note}" for note in inactive_notes)
+        )
+    if alerts:
+        extra_context += "\n\n" + "\n\n".join(alerts)
 
     coverage = (
         f"NPPES enumerated ~{market.provider_count}{'+' if market.capped else ''} "
