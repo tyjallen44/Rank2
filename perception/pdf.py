@@ -207,7 +207,7 @@ def _rankings_section(providers: list[RankedProvider], title: str, subtitle: str
 
 
 _TEASER_DEMO_URL = "https://www.rldatix.com/en-nam/book-a-demo/"
-_TEASER_PHONE    = "(xxx)xxx-xxxx"
+_TEASER_PHONE    = "801.998.2830"
 
 
 def _teaser_card(p: RankedProvider, display_rank: int) -> str:
