@@ -21,7 +21,8 @@ RUN pip install --no-cache-dir \
     "httpx>=0.27" \
     "tenacity>=8.3" \
     "python-dateutil>=2.9" \
-    "nltk>=3.8"
+    "nltk>=3.8" \
+    "pyspellchecker>=0.8"
 
 # Bake Chromium + all its system libs into the image
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
