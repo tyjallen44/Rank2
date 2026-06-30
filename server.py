@@ -41,6 +41,18 @@ except ImportError:
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
+from spellchecker import SpellChecker
+
+_spell = SpellChecker()
+
+
+def _normalize_input(text: str | None) -> str | None:
+    """Title-case and spell-correct a free-text field received in ALL CAPS from the UI."""
+    if not text:
+        return text
+    words = text.strip().lower().split()
+    corrected = [(_spell.correction(w) or w) for w in words]
+    return " ".join(corrected).title()
 
 app = FastAPI(title="Rank2", docs_url=None, redoc_url=None)
 
@@ -170,6 +182,8 @@ def _job_run_single(
             radius_miles=radius_miles, zip_code=job.get("zip_code"),
             patient_perspective=job.get("patient_perspective", False),
             teaser_report=job.get("teaser_report", False),
+            entity_name=job.get("entity_name"),
+            individual_report=job.get("individual_report", False),
             output_dir=REPORTS_DIR, on_event=emit,
         )
         set_run_role(result.run_id, job["role"])
@@ -203,6 +217,8 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
         results = []
         total = len(groups)
         for i, g in enumerate(groups):
+            g["city"] = _normalize_input(g.get("city")) or g.get("city", "")
+            g["specialty"] = _normalize_input(g.get("specialty"))
             loc = f"{g['city']}, {g['state']}"
             if g.get("specialty"):
                 loc += f" — {g['specialty']}"
@@ -249,6 +265,13 @@ def _zip_to_city_state(zip_code: str) -> tuple[str, str]:
     return place["place name"], place["state abbreviation"]
 
 
+class EntitySearchRequest(BaseModel):
+    name: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+
+
 class AnalyzeRequest(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
@@ -258,6 +281,8 @@ class AnalyzeRequest(BaseModel):
     aggregate: bool = False
     patient_perspective: bool = False
     teaser_report: bool = False
+    entity_name: Optional[str] = None
+    individual_report: bool = False
 
 
 class BatchRequest(BaseModel):
@@ -278,11 +303,17 @@ async def start_analysis(req: AnalyzeRequest, role: str = Depends(require_auth))
     elif not city or not state:
         raise HTTPException(400, "Provide either city+state or zip_code.")
 
+    city = _normalize_input(city)
+    specialty = _normalize_input(req.specialty)
+    entity_name = _normalize_input(req.entity_name)
+
     job_id = _new_job(role)
     _jobs[job_id]["zip_code"] = req.zip_code if req.zip_code else None
     _jobs[job_id]["patient_perspective"] = req.patient_perspective
     _jobs[job_id]["teaser_report"] = req.teaser_report
-    _pool.submit(_job_run_single, job_id, city, state, req.specialty, req.aggregate, radius)
+    _jobs[job_id]["entity_name"] = entity_name
+    _jobs[job_id]["individual_report"] = req.individual_report
+    _pool.submit(_job_run_single, job_id, city, state, specialty, req.aggregate, radius)
     return {"job_id": job_id}
 
 
@@ -350,6 +381,21 @@ async def download_pdf(run_id: str, role: str = Depends(require_auth)):
     if not pdf.exists():
         raise HTTPException(404, "PDF file not found on disk")
     return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
+
+
+@app.post("/api/search/entity")
+async def search_entity(req: EntitySearchRequest, _: str = Depends(require_auth)):
+    from perception.data.places import search_entity_candidates
+    city, state = req.city, req.state
+    if req.zip_code and not (city and state):
+        try:
+            city, state = _zip_to_city_state(req.zip_code)
+        except Exception:
+            pass
+    city = _normalize_input(city)
+    name = _normalize_input(req.name)
+    candidates = search_entity_candidates(name, city, state)
+    return {"candidates": candidates, "city": city, "state": state}
 
 
 @app.post("/api/upload")
