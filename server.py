@@ -391,17 +391,22 @@ async def download_pdf(run_id: str, role: str = Depends(require_auth)):
 
 @app.post("/api/search/entity")
 async def search_entity(req: EntitySearchRequest, _: str = Depends(require_auth)):
-    from perception.data.places import search_entity_candidates
-    city, state = req.city, req.state
-    if req.zip_code and not (city and state):
-        try:
-            city, state = _zip_to_city_state(req.zip_code)
-        except Exception:
-            pass
-    city = _normalize_input(city)
-    name = _normalize_input(req.name)
-    candidates = search_entity_candidates(name, city, state)
-    return {"candidates": candidates, "city": city, "state": state}
+    try:
+        from perception.data.places import search_entity_candidates
+        city, state = req.city, req.state
+        if req.zip_code and not (city and state):
+            try:
+                city, state = _zip_to_city_state(req.zip_code)
+            except Exception:
+                pass
+        city = _normalize_input(city)
+        name = _normalize_input(req.name)
+        candidates = search_entity_candidates(name, city, state)
+        return {"candidates": candidates, "city": city, "state": state}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Search error: {type(exc).__name__}: {exc}")
 
 
 @app.post("/api/upload")
