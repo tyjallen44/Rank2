@@ -80,6 +80,8 @@ def init_db() -> None:
         ("aggregate", "BOOLEAN DEFAULT FALSE"),
         ("patient_perspective", "BOOLEAN DEFAULT FALSE"),
         ("teaser_report", "BOOLEAN DEFAULT FALSE"),
+        ("individual_report", "BOOLEAN DEFAULT FALSE"),
+        ("entity_name", "VARCHAR"),
         # AI Visibility Score additions
         ("weighting_profile", "VARCHAR"),
         ("market_overview", "VARCHAR"),
@@ -132,6 +134,15 @@ def init_db() -> None:
         ("third_party_aggregate", "VARCHAR DEFAULT '{}'"),
         ("disqualifiers", "VARCHAR DEFAULT '[]'"),
         ("website_url", "VARCHAR"),
+        ("patient_voice_summary", "VARCHAR DEFAULT ''"),
+        ("leapfrog_grade", "VARCHAR"),
+        ("accreditations", "VARCHAR DEFAULT '[]'"),
+        ("cms_quality_highlights", "VARCHAR DEFAULT ''"),
+        ("cms_star_rating", "INTEGER"),
+        ("us_news_rankings", "VARCHAR DEFAULT '[]'"),
+        ("ai_says", "VARCHAR DEFAULT ''"),
+        ("trauma_level", "VARCHAR"),
+        ("teaching_status", "VARCHAR"),
     ]:
         if col not in existing_provider_cols:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")

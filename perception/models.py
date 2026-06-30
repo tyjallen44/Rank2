@@ -76,6 +76,9 @@ class SizeCategory(str, Enum):
 class ConsolidatedLocation(BaseModel):
     name: str
     overall_rating: str = ""
+    google_rating: Optional[float] = None
+    google_review_count: Optional[int] = None
+    address: Optional[str] = None
 
 
 class TierScores(BaseModel):
@@ -130,6 +133,13 @@ class ThirdPartyAggregate(BaseModel):
     note: str = ""
 
 
+class UsNewsRanking(BaseModel):
+    """A single U.S. News & World Report recognition for a provider."""
+    category: str                                # e.g. "Orthopedics", "Cardiology & Heart Surgery"
+    rank: Optional[int] = None                   # specific rank number; None if only high-performing
+    recognition_type: str = "nationally_ranked"  # "nationally_ranked" | "high_performing"
+
+
 class RankedProvider(BaseModel):
     rank: int
     name: str
@@ -150,6 +160,15 @@ class RankedProvider(BaseModel):
     best_suited_for: str = ""
     recommendation_summary: str = ""
     consolidated_locations: list[ConsolidatedLocation] = Field(default_factory=list)
+    patient_voice_summary: str = ""
+    leapfrog_grade: Optional[str] = None
+    accreditations: list[str] = Field(default_factory=list)
+    cms_quality_highlights: str = ""
+    cms_star_rating: Optional[int] = None          # CMS Overall Hospital Quality Star Rating 1–5
+    us_news_rankings: list[UsNewsRanking] = Field(default_factory=list)
+    ai_says: str = ""                              # how AI assistants currently describe this provider
+    trauma_level: Optional[str] = None            # "Level I" / "Level II" / "Level III"
+    teaching_status: Optional[str] = None         # "major" / "minor" / "not_teaching"
 
 
 class AnalysisResult(BaseModel):
@@ -160,6 +179,8 @@ class AnalysisResult(BaseModel):
     aggregate: bool = False                # whether parent/child entities were consolidated
     patient_perspective: bool = False      # flat ranking by score, no entity-type grouping
     teaser_report: bool = False            # summary-only cards with CTA; implies patient_perspective
+    individual_report: bool = False        # single-entity deep-dive report
+    entity_name: Optional[str] = None     # named entity for individual_report mode
     zip_code: Optional[str] = None         # set when search was by ZIP code
     radius_miles: Optional[int] = None     # set when search was by ZIP code
     generated_at: date
