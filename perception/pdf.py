@@ -229,7 +229,7 @@ def _outcomes_safety_block(p: RankedProvider) -> str:
     grade = (p.leapfrog_grade or "").strip()
     first = grade[0].upper() if grade else ""
 
-    if first in "ABCDF":
+    if first and first in "ABCDF":
         css_cls = f"qs-badge qs-leapfrog-{first}"
         leapfrog_cell = f'<span class="{css_cls}">{first}</span>'
     elif grade.lower() in ("not rated", "not_rated"):
