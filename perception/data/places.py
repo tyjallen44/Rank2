@@ -321,6 +321,53 @@ def search_listings(
     return out
 
 
+def search_entity_candidates(
+    name: str,
+    city: str | None = None,
+    state: str | None = None,
+    *,
+    api_key: str | None = None,
+    max_results: int = 5,
+    timeout: float = 20.0,
+) -> list[dict]:
+    """Search Google Places for candidates matching name + location.
+
+    Returns up to max_results dicts with keys: name, address, rating, review_count.
+    Used by the search-before-analyze flow on the Individual Report page.
+    """
+    query = " ".join(p for p in (name, city, state) if p).strip()
+    key = _api_key(api_key)
+    if not key:
+        return []
+    try:
+        resp = httpx.post(
+            _SEARCH_TEXT,
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": key,
+                "X-Goog-FieldMask": (
+                    "places.displayName,places.formattedAddress,"
+                    "places.rating,places.userRatingCount"
+                ),
+            },
+            json={"textQuery": query, "pageSize": min(max_results, 20)},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        raw = resp.json().get("places", [])
+    except (httpx.HTTPError, ValueError):
+        return []
+    return [
+        {
+            "name": (p.get("displayName") or {}).get("text", ""),
+            "address": p.get("formattedAddress", ""),
+            "rating": p.get("rating"),
+            "review_count": p.get("userRatingCount"),
+        }
+        for p in raw
+    ]
+
+
 def fetch_footprint(
     org: str,
     city: str | None = None,
