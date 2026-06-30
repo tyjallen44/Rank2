@@ -1348,7 +1348,7 @@ async function doLogin() {
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({password: pw}),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Invalid password');
+    if (!r.ok) throw new Error(await errDetail(r, 'Invalid password'));
     const { token, display_name } = await r.json();
     _token = token;
     _displayName = display_name;
@@ -1390,6 +1390,10 @@ async function api(path, opts = {}) {
     throw new Error('session_expired');
   }
   return r;
+}
+
+async function errDetail(r, fallback) {
+  try { return (await r.json()).detail || fallback; } catch { return fallback; }
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────
@@ -1458,7 +1462,7 @@ async function onPpFileSelect(file) {
   form.append('file', file);
   try {
     const r = await api('/api/upload', {method:'POST', body: form});
-    if (!r.ok) throw new Error((await r.json()).detail || 'Upload failed');
+    if (!r.ok) throw new Error(await errDetail(r, 'Upload failed'));
     const data = await r.json();
     _ppGroups = data.groups;
     document.getElementById('pp-csv-summary').textContent =
@@ -1506,7 +1510,7 @@ async function runBatchPatient() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({groups}),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start'));
     const { job_id } = await r.json();
     _lastPage = 'patient';
     startProgress(job_id, `${_ppGroups.length} locations`, true);
@@ -1565,7 +1569,7 @@ async function runPatient() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start'));
     const { job_id } = await r.json();
     _lastPage = 'patient';
     startProgress(job_id, label, false);
@@ -1626,7 +1630,7 @@ async function runIrSearch() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Search failed');
+    if (!r.ok) throw new Error(await errDetail(r, 'Search failed'));
     const data = await r.json();
     _irCandidates    = data.candidates || [];
     _irResolvedCity  = data.city  || reqBody.city  || null;
@@ -1745,7 +1749,7 @@ async function runIndividual() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start'));
     const { job_id } = await r.json();
     _lastPage = 'individual';
     startProgress(job_id, _irSelected.name, false);
@@ -1792,7 +1796,7 @@ async function runManual() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start'));
     const { job_id } = await r.json();
     _lastPage = 'new';
     startProgress(job_id, label, false);
@@ -1816,7 +1820,7 @@ async function onFileSelect(file) {
   form.append('file', file);
   try {
     const r = await api('/api/upload', {method:'POST', body: form});
-    if (!r.ok) throw new Error((await r.json()).detail || 'Upload failed');
+    if (!r.ok) throw new Error(await errDetail(r, 'Upload failed'));
     const data = await r.json();
     _groups = data.groups;
 
@@ -1866,7 +1870,7 @@ async function runBatch() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({groups: _groups}),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to start');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start'));
     const { job_id } = await r.json();
     startProgress(job_id, `${_groups.length} locations`, true);
   } catch(e) { showErr(document.getElementById('csv-err'), e.message); }

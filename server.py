@@ -41,18 +41,24 @@ except ImportError:
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
-from spellchecker import SpellChecker
-
-_spell = SpellChecker()
+try:
+    from spellchecker import SpellChecker
+    _spell = SpellChecker()
+except Exception:
+    _spell = None
 
 
 def _normalize_input(text: str | None) -> str | None:
     """Title-case and spell-correct a free-text field received in ALL CAPS from the UI."""
     if not text:
         return text
-    words = text.strip().lower().split()
-    corrected = [(_spell.correction(w) or w) for w in words]
-    return " ".join(corrected).title()
+    try:
+        words = text.strip().lower().split()
+        if _spell:
+            words = [(_spell.correction(w) or w) for w in words]
+        return " ".join(words).title()
+    except Exception:
+        return text.strip().title()
 
 app = FastAPI(title="Rank2", docs_url=None, redoc_url=None)
 
