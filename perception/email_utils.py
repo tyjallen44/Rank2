@@ -6,8 +6,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
-GMAIL_USER: str = os.environ.get("GMAIL_USER", "")
-GMAIL_APP_PASSWORD: str = os.environ.get("GMAIL_APP_PASSWORD", "")
 ADMIN_EMAIL: str = os.environ.get("ADMIN_NOTIFICATION_EMAIL", "ty.allen@rldatix.com")
 APP_URL: str = os.environ.get("APP_URL", "https://careclimb.com")
 
@@ -20,17 +18,24 @@ _CARD_CSS = (
 
 
 def _send(to: str, subject: str, html: str) -> None:
-    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
-        print(f"[email] GMAIL credentials not set — skipping delivery to {to}")
+    gmail_user = os.environ.get("GMAIL_USER", "")
+    gmail_pw   = os.environ.get("GMAIL_APP_PASSWORD", "")
+    print(f"[email] Attempting send to={to} subject={subject!r} from={gmail_user or '(not set)'}")
+    if not gmail_user or not gmail_pw:
+        print(f"[email] GMAIL_USER or GMAIL_APP_PASSWORD not set — skipping")
         return
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"{_BRAND} — {subject}"
-    msg["From"] = f"{_BRAND} <{GMAIL_USER}>"
-    msg["To"] = to
-    msg.attach(MIMEText(html, "html"))
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-        smtp.sendmail(GMAIL_USER, to, msg.as_string())
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"{_BRAND} — {subject}"
+        msg["From"]    = f"{_BRAND} <{gmail_user}>"
+        msg["To"]      = to
+        msg.attach(MIMEText(html, "html"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(gmail_user, gmail_pw)
+            smtp.sendmail(gmail_user, to, msg.as_string())
+        print(f"[email] Sent OK to={to}")
+    except Exception as exc:
+        print(f"[email] FAILED to={to} error={type(exc).__name__}: {exc}")
 
 
 def _btn(href: str, label: str) -> str:

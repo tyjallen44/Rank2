@@ -630,8 +630,8 @@ async def request_access(req: RequestAccessBody):
     new_req = create_access_request(email, req.name, req.request_type)
     try:
         notify_admin_access_request(email, req.name, req.request_type, new_req["id"])
-    except Exception:
-        pass
+    except Exception as _e:
+        print(f"[email] request notify error: {_e}")
     return {"status": "requested"}
 
 
@@ -709,13 +709,13 @@ async def admin_approve_request(req_id: str, payload: dict = Depends(require_adm
             tok = create_password_token(user["id"])
             try:
                 send_set_password_link(req["email"], req["name"], tok)
-            except Exception:
-                pass
+            except Exception as _e:
+                print(f"[email] approve native error: {_e}")
     else:
         try:
             send_google_access_approved(req["email"], req["name"])
-        except Exception:
-            pass
+        except Exception as _e:
+            print(f"[email] approve google error: {_e}")
     return {"status": "approved"}
 
 
@@ -732,8 +732,8 @@ async def admin_deny_request(req_id: str, payload: dict = Depends(require_admin)
     handle_access_request(req_id, "denied", by)
     try:
         send_access_denied(req["email"], req["name"])
-    except Exception:
-        pass
+    except Exception as _e:
+        print(f"[email] deny error: {_e}")
     return {"status": "denied"}
 
 
@@ -781,13 +781,13 @@ async def admin_invite_user(req: InviteUserRequest, payload: dict = Depends(requ
         tok = create_password_token(user["id"])
         try:
             send_set_password_link(email, req.name, tok)
-        except Exception:
-            pass
+        except Exception as _e:
+            print(f"[email] invite native error: {_e}")
     else:
         try:
             send_google_access_approved(email, req.name)
-        except Exception:
-            pass
+        except Exception as _e:
+            print(f"[email] invite google error: {_e}")
     return {"status": "invited", "user_id": user["id"]}
 
 
