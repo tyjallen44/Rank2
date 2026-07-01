@@ -224,11 +224,34 @@ def _patient_voice_block(p: RankedProvider) -> str:
     </div>"""
 
 
-def _outcomes_safety_block(p: RankedProvider) -> str:
-    """Leapfrog + CMS quality row — always renders, making non-participation explicit."""
+def _outcomes_data_status(p: RankedProvider) -> tuple[bool, bool]:
+    """Returns (has_leapfrog_grade, has_cms_rating)."""
     grade = (p.leapfrog_grade or "").strip()
     first = grade[0].upper() if grade else ""
+    has_leapfrog = bool(first and first in "ABCDF")
+    has_cms = bool(p.cms_star_rating and 1 <= p.cms_star_rating <= 5)
+    return has_leapfrog, has_cms
 
+
+def _outcomes_safety_weaknesses(p: RankedProvider) -> list[str]:
+    """When both Leapfrog and CMS data are absent, return items for Areas for Improvement."""
+    has_leapfrog, has_cms = _outcomes_data_status(p)
+    if has_leapfrog or has_cms:
+        return []
+    return [
+        "Leapfrog Hospital Safety Grade not published",
+        "CMS Overall Star Rating not published",
+    ]
+
+
+def _outcomes_safety_block(p: RankedProvider) -> str:
+    """Leapfrog + CMS quality row. Returns empty string when both values are absent."""
+    has_leapfrog, has_cms = _outcomes_data_status(p)
+    if not has_leapfrog and not has_cms:
+        return ""
+
+    grade = (p.leapfrog_grade or "").strip()
+    first = grade[0].upper() if grade else ""
     if first and first in "ABCDF":
         css_cls = f"qs-badge qs-leapfrog-{first}"
         leapfrog_cell = f'<span class="{css_cls}">{first}</span>'
@@ -237,7 +260,7 @@ def _outcomes_safety_block(p: RankedProvider) -> str:
     else:
         leapfrog_cell = '<span class="os-absent">Not currently participating in Leapfrog survey</span>'
 
-    if p.cms_star_rating and 1 <= p.cms_star_rating <= 5:
+    if has_cms:
         _star_css = {5: "qs-cms-5", 4: "qs-cms-4", 3: "qs-cms-3", 2: "qs-cms-2", 1: "qs-cms-1"}
         stars = "★" * p.cms_star_rating + "☆" * (5 - p.cms_star_rating)
         cms_cell = f'<span class="qs-badge {_star_css[p.cms_star_rating]}">{stars} ({p.cms_star_rating} of 5)</span>'
@@ -300,7 +323,10 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
     bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
     text_color = _rank_text_color(display_rank)
     strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
-    weaknesses_html = "".join(f"<li>{_e(w)}</li>" for w in p.notable_weaknesses)
+    weaknesses_html = "".join(
+        f"<li>{_e(w)}</li>"
+        for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
+    )
     disq_html = (
         f'<div class="disqualifier">⚠ Disqualifiers: {_e("; ".join(p.disqualifiers))}</div>'
         if p.disqualifiers else ""
@@ -337,7 +363,7 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
             <ul>{strengths_html}</ul>
           </div>
           <div class="trait-col">
-            <div class="trait-label weaknesses-label">Areas to Note</div>
+            <div class="trait-label weaknesses-label">Areas for Improvement</div>
             <ul>{weaknesses_html}</ul>
           </div>
         </div>
@@ -350,7 +376,10 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
 def _individual_entity_card(p: RankedProvider) -> str:
     """Full-width card for individual entity reports — no rank badge."""
     strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
-    weaknesses_html = "".join(f"<li>{_e(w)}</li>" for w in p.notable_weaknesses)
+    weaknesses_html = "".join(
+        f"<li>{_e(w)}</li>"
+        for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
+    )
     disq_html = (
         f'<div class="disqualifier">⚠ Disqualifiers: {_e("; ".join(p.disqualifiers))}</div>'
         if p.disqualifiers else ""
@@ -386,7 +415,7 @@ def _individual_entity_card(p: RankedProvider) -> str:
             <ul>{strengths_html}</ul>
           </div>
           <div class="trait-col">
-            <div class="trait-label weaknesses-label">Areas to Note</div>
+            <div class="trait-label weaknesses-label">Areas for Improvement</div>
             <ul>{weaknesses_html}</ul>
           </div>
         </div>
@@ -404,7 +433,10 @@ def _individual_teaser_card(p: RankedProvider) -> str:
         if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
     )
     strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
-    weaknesses_html = "".join(f"<li>{_e(w)}</li>" for w in p.notable_weaknesses)
+    weaknesses_html = "".join(
+        f"<li>{_e(w)}</li>"
+        for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
+    )
     return f"""
     <div class="card" style="border:2px solid {_TEAL}">
       <div class="card-body" style="padding:16px 20px">
@@ -428,7 +460,7 @@ def _individual_teaser_card(p: RankedProvider) -> str:
                 <ul>{strengths_html}</ul>
               </div>
               <div class="trait-col">
-                <div class="trait-label weaknesses-label">Areas to Note</div>
+                <div class="trait-label weaknesses-label">Areas for Improvement</div>
                 <ul>{weaknesses_html}</ul>
               </div>
             </div>
@@ -485,7 +517,10 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
         if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
     )
     strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
-    weaknesses_html = "".join(f"<li>{_e(w)}</li>" for w in p.notable_weaknesses)
+    weaknesses_html = "".join(
+        f"<li>{_e(w)}</li>"
+        for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
+    )
     return f"""
     <div class="card">
       <div class="card-rank" style="background:{bg}; color:{text_color}">
@@ -512,7 +547,7 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
                 <ul>{strengths_html}</ul>
               </div>
               <div class="trait-col">
-                <div class="trait-label weaknesses-label">Areas to Note</div>
+                <div class="trait-label weaknesses-label">Areas for Improvement</div>
                 <ul>{weaknesses_html}</ul>
               </div>
             </div>
