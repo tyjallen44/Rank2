@@ -522,8 +522,10 @@ async def google_callback(
                 },
             )
             token_data = token_resp.json()
+            print(f"[oauth] token exchange status={token_resp.status_code} keys={list(token_data.keys())}")
             access_token = token_data.get("access_token")
             if not access_token:
+                print(f"[oauth] token_failed: {token_data.get('error')} — {token_data.get('error_description')}")
                 return RedirectResponse(f"{base}/?auth_error=token_failed")
 
             info_resp = await client.get(
@@ -531,7 +533,9 @@ async def google_callback(
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             userinfo = info_resp.json()
-    except Exception:
+            print(f"[oauth] userinfo email={userinfo.get('email')} name={userinfo.get('name')}")
+    except Exception as _exc:
+        print(f"[oauth] network error: {type(_exc).__name__}: {_exc}")
         return RedirectResponse(f"{base}/?auth_error=network")
 
     email = (userinfo.get("email") or "").lower()
@@ -548,6 +552,7 @@ async def google_callback(
 
     init_db()
     user = get_user_by_email(email)
+    print(f"[oauth] lookup email={email} user_found={bool(user)}")
     if user:
         if not user["is_active"]:
             return RedirectResponse(f"{base}/?auth_error=deactivated")
@@ -557,6 +562,7 @@ async def google_callback(
         return RedirectResponse(f"{base}/?google_token={tok}")
 
     req = get_access_request_by_email(email)
+    print(f"[oauth] access_request={req['status'] if req else 'none'}")
     if req and req["status"] == "approved":
         new_user = create_user(email, name, "user", "google")
         update_last_login(new_user["id"])
