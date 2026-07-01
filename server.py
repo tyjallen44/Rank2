@@ -737,6 +737,47 @@ async def admin_deny_request(req_id: str, payload: dict = Depends(require_admin)
     return {"status": "denied"}
 
 
+@app.post("/api/admin/requests/{req_id}/resend")
+async def admin_resend_request(req_id: str, _: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import (
+        create_password_token, get_access_request, get_user_by_email,
+    )
+    from perception.email_utils import (
+        notify_admin_access_request, send_access_denied,
+        send_google_access_approved, send_set_password_link,
+    )
+    init_db()
+    req = get_access_request(req_id)
+    if not req:
+        raise HTTPException(404, "Request not found")
+    status = req["status"]
+    rtype  = req["request_type"]
+    email  = req["email"]
+    name   = req["name"]
+    try:
+        if status == "approved" and rtype == "native":
+            user = get_user_by_email(email)
+            if not user:
+                raise HTTPException(400, "User account not found — approve the request first")
+            tok = create_password_token(user["id"])
+            send_set_password_link(email, name, tok)
+        elif status == "approved" and rtype == "google":
+            send_google_access_approved(email, name)
+        elif status == "denied":
+            send_access_denied(email, name)
+        elif status == "pending":
+            notify_admin_access_request(email, name, rtype, req_id)
+        else:
+            raise HTTPException(400, f"Cannot resend for status '{status}'")
+    except HTTPException:
+        raise
+    except Exception as _e:
+        print(f"[email] resend error: {_e}")
+        raise HTTPException(500, f"Email send failed: {_e}")
+    return {"status": "resent"}
+
+
 @app.put("/api/admin/users/{user_id}/role")
 async def admin_update_role(
     user_id: str, req: UpdateRoleRequest, _: dict = Depends(require_admin)

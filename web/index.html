@@ -2641,11 +2641,12 @@ async function loadAdminRequests() {
               <td><span class="badge badge-${req.request_type}">${req.request_type}</span></td>
               <td><span class="badge badge-${req.status}">${req.status}</span></td>
               <td style="color:var(--muted);font-size:12px">${(req.requested_at||'').slice(0,10)}</td>
-              <td style="display:flex;gap:6px">
+              <td style="display:flex;gap:6px;flex-wrap:wrap">
                 ${req.status === 'pending' ? `
                   <button class="btn btn-primary" style="padding:5px 12px;font-size:12px" onclick="adminApproveReq('${req.id}')">Approve</button>
                   <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:12px" onclick="adminDenyReq('${req.id}')">Deny</button>
-                ` : '<span style="color:var(--muted);font-size:12px">Handled</span>'}
+                ` : ''}
+                <button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="adminResendReq('${req.id}','${req.status}')">Resend Email</button>
               </td>
             </tr>`).join('')}
         </tbody>
@@ -2700,6 +2701,16 @@ async function adminDenyReq(reqId) {
     const r = await api(`/api/admin/requests/${reqId}/deny`, {method:'POST'});
     if (!r.ok) throw new Error(await errDetail(r, 'Failed'));
     loadAdminRequests();
+  } catch(e) { alert(e.message); }
+}
+
+async function adminResendReq(reqId, status) {
+  const label = status === 'approved' ? 'approval' : status === 'denied' ? 'denial' : 'notification';
+  if (!confirm(`Resend the ${label} email?`)) return;
+  try {
+    const r = await api(`/api/admin/requests/${reqId}/resend`, {method:'POST'});
+    if (!r.ok) throw new Error(await errDetail(r, 'Resend failed'));
+    alert('Email resent successfully.');
   } catch(e) { alert(e.message); }
 }
 
