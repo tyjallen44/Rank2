@@ -146,6 +146,42 @@ def init_db() -> None:
     ]:
         if col not in existing_provider_cols:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")
+    # ── SSO auth tables ───────────────────────────────────────────────────────
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id            VARCHAR PRIMARY KEY,
+            email         VARCHAR NOT NULL UNIQUE,
+            name          VARCHAR,
+            role          VARCHAR DEFAULT 'user',
+            auth_type     VARCHAR NOT NULL,
+            password_hash VARCHAR,
+            password_salt VARCHAR,
+            is_active     BOOLEAN DEFAULT TRUE,
+            created_at    TIMESTAMP,
+            last_login    TIMESTAMP,
+            invited_by    VARCHAR
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS access_requests (
+            id           VARCHAR PRIMARY KEY,
+            email        VARCHAR NOT NULL,
+            name         VARCHAR,
+            request_type VARCHAR NOT NULL,
+            status       VARCHAR DEFAULT 'pending',
+            requested_at TIMESTAMP NOT NULL,
+            handled_at   TIMESTAMP,
+            handled_by   VARCHAR
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS password_tokens (
+            token      VARCHAR PRIMARY KEY,
+            user_id    VARCHAR NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used       BOOLEAN DEFAULT FALSE
+        )
+    """)
     con.close()
 
 

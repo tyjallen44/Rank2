@@ -25,6 +25,7 @@ import secrets
 import shutil
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -39,7 +40,7 @@ except ImportError:
     pass
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 try:
     from spellchecker import SpellChecker
@@ -65,6 +66,10 @@ app = FastAPI(title="Rank2", docs_url=None, redoc_url=None)
 # ── Config ────────────────────────────────────────────────────────────────────
 _raw_pw = os.environ.get("ACCESS_PASSWORD", "")
 ACCESS_PASSWORDS: set[str] = {p.strip() for p in _raw_pw.split(",") if p.strip()}
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+APP_URL = os.environ.get("APP_URL", "http://localhost:8000")
+_GOOGLE_REDIRECT_URI = f"{APP_URL}/auth/google/callback"
 REPORTS_DIR = Path(os.environ.get(
     "REPORTS_DIR",
     str(Path.home() / "Documents" / "Rank2 Reports"),
@@ -94,15 +99,21 @@ def _signing_key() -> bytes:
     return _hmac.new(pw.encode(), b"rank2-session-v1", hashlib.sha256).digest()
 
 
-def _create_token(role_id: str) -> str:
-    payload = json.dumps({"role": role_id, "exp": int(time.time()) + _SESSION_TTL_DAYS * 86400})
-    b64 = base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+def _create_token(role_id: str, **extra: object) -> str:
+    payload = {"role": role_id, "exp": int(time.time()) + _SESSION_TTL_DAYS * 86400, **extra}
+    b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
     sig = _hmac.new(_signing_key(), b64.encode(), hashlib.sha256).hexdigest()
     return f"{b64}.{sig}"
 
 
 def _verify_token(token: str) -> str | None:
     """Returns role_id if the token is valid and not expired, else None."""
+    payload = _verify_token_full(token)
+    return payload["role"] if payload else None
+
+
+def _verify_token_full(token: str) -> dict | None:
+    """Returns the full decoded payload dict if valid, else None."""
     try:
         b64, sig = token.rsplit(".", 1)
         expected = _hmac.new(_signing_key(), b64.encode(), hashlib.sha256).hexdigest()
@@ -112,7 +123,7 @@ def _verify_token(token: str) -> str | None:
         payload = json.loads(base64.urlsafe_b64decode(padded).decode())
         if payload["exp"] < time.time():
             return None
-        return payload["role"]
+        return payload
     except Exception:
         return None
 
@@ -132,19 +143,40 @@ async def login(req: LoginRequest):
     return {"token": token, "role": role_id, "display_name": display_name}
 
 
+def _extract_token(request: Request, token: Optional[str]) -> str | None:
+    hdr = request.headers.get("Authorization", "")
+    return hdr[7:] if hdr.startswith("Bearer ") else token
+
+
 def require_auth(request: Request, token: Optional[str] = Query(None)) -> str:
     """Accepts Bearer header or ?token= query param. Returns the user's role_id."""
-    hdr = request.headers.get("Authorization", "")
-    t = hdr[7:] if hdr.startswith("Bearer ") else token
+    t = _extract_token(request, token)
     role = _verify_token(t) if t else None
     if role is None:
         raise HTTPException(401, "Session expired — please log in again")
     return role
 
 
+def get_current_user_payload(request: Request, token: Optional[str] = Query(None)) -> dict:
+    """Returns the full token payload dict; raises 401 if invalid."""
+    t = _extract_token(request, token)
+    payload = _verify_token_full(t) if t else None
+    if payload is None:
+        raise HTTPException(401, "Session expired — please log in again")
+    return payload
+
+
+def require_admin(payload: dict = Depends(get_current_user_payload)) -> dict:
+    if payload.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    return payload
+
+
 @app.get("/api/auth/me")
-async def me(role: str = Depends(require_auth)):
-    return {"role": role, "display_name": _ROLE_DISPLAY.get(role, "Admin")}
+async def me(payload: dict = Depends(get_current_user_payload)):
+    role = payload.get("role", "")
+    name = payload.get("name") or _ROLE_DISPLAY.get(role, "Admin")
+    return {"role": role, "display_name": name, "email": payload.get("email")}
 
 
 _SERVER_START = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
@@ -431,6 +463,332 @@ async def upload_csv(file: UploadFile = File(...), _: str = Depends(require_auth
         "entity_count": len(entities),
         "groups": [{"city": c, "state": s, "specialty": sp} for c, s, sp in seen],
     }
+
+
+# ── SSO — models ─────────────────────────────────────────────────────────────
+
+class RequestAccessBody(BaseModel):
+    email: str
+    name: Optional[str] = None
+    request_type: str = "google"  # "google" or "native"
+
+
+class NativeLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class SetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+class UpdateRoleRequest(BaseModel):
+    role: str
+
+
+class InviteUserRequest(BaseModel):
+    email: str
+    name: Optional[str] = None
+    auth_type: str = "native"
+    role: str = "user"
+
+
+# ── Google OAuth ──────────────────────────────────────────────────────────────
+
+@app.get("/auth/google")
+async def google_auth():
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(500, "Google OAuth not configured (GOOGLE_CLIENT_ID missing)")
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": _GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
+    return RedirectResponse(url)
+
+
+@app.get("/auth/google/callback")
+async def google_callback(
+    code: Optional[str] = Query(None),
+    error: Optional[str] = Query(None),
+):
+    base = APP_URL
+    if error or not code:
+        return RedirectResponse(f"{base}/?auth_error=cancelled")
+
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10) as client:
+            token_resp = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": _GOOGLE_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                },
+            )
+            token_data = token_resp.json()
+            access_token = token_data.get("access_token")
+            if not access_token:
+                return RedirectResponse(f"{base}/?auth_error=token_failed")
+
+            info_resp = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            userinfo = info_resp.json()
+    except Exception:
+        return RedirectResponse(f"{base}/?auth_error=network")
+
+    email = (userinfo.get("email") or "").lower()
+    name = userinfo.get("name") or userinfo.get("given_name") or email
+    if not email:
+        return RedirectResponse(f"{base}/?auth_error=no_email")
+
+    from perception.db import init_db
+    from perception.auth import (
+        create_user, create_access_request, get_access_request_by_email,
+        get_user_by_email, update_last_login,
+    )
+    from perception.email_utils import notify_admin_access_request
+
+    init_db()
+    user = get_user_by_email(email)
+    if user:
+        if not user["is_active"]:
+            return RedirectResponse(f"{base}/?auth_error=deactivated")
+        update_last_login(user["id"])
+        tok = _create_token(user["role"], uid=user["id"], email=email,
+                            name=user.get("name") or name)
+        return RedirectResponse(f"{base}/?google_token={tok}")
+
+    req = get_access_request_by_email(email)
+    if req and req["status"] == "approved":
+        new_user = create_user(email, name, "user", "google")
+        update_last_login(new_user["id"])
+        tok = _create_token(new_user["role"], uid=new_user["id"], email=email, name=name)
+        return RedirectResponse(f"{base}/?google_token={tok}")
+    elif req and req["status"] == "pending":
+        return RedirectResponse(
+            f"{base}/?auth_status=pending&auth_email={urllib.parse.quote(email)}"
+        )
+    elif req and req["status"] == "denied":
+        return RedirectResponse(f"{base}/?auth_error=denied")
+
+    new_req = create_access_request(email, name, "google")
+    try:
+        notify_admin_access_request(email, name, "google", new_req["id"])
+    except Exception:
+        pass
+    return RedirectResponse(
+        f"{base}/?auth_status=requested&auth_email={urllib.parse.quote(email)}"
+    )
+
+
+# ── Native (email+password) login ─────────────────────────────────────────────
+
+@app.post("/api/auth/native/login")
+async def native_login(req: NativeLoginRequest):
+    from perception.db import init_db
+    from perception.auth import get_user_by_email, update_last_login, verify_password
+    init_db()
+    user = get_user_by_email(req.email.lower())
+    if not user or user.get("auth_type") != "native" or not user.get("is_active"):
+        raise HTTPException(401, "Invalid email or password")
+    if not verify_password(user, req.password):
+        raise HTTPException(401, "Invalid email or password")
+    update_last_login(user["id"])
+    tok = _create_token(user["role"], uid=user["id"], email=user["email"],
+                        name=user.get("name") or user["email"])
+    return {"token": tok, "role": user["role"],
+            "display_name": user.get("name") or user["email"]}
+
+
+# ── Access request submission ─────────────────────────────────────────────────
+
+@app.post("/api/auth/request")
+async def request_access(req: RequestAccessBody):
+    from perception.db import init_db
+    from perception.auth import (
+        create_access_request, get_access_request_by_email, get_user_by_email,
+    )
+    from perception.email_utils import notify_admin_access_request
+    init_db()
+    email = req.email.lower().strip()
+    if get_user_by_email(email):
+        raise HTTPException(400, "An account with this email already exists")
+    existing = get_access_request_by_email(email)
+    if existing and existing["status"] == "pending":
+        return {"status": "pending", "message": "Your request is already being reviewed"}
+    new_req = create_access_request(email, req.name, req.request_type)
+    try:
+        notify_admin_access_request(email, req.name, req.request_type, new_req["id"])
+    except Exception:
+        pass
+    return {"status": "requested"}
+
+
+# ── Set password from emailed link ────────────────────────────────────────────
+
+@app.post("/api/auth/set-password")
+async def set_password_endpoint(req: SetPasswordRequest):
+    from perception.db import init_db
+    from perception.auth import consume_password_token, get_user_by_id, set_password
+    init_db()
+    if len(req.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters")
+    user_id = consume_password_token(req.token)
+    if not user_id:
+        raise HTTPException(400, "This link is invalid or has already been used")
+    set_password(user_id, req.password)
+    user = get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(500, "User not found")
+    tok = _create_token(user["role"], uid=user["id"], email=user["email"],
+                        name=user.get("name") or user["email"])
+    return {"token": tok, "role": user["role"],
+            "display_name": user.get("name") or user["email"]}
+
+
+# ── Admin endpoints ───────────────────────────────────────────────────────────
+
+def _fmt_user(u: dict) -> dict:
+    for k in ("created_at", "last_login"):
+        if u.get(k) is not None:
+            u[k] = str(u[k])
+    return u
+
+
+def _fmt_req(r: dict) -> dict:
+    for k in ("requested_at", "handled_at"):
+        if r.get(k) is not None:
+            r[k] = str(r[k])
+    return r
+
+
+@app.get("/api/admin/users")
+async def admin_list_users(_: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import list_users
+    init_db()
+    return [_fmt_user(u) for u in list_users()]
+
+
+@app.get("/api/admin/requests")
+async def admin_list_requests(_: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import list_access_requests
+    init_db()
+    return [_fmt_req(r) for r in list_access_requests()]
+
+
+@app.post("/api/admin/requests/{req_id}/approve")
+async def admin_approve_request(req_id: str, payload: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import (
+        create_password_token, create_user, get_access_request, get_user_by_email,
+        handle_access_request,
+    )
+    from perception.email_utils import send_google_access_approved, send_set_password_link
+    init_db()
+    req = get_access_request(req_id)
+    if not req:
+        raise HTTPException(404, "Request not found")
+    by = payload.get("email") or payload.get("uid") or payload.get("role", "admin")
+    handle_access_request(req_id, "approved", by)
+    if req["request_type"] == "native":
+        if not get_user_by_email(req["email"]):
+            user = create_user(req["email"], req["name"], "user", "native")
+            tok = create_password_token(user["id"])
+            try:
+                send_set_password_link(req["email"], req["name"], tok)
+            except Exception:
+                pass
+    else:
+        try:
+            send_google_access_approved(req["email"], req["name"])
+        except Exception:
+            pass
+    return {"status": "approved"}
+
+
+@app.post("/api/admin/requests/{req_id}/deny")
+async def admin_deny_request(req_id: str, payload: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import get_access_request, handle_access_request
+    from perception.email_utils import send_access_denied
+    init_db()
+    req = get_access_request(req_id)
+    if not req:
+        raise HTTPException(404, "Request not found")
+    by = payload.get("email") or payload.get("uid") or payload.get("role", "admin")
+    handle_access_request(req_id, "denied", by)
+    try:
+        send_access_denied(req["email"], req["name"])
+    except Exception:
+        pass
+    return {"status": "denied"}
+
+
+@app.put("/api/admin/users/{user_id}/role")
+async def admin_update_role(
+    user_id: str, req: UpdateRoleRequest, _: dict = Depends(require_admin)
+):
+    from perception.db import init_db
+    from perception.auth import update_user_role
+    init_db()
+    update_user_role(user_id, req.role)
+    return {"status": "updated"}
+
+
+@app.post("/api/admin/users/{user_id}/deactivate")
+async def admin_deactivate(user_id: str, _: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import deactivate_user
+    init_db()
+    deactivate_user(user_id)
+    return {"status": "deactivated"}
+
+
+@app.post("/api/admin/users/{user_id}/reactivate")
+async def admin_reactivate(user_id: str, _: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import reactivate_user
+    init_db()
+    reactivate_user(user_id)
+    return {"status": "reactivated"}
+
+
+@app.post("/api/admin/users/invite")
+async def admin_invite_user(req: InviteUserRequest, payload: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import create_password_token, create_user, get_user_by_email
+    from perception.email_utils import send_google_access_approved, send_set_password_link
+    init_db()
+    email = req.email.lower().strip()
+    if get_user_by_email(email):
+        raise HTTPException(400, "A user with this email already exists")
+    by = payload.get("email") or payload.get("uid") or payload.get("role", "admin")
+    user = create_user(email, req.name, req.role, req.auth_type, invited_by=by)
+    if req.auth_type == "native":
+        tok = create_password_token(user["id"])
+        try:
+            send_set_password_link(email, req.name, tok)
+        except Exception:
+            pass
+    else:
+        try:
+            send_google_access_approved(email, req.name)
+        except Exception:
+            pass
+    return {"status": "invited", "user_id": user["id"]}
 
 
 # ── Frontend (catch-all — must be last) ───────────────────────────────────────

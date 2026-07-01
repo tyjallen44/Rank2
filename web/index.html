@@ -529,6 +529,102 @@ html, body {
   white-space: nowrap;
 }
 .leaflet-tooltip.zip-center-label::before { border-top-color: var(--teal); }
+
+/* ── Google Sign In button ───────────────────────────────────── */
+.btn-google {
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  background:#fff;color:#3c4043;border:1.5px solid #dadce0;
+  padding:11px 16px;border-radius:8px;font:500 14px 'Inter',sans-serif;
+  cursor:pointer;transition:background 0.15s;width:100%;margin-top:20px;
+}
+.btn-google:hover { background:#f8f9fa; }
+.btn-google:active { background:#f1f3f4; }
+.btn-google svg { flex-shrink:0; }
+
+/* ── Divider ──────────────────────────────────────────────────── */
+.login-divider {
+  display:flex;align-items:center;gap:12px;
+  margin:20px 0 16px;color:var(--muted);font-size:12px;letter-spacing:0.06em;
+}
+.login-divider::before,.login-divider::after {
+  content:'';flex:1;height:1px;background:var(--border);
+}
+
+/* ── Login footer links ───────────────────────────────────────── */
+.login-footer {
+  display:flex;justify-content:center;align-items:center;gap:16px;
+  margin-top:20px;font-size:13px;
+}
+.link-btn {
+  background:none;border:none;color:var(--teal);cursor:pointer;
+  text-decoration:underline;font-size:13px;padding:0;font-family:inherit;
+}
+.link-btn:hover { color:var(--teal-mid); }
+.link-btn.muted { color:var(--muted);font-size:12px; }
+.link-btn.muted:hover { color:var(--teal); }
+
+/* ── Request Access / Set Password screens ────────────────────── */
+#request-access-screen,#set-password-screen {
+  height:100vh;display:none;
+  align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#0F4146 0%,#1a6068 100%);
+}
+
+/* ── Admin tabs ───────────────────────────────────────────────── */
+.admin-tabs {
+  display:flex;gap:4px;margin-bottom:20px;
+  border-bottom:2px solid var(--border);
+}
+.admin-tab {
+  background:none;border:none;cursor:pointer;
+  padding:8px 20px;font:500 14px 'Inter',sans-serif;
+  color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;
+  transition:color 0.15s;
+}
+.admin-tab.active { color:var(--teal);border-bottom-color:var(--teal);font-weight:600; }
+.admin-tab:hover:not(.active) { color:var(--text); }
+
+/* ── Admin table ──────────────────────────────────────────────── */
+.admin-tbl { width:100%;border-collapse:collapse;font-size:13px; }
+.admin-tbl th {
+  text-align:left;padding:8px 12px;color:var(--muted);
+  font-weight:600;border-bottom:1px solid var(--border);font-size:12px;
+}
+.admin-tbl td {
+  padding:10px 12px;border-bottom:1px solid rgba(200,228,220,0.5);
+  vertical-align:middle;
+}
+.admin-tbl tr:last-child td { border-bottom:none; }
+.admin-tbl tr:hover td { background:var(--pale); }
+
+/* ── Badges ───────────────────────────────────────────────────── */
+.badge {
+  display:inline-block;padding:2px 8px;border-radius:4px;
+  font-size:11px;font-weight:600;white-space:nowrap;
+}
+.badge-active   { background:#d4edda;color:#155724; }
+.badge-inactive { background:#f8d7da;color:#721c24; }
+.badge-pending  { background:#fff3cd;color:#856404; }
+.badge-approved { background:#d4edda;color:#155724; }
+.badge-denied   { background:#f8d7da;color:#721c24; }
+.badge-google   { background:#e8f0fe;color:#1a73e8; }
+.badge-native   { background:#fce8e6;color:#c5221f; }
+.badge-admin    { background:rgba(128,248,228,0.3);color:#0F4146; }
+.badge-user     { background:var(--border);color:var(--muted); }
+
+/* ── Invite / Resend-invite modal ─────────────────────────────── */
+#invite-modal {
+  display:none;position:fixed;inset:0;
+  background:rgba(15,65,70,0.55);z-index:1000;
+  align-items:center;justify-content:center;
+}
+#invite-modal.open { display:flex; }
+.modal-card {
+  background:#fff;border-radius:12px;padding:32px;
+  width:420px;max-width:92vw;box-shadow:0 8px 40px rgba(0,0,0,0.2);
+}
+.modal-title { font-size:17px;font-weight:700;color:var(--teal);margin-bottom:20px; }
+.modal-footer { display:flex;justify-content:flex-end;gap:10px;margin-top:20px; }
 </style>
 </head>
 <body>
@@ -552,14 +648,102 @@ html, body {
       <div class="accent-line"></div>
     </div>
     <div id="login-err" class="err hidden mt12"></div>
+
+    <!-- Google SSO -->
+    <button class="btn-google" id="google-btn" onclick="doGoogleLogin()">
+      <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+        <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
+        <path d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+      </svg>
+      Sign in with Google
+    </button>
+
+    <div class="login-divider"><span>OR</span></div>
+
+    <!-- Native email + password for @rldatix.com accounts -->
+    <div class="fg" style="margin-bottom:10px">
+      <label class="fl">Email</label>
+      <input id="login-email" class="fi" type="email" placeholder="you@rldatix.com"
+        onkeydown="if(event.key==='Enter')doNativeLogin()">
+    </div>
     <div class="fg">
       <label class="fl">Password</label>
-      <input id="login-pw" class="fi" type="password" placeholder="Enter access password"
-        onkeydown="if(event.key==='Enter')doLogin()">
+      <input id="login-pw" class="fi" type="password" placeholder="Password"
+        onkeydown="if(event.key==='Enter')doNativeLogin()">
     </div>
-    <button class="btn btn-primary btn-full mt8" id="login-btn" onclick="doLogin()">
+    <button class="btn btn-primary btn-full mt8" id="login-btn" onclick="doNativeLogin()">
       Sign In
     </button>
+
+    <div class="login-footer">
+      <button class="link-btn" onclick="showRequestAccess()">Request Access</button>
+      <span style="color:var(--border)">·</span>
+      <button class="link-btn muted" onclick="toggleAdminAccess()" id="admin-toggle-link">Admin</button>
+    </div>
+
+    <!-- Legacy access-password bypass (hidden by default) -->
+    <div id="admin-pw-section" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-align:center;letter-spacing:0.08em">ACCESS PASSWORD</div>
+      <input id="admin-pw" class="fi" type="password" placeholder="Enter access password"
+        onkeydown="if(event.key==='Enter')doLegacyLogin()" style="margin-bottom:8px">
+      <button class="btn btn-primary btn-full" id="admin-pw-btn" onclick="doLegacyLogin()">Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Request Access ──────────────────────────────────────────────────────── -->
+<div id="request-access-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="wordmark">Rank<span>2</span></div>
+      <div class="sub">Request Access</div>
+      <div class="accent-line"></div>
+    </div>
+    <div id="ra-err" class="err hidden mt12"></div>
+    <div id="ra-ok" class="hidden mt12" style="background:var(--pale);border:1px solid var(--border);padding:12px 14px;border-radius:8px;font-size:13px;color:var(--teal);line-height:1.55"></div>
+    <div id="ra-form">
+      <div class="fg mt12">
+        <label class="fl">Your Name</label>
+        <input id="ra-name" class="fi" type="text" placeholder="Full Name">
+      </div>
+      <div class="fg">
+        <label class="fl">Email Address</label>
+        <input id="ra-email" class="fi" type="email" placeholder="you@example.com or you@rldatix.com">
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 16px;line-height:1.5">
+        @rldatix.com emails receive a native account with password login.<br>
+        Other emails are approved for Google Sign In.
+      </p>
+      <button class="btn btn-primary btn-full" id="ra-btn" onclick="submitRequestAccess()">Submit Request</button>
+    </div>
+    <div class="login-footer">
+      <button class="link-btn" onclick="showLoginScreen()">← Back to Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Set Password ───────────────────────────────────────────────────────── -->
+<div id="set-password-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="wordmark">Rank<span>2</span></div>
+      <div class="sub">Set Your Password</div>
+      <div class="accent-line"></div>
+    </div>
+    <div id="sp-err" class="err hidden mt12"></div>
+    <input type="hidden" id="sps-token">
+    <div class="fg mt12">
+      <label class="fl">New Password</label>
+      <input id="sp-pw" class="fi" type="password" placeholder="At least 8 characters">
+    </div>
+    <div class="fg">
+      <label class="fl">Confirm Password</label>
+      <input id="sp-pw2" class="fi" type="password" placeholder="Repeat password"
+        onkeydown="if(event.key==='Enter')submitSetPassword()">
+    </div>
+    <button class="btn btn-primary btn-full" id="sp-btn" onclick="submitSetPassword()">Set Password &amp; Sign In</button>
   </div>
 </div>
 
@@ -583,6 +767,9 @@ html, body {
       </button>
       <button class="nav-btn" id="nav-history" onclick="navigate('history')" title="Access to Previous Reports">
         <span class="ni">◷</span><span class="nb-lbl">History</span>
+      </button>
+      <button class="nav-btn" id="nav-admin" onclick="navigate('admin')" title="User &amp; Access Management" style="display:none">
+        <span class="ni">⚙</span><span class="nb-lbl">Admin</span>
       </button>
     </div>
     <div class="sb-footer">
@@ -1079,6 +1266,36 @@ html, body {
       </div>
     </div>
 
+    <!-- ── Admin ─────────────────────────────────────────────────────────── -->
+    <div id="page-admin" class="page">
+      <div class="page-title">Admin</div>
+      <div class="page-sub">Manage user accounts and access requests.</div>
+
+      <div class="admin-tabs">
+        <button class="admin-tab active" id="atab-users" onclick="switchAdminTab('users')">Users</button>
+        <button class="admin-tab" id="atab-requests" onclick="switchAdminTab('requests')">Access Requests</button>
+      </div>
+
+      <!-- Users panel -->
+      <div id="admin-users-panel">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div style="font-weight:600;font-size:15px">All Users</div>
+            <button class="btn btn-primary" onclick="showInviteModal()" style="padding:8px 16px;font-size:13px">+ Invite User</button>
+          </div>
+          <div id="admin-users-table"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
+        </div>
+      </div>
+
+      <!-- Requests panel -->
+      <div id="admin-requests-panel" style="display:none">
+        <div class="card">
+          <div style="font-weight:600;font-size:15px;margin-bottom:16px">Access Requests</div>
+          <div id="admin-requests-table"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── History ───────────────────────────────────────────────────────── -->
     <div id="page-history" class="page">
       <div class="page-title">History</div>
@@ -1313,11 +1530,51 @@ html, body {
   </div><!-- /main -->
 </div><!-- /app -->
 
+<!-- ── Invite User Modal ──────────────────────────────────────────────────── -->
+<div id="invite-modal">
+  <div class="modal-card">
+    <div class="modal-title">Invite User</div>
+    <div id="invite-err" class="err hidden" style="margin-bottom:12px"></div>
+    <div class="fg">
+      <label class="fl">Email Address</label>
+      <input id="inv-email" class="fi" type="email" placeholder="user@example.com">
+    </div>
+    <div class="fg">
+      <label class="fl">Full Name <span style="color:var(--muted)">(optional)</span></label>
+      <input id="inv-name" class="fi" type="text" placeholder="Full Name">
+    </div>
+    <div class="fg">
+      <label class="fl">Auth Type</label>
+      <select id="inv-auth" class="fi">
+        <option value="native">Native — email + password (@rldatix.com)</option>
+        <option value="google">Google SSO</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Role</label>
+      <select id="inv-role" class="fi">
+        <option value="user">User</option>
+        <option value="rldatix">RLDatix Team</option>
+        <option value="customersuccess">Customer Success</option>
+        <option value="salesteam">Sales Team</option>
+        <option value="marketing">Marketing</option>
+        <option value="partner">Partner</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeInviteModal()">Cancel</button>
+      <button class="btn btn-primary" id="inv-btn" onclick="submitInvite()">Send Invite</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 // ── State ─────────────────────────────────────────────────────────────────
 let _token       = localStorage.getItem('rk2') || '';
 let _displayName = localStorage.getItem('rk2_name') || '';
+let _role        = localStorage.getItem('rk2_role') || '';
 let _mode        = 'manual';
 let _type        = 'hospital';
 let _groups      = [];       // parsed CSV groups
@@ -1334,9 +1591,28 @@ const PHASE_MAP = {
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────
-async function doLogin() {
-  const pw  = document.getElementById('login-pw').value.trim();
-  const btn = document.getElementById('login-btn');
+
+function _storeSession(token, displayName, role) {
+  _token = token;
+  _displayName = displayName;
+  _role = role || '';
+  localStorage.setItem('rk2', token);
+  localStorage.setItem('rk2_name', displayName);
+  localStorage.setItem('rk2_role', _role);
+}
+
+function doGoogleLogin() {
+  window.location.href = '/auth/google';
+}
+
+function toggleAdminAccess() {
+  const sec = document.getElementById('admin-pw-section');
+  sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+}
+
+async function doLegacyLogin() {
+  const pw  = document.getElementById('admin-pw').value.trim();
+  const btn = document.getElementById('admin-pw-btn');
   const err = document.getElementById('login-err');
   if (!pw) return;
   err.classList.add('hidden');
@@ -1344,16 +1620,13 @@ async function doLogin() {
   btn.innerHTML = '<span class="spinner"></span>';
   try {
     const r = await fetch('/api/auth/login', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({password: pw}),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Invalid password'));
-    const { token, display_name } = await r.json();
-    _token = token;
-    _displayName = display_name;
-    localStorage.setItem('rk2', token);
-    localStorage.setItem('rk2_name', display_name);
+    const { token, display_name, role } = await r.json();
+    _storeSession(token, display_name, role || 'admin');
     showApp();
   } catch(e) {
     err.textContent = e.message;
@@ -1363,10 +1636,113 @@ async function doLogin() {
   }
 }
 
-function showApp() {
+async function doNativeLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw    = document.getElementById('login-pw').value.trim();
+  const btn   = document.getElementById('login-btn');
+  const err   = document.getElementById('login-err');
+  if (!email || !pw) { showErr(err, 'Enter your email and password.'); return; }
+  err.classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await fetch('/api/auth/native/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password: pw}),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Invalid email or password'));
+    const { token, display_name, role } = await r.json();
+    _storeSession(token, display_name, role);
+    showApp();
+  } catch(e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+function showLoginScreen() {
+  document.getElementById('request-access-screen').style.display = 'none';
+  document.getElementById('set-password-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+function showRequestAccess() {
   document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('request-access-screen').style.display = 'flex';
+}
+
+async function submitRequestAccess() {
+  const name  = document.getElementById('ra-name').value.trim();
+  const email = document.getElementById('ra-email').value.trim();
+  const btn   = document.getElementById('ra-btn');
+  const err   = document.getElementById('ra-err');
+  const ok    = document.getElementById('ra-ok');
+  if (!email) { showErr(err, 'Please enter your email address.'); return; }
+  err.classList.add('hidden');
+  ok.classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const isRLD = email.toLowerCase().endsWith('@rldatix.com');
+    const request_type = isRLD ? 'native' : 'google';
+    const r = await fetch('/api/auth/request', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, name: name || null, request_type}),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Request failed'));
+    document.getElementById('ra-form').style.display = 'none';
+    ok.textContent = isRLD
+      ? 'Request submitted! Once approved, you\'ll receive an email with a link to set your password.'
+      : 'Request submitted! Once approved, you\'ll receive an email and can sign in with Google.';
+    ok.classList.remove('hidden');
+  } catch(e) {
+    showErr(err, e.message);
+    btn.disabled = false;
+    btn.textContent = 'Submit Request';
+  }
+}
+
+async function submitSetPassword() {
+  const token = document.getElementById('sps-token').value;
+  const pw    = document.getElementById('sp-pw').value;
+  const pw2   = document.getElementById('sp-pw2').value;
+  const btn   = document.getElementById('sp-btn');
+  const err   = document.getElementById('sp-err');
+  err.classList.add('hidden');
+  if (pw.length < 8) { showErr(err, 'Password must be at least 8 characters.'); return; }
+  if (pw !== pw2)    { showErr(err, 'Passwords do not match.'); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await fetch('/api/auth/set-password', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({token, password: pw}),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Link is invalid or has expired'));
+    const { token: appToken, display_name, role } = await r.json();
+    document.getElementById('set-password-screen').style.display = 'none';
+    _storeSession(appToken, display_name, role);
+    showApp();
+  } catch(e) {
+    showErr(err, e.message);
+    btn.disabled = false;
+    btn.textContent = 'Set Password & Sign In';
+  }
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display   = 'none';
+  document.getElementById('request-access-screen').style.display = 'none';
+  document.getElementById('set-password-screen').style.display   = 'none';
   document.getElementById('app').classList.add('visible');
   document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
+  const adminBtn = document.getElementById('nav-admin');
+  if (adminBtn) adminBtn.style.display = (_role === 'admin') ? 'flex' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
     el.textContent = 'build ' + d.build;
@@ -1405,6 +1781,7 @@ function navigate(p) {
   if (nb) nb.classList.add('active');
   document.getElementById('main').classList.toggle('patient-bg', p === 'patient');
   if (p === 'history') loadHistory();
+  if (p === 'admin') loadAdminPage();
 }
 
 // ── New Analysis — mode & type ─────────────────────────────────────────────
@@ -2055,8 +2432,10 @@ function showErr(el, msg) { el.textContent = msg; el.classList.remove('hidden');
 function doLogout() {
   localStorage.removeItem('rk2');
   localStorage.removeItem('rk2_name');
+  localStorage.removeItem('rk2_role');
   _token = '';
   _displayName = '';
+  _role = '';
   location.reload();
 }
 
@@ -2177,23 +2556,267 @@ function _drawZipMap(prefix, mapId, infoId, lat, lon, centerZip, radiusMiles, ra
     : `ZIP ${centerZip} · ${radiusMiles}-mile radius`;
 }
 
+// ── Admin page ────────────────────────────────────────────────────────────
+
+function switchAdminTab(tab) {
+  ['users','requests'].forEach(t => {
+    document.getElementById('atab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('admin-' + t + '-panel').style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'users') loadAdminUsers();
+  else loadAdminRequests();
+}
+
+async function loadAdminPage() {
+  await loadAdminUsers();
+}
+
+async function loadAdminUsers() {
+  const el = document.getElementById('admin-users-table');
+  el.innerHTML = '<div class="empty" style="padding:20px 0"><div>Loading…</div></div>';
+  try {
+    const r = await api('/api/admin/users');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to load users'));
+    const users = await r.json();
+    if (!users.length) {
+      el.innerHTML = '<div class="empty" style="padding:20px 0"><div>No users yet.</div></div>';
+      return;
+    }
+    const roles = ['user','rldatix','customersuccess','salesteam','marketing','partner','admin'];
+    el.innerHTML = `
+      <table class="admin-tbl">
+        <thead><tr>
+          <th>Email</th><th>Name</th><th>Role</th>
+          <th>Auth</th><th>Status</th><th>Last Login</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td>${u.email}</td>
+              <td>${u.name || '<span style="color:var(--muted)">—</span>'}</td>
+              <td>
+                <select onchange="adminUpdateRole('${u.id}',this.value)" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;background:#fff">
+                  ${roles.map(ro => `<option value="${ro}" ${ro===u.role?'selected':''}>${ro}</option>`).join('')}
+                </select>
+              </td>
+              <td><span class="badge badge-${u.auth_type}">${u.auth_type}</span></td>
+              <td><span class="badge badge-${u.is_active?'active':'inactive'}">${u.is_active?'Active':'Inactive'}</span></td>
+              <td style="color:var(--muted);font-size:12px">${u.last_login ? u.last_login.slice(0,10) : '—'}</td>
+              <td>
+                ${u.is_active
+                  ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:12px" onclick="adminDeactivate('${u.id}')">Deactivate</button>`
+                  : `<button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="adminReactivate('${u.id}')">Reactivate</button>`
+                }
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = `<div class="err">${e.message}</div>`;
+  }
+}
+
+async function loadAdminRequests() {
+  const el = document.getElementById('admin-requests-table');
+  el.innerHTML = '<div class="empty" style="padding:20px 0"><div>Loading…</div></div>';
+  try {
+    const r = await api('/api/admin/requests');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to load requests'));
+    const reqs = await r.json();
+    if (!reqs.length) {
+      el.innerHTML = '<div class="empty" style="padding:20px 0"><div>No access requests.</div></div>';
+      return;
+    }
+    el.innerHTML = `
+      <table class="admin-tbl">
+        <thead><tr>
+          <th>Email</th><th>Name</th><th>Auth Type</th>
+          <th>Status</th><th>Requested</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${reqs.map(req => `
+            <tr>
+              <td>${req.email}</td>
+              <td>${req.name || '<span style="color:var(--muted)">—</span>'}</td>
+              <td><span class="badge badge-${req.request_type}">${req.request_type}</span></td>
+              <td><span class="badge badge-${req.status}">${req.status}</span></td>
+              <td style="color:var(--muted);font-size:12px">${(req.requested_at||'').slice(0,10)}</td>
+              <td style="display:flex;gap:6px">
+                ${req.status === 'pending' ? `
+                  <button class="btn btn-primary" style="padding:5px 12px;font-size:12px" onclick="adminApproveReq('${req.id}')">Approve</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:12px" onclick="adminDenyReq('${req.id}')">Deny</button>
+                ` : '<span style="color:var(--muted);font-size:12px">Handled</span>'}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = `<div class="err">${e.message}</div>`;
+  }
+}
+
+async function adminUpdateRole(userId, role) {
+  try {
+    const r = await api(`/api/admin/users/${userId}/role`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({role}),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Update failed'));
+  } catch(e) {
+    alert(e.message);
+    loadAdminUsers();
+  }
+}
+
+async function adminDeactivate(userId) {
+  if (!confirm('Deactivate this user?')) return;
+  try {
+    const r = await api(`/api/admin/users/${userId}/deactivate`, {method:'POST'});
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed'));
+    loadAdminUsers();
+  } catch(e) { alert(e.message); }
+}
+
+async function adminReactivate(userId) {
+  try {
+    const r = await api(`/api/admin/users/${userId}/reactivate`, {method:'POST'});
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed'));
+    loadAdminUsers();
+  } catch(e) { alert(e.message); }
+}
+
+async function adminApproveReq(reqId) {
+  try {
+    const r = await api(`/api/admin/requests/${reqId}/approve`, {method:'POST'});
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed'));
+    loadAdminRequests();
+  } catch(e) { alert(e.message); }
+}
+
+async function adminDenyReq(reqId) {
+  if (!confirm('Deny this request? The user will be notified.')) return;
+  try {
+    const r = await api(`/api/admin/requests/${reqId}/deny`, {method:'POST'});
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed'));
+    loadAdminRequests();
+  } catch(e) { alert(e.message); }
+}
+
+function showInviteModal() {
+  document.getElementById('invite-modal').classList.add('open');
+  document.getElementById('invite-err').classList.add('hidden');
+  document.getElementById('inv-email').value = '';
+  document.getElementById('inv-name').value  = '';
+  document.getElementById('inv-auth').value  = 'native';
+  document.getElementById('inv-role').value  = 'user';
+  document.getElementById('inv-btn').disabled = false;
+  document.getElementById('inv-btn').textContent = 'Send Invite';
+}
+
+function closeInviteModal() {
+  document.getElementById('invite-modal').classList.remove('open');
+}
+
+async function submitInvite() {
+  const email     = document.getElementById('inv-email').value.trim();
+  const name      = document.getElementById('inv-name').value.trim();
+  const auth_type = document.getElementById('inv-auth').value;
+  const role      = document.getElementById('inv-role').value;
+  const btn       = document.getElementById('inv-btn');
+  const err       = document.getElementById('invite-err');
+  if (!email) { showErr(err, 'Email is required.'); return; }
+  err.classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api('/api/admin/users/invite', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, name: name || null, auth_type, role}),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Invite failed'));
+    closeInviteModal();
+    loadAdminUsers();
+  } catch(e) {
+    showErr(err, e.message);
+    btn.disabled = false;
+    btn.textContent = 'Send Invite';
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 (async function init() {
+  const params = new URLSearchParams(location.search);
+
+  // Google OAuth callback — app token arrives in URL
+  const googleToken = params.get('google_token');
+  if (googleToken) {
+    history.replaceState({}, '', '/');
+    try {
+      const r = await fetch('/api/auth/me', {headers:{'Authorization':`Bearer ${googleToken}`}});
+      if (r.ok) {
+        const { display_name, role } = await r.json();
+        _storeSession(googleToken, display_name, role);
+        showApp();
+        return;
+      }
+    } catch(_) {}
+  }
+
+  // Set-password link
+  const spToken = params.get('set_password_token');
+  if (spToken) {
+    history.replaceState({}, '', '/');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('sps-token').value = spToken;
+    document.getElementById('set-password-screen').style.display = 'flex';
+    setMode('manual'); setType('hospital');
+    return;
+  }
+
+  // Auth status / error messages from OAuth redirect
+  const authStatus = params.get('auth_status');
+  const authError  = params.get('auth_error');
+  if (authStatus || authError) {
+    history.replaceState({}, '', '/');
+    const err = document.getElementById('login-err');
+    if (authStatus === 'pending')
+      err.textContent = 'Your access request is pending approval. You\'ll receive an email when it\'s approved.';
+    else if (authStatus === 'requested')
+      err.textContent = 'Access request submitted! You\'ll be notified by email once it\'s approved.';
+    else if (authError === 'denied')
+      err.textContent = 'Your access request was not approved. Contact an administrator for help.';
+    else if (authError === 'deactivated')
+      err.textContent = 'Your account has been deactivated. Contact an administrator.';
+    else if (authError === 'cancelled') { /* just show login */ }
+    else if (authError)
+      err.textContent = 'Sign-in error. Please try again or use a different method.';
+    if (authError !== 'cancelled') err.classList.remove('hidden');
+    setMode('manual'); setType('hospital');
+    return;
+  }
+
+  // Existing session token
   if (_token) {
     try {
       const r = await fetch('/api/auth/me', {headers:{'Authorization':`Bearer ${_token}`}});
       if (r.ok) {
-        const { display_name } = await r.json();
+        const { display_name, role } = await r.json();
         _displayName = display_name;
+        _role = role || '';
         localStorage.setItem('rk2_name', display_name);
+        localStorage.setItem('rk2_role', _role);
         showApp();
         return;
       }
     } catch(_) {}
     localStorage.removeItem('rk2');
     localStorage.removeItem('rk2_name');
+    localStorage.removeItem('rk2_role');
     _token = '';
     _displayName = '';
+    _role = '';
   }
   setMode('manual');
   setType('hospital');
