@@ -114,6 +114,68 @@ Google figure is supplied in the evidence block and is the only source for it. \
 When a provided system-wide weighted reputation is present in the evidence, treat \
 it as the authoritative reputation signal for that system and anchor the \
 Experience & Reviews tier to it rather than to a single flagship listing.
+
+**Two channels: training-data presence vs. retrieval-time signals.** These have \
+completely different remediation strategies and must be distinguished in your analysis:
+- **Training-data presence** — what the model "knows" without searching. Dominated by \
+Wikipedia/Wikidata articles, Reddit threads, news archives, and long-lived web content. \
+Updates on model-release cycles (months to years). Absent or thin content here means \
+the model's baseline characterization from memory is weak or nonexistent.
+- **Retrieval-time signals** — what the model finds when it searches during the conversation. \
+Google Business Profiles, CMS Care Compare, Leapfrog site, Healthgrades, the provider's \
+own crawlable website. Updates immediately. Different assistants retrieve differently: \
+Gemini pulls Google Maps/reviews natively; ChatGPT leans on Bing's index; Claude uses \
+its own web search. A provider strong on retrieval but absent from training has a \
+Wikipedia/press-record problem. The reverse indicates a listings/structured-data problem.
+When noting where a visibility gap lies and what to fix, always specify which channel.
+
+**Wikipedia / Wikidata presence (training-data anchor — assess for every provider).**
+Search for a Wikipedia article about this provider. Note: (a) whether an article exists, \
+(b) whether it is current and accurate vs. stub/outdated, (c) whether Wikidata has a \
+corresponding structured record. A well-maintained Wikipedia article with accurate facts, \
+cited sources, and recent events is the single highest-leverage training-data input — it \
+directly shapes baseline AI characterizations before any search occurs. Absence or a stale \
+article is a high-priority gap; include it in strengths if strong, weaknesses if absent/stale.
+
+**Reddit and community forum sentiment (training-data channel — search for every provider).**
+Search Reddit (especially local subreddits such as r/[city] and r/[state]) and local Facebook \
+groups or Nextdoor for discussions mentioning this provider. These platforms are heavily weighted \
+in AI training corpora and often diverge significantly from Google review sentiment. Recurring \
+negative threads about ER wait times, billing disputes, or staff behavior materially shape \
+how AI assistants characterize a provider from memory. Note: sentiment found (positive/mixed/ \
+negative/not found), top recurring themes, and any specific threads that would shape an AI \
+assistant's characterization. If no material Reddit/forum presence found, note that explicitly.
+
+**Website machine-readability (retrieval-time channel — assess for every provider).**
+Assess whether the provider's own website makes key quality information available in \
+machine-readable, crawlable form: (a) Schema.org markup for Hospital, Physician, or \
+MedicalOrganization types, (b) whether accreditations, quality scores, and service-line \
+information are in indexed HTML rather than buried in PDFs or JavaScript-rendered pages, \
+(c) presence of sitemap.xml, (d) presence of llms.txt (an emerging standard that explicitly \
+declares what AI systems may use). Providers that bury quality data in PDFs or JS-heavy pages \
+are effectively invisible to AI retrieval even if the data exists. Note any specific gaps found.
+
+**Yelp and Facebook reviews (retrieval-time channel).**
+Check Yelp and Facebook for this provider. Note overall rating, review volume, and \
+whether they diverge from Google. Divergence is diagnostic — a provider with strong Google \
+but weak Yelp/Facebook has a cross-platform consistency problem that affects which assistant \
+surfaces it favorably (Gemini leans Google; ChatGPT/Bing index pulls Yelp and other sources).
+
+**Deeper CMS signals (Outcomes & Safety tier — use when available).**
+Beyond the overall CMS star rating, check CMS Care Compare for: HAC Reduction Program \
+penalty status (hospital-acquired condition penalties), HRRP readmission penalty status, \
+NHSN infection measures (CLABSI, CAUTI, C. diff rates vs. national benchmark), SEP-1 \
+sepsis compliance, timely-and-effective-care measures (especially ED wait times — \
+directly relevant to patient reviews), and maternity measures (C-section rate, \
+early elective delivery rate) where applicable. These specifics are increasingly \
+cited by AI assistants when asked to justify a recommendation.
+
+**Nursing Home Compare / CMS SNF ratings (when applicable).**
+If the provider operates a skilled nursing facility (SNF), long-term care (LTC), \
+or senior living community, check CMS Nursing Home Compare for the five-star overall \
+rating and domain sub-scores (health inspections, staffing, quality measures). \
+These are entirely separate from hospital CMS stars, highly influential, and publicly \
+available. Include them in the Outcomes & Safety scoring and note if absent.
 """
 
 _VOICE = """\
@@ -201,16 +263,23 @@ Rank ALL large/major entries (consolidated by ownership), strongest to weakest:
 - CMS Star Rating: [1/2/3/4/5 or "not rated by CMS"]
 - U.S. News: [e.g. "Nationally Ranked #12 in Orthopedics · High-Performing in Cardiology" or "not ranked"]
 - Accreditations: [Joint Commission, Magnet, DNV, NCQA, etc. or "none confirmed"]
-- Quality Highlights: [CMS mortality/readmission vs. national, patient safety indicators, or empty]
+- Quality Highlights: [CMS mortality/readmission vs. national, HAC/HRRP penalty status, NHSN infection measures, SEP-1 compliance, ED wait times vs. national — use specific measures where found, or empty]
 - Trauma Level: [Level I / Level II / Level III / not a trauma center]
 - Teaching Status: [major teaching / minor teaching / not teaching]
+- Nursing Home Compare: [overall star rating if SNF/LTC operations exist, or "not applicable"]
+- Wikipedia: [current & accurate / stub or outdated / absent — note article title if exists]
+- Reddit/Forum Sentiment: [positive / mixed / negative / not found — 1 sentence on dominant theme]
+- Website Machine-Readability: [Schema.org present / absent · key data in crawlable HTML or buried in PDFs/JS · llms.txt present/absent]
+- Yelp / Facebook: [rating + review count, or "not found"]
 - Locations: [campuses with individual ratings if consolidated — omit if single]
 - Key Strengths / Notable Weaknesses: [bullets]
 - Disqualifiers: [none / list]
 - Best Suited For / Summary: [patient types; 2–3 sentence recommendation]
 - What AI Currently Says: [1–2 sentences: how AI assistants (ChatGPT, Gemini, Claude) would describe \
-this hospital today based on its public signals. Frame as "AI assistants typically describe [name] as…" \
-If footprint is thin, reflect that honestly.]
+this hospital today based on its public signals — drawing from both training-data memory and live retrieval. \
+Frame as "AI assistants typically describe [name] as…" Note whether this characterization is driven \
+primarily by training-data presence (Wikipedia, news) or retrieval-time signals (Google, CMS pages). \
+If footprint is thin or fragmented, reflect that honestly.]
 
 ### Community & Smaller Hospitals
 [Same per-entry structure including Trauma Level, Teaching Status, CMS Star Rating, \
@@ -220,8 +289,8 @@ U.S. News, and What AI Currently Says.]
 [The single best option for a typical patient seeking acute care; note when a \
 community hospital is the better choice for simpler needs.]
 
-### Practical Advice for Patients
-[3–5 actionable bullet points.]
+### AI Visibility Assessment & Improvement Opportunities
+[A thorough, action-oriented assessment of this market's AI visibility gaps. Begin with 2–3 sentences on the overall posture. Then provide a comprehensive, uncapped list of specific improvement actions. For each gap, specify: (1) the current state, (2) the concrete action to take, (3) which channel it primarily affects — training-data presence (Wikipedia, Reddit, forums, long-lived web content) vs. retrieval-time signals (Google listings, CMS pages, accreditation sites, hospital website crawlability). Cover all applicable gaps: Wikipedia/Wikidata presence, Google listing hygiene, Reddit/forum monitoring, website machine-readability (Schema.org, llms.txt), CMS data surfacing, credential documentation, Yelp/Facebook listings, Nursing Home Compare (if SNF/LTC present), and any provider-specific issues found. Frame every recommendation as improving the accuracy and machine-readability of the public evidence record — never as "gaming" AI outputs. Do NOT cap at 5 items — list everything material.]
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits; verify with insurer and treating \
@@ -322,14 +391,19 @@ Rank ALL independent {specialty} practices, strongest to weakest:
 - CMS Star Rating: [affiliated hospital's CMS star rating 1–5, or "not applicable" for independent practices]
 - U.S. News: [e.g. "Affiliated hospital Nationally Ranked #8 in Orthopedics" or "not ranked"]
 - Accreditations: [Joint Commission, Magnet (affiliated), NCQA, specialty certs, or "none confirmed"]
-- Quality Highlights: [affiliated-hospital quality data, procedure volume, outcomes data, or empty]
+- Quality Highlights: [affiliated-hospital quality data, procedure volume, outcomes data, HAC/HRRP penalty status if affiliated hospital — use specific measures where found, or empty]
 - Teaching/Academic Status: [academic-affiliated / residency program / not teaching / not applicable]
+- Wikipedia: [current & accurate / stub or outdated / absent — note article title if exists]
+- Reddit/Forum Sentiment: [positive / mixed / negative / not found — 1 sentence on dominant theme]
+- Website Machine-Readability: [Schema.org present / absent · key data in crawlable HTML or buried in PDFs/JS · llms.txt present/absent]
+- Yelp / Facebook: [rating + review count, or "not found"]
 - Key Strengths / Notable Weaknesses: [bullets]
 - Disqualifiers: [none / list]
 - Best Suited For / Summary: [patient types; 2–3 sentence recommendation]
 - What AI Currently Says: [1–2 sentences: how AI assistants (ChatGPT, Gemini, Claude) would describe \
-this practice today. Frame as "AI assistants typically describe [name] as…" \
-If footprint is thin or unclaimed, reflect that honestly.]
+this practice today — drawing from both training-data memory and live retrieval. \
+Frame as "AI assistants typically describe [name] as…" Note whether driven primarily by training-data \
+presence or retrieval-time signals. If footprint is thin or unclaimed, reflect that honestly.]
 
 ### Hospital & Academic-Affiliated Groups
 **[Rank]. [Group Name]** — Affiliated with [Hospital/System] — AI Visibility: [NN]/100
@@ -340,8 +414,8 @@ and What AI Currently Says.]
 [The single best option for a typical patient; note whether independent or \
 hospital-affiliated and why that matters.]
 
-### Practical Advice for Patients
-[3–5 actionable bullet points for someone seeking {specialty} care.]
+### AI Visibility Assessment & Improvement Opportunities
+[A thorough, action-oriented assessment of this market's AI visibility gaps. Begin with 2–3 sentences on the overall posture. Then provide a comprehensive, uncapped list of specific improvement actions. For each gap, specify: (1) the current state, (2) the concrete action to take, (3) which channel it primarily affects — training-data presence (Wikipedia, Reddit, forums, long-lived web content) vs. retrieval-time signals (Google listings, CMS pages, accreditation sites, practice website crawlability). Cover all applicable gaps: Wikipedia/Wikidata presence, Google listing hygiene, Reddit/forum monitoring, website machine-readability (Schema.org, llms.txt), CMS and accreditation data surfacing, physician credential visibility (NPI, ABMS, state board), Yelp/Facebook listings, and any practice-specific issues. Frame every recommendation as improving the accuracy and machine-readability of the public evidence record. Do NOT cap at 5 items — list everything material.]
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits; verify with insurer and treating \
@@ -425,29 +499,43 @@ significant visibility gap exists. Reference the 0–100 scale.]
 - CMS Star Rating: [1/2/3/4/5 or "not rated by CMS" or "not applicable"]
 - U.S. News: [e.g. "Nationally Ranked #12 in Orthopedics · High-Performing in Cardiology" or "not ranked"]
 - Accreditations: [Joint Commission, Magnet, DNV, NCQA, specialty certs, or "none confirmed"]
-- Quality Highlights: [standout CMS Care Compare measures vs. national average, or empty string if none notable]
+- Quality Highlights: [standout CMS Care Compare measures vs. national average, HAC/HRRP penalty status, NHSN infection measures, SEP-1, ED wait times — use specific measures where found, or empty string]
 - Trauma Level: [Level I / Level II / Level III / not a trauma center / not applicable]
 - Teaching Status: [major teaching / minor teaching / not teaching / not applicable]
+- Nursing Home Compare: [overall star rating if SNF/LTC operations exist, or "not applicable"]
+- Wikipedia: [current & accurate / stub or outdated / absent — note article title if found]
+- Reddit/Forum Sentiment: [positive / mixed / negative / not found — 1 sentence on dominant theme if found]
+- Website Machine-Readability: [Schema.org markup present/absent · accreditations in crawlable HTML or buried in PDFs/JS · sitemap · llms.txt present/absent]
+- Yelp / Facebook: [rating + review count on each, or "not found"]
 {locations_format}
 - Key Strengths / Notable Weaknesses: [bullets]
 - Disqualifiers: [none / list if any apply]
 - Best Suited For / Summary: [who benefits most; 2–3 sentence AI visibility assessment]
-- What AI Currently Says: [1–2 sentences: how AI assistants (ChatGPT, Gemini, Claude, Grok) would \
-describe {entity_name} today when a patient asks for a recommendation. Frame as "AI assistants \
-typically describe [name] as…" Reflect the current digital footprint honestly — strong signals \
-or thin/fragmented presence.]
+- What AI Currently Says: [2–3 sentences: how AI assistants (ChatGPT, Gemini, Claude) would \
+describe {entity_name} today when a patient asks for a recommendation — drawing from both \
+training-data memory and live retrieval. Frame as "AI assistants typically describe [name] as…" \
+Explicitly note: (a) whether training-data presence is strong (Wikipedia article, news coverage, \
+Reddit discussions) or thin, (b) whether retrieval-time signals are strong (Google, CMS, accreditation \
+pages) or weak, (c) any divergence between what assistants say from memory vs. what they find when \
+they search. Reflect the current digital footprint honestly.]
 
-### AI Visibility Assessment
-[IMPORTANT: Begin this section IMMEDIATELY with the first paragraph of analysis. \
-Do NOT write the entity name, a sub-heading, or any label before the paragraphs — \
-go directly to the prose. Write 2–3 paragraphs covering: where {entity_name} \
-stands in its AI visibility, the single most important lever for improving how \
-it surfaces to AI assistants, and what a decision-maker should understand about \
-the gap between its clinical record and its current digital presence. Write as \
-a senior analyst advising leadership.]
-
-### Key Takeaways
-[3–5 specific, actionable insights about {entity_name}'s AI visibility posture.]
+### AI Visibility Assessment & Improvement Opportunities
+[IMPORTANT: Begin this section IMMEDIATELY with the first paragraph of analysis — \
+go directly to the prose, no label or entity name heading before it. \
+Write 2–3 paragraphs covering: where {entity_name} stands in its AI visibility, \
+the single most important lever for improving how it surfaces to AI assistants, \
+and what a decision-maker should understand about the gap between its clinical \
+record and its current digital presence. Write as a senior analyst advising leadership. \
+Then provide a comprehensive, uncapped bulleted list of specific improvement actions. \
+For each item: state the current gap, the concrete action to take, and whether it \
+primarily targets training-data presence (Wikipedia, Reddit, forums, long-lived web content) \
+or retrieval-time signals (Google listings, CMS pages, accreditation sites, website crawlability). \
+Cover every material gap found: Wikipedia/Wikidata article status, Google Business Profile hygiene \
+across all locations, Reddit and community forum sentiment, website machine-readability \
+(Schema.org Hospital/Physician markup, llms.txt, PDF-buried vs. crawlable HTML), CMS data surfacing, \
+credential and accreditation documentation visibility, Yelp/Facebook listings, \
+Nursing Home Compare (if SNF/LTC operations exist), and any entity-specific findings. \
+Do NOT cap the list — include every actionable item found.]
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits; verify with insurer and treating \

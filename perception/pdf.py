@@ -120,17 +120,15 @@ def _locations_block(p: RankedProvider) -> str:
 
 
 def _ai_says_block(p: RankedProvider) -> str:
-    """'What AI assistants currently see' callout block."""
     if not p.ai_says:
         return ""
     return f"""
     <div class="ai-says">
-      <div class="ai-says-label">What AI Assistants Currently See</div>
-      <div class="ai-says-source">AI Summary &mdash; Claude &middot; ChatGPT &middot; Gemini</div>
+      <div class="ai-says-label">What AI Assistants Currently See
+        <span style="font-size:6pt;font-weight:400;color:#7a9095;font-style:italic;margin-left:6px">
+          &mdash; from training memory &amp; live retrieval &middot; Claude, ChatGPT, Gemini</span>
+      </div>
       <div class="ai-says-text">{_e(p.ai_says)}</div>
-      <div class="ai-says-footnote">This report analyzes the public signals AI assistants use \
-to understand, evaluate, and recommend healthcare providers to patients. The summary above \
-reflects what those systems currently surface when asked about this organization.</div>
     </div>"""
 
 
@@ -167,33 +165,67 @@ def _aivs_block(p: RankedProvider) -> str:
         <div class="aivs-score">{score_txt}<span class="out">/100</span>{band_html}</div>
         <div class="profile-chip">{profile_label}</div>
       </div>
-      <div class="tier-bars">{rows}</div>
+      <div class="tier-bars">{rows}
+        <div style="font-size:6pt;color:#aabcc0;margin-top:3px;font-style:italic">Scored per Appendix A methodology</div>
+      </div>
     </div>"""
 
 
 def _google_stat(p: RankedProvider) -> str:
     """Front door (verified) + footprint + third-party aggregate — the wedge."""
     fd = p.google_footprint.front_door
+    fp = p.google_footprint
+    sa = fp.system_aggregate
+
+    # ── Front door label: explain WHAT listing this represents ────────────
+    if sa.available:
+        fd_label = "Brand / Parent Listing"
+        fd_context = (
+            f'<span style="font-size:6.5pt;color:#7a9095;font-style:italic">'
+            f'(the organization\'s primary Google Business Profile — '
+            f'distinct from individual location ratings below)</span>'
+        )
+    else:
+        fd_label = "Google Front Door"
+        fd_context = ""
+
     if fd.verified and fd.rating is not None:
         recency = f" · {_e(fd.recency)}" if fd.recency else ""
-        front = f"Google front door: <strong>{fd.rating:.1f}&#9733; · {fd.count or 0} reviews</strong>{recency}"
+        stars_filled = "&#9733;" * int(fd.rating)
+        stars_empty  = "&#9734;" * (5 - int(fd.rating))
+        front = (
+            f'<strong>{fd.rating:.1f}&#9733;</strong>'
+            f' <span style="font-size:7pt;color:#7a9095">{stars_filled}{stars_empty}</span>'
+            f' &nbsp;·&nbsp; <strong>{fd.count or 0:,} reviews</strong>{recency}'
+        )
     else:
-        front = f'Google front door: <strong>not verified</strong> <span class="google-gap">— {_e(fd.reason or "no rated listing")}</span>'
+        front = f'<strong>Not verified</strong> <span class="google-gap">— {_e(fd.reason or "no rated listing found")}</span>'
 
-    fp = p.google_footprint
-    footprint = _e(fp.rating_range or fp.listings_estimate or fp.consistency) or "single listing"
-    consistency = f" · {_e(fp.consistency)}" if fp.consistency and (fp.rating_range or fp.listings_estimate) else ""
-
-    sa = fp.system_aggregate
+    # ── System-wide aggregate ─────────────────────────────────────────────
     system_line = ""
     if sa.available:
         conf = "registry-enumerated" if sa.confidence == "registry" else "sampled"
         loc = f"{sa.location_count}{'+' if sa.capped else ''}"
+        pct_diff = ""
+        if fd.verified and fd.rating and sa.rating:
+            diff = round(sa.rating - fd.rating, 1)
+            if abs(diff) >= 0.3:
+                direction = "higher" if diff > 0 else "lower"
+                pct_diff = f' <span class="google-gap">({abs(diff):.1f}★ {direction} than brand listing)</span>'
         system_line = (
-            f"System-wide: <strong>{sa.rating:.1f}&#9733; · {sa.total_reviews:,} reviews "
-            f"across {loc} locations</strong> (review-count-weighted, {conf})<br>"
+            f'<div style="margin-top:4px;font-size:7pt;color:#3a5a60">'
+            f'<strong>System-wide (all locations):</strong> '
+            f'<strong>{sa.rating:.1f}&#9733; · {sa.total_reviews:,} total reviews '
+            f'across {loc} locations</strong>{pct_diff} '
+            f'<span style="color:#7a9095;font-style:italic">(review-count-weighted, {conf})</span>'
+            f'</div>'
         )
 
+    # ── Footprint breadth ─────────────────────────────────────────────────
+    footprint = _e(fp.rating_range or fp.listings_estimate or fp.consistency) or "single listing"
+    consistency = f" · {_e(fp.consistency)}" if fp.consistency and (fp.rating_range or fp.listings_estimate) else ""
+
+    # ── Third-party aggregate ─────────────────────────────────────────────
     tpa = p.third_party_aggregate
     if tpa.rating is not None and tpa.note:
         agg = f"{tpa.rating:.1f} avg — {_e(tpa.note)}"
@@ -207,9 +239,10 @@ def _google_stat(p: RankedProvider) -> str:
     <div class="google-stat-section">
       <div class="google-stat-label">Public &amp; Social Ratings</div>
       <div class="google-stat">
-        {front}<br>
-        {system_line}Footprint: {footprint}{consistency}<br>
-        Third-Party Aggregate <span style="font-size:6.5pt;color:#7a9095">(Healthgrades, Vitals, WebMD)</span>: <strong>{agg}</strong>{gap}
+        <span style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#5a7880">{fd_label}:</span> {front} {fd_context}<br>
+        {system_line}
+        <span style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#5a7880">Footprint:</span> {footprint}{consistency}<br>
+        <span style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#5a7880">Third-Party</span> <span style="font-size:6.5pt;color:#7a9095">(Healthgrades, Vitals, WebMD, Yelp):</span> <strong>{agg}</strong>{gap}
       </div>
     </div>"""
 
@@ -1026,7 +1059,7 @@ def _build_html(result: AnalysisResult) -> str:
     # Section title overrides for individual reports
     overview_title      = "Organization Overview"      if result.individual_report else "Market Overview"
     recommendation_title = "AI Visibility Assessment"   if result.individual_report else "Top Recommendation"
-    advice_title        = "Key Takeaways"              if result.individual_report else "Practical Advice for Patients"
+    advice_title        = "AI Visibility Assessment & Improvement Opportunities"
 
     def _paras(text: str) -> str:
         return "".join(f"<p>{_e(para.strip())}</p>" for para in (text or "").split("\n") if para.strip())
