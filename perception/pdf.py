@@ -480,9 +480,9 @@ def _individual_teaser_card(p: RankedProvider) -> str:
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
         {_aivs_block(p)}
+        {_ai_says_block(p)}
         <div class="teaser-blur-wrapper">
           <div class="teaser-blur-content">
-            {_ai_says_block(p)}
             {_google_stat(p)}
             {_patient_voice_block(p)}
             {_outcomes_safety_block(p)}
@@ -567,9 +567,9 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
         {_aivs_block(p)}
+        {_ai_says_block(p)}
         <div class="teaser-blur-wrapper">
           <div class="teaser-blur-content">
-            {_ai_says_block(p)}
             {_google_stat(p)}
             {_patient_voice_block(p)}
             {_outcomes_safety_block(p)}
