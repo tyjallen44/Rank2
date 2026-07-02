@@ -747,9 +747,9 @@ def _appendix_html() -> str:
 <div style="page-break-before:always;padding-top:10px">
 
   <div style="border-bottom:3px solid {T};padding-bottom:10px;margin-bottom:4px">
-    <div style="font-size:7.5pt;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:{S};margin-bottom:4px">Appendix A</div>
+    <div style="font-size:7.5pt;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:{S};margin-bottom:4px">Appendix</div>
     <div style="font-family:'Barlow Condensed',Impact,sans-serif;font-size:20pt;font-weight:700;color:{T};line-height:1.1">AI Visibility Methodology</div>
-    <div style="font-size:8pt;color:{M};margin-top:4px">Prompt Battery &amp; Scoring Rubric &nbsp;&middot;&nbsp; v1.0 Draft</div>
+    <div style="font-size:8pt;color:{M};margin-top:4px">Prompt Battery &amp; Scoring Rubric</div>
   </div>
 
   {_part("PART 1", "THE PROMPT BATTERY")}
