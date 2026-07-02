@@ -83,6 +83,21 @@ def send_set_password_link(email: str, name: Optional[str], token: str) -> None:
     _send(email, "Set Your Password", _wrap(body))
 
 
+def send_reset_password_link(email: str, name: Optional[str], token: str) -> None:
+    display = name or email
+    link = f"{APP_URL}/?set_password_token={token}"
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">Password Reset Request</h2>
+    <p>Hi {display},</p>
+    <p style="margin-bottom:24px">We received a request to reset your {_BRAND} password.
+    Click below to choose a new one:</p>
+    {_btn(link, "Reset My Password")}
+    <p style="margin-top:20px;color:#7a9095;font-size:13px">
+    This link expires in 48 hours. If you did not request a password reset, you can safely ignore this email.</p>
+    """
+    _send(email, "Reset Your Password", _wrap(body))
+
+
 def send_access_denied(email: str, name: Optional[str]) -> None:
     display = name or email
     body = f"""
