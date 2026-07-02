@@ -564,7 +564,7 @@ html, body {
 .link-btn.muted:hover { color:var(--teal); }
 
 /* ── Request Access / Set Password screens ────────────────────── */
-#request-access-screen,#set-password-screen {
+#request-access-screen,#set-password-screen,#forgot-password-screen {
   height:100vh;display:none;
   align-items:center;justify-content:center;
   background:linear-gradient(135deg,#0F4146 0%,#1a6068 100%);
@@ -680,6 +680,8 @@ html, body {
     <div class="login-footer">
       <button class="link-btn" onclick="showRequestAccess()">Request Access</button>
       <span style="color:var(--border)">·</span>
+      <button class="link-btn" onclick="showForgotPassword()">Forgot Password?</button>
+      <span style="color:var(--border)">·</span>
       <button class="link-btn muted" onclick="toggleAdminAccess()" id="admin-toggle-link">Admin</button>
     </div>
 
@@ -744,6 +746,31 @@ html, body {
         onkeydown="if(event.key==='Enter')submitSetPassword()">
     </div>
     <button class="btn btn-primary btn-full" id="sp-btn" onclick="submitSetPassword()">Set Password &amp; Sign In</button>
+  </div>
+</div>
+
+<!-- ── Forgot Password ───────────────────────────────────────────────────── -->
+<div id="forgot-password-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="wordmark">Rank<span>2</span></div>
+      <div class="sub">Reset Password</div>
+      <div class="accent-line"></div>
+    </div>
+    <div id="fp-err" class="err hidden mt12"></div>
+    <div id="fp-ok" class="hidden mt12" style="background:var(--pale);border:1px solid var(--border);padding:12px 14px;border-radius:8px;font-size:13px;color:var(--teal);line-height:1.55"></div>
+    <div id="fp-form">
+      <p style="font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.5">Enter your @rldatix.com email and we'll send you a link to reset your password.</p>
+      <div class="fg">
+        <label class="fl">Email</label>
+        <input id="fp-email" class="fi" type="email" placeholder="you@rldatix.com"
+          onkeydown="if(event.key==='Enter')submitForgotPassword()">
+      </div>
+      <button class="btn btn-primary btn-full mt8" id="fp-btn" onclick="submitForgotPassword()">Send Reset Link</button>
+    </div>
+    <div class="login-footer">
+      <button class="link-btn" onclick="showLoginScreen()">← Back to Sign In</button>
+    </div>
   </div>
 </div>
 
@@ -1757,6 +1784,7 @@ async function doNativeLogin() {
 function showLoginScreen() {
   document.getElementById('request-access-screen').style.display = 'none';
   document.getElementById('set-password-screen').style.display = 'none';
+  document.getElementById('forgot-password-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
 
@@ -1797,6 +1825,37 @@ async function submitRequestAccess() {
   }
 }
 
+function showForgotPassword() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('forgot-password-screen').style.display = 'flex';
+  document.getElementById('fp-email').focus();
+}
+
+async function submitForgotPassword() {
+  const email = document.getElementById('fp-email').value.trim();
+  const btn   = document.getElementById('fp-btn');
+  const err   = document.getElementById('fp-err');
+  const ok    = document.getElementById('fp-ok');
+  if (!email) { showErr(err, 'Please enter your email address.'); return; }
+  err.classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email}),
+    });
+    document.getElementById('fp-form').style.display = 'none';
+    ok.textContent = 'If that email has an account, a password reset link is on its way. Check your inbox.';
+    ok.classList.remove('hidden');
+  } catch(e) {
+    showErr(err, 'Something went wrong. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Send Reset Link';
+  }
+}
+
 async function submitSetPassword() {
   const token = document.getElementById('sps-token').value;
   const pw    = document.getElementById('sp-pw').value;
@@ -1827,9 +1886,10 @@ async function submitSetPassword() {
 }
 
 function showApp() {
-  document.getElementById('login-screen').style.display   = 'none';
+  document.getElementById('login-screen').style.display         = 'none';
   document.getElementById('request-access-screen').style.display = 'none';
   document.getElementById('set-password-screen').style.display   = 'none';
+  document.getElementById('forgot-password-screen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
   document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
   const adminBtn = document.getElementById('nav-admin');

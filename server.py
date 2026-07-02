@@ -470,6 +470,10 @@ class SetPasswordRequest(BaseModel):
     password: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
 class UpdateRoleRequest(BaseModel):
     role: str
 
@@ -648,6 +652,26 @@ async def set_password_endpoint(req: SetPasswordRequest):
                         name=user.get("name") or user["email"])
     return {"token": tok, "role": user["role"],
             "display_name": user.get("name") or user["email"]}
+
+
+# ── Forgot password ───────────────────────────────────────────────────────────
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    from perception.db import init_db
+    from perception.auth import create_password_token, get_user_by_email
+    from perception.email_utils import send_set_password_link
+    init_db()
+    email = req.email.lower().strip()
+    user = get_user_by_email(email)
+    if user and user.get("auth_type") == "native" and user.get("is_active"):
+        tok = create_password_token(user["id"])
+        try:
+            send_set_password_link(email, user.get("name") or email, tok)
+        except Exception as _e:
+            print(f"[email] forgot-password error: {_e}")
+    # Always return success to avoid email enumeration
+    return {"status": "sent"}
 
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
