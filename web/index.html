@@ -2420,6 +2420,10 @@ function historySearch(val) {
   renderHistory();
 }
 
+function _historyFilename(r) {
+  return (r.pdf_path || '').split('/').pop().replace(/\.pdf$/i, '') || '—';
+}
+
 function renderHistory() {
   const el = document.getElementById('history-body');
   if (!_historyRuns.length) {
@@ -2430,22 +2434,28 @@ function renderHistory() {
   const q = _historySearch.toLowerCase();
   let runs = q
     ? _historyRuns.filter(r => {
-        const filename = (r.pdf_path || '').split('/').pop().toLowerCase();
-        return r.location.toLowerCase().includes(q) || filename.includes(q);
+        const fn = _historyFilename(r).toLowerCase();
+        return r.location.toLowerCase().includes(q) || fn.includes(q);
       })
     : _historyRuns.slice();
 
   runs.sort((a, b) => {
-    const va = _historySortField === 'date' ? a.generated_at : a.location.toLowerCase();
-    const vb = _historySortField === 'date' ? b.generated_at : b.location.toLowerCase();
+    let va, vb;
+    if (_historySortField === 'date')      { va = a.generated_at; vb = b.generated_at; }
+    else if (_historySortField === 'location') { va = a.location.toLowerCase(); vb = b.location.toLowerCase(); }
+    else if (_historySortField === 'type') { va = (a.specialty || '').toLowerCase(); vb = (b.specialty || '').toLowerCase(); }
+    else if (_historySortField === 'providers') { va = a.provider_count; vb = b.provider_count; }
+    else if (_historySortField === 'name') { va = _historyFilename(a).toLowerCase(); vb = _historyFilename(b).toLowerCase(); }
     if (va < vb) return _historySortDir === 'asc' ? -1 : 1;
     if (va > vb) return _historySortDir === 'asc' ? 1 : -1;
     return 0;
   });
 
-  const arrow = f => _historySortField !== f
-    ? '<span style="opacity:0.3;font-size:11px">↕</span>'
-    : (_historySortDir === 'asc' ? ' ↑' : ' ↓');
+  const th = (label, field, align) => {
+    const active = _historySortField === field;
+    const icon = active ? (_historySortDir === 'asc' ? ' ↑' : ' ↓') : '<span style="opacity:0.3;font-size:11px"> ↕</span>';
+    return `<th onclick="historySort('${field}')" style="cursor:pointer;user-select:none${align ? ';text-align:' + align : ''}">${label}${icon}</th>`;
+  };
 
   el.innerHTML = `
     <div style="margin-bottom:16px">
@@ -2458,10 +2468,11 @@ function renderHistory() {
     <div class="card" style="padding:0;overflow:hidden">
       <table class="tbl">
         <thead><tr>
-          <th onclick="historySort('date')" style="cursor:pointer;user-select:none;white-space:nowrap">Date${arrow('date')}</th>
-          <th onclick="historySort('location')" style="cursor:pointer;user-select:none">Location${arrow('location')}</th>
-          <th>Type</th>
-          <th style="text-align:right">Providers</th>
+          ${th('Date', 'date')}
+          ${th('Location', 'location')}
+          ${th('Name', 'name')}
+          ${th('Type', 'type')}
+          ${th('Providers', 'providers', 'right')}
           <th>Report</th>
         </tr></thead>
         <tbody>
@@ -2469,6 +2480,7 @@ function renderHistory() {
             <tr>
               <td style="color:var(--muted);font-size:13px;white-space:nowrap">${run.generated_at}</td>
               <td style="font-weight:500">${run.location}</td>
+              <td style="font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_historyFilename(run)}">${_historyFilename(run)}</td>
               <td>${run.specialty
                 ? `<span class="badge bg-gold">${run.specialty}</span>`
                 : `<span class="badge bg-muted">Hospitals</span>`}</td>
@@ -2477,7 +2489,7 @@ function renderHistory() {
                 ? `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`
                 : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
             </tr>`).join('')
-          : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
+          : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
         </tbody>
       </table>
     </div>`;
