@@ -2385,45 +2385,102 @@ function dlPdf(runId) {
 }
 
 // ── History ───────────────────────────────────────────────────────────────
+let _historyRuns = [];
+let _historySortField = 'date';
+let _historySortDir = 'desc';
+let _historySearch = '';
+
 async function loadHistory() {
   const el = document.getElementById('history-body');
   el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
   try {
     const r = await api('/api/history');
-    const runs = await r.json();
-    if (!runs.length) {
-      el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
-      return;
-    }
-    el.innerHTML = `
-      <div class="card" style="padding:0;overflow:hidden">
-        <table class="tbl">
-          <thead><tr>
-            <th>Date</th>
-            <th>Location</th>
-            <th>Type</th>
-            <th style="text-align:right">Providers</th>
-            <th>Report</th>
-          </tr></thead>
-          <tbody>
-            ${runs.map(run => `
-              <tr>
-                <td style="color:var(--muted);font-size:13px;white-space:nowrap">${run.generated_at}</td>
-                <td style="font-weight:500">${run.location}</td>
-                <td>${run.specialty
-                  ? `<span class="badge bg-gold">${run.specialty}</span>`
-                  : `<span class="badge bg-muted">Hospitals</span>`}</td>
-                <td style="text-align:right">${run.provider_count}</td>
-                <td>${run.has_pdf
-                  ? `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`
-                  : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    _historyRuns = await r.json();
+    _historySortField = 'date';
+    _historySortDir = 'desc';
+    _historySearch = '';
+    renderHistory();
   } catch(e) {
     el.innerHTML = `<div class="err">${e.message}</div>`;
   }
+}
+
+function historySort(field) {
+  if (_historySortField === field) {
+    _historySortDir = _historySortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _historySortField = field;
+    _historySortDir = field === 'date' ? 'desc' : 'asc';
+  }
+  renderHistory();
+}
+
+function historySearch(val) {
+  _historySearch = val;
+  renderHistory();
+}
+
+function renderHistory() {
+  const el = document.getElementById('history-body');
+  if (!_historyRuns.length) {
+    el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
+    return;
+  }
+
+  const q = _historySearch.toLowerCase();
+  let runs = q
+    ? _historyRuns.filter(r => {
+        const filename = (r.pdf_path || '').split('/').pop().toLowerCase();
+        return r.location.toLowerCase().includes(q) || filename.includes(q);
+      })
+    : _historyRuns.slice();
+
+  runs.sort((a, b) => {
+    const va = _historySortField === 'date' ? a.generated_at : a.location.toLowerCase();
+    const vb = _historySortField === 'date' ? b.generated_at : b.location.toLowerCase();
+    if (va < vb) return _historySortDir === 'asc' ? -1 : 1;
+    if (va > vb) return _historySortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const arrow = f => _historySortField !== f
+    ? '<span style="opacity:0.3;font-size:11px">↕</span>'
+    : (_historySortDir === 'asc' ? ' ↑' : ' ↓');
+
+  el.innerHTML = `
+    <div style="margin-bottom:16px">
+      <input id="history-search" type="text" class="input"
+        placeholder="Search by location or name…"
+        value="${_historySearch.replace(/"/g, '&quot;')}"
+        oninput="historySearch(this.value)"
+        style="max-width:320px">
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="tbl">
+        <thead><tr>
+          <th onclick="historySort('date')" style="cursor:pointer;user-select:none;white-space:nowrap">Date${arrow('date')}</th>
+          <th onclick="historySort('location')" style="cursor:pointer;user-select:none">Location${arrow('location')}</th>
+          <th>Type</th>
+          <th style="text-align:right">Providers</th>
+          <th>Report</th>
+        </tr></thead>
+        <tbody>
+          ${runs.length ? runs.map(run => `
+            <tr>
+              <td style="color:var(--muted);font-size:13px;white-space:nowrap">${run.generated_at}</td>
+              <td style="font-weight:500">${run.location}</td>
+              <td>${run.specialty
+                ? `<span class="badge bg-gold">${run.specialty}</span>`
+                : `<span class="badge bg-muted">Hospitals</span>`}</td>
+              <td style="text-align:right">${run.provider_count}</td>
+              <td>${run.has_pdf
+                ? `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`
+                : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
+            </tr>`).join('')
+          : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
