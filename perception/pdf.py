@@ -629,6 +629,317 @@ def _teaser_rankings_section(providers: list[RankedProvider], title: str, subtit
   {_teaser_roadmap_section()}"""
 
 
+def _appendix_html() -> str:
+    """Appendix A — AI Visibility Methodology: Prompt Battery & Scoring Rubric."""
+    T   = "#0F4146"
+    S   = "#177B6E"
+    M   = "#7a9095"
+    BD  = "#d0e4e8"
+    TXT = "#3a5a60"
+    ALT = "#f8fbfa"
+
+    def _part(n, title):
+        return (
+            f'<div style="background:{T};color:#fff;padding:7px 12px;margin:20px 0 12px;'
+            f'border-radius:3px;font-size:7.5pt;font-weight:700;letter-spacing:0.14em;'
+            f'text-transform:uppercase">{n} &mdash; {title}</div>'
+        )
+
+    def _sec(n, title):
+        return (
+            f'<div style="font-size:8pt;font-weight:700;color:{T};margin:14px 0 6px;'
+            f'padding-bottom:4px;border-bottom:1.5px solid {BD}">'
+            f'<span style="color:{S};margin-right:5px">{n}</span>{title}</div>'
+        )
+
+    def _cat(title):
+        return (
+            f'<div style="font-size:7.5pt;font-weight:700;color:{T};margin:10px 0 3px;'
+            f'font-style:italic">{title}</div>'
+        )
+
+    def _p(text):
+        return f'<p style="font-size:7.5pt;color:{TXT};line-height:1.55;margin-bottom:6px">{text}</p>'
+
+    def _note(text):
+        return (
+            f'<p style="font-size:7pt;color:{M};line-height:1.5;margin-bottom:5px;'
+            f'font-style:italic">{text}</p>'
+        )
+
+    def _tbl(*rows, header=None):
+        th_s = (f'background:{T};color:#fff;padding:5px 8px;text-align:left;'
+                f'font-weight:700;font-size:7pt;border:1px solid {BD}')
+        td_s = f'border:1px solid {BD};padding:5px 8px;vertical-align:top;font-size:7pt;line-height:1.45;color:{TXT}'
+        td_a = f'border:1px solid {BD};padding:5px 8px;vertical-align:top;font-size:7pt;line-height:1.45;color:{TXT};background:{ALT}'
+        head = ""
+        if header:
+            cells = "".join(f'<th style="{th_s}">{c}</th>' for c in header)
+            head = f'<thead><tr>{cells}</tr></thead>'
+        body_rows = []
+        for i, row in enumerate(rows):
+            s = td_a if i % 2 else td_s
+            cells = "".join(f'<td style="{s}">{c}</td>' for c in row)
+            body_rows.append(f'<tr>{cells}</tr>')
+        return (f'<table style="width:100%;border-collapse:collapse;margin-bottom:12px">'
+                f'{head}<tbody>{"".join(body_rows)}</tbody></table>')
+
+    def _ol(items):
+        lis = "".join(
+            f'<li style="font-size:7.5pt;color:{TXT};line-height:1.5;margin-bottom:4px">{i}</li>'
+            for i in items
+        )
+        return f'<ol style="padding-left:18px;margin-bottom:8px">{lis}</ol>'
+
+    def _ul(items):
+        lis = "".join(
+            f'<li style="font-size:7.5pt;color:{TXT};line-height:1.5;margin-bottom:4px">{i}</li>'
+            for i in items
+        )
+        return f'<ul style="padding-left:18px;margin-bottom:8px">{lis}</ul>'
+
+    def _prompts(items):
+        rows = "".join(
+            f'<tr>'
+            f'<td style="width:22px;font-size:7pt;font-weight:700;color:{S};padding:3px 6px;vertical-align:top">{n}.</td>'
+            f'<td style="font-size:7.5pt;color:{TXT};line-height:1.5;padding:3px 6px">{t}</td>'
+            f'</tr>'
+            for n, t in items
+        )
+        return f'<table style="border-collapse:collapse;margin-bottom:6px;width:100%">{rows}</table>'
+
+    CODE = f'background:#f0f4f4;padding:1px 4px;border-radius:2px;font-size:7pt;font-family:monospace'
+
+    return f"""
+<div style="page-break-before:always;padding-top:10px">
+
+  <div style="border-bottom:3px solid {T};padding-bottom:10px;margin-bottom:4px">
+    <div style="font-size:7.5pt;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:{S};margin-bottom:4px">Appendix A</div>
+    <div style="font-family:'Barlow Condensed',Impact,sans-serif;font-size:20pt;font-weight:700;color:{T};line-height:1.1">AI Visibility Methodology</div>
+    <div style="font-size:8pt;color:{M};margin-top:4px">Prompt Battery &amp; Scoring Rubric &nbsp;&middot;&nbsp; v1.0 Draft</div>
+  </div>
+
+  {_part("PART 1", "THE PROMPT BATTERY")}
+
+  {_sec("1.1", "Purpose")}
+  {_p("The prompt battery is a standardized, repeatable set of queries run against each major AI assistant to produce evidence &#8212; not impressions &#8212; of how a provider surfaces. Every <em>What AI Assistants Currently See</em> summary in the report body must be traceable to logged battery runs.")}
+
+  {_sec("1.2", "Test Protocol")}
+  {_tbl(
+      ("Assistants tested",  "Claude (claude.ai), ChatGPT (chatgpt.com), Gemini (gemini.google.com); optionally Copilot, Perplexity"),
+      ("Model versions",     "Record exact model/version string per run (e.g., &#8220;GPT-5.x&#8221;, &#8220;Claude Fable 5&#8221;)"),
+      ("Runs per prompt",    "3 minimum, 5 preferred (LLM outputs are nondeterministic; single runs are anecdotes)"),
+      ("Retrieval modes",    "Run each prompt twice: (a) web search / browsing <strong>OFF</strong> where the platform allows &rarr; measures training-data presence; (b) web search <strong>ON</strong> &rarr; measures retrieval-time visibility"),
+      ("Session hygiene",    "Fresh session per run; no memory/personalization features enabled; logged-out or clean-profile accounts"),
+      ("Location context",   "Set/simulate the client&#8217;s market geography (assistants localize &#8220;near me&#8221; queries); record the location used"),
+      ("Date stamping",      "Record run date/time; battery results expire &#8212; recommend 90-day refresh cycle"),
+      ("Capture",            "Full verbatim response, all cited sources/URLs, and any refusal or hedge language"),
+      header=("Parameter", "Specification"),
+  )}
+
+  {_sec("1.3", "Prompt Categories")}
+  {_p(f'Prompts are parameterized: <code style="{CODE}">{{ORG}}</code> = client organization, <code style="{CODE}">{{CITY}}</code> = market, <code style="{CODE}">{{HOSPITAL_B}}</code> = leading competitor, <code style="{CODE}">{{CONDITION}}</code> = client-relevant service lines, <code style="{CODE}">{{DR_NAME}}</code> = sampled physicians.')}
+
+  {_cat("Category A &#8212; Baseline Entity Knowledge")}
+  {_note("What does the model &#8220;know&#8221; cold? Primary probe of training-data presence.")}
+  {_prompts([
+      (1, "&#8220;Tell me about {ORG}.&#8221;"),
+      (2, "&#8220;Is {ORG} a good hospital?&#8221;"),
+      (3, "&#8220;What is {ORG} known for?&#8221;"),
+      (4, "&#8220;Who owns {ORG}? Is it nonprofit or for-profit?&#8221;"),
+  ])}
+
+  {_cat("Category B &#8212; Local Recommendation (Generic Intent)")}
+  {_note("The highest-stakes commercial queries: does the client appear at all, and at what rank?")}
+  {_prompts([
+      (5,  "&#8220;What&#8217;s the best hospital in {CITY}?&#8221;"),
+      (6,  "&#8220;I need to find a doctor in {CITY}. Where should I start?&#8221;"),
+      (7,  "&#8220;Which emergency room should I go to near {CITY}?&#8221;"),
+      (8,  "&#8220;I just moved to {CITY} &#8212; recommend a primary care clinic.&#8221;"),
+  ])}
+
+  {_cat("Category C &#8212; Condition / Service-Line Specific")}
+  {_note("Select 4&#8211;8 based on the client&#8217;s actual service lines. Recommendations vary enormously by intent.")}
+  {_prompts([
+      (9,  "&#8220;Where should I deliver my baby near {CITY}?&#8221;"),
+      (10, "&#8220;Best place to get a knee replacement near {CITY}?&#8221;"),
+      (11, "&#8220;I was just diagnosed with cancer &#8212; which hospital near {CITY} should I go to?&#8221;"),
+      (12, "&#8220;Who has the shortest ER wait times in {CITY}?&#8221;"),
+      (13, "&#8220;Best cardiac care near {CITY}?&#8221;"),
+      (14, "&#8220;Where should I take my elderly parent for rehab / skilled nursing near {CITY}?&#8221; <em>(mandatory when the client has a senior-care footprint)</em>"),
+  ])}
+
+  {_cat("Category D &#8212; Comparative")}
+  {_prompts([
+      (15, "&#8220;{ORG} vs {HOSPITAL_B} &#8212; which is better?&#8221;"),
+      (16, "&#8220;Should I drive past {ORG} to go to {HOSPITAL_B} for {CONDITION}?&#8221;"),
+      (17, "&#8220;Rank the hospitals in {CITY} from best to worst.&#8221;"),
+  ])}
+
+  {_cat("Category E &#8212; Physician-Level")}
+  {_prompts([
+      (18, "&#8220;Is Dr. {DR_NAME} a good doctor?&#8221;"),
+      (19, "&#8220;Find me a highly rated {SPECIALTY} in {CITY}.&#8221;"),
+      (20, "&#8220;Is Dr. {DR_NAME} board certified? Any disciplinary actions?&#8221; <em>(Sample 3&#8211;5 physicians: highest-volume, newest, and any with known review issues.)</em>"),
+  ])}
+
+  {_cat("Category F &#8212; Quality &amp; Safety Verification")}
+  {_note("Tests whether structured quality data surfaces and is cited accurately.")}
+  {_prompts([
+      (21, "&#8220;What is {ORG}&#8217;s CMS star rating?&#8221;"),
+      (22, "&#8220;What is {ORG}&#8217;s Leapfrog safety grade?&#8221;"),
+      (23, "&#8220;What is {ORG}&#8217;s infection rate / safety record?&#8221;"),
+      (24, "&#8220;Is {ORG} accredited?&#8221;"),
+  ])}
+
+  {_cat("Category G &#8212; Access, Insurance &amp; Logistics")}
+  {_prompts([
+      (25, "&#8220;Does {ORG} take Medicare / Medicaid / {MAJOR_REGIONAL_PLAN}?&#8221;"),
+      (26, "&#8220;How long does it take to get an appointment at {ORG}?&#8221;"),
+      (27, "&#8220;Does {ORG} offer telehealth / urgent care / walk-in?&#8221;"),
+  ])}
+
+  {_cat("Category H &#8212; Adverse Signal Probing")}
+  {_note("What negative material surfaces when a skeptical patient asks?")}
+  {_prompts([
+      (28, "&#8220;What are the complaints about {ORG}?&#8221;"),
+      (29, "&#8220;Should I avoid {ORG}? Any problems there?&#8221;"),
+      (30, "&#8220;Has {ORG} been sued / cited / in the news for anything bad?&#8221;"),
+      (31, "&#8220;Why are {ORG}&#8217;s Google reviews so low/high?&#8221;"),
+  ])}
+
+  {_sec("1.4", "Output Coding")}
+  {_p("Each run is coded on six dimensions:")}
+  {_ol([
+      "<strong>Mention</strong> &#8212; Was the client named at all? (Categories B, C, D)",
+      "<strong>Rank position</strong> &#8212; 1st / 2nd / 3rd / mentioned-unranked / absent",
+      "<strong>Characterization</strong> &#8212; coded &#8722;2 (strongly negative) to +2 (strongly positive), with the dominant frame noted (e.g., &#8220;trusted community provider,&#8221; &#8220;quality concerns&#8221;)",
+      "<strong>Factual accuracy</strong> &#8212; each verifiable claim marked <em>correct</em> / <em>incorrect</em> / <em>hallucinated</em> / <em>outdated</em> (e.g., cites a stale CMS star)",
+      "<strong>Hedging index</strong> &#8212; 0 (confident specifics) to 3 (&#8220;I can&#8217;t find quality data&#8221; language). High hedging is itself a finding &#8212; it is the direct symptom of a thin structured-evidence layer.",
+      "<strong>Sources cited</strong> &#8212; every URL/source logged and bucketed (CMS, Leapfrog, Google reviews, Wikipedia, news, client website, Reddit/forums, aggregators)",
+  ])}
+
+  {_sec("1.5", "Derived Battery Metrics (reportable)")}
+  {_ol([
+      "<strong>Recommendation Share</strong> &#8212; % of Category B/C/D runs where client is top recommendation",
+      "<strong>Mention Rate</strong> &#8212; % of relevant runs where client appears at all",
+      "<strong>Sentiment Consistency</strong> &#8212; variance of characterization scores across runs (high variance = unstable narrative)",
+      "<strong>Accuracy Rate</strong> &#8212; % of factual claims correct; hallucination and staleness counts broken out",
+      "<strong>Training vs. Retrieval Delta</strong> &#8212; difference between search-off and search-on runs. Strong on retrieval but absent from training = Wikipedia/press-record problem; the reverse = listings/structured-data problem. Different fixes.",
+      "<strong>Source Mix</strong> &#8212; which sources each assistant actually leaned on for this client (drives the remediation priority list)",
+  ])}
+
+  {_part("PART 2", "THE SCORING RUBRIC")}
+
+  {_sec("2.1", "Architecture")}
+  {_p("AI Visibility Score (0&#8211;100) = weighted sum of four pillar scores, with the weight set determined by the provider&#8217;s profile classification, then adjusted by modifiers.")}
+  {_p("<strong>Profile classification</strong>")}
+  {_ul([
+      "<strong>PROCEDURAL</strong> &#8212; academic/tertiary centers, high-acuity and destination service lines. Outcomes and credentials dominate the recommendation logic.",
+      "<strong>RELATIONSHIP</strong> &#8212; community systems, primary/chronic care, senior services. Access and experience dominate.",
+      "<strong>HYBRID</strong> &#8212; large community systems with genuine tertiary lines; blend 50/50.",
+  ])}
+  {_p("<strong>Pillar weights</strong>")}
+  {_tbl(
+      ("Outcomes &amp; Safety",       "35%", "20%"),
+      ("Credentials &amp; Recognition","30%", "15%"),
+      ("Experience &amp; Reviews",     "15%", "35%"),
+      ("Access &amp; Fit",             "20%", "30%"),
+      header=("Pillar", "Procedural", "Relationship"),
+  )}
+
+  {_sec("2.2", "Pillar 1 &#8212; Outcomes &amp; Safety (0&#8211;100)")}
+  {_tbl(
+      ("CMS Overall Star Rating",         "30", "5&#9733;=30, 4&#9733;=24, 3&#9733;=15, 2&#9733;=6, 1&#9733;=0; not published/not found = 8 (absence is penalized less than a bad score but is never free)"),
+      ("Leapfrog Hospital Safety Grade",  "20", "A=20, B=15, C=8, D/F=0; not participating = 6"),
+      ("CMS component measures",          "20", "Sampled: mortality, readmission (HRRP penalty status), HAC penalty status, infection measures (CLABSI/CAUTI/C.&#8202;diff), SEP-1, ED timeliness. Score on favorable/average/unfavorable mix"),
+      ("Service-line outcome recognition","15", "U.S. News High-Performing procedures/conditions, registry designations (e.g., ACC, Commission on Cancer), trauma/stroke certification levels"),
+      ("Nursing Home Compare stars",      "15", "Applies only when client operates SNF/LTC; otherwise redistribute pro-rata. 5&#9733;=15 &hellip; 1&#9733;=0"),
+      ("Machine-readability multiplier",  "&times;0.85&#8211;&times;1.0", "Full credit only if the above are discoverable in crawlable public sources. If data exists but is effectively invisible to retrieval, apply &times;0.85 and flag as a remediation item"),
+      header=("Signal", "Max pts", "Scoring notes"),
+  )}
+
+  {_sec("2.3", "Pillar 2 &#8212; Credentials &amp; Recognition (0&#8211;100)")}
+  {_tbl(
+      ("Accreditation (Joint Commission / DNV)",    "20", "Verified &amp; publicly surfaced = 20; verified but hard to find = 12; unverifiable = 4"),
+      ("Nursing/specialty designations",            "15", "Magnet, Pathway to Excellence, Baby-Friendly, etc."),
+      ("Academic/teaching status &amp; affiliations","10", "Residencies, medical-school affiliation, research footprint (PubMed/ClinicalTrials presence)"),
+      ("Physician credential visibility",           "20", "Sampled provider profiles: NPI match, ABMS board certification verifiable, state license clean &amp; findable, bios on crawlable pages. Score = % of sampled physicians fully verifiable"),
+      ("Wikipedia / Wikidata presence",             "15", "Accurate, current article = 15; stub/outdated = 8; absent = 0. Primary driver of training-data characterization"),
+      ("Rankings &amp; awards",                     "10", "U.S. News regional/state ranks, Newsweek, Healthgrades awards"),
+      ("Adverse credential record",                 "10", "Full points if no unresolved CMS immediate-jeopardy citations, accreditation losses, or major disciplinary clusters surface; deduct per event severity/recency"),
+      header=("Signal", "Max pts", "Scoring notes"),
+  )}
+
+  {_sec("2.4", "Pillar 3 &#8212; Experience &amp; Reviews (0&#8211;100)")}
+  {_tbl(
+      ("Google front door (flagship)",   "25", "Rating band &times; volume band. Volume tiers: &lt;50 / 50&#8211;250 / 250&#8211;1,000 / 1,000+. A 4.5&#9733; on 20 reviews &ne; 4.5&#9733; on 400"),
+      ("System-wide footprint quality",  "15", "Review-weighted average across all claimed listings; penalize wide dispersion and orphaned/unclaimed sub-listings"),
+      ("Listing hygiene",                "10", "Claimed, NAP-consistent, correct hours/categories, owner responses to reviews"),
+      ("Third-party aggregators",        "15", "Healthgrades, Vitals, WebMD, Yelp, Facebook &#8212; coverage breadth and rating consistency with Google"),
+      ("HCAHPS",                         "20", "Star ratings / percentile on key domains (nurse &amp; physician communication, responsiveness, recommend-hospital). Not found = 6"),
+      ("Community/forum sentiment",      "10", "Reddit, local Facebook groups, Nextdoor &#8212; coded sentiment from sampled threads. Heavily represented in training data; unmonitored by most clients"),
+      ("Recency &amp; velocity",         "5",  "Active review flow in trailing 12 months vs. stale profile"),
+      header=("Signal", "Max pts", "Scoring notes"),
+  )}
+
+  {_sec("2.5", "Pillar 4 &#8212; Access &amp; Fit (0&#8211;100)")}
+  {_tbl(
+      ("Service-line breadth vs. market need",    "20", "Full continuum for the profile type (relationship: primary + chronic + senior; procedural: tertiary depth)"),
+      ("Geographic convenience / market role",    "15", "Sole/essential provider status, drive-time coverage"),
+      ("Insurance clarity",                       "15", "Accepted-plans list publicly crawlable and current; Medicare/Medicaid participation visible; price-transparency file compliance"),
+      ("Appointment access signals",              "10", "Online scheduling, new-patient availability, urgent care/walk-in, telehealth"),
+      ("Website machine-readability",             "20", "Schema.org markup (Hospital/Physician/MedicalOrganization), crawlable HTML (not JS-locked or PDF-buried), sitemap health, llms.txt"),
+      ("Referral/escalation pathway clarity",     "10", "Documented tertiary partnerships (relationship profiles); network reach (procedural profiles)"),
+      ("Language/accessibility signals",          "10", "Multilingual content, accessibility statements, interpreter services visibility"),
+      header=("Signal", "Max pts", "Scoring notes"),
+  )}
+
+  {_sec("2.6", "Cross-Cutting Modifiers")}
+  {_p("Applied after pillar blend.")}
+  {_tbl(
+      ("Adverse-event overhang",       "Active bankruptcy, ownership transition, closure rumors, or major litigation surfacing in Category H probes: &#8722;3 to &#8722;10 depending on severity/recency; mandatory &#8220;&#9888; Disqualifiers/Confirm&#8221; note in report"),
+      ("Narrative instability",        "Battery sentiment variance in top quartile: &#8722;3 (assistants tell inconsistent stories about the client)"),
+      ("Hallucination exposure",       "Assistants repeatedly state incorrect facts about client (wrong ownership, stale ratings): &#8722;2 to &#8722;5, flagged as urgent correction target"),
+      ("Training/retrieval imbalance", "Delta &gt; 20 points between modes: no score change, but drives the top remediation recommendation"),
+      ("Score floor/ceiling logic",    "No provider with an unverifiable CMS star <strong>AND</strong> absent Leapfrog <strong>AND</strong> unverifiable accreditation may score above 74 (caps the &#8220;well-liked but undocumented&#8221; profile)"),
+      header=("Modifier", "Effect"),
+  )}
+
+  {_sec("2.7", "Assistant Blend")}
+  {_p("Final score = usage-weighted blend across assistants (weights refreshed quarterly from published usage share; e.g., ChatGPT 0.5 / Gemini 0.3 / Claude 0.2 as a placeholder). Report the per-assistant sub-scores in the appendix &#8212; divergence between assistants is itself diagnostic (e.g., strong on Gemini but weak on ChatGPT typically indicates a Google-listings-heavy, Bing-index-light footprint).")}
+
+  {_sec("2.8", "Letter Grade Bands")}
+  {_tbl(
+      ("85&#8211;100", "A / A&#8722;",  "Excellent"),
+      ("75&#8211;84",  "B+ / B",        "Good (strong)"),
+      ("65&#8211;74",  "B / B&#8722;",  "Good"),
+      ("55&#8211;64",  "C+ / C",        "Fair"),
+      ("40&#8211;54",  "C&#8722; / D",  "Weak"),
+      ("&lt;40",       "D / F",         "Poor"),
+      header=("Score", "Grade", "Report label"),
+  )}
+
+  {_sec("2.9", "Verification Status Convention")}
+  {_p("Every scored signal carries one of three flags, shown in the report:")}
+  {_ol([
+      "<strong>&#10003; Verified</strong> &#8212; confirmed from a primary public source on the analysis date",
+      "<strong>&#9680; Partial</strong> &#8212; found but stale, fragmented, or from a secondary source",
+      "<strong>&#10007; Not established</strong> &#8212; not findable from public sources (scored per &#8220;absence&#8221; rules above; never estimated)",
+  ])}
+
+  {_sec("2.10", "Refresh &amp; Versioning")}
+  {_ul([
+      "Battery runs: 90-day validity; re-run before any client re-report",
+      "CMS stars: re-verify at each CMS release (typically ~annually, with quarterly measure refreshes)",
+      "Leapfrog: re-verify each spring/fall grade cycle",
+      "Rubric weights: version-controlled; any weight change bumps the rubric version printed on the report so scores remain comparable across editions",
+  ])}
+
+</div>
+"""
+
+
 def _build_html(result: AnalysisResult) -> str:
     location        = _e(result.location)
     specialty_label = _e(result.specialty or "Hospital Market")
@@ -732,6 +1043,8 @@ def _build_html(result: AnalysisResult) -> str:
             '<div class="verdict"><div class="section-title" style="margin-bottom:8px;">AI Visibility Verdict</div>'
             + _paras(result.ai_visibility_verdict) + "</div>"
         )
+
+    appendix_html = _appendix_html()
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1420,6 +1733,8 @@ def _build_html(result: AnalysisResult) -> str:
     <strong>Data Limitations &amp; Disclaimer</strong><br>
     {_e(result.disclaimer)}
   </div>
+
+  {appendix_html}
 
 </div>
 </body>
