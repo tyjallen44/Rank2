@@ -771,6 +771,9 @@ html, body {
       <button class="nav-btn" id="nav-admin" onclick="navigate('admin')" title="User &amp; Access Management" style="display:none">
         <span class="ni">⚙</span><span class="nb-lbl">Admin</span>
       </button>
+      <button class="nav-btn" id="nav-feedback" onclick="navigate('feedback')" title="Submit a bug report or feature request">
+        <span class="ni">✉</span><span class="nb-lbl">Feedback</span>
+      </button>
     </div>
     <div class="sb-footer">
       <div class="sb-user-info">
@@ -1296,6 +1299,38 @@ html, body {
       </div>
     </div>
 
+    <!-- ── Feedback ──────────────────────────────────────────────────────── -->
+    <div id="page-feedback" class="page">
+      <div class="page-title">Feedback</div>
+      <div class="page-sub">Report a bug or suggest a feature. All submissions are visible to the team.</div>
+
+      <div class="card" style="max-width:640px;margin-bottom:32px">
+        <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Title</div>
+            <input id="fb-title" type="text" class="input" placeholder="Brief summary…" style="width:100%">
+          </div>
+          <div style="min-width:160px">
+            <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Type</div>
+            <select id="fb-type" class="input" style="width:100%">
+              <option value="bug">Bug Report</option>
+              <option value="feature">Feature Request</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:16px">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Details</div>
+          <textarea id="fb-body" class="input" rows="4" placeholder="Describe the bug or feature in detail…" style="width:100%;resize:vertical;font-family:inherit;line-height:1.6"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="submitFeedback()">Submit</button>
+        <span id="fb-msg" class="hidden" style="margin-left:14px;font-size:13px"></span>
+      </div>
+
+      <div id="feedback-body">
+        <div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>
+      </div>
+    </div>
+
     <!-- ── History ───────────────────────────────────────────────────────── -->
     <div id="page-history" class="page">
       <div class="page-title">History</div>
@@ -1782,6 +1817,7 @@ function navigate(p) {
   document.getElementById('main').classList.toggle('patient-bg', p === 'patient');
   if (p === 'history') loadHistory();
   if (p === 'admin') loadAdminPage();
+  if (p === 'feedback') loadFeedback();
 }
 
 // ── New Analysis — mode & type ─────────────────────────────────────────────
@@ -2382,6 +2418,202 @@ function dlPdf(runId) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+// ── Feedback ──────────────────────────────────────────────────────────────
+let _feedbackItems = [];
+let _feedbackSortField = 'date';
+let _feedbackSortDir = 'desc';
+let _feedbackSearch = '';
+let _feedbackExpanded = null;
+
+async function loadFeedback() {
+  const el = document.getElementById('feedback-body');
+  el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
+  try {
+    const r = await api('/api/feedback');
+    _feedbackItems = await r.json();
+    _feedbackSortField = 'date';
+    _feedbackSortDir = 'desc';
+    _feedbackSearch = '';
+    _feedbackExpanded = null;
+    renderFeedback();
+  } catch(e) {
+    el.innerHTML = `<div class="err">${e.message}</div>`;
+  }
+}
+
+async function submitFeedback() {
+  const title = document.getElementById('fb-title').value.trim();
+  const type  = document.getElementById('fb-type').value;
+  const body  = document.getElementById('fb-body').value.trim();
+  const msg   = document.getElementById('fb-msg');
+  msg.classList.add('hidden');
+  if (!title) { msg.textContent = 'Please enter a title.'; msg.style.color = 'var(--err,#c00)'; msg.classList.remove('hidden'); return; }
+  if (!body)  { msg.textContent = 'Please enter details.'; msg.style.color = 'var(--err,#c00)'; msg.classList.remove('hidden'); return; }
+  try {
+    const r = await api('/api/feedback', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title, type, body})
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Submission failed');
+    const item = await r.json();
+    document.getElementById('fb-title').value = '';
+    document.getElementById('fb-body').value = '';
+    _feedbackItems.unshift(item);
+    renderFeedback();
+    msg.textContent = 'Submitted — thank you!';
+    msg.style.color = 'var(--teal)';
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 3500);
+  } catch(e) {
+    msg.textContent = e.message;
+    msg.style.color = 'var(--err,#c00)';
+    msg.classList.remove('hidden');
+  }
+}
+
+function feedbackSort(field) {
+  if (_feedbackSortField === field) {
+    _feedbackSortDir = _feedbackSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _feedbackSortField = field;
+    _feedbackSortDir = field === 'date' ? 'desc' : 'asc';
+  }
+  renderFeedback();
+}
+
+function feedbackSearch(val) {
+  _feedbackSearch = val;
+  renderFeedback();
+}
+
+function toggleFeedbackDetail(id) {
+  _feedbackExpanded = _feedbackExpanded === id ? null : id;
+  renderFeedback();
+}
+
+async function updateFeedbackAction(id, action) {
+  try {
+    const r = await api(`/api/feedback/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action})
+    });
+    if (!r.ok) throw new Error('Update failed');
+    const item = _feedbackItems.find(f => f.id === id);
+    if (item) item.action = action;
+    renderFeedback();
+  } catch(e) {
+    alert('Failed to update: ' + e.message);
+  }
+}
+
+function renderFeedback() {
+  const searchWasFocused = document.activeElement && document.activeElement.id === 'feedback-search';
+  const el = document.getElementById('feedback-body');
+  if (!el) return;
+
+  const q = _feedbackSearch.toLowerCase();
+  let items = q
+    ? _feedbackItems.filter(f =>
+        f.title.toLowerCase().includes(q) ||
+        f.body.toLowerCase().includes(q) ||
+        f.type.toLowerCase().includes(q) ||
+        (f.submitted_by || '').toLowerCase().includes(q)
+      )
+    : _feedbackItems.slice();
+
+  items.sort((a, b) => {
+    let va, vb;
+    if      (_feedbackSortField === 'date')   { va = a.submitted_at; vb = b.submitted_at; }
+    else if (_feedbackSortField === 'title')  { va = a.title.toLowerCase(); vb = b.title.toLowerCase(); }
+    else if (_feedbackSortField === 'type')   { va = a.type; vb = b.type; }
+    else if (_feedbackSortField === 'action') { va = a.action || ''; vb = b.action || ''; }
+    if (va < vb) return _feedbackSortDir === 'asc' ? -1 : 1;
+    if (va > vb) return _feedbackSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const th = (label, field) => {
+    const active = _feedbackSortField === field;
+    const icon = active ? (_feedbackSortDir === 'asc' ? ' ↑' : ' ↓') : '<span style="opacity:0.3;font-size:11px"> ↕</span>';
+    return `<th onclick="feedbackSort('${field}')" style="cursor:pointer;user-select:none">${label}${icon}</th>`;
+  };
+
+  const typeBadge = t => t === 'bug'
+    ? '<span class="badge" style="background:#fee2e2;color:#991b1b;white-space:nowrap">Bug</span>'
+    : '<span class="badge" style="background:#dbeafe;color:#1e40af;white-space:nowrap">Feature</span>';
+
+  const actionLabel = a => ({pending: '—', fixed: 'Fixed', accepted: 'Accepted', rejected: 'Rejected'})[a] || '—';
+
+  const actionCell = (id, current) => _role === 'admin'
+    ? `<select onchange="updateFeedbackAction('${id}',this.value)" onclick="event.stopPropagation()"
+         style="font-size:12px;padding:3px 6px;border:1px solid var(--pale);border-radius:4px;background:#fff;cursor:pointer;color:var(--ink)">
+         <option value="pending"  ${current==='pending' ?'selected':''}>—</option>
+         <option value="accepted" ${current==='accepted'?'selected':''}>Accepted</option>
+         <option value="fixed"    ${current==='fixed'   ?'selected':''}>Fixed</option>
+         <option value="rejected" ${current==='rejected'?'selected':''}>Rejected</option>
+       </select>`
+    : `<span style="font-size:13px;color:var(--muted)">${actionLabel(current)}</span>`;
+
+  if (!_feedbackItems.length) {
+    el.innerHTML = `
+      <div style="margin-bottom:16px">
+        <input id="feedback-search" type="text" class="input" placeholder="Search…" style="max-width:320px" disabled>
+      </div>
+      <div class="empty"><div class="ei">✉</div><div>No feedback submitted yet.</div></div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="margin-bottom:16px">
+      <input id="feedback-search" type="text" class="input"
+        placeholder="Search by title, type, or details…"
+        value="${_feedbackSearch.replace(/"/g,'&quot;')}"
+        oninput="feedbackSearch(this.value)"
+        style="max-width:320px">
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="tbl">
+        <thead><tr>
+          ${th('Title','title')}
+          ${th('Type','type')}
+          ${th('Date','date')}
+          ${th('Action','action')}
+          <th style="width:24px"></th>
+        </tr></thead>
+        <tbody>
+          ${items.length ? items.map(f => {
+            const expanded = _feedbackExpanded === f.id;
+            const dateStr  = (f.submitted_at || '').slice(0, 10) || '—';
+            return `
+              <tr onclick="toggleFeedbackDetail('${f.id}')" style="cursor:pointer">
+                <td style="font-weight:500">${f.title}</td>
+                <td>${typeBadge(f.type)}</td>
+                <td style="color:var(--muted);font-size:13px;white-space:nowrap">${dateStr}</td>
+                <td onclick="event.stopPropagation()">${actionCell(f.id, f.action || 'pending')}</td>
+                <td style="color:var(--muted);font-size:11px;text-align:center">${expanded ? '▲' : '▼'}</td>
+              </tr>
+              ${expanded ? `<tr>
+                <td colspan="5" style="background:#f8fafb;padding:16px 20px;border-top:1px solid var(--pale)">
+                  <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+                    Submitted by <strong>${f.submitted_by}</strong> · ${(f.submitted_at||'').slice(0,16).replace('T',' ')} UTC
+                  </div>
+                  <div style="white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--ink)">${f.body}</div>
+                </td>
+              </tr>` : ''}`;
+          }).join('')
+          : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+
+  if (searchWasFocused) {
+    const inp = document.getElementById('feedback-search');
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
 }
 
 // ── History ───────────────────────────────────────────────────────────────

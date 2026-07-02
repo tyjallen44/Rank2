@@ -825,6 +825,39 @@ async def admin_invite_user(req: InviteUserRequest, payload: dict = Depends(requ
     return {"status": "invited", "user_id": user["id"]}
 
 
+# ── Feedback ──────────────────────────────────────────────────────────────────
+class FeedbackSubmitRequest(BaseModel):
+    title: str
+    type: str
+    body: str
+
+class FeedbackActionRequest(BaseModel):
+    action: str
+
+@app.post("/api/feedback")
+async def submit_feedback(req: FeedbackSubmitRequest, payload: dict = Depends(get_current_user_payload)):
+    from perception.db import init_db, create_feedback
+    if req.type not in ("bug", "feature"):
+        raise HTTPException(400, "type must be 'bug' or 'feature'")
+    init_db()
+    return create_feedback(req.title.strip(), req.type, req.body.strip(), payload.get("email", "unknown"))
+
+@app.get("/api/feedback")
+async def get_feedback(_: str = Depends(require_auth)):
+    from perception.db import init_db, list_feedback
+    init_db()
+    return list_feedback()
+
+@app.patch("/api/feedback/{feedback_id}")
+async def patch_feedback(feedback_id: str, req: FeedbackActionRequest, _: dict = Depends(require_admin)):
+    from perception.db import init_db, update_feedback_action
+    if req.action not in ("pending", "accepted", "fixed", "rejected"):
+        raise HTTPException(400, "invalid action")
+    init_db()
+    update_feedback_action(feedback_id, req.action)
+    return {"ok": True}
+
+
 # ── Frontend (catch-all — must be last) ───────────────────────────────────────
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 async def frontend(full_path: str):

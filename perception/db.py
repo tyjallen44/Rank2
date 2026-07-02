@@ -182,6 +182,17 @@ def init_db() -> None:
             used       BOOLEAN DEFAULT FALSE
         )
     """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS feedback (
+            id           VARCHAR PRIMARY KEY,
+            title        VARCHAR NOT NULL,
+            type         VARCHAR NOT NULL,
+            body         TEXT NOT NULL,
+            submitted_by VARCHAR NOT NULL,
+            submitted_at TIMESTAMP NOT NULL,
+            action       VARCHAR DEFAULT 'pending'
+        )
+    """)
     con.close()
 
 
@@ -230,3 +241,36 @@ def query_history(role: str) -> list[dict[str, Any]]:
             "pdf_path", "md_path", "provider_count"]
     con.close()
     return [dict(zip(cols, row)) for row in rows]
+
+
+def create_feedback(title: str, ftype: str, body: str, submitted_by: str) -> dict:
+    import uuid
+    from datetime import datetime
+    con = get_connection()
+    fid = str(uuid.uuid4())
+    now = datetime.utcnow()
+    con.execute(
+        "INSERT INTO feedback VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [fid, title, ftype, body, submitted_by, now, "pending"]
+    )
+    con.close()
+    return {"id": fid, "title": title, "type": ftype, "body": body,
+            "submitted_by": submitted_by, "submitted_at": str(now), "action": "pending"}
+
+
+def list_feedback() -> list[dict]:
+    con = get_connection()
+    rows = con.execute("""
+        SELECT id, title, type, body, submitted_by, submitted_at, action
+        FROM feedback
+        ORDER BY submitted_at DESC
+    """).fetchall()
+    con.close()
+    cols = ["id", "title", "type", "body", "submitted_by", "submitted_at", "action"]
+    return [dict(zip(cols, r)) | {"submitted_at": str(r[5])} for r in rows]
+
+
+def update_feedback_action(feedback_id: str, action: str) -> None:
+    con = get_connection()
+    con.execute("UPDATE feedback SET action = ? WHERE id = ?", [action, feedback_id])
+    con.close()
