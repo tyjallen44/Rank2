@@ -2546,15 +2546,17 @@ function renderFeedback() {
     ? '<span class="badge" style="background:#fee2e2;color:#991b1b;white-space:nowrap">Bug</span>'
     : '<span class="badge" style="background:#dbeafe;color:#1e40af;white-space:nowrap">Feature</span>';
 
-  const actionLabel = a => ({pending: '—', fixed: 'Fixed', accepted: 'Accepted', rejected: 'Rejected'})[a] || '—';
+  const actionLabel = a => ({pending: '—', fixed: 'Fixed', completed: 'Completed', accepted: 'Accepted', rejected: 'Rejected'})[a] || '—';
+  const _doneSt = new Set(['fixed', 'completed']);
 
   const actionCell = (id, current) => _role === 'admin'
     ? `<select onchange="updateFeedbackAction('${id}',this.value)" onclick="event.stopPropagation()"
          style="font-size:12px;padding:3px 6px;border:1px solid var(--pale);border-radius:4px;background:#fff;cursor:pointer;color:var(--ink)">
-         <option value="pending"  ${current==='pending' ?'selected':''}>—</option>
-         <option value="accepted" ${current==='accepted'?'selected':''}>Accepted</option>
-         <option value="fixed"    ${current==='fixed'   ?'selected':''}>Fixed</option>
-         <option value="rejected" ${current==='rejected'?'selected':''}>Rejected</option>
+         <option value="pending"   ${current==='pending'   ?'selected':''}>—</option>
+         <option value="accepted"  ${current==='accepted'  ?'selected':''}>Accepted</option>
+         <option value="fixed"     ${current==='fixed'     ?'selected':''}>Fixed</option>
+         <option value="completed" ${current==='completed' ?'selected':''}>Completed</option>
+         <option value="rejected"  ${current==='rejected'  ?'selected':''}>Rejected</option>
        </select>`
     : `<span style="font-size:13px;color:var(--muted)">${actionLabel(current)}</span>`;
 
@@ -2585,27 +2587,37 @@ function renderFeedback() {
           <th style="width:24px"></th>
         </tr></thead>
         <tbody>
-          ${items.length ? items.map(f => {
-            const expanded = _feedbackExpanded === f.id;
-            const dateStr  = (f.submitted_at || '').slice(0, 10) || '—';
-            return `
-              <tr onclick="toggleFeedbackDetail('${f.id}')" style="cursor:pointer">
-                <td style="font-weight:500">${f.title}</td>
-                <td>${typeBadge(f.type)}</td>
-                <td style="color:var(--muted);font-size:13px;white-space:nowrap">${dateStr}</td>
-                <td onclick="event.stopPropagation()">${actionCell(f.id, f.action || 'pending')}</td>
-                <td style="color:var(--muted);font-size:11px;text-align:center">${expanded ? '▲' : '▼'}</td>
-              </tr>
-              ${expanded ? `<tr>
-                <td colspan="5" style="background:#f8fafb;padding:16px 20px;border-top:1px solid var(--pale)">
-                  <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
-                    Submitted by <strong>${f.submitted_by}</strong> · ${(f.submitted_at||'').slice(0,16).replace('T',' ')} UTC
-                  </div>
-                  <div style="white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--ink)">${f.body}</div>
-                </td>
-              </tr>` : ''}`;
-          }).join('')
-          : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
+          ${(() => {
+            const active = items.filter(f => !_doneSt.has(f.action));
+            const done   = items.filter(f =>  _doneSt.has(f.action));
+            const renderRow = f => {
+              const expanded = _feedbackExpanded === f.id;
+              const dateStr  = (f.submitted_at || '').slice(0, 10) || '—';
+              return `
+                <tr onclick="toggleFeedbackDetail('${f.id}')" style="cursor:pointer">
+                  <td style="font-weight:500">${f.title}</td>
+                  <td>${typeBadge(f.type)}</td>
+                  <td style="color:var(--muted);font-size:13px;white-space:nowrap">${dateStr}</td>
+                  <td onclick="event.stopPropagation()">${actionCell(f.id, f.action || 'pending')}</td>
+                  <td style="color:var(--muted);font-size:11px;text-align:center">${expanded ? '▲' : '▼'}</td>
+                </tr>
+                ${expanded ? `<tr>
+                  <td colspan="5" style="background:#f8fafb;padding:16px 20px;border-top:1px solid var(--pale)">
+                    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+                      Submitted by <strong>${f.submitted_by}</strong> · ${(f.submitted_at||'').slice(0,16).replace('T',' ')} UTC
+                    </div>
+                    <div style="white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--ink)">${f.body}</div>
+                  </td>
+                </tr>` : ''}`;
+            };
+            if (!active.length && !done.length) {
+              return `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`;
+            }
+            const divider = done.length
+              ? `<tr><td colspan="5" style="padding:0;border-top:2px solid var(--pale)"></td></tr>`
+              : '';
+            return active.map(renderRow).join('') + divider + done.map(renderRow).join('');
+          })()}
         </tbody>
       </table>
     </div>`;

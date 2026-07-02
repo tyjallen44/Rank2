@@ -851,7 +851,7 @@ async def get_feedback(_: str = Depends(require_auth)):
 @app.patch("/api/feedback/{feedback_id}")
 async def patch_feedback(feedback_id: str, req: FeedbackActionRequest, _: dict = Depends(require_admin)):
     from perception.db import init_db, update_feedback_action
-    if req.action not in ("pending", "accepted", "fixed", "rejected"):
+    if req.action not in ("pending", "accepted", "fixed", "completed", "rejected"):
         raise HTTPException(400, "invalid action")
     init_db()
     update_feedback_action(feedback_id, req.action)
