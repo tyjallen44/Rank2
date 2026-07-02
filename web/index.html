@@ -2425,6 +2425,7 @@ function _historyFilename(r) {
 }
 
 function renderHistory() {
+  const searchWasFocused = document.activeElement && document.activeElement.id === 'history-search';
   const el = document.getElementById('history-body');
   if (!_historyRuns.length) {
     el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
@@ -2493,6 +2494,10 @@ function renderHistory() {
         </tbody>
       </table>
     </div>`;
+  if (searchWasFocused) {
+    const inp = document.getElementById('history-search');
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
