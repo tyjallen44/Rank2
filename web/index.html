@@ -1301,6 +1301,10 @@ html, body {
             <input type="checkbox" id="ir-agg-toggle" checked>
             <span class="agg-label">Aggregate related facilities into parent systems</span>
           </label>
+          <label class="aggregate-toggle" style="margin-top:10px" title="Collect and store analysis data without generating a PDF — useful for tracking AI visibility trends over time.">
+            <input type="checkbox" id="ir-skip-pdf-toggle">
+            <span class="agg-label">Skip PDF — collect data only</span>
+          </label>
           <label class="aggregate-toggle" style="margin-top:10px" title="Create a teaser version with blurred details for sending to prospects.">
             <input type="checkbox" id="ir-teaser-toggle">
             <span class="agg-label">Create Teaser Report</span>
@@ -2428,6 +2432,7 @@ async function runIndividual() {
   if (_irType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
 
   const aggregate     = document.getElementById('ir-agg-toggle').checked;
+  const skip_pdf      = document.getElementById('ir-skip-pdf-toggle').checked;
   const teaser_report = document.getElementById('ir-teaser-toggle').checked;
 
   const body = {
@@ -2439,6 +2444,7 @@ async function runIndividual() {
     entity_name: _irSelected.name,
     patient_perspective: false,
     teaser_report,
+    skip_pdf,
   };
 
   const btn = document.getElementById('ir-run-btn');

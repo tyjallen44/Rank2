@@ -478,6 +478,7 @@ def analyze_location(
     output_dir: str | Path = "reports",
     on_event: Callable | None = None,
     brand: str = "original",
+    skip_pdf: bool = False,
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -724,15 +725,19 @@ def analyze_location(
     report_path.write_text(report_markdown, encoding="utf-8")
     console.print(f"[green]✓[/green] Report saved → [dim]{report_path}[/dim]")
 
-    emit({"type": "phase", "name": "pdf", "text": "Rendering PDF"})
-    with console.status("[bold dark_sea_green4]Rendering PDF…[/bold dark_sea_green4]"):
-        from .pdf import render_pdf
-        pdf_path = output_dir / f"{_stem}.pdf"
-        render_pdf(result, pdf_path, brand=brand)
-    console.print(f"[green]✓[/green] PDF saved    → [dim]{pdf_path}[/dim]")
+    if skip_pdf:
+        console.print("[dim]skip_pdf=True — PDF rendering skipped[/dim]")
+        result.md_path = str(report_path)
+    else:
+        emit({"type": "phase", "name": "pdf", "text": "Rendering PDF"})
+        with console.status("[bold dark_sea_green4]Rendering PDF…[/bold dark_sea_green4]"):
+            from .pdf import render_pdf
+            pdf_path = output_dir / f"{_stem}.pdf"
+            render_pdf(result, pdf_path, brand=brand)
+        console.print(f"[green]✓[/green] PDF saved    → [dim]{pdf_path}[/dim]")
+        result.pdf_path = str(pdf_path)
+        result.md_path = str(report_path)
 
-    result.pdf_path = str(pdf_path)
-    result.md_path = str(report_path)
     _save_to_db(result)
 
     emit({"type": "phase", "name": "done_item", "text": "Complete"})

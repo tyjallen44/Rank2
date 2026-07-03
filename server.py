@@ -216,6 +216,7 @@ def _job_run_single(
             individual_report=job.get("individual_report", False),
             output_dir=REPORTS_DIR, on_event=emit,
             brand=job.get("brand", "original"),
+            skip_pdf=job.get("skip_pdf", False),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -315,6 +316,7 @@ class AnalyzeRequest(BaseModel):
     teaser_report: bool = False
     entity_name: Optional[str] = None
     individual_report: bool = False
+    skip_pdf: bool = False
 
 
 class BatchRequest(BaseModel):
@@ -347,6 +349,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["teaser_report"] = req.teaser_report
     _jobs[job_id]["entity_name"] = entity_name
     _jobs[job_id]["individual_report"] = req.individual_report
+    _jobs[job_id]["skip_pdf"] = req.skip_pdf
     _pool.submit(_job_run_single, job_id, city, state, specialty, req.aggregate, radius)
     return {"job_id": job_id}
 
