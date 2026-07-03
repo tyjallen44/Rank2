@@ -933,8 +933,8 @@ def _save_to_db(result: AnalysisResult) -> None:
             (run_id, location, specialty, aggregate, generated_at,
              weighting_profile, market_overview, ai_visibility_verdict, coverage_note,
              top_recommendation, practical_advice, disclaimer, report_markdown,
-             pdf_path, md_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             pdf_path, md_path, entity_name, individual_report)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             result.run_id, result.location, result.specialty, result.aggregate,
@@ -942,6 +942,7 @@ def _save_to_db(result: AnalysisResult) -> None:
             result.market_overview, result.ai_visibility_verdict, result.coverage_note,
             result.top_recommendation, json.dumps(result.practical_advice),
             result.disclaimer, result.report_markdown, result.pdf_path, result.md_path,
+            result.entity_name, result.individual_report,
         ],
     )
 

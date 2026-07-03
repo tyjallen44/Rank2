@@ -203,6 +203,23 @@ def init_db() -> None:
             action       VARCHAR DEFAULT 'pending'
         )
     """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS tracked_entities (
+            id           VARCHAR PRIMARY KEY,
+            entity_name  VARCHAR NOT NULL,
+            city         VARCHAR NOT NULL,
+            state        VARCHAR NOT NULL,
+            specialty    VARCHAR,
+            aggregate    BOOLEAN DEFAULT TRUE,
+            schedule     VARCHAR DEFAULT 'monthly',
+            last_run_at  TIMESTAMP,
+            next_run_at  TIMESTAMP,
+            created_by   VARCHAR NOT NULL,
+            created_at   TIMESTAMP NOT NULL,
+            active       BOOLEAN DEFAULT TRUE,
+            notes        VARCHAR
+        )
+    """)
     con.close()
 
 
@@ -284,3 +301,153 @@ def update_feedback_action(feedback_id: str, action: str) -> None:
     con = get_connection()
     con.execute("UPDATE feedback SET action = ? WHERE id = ?", [action, feedback_id])
     con.close()
+
+
+# ── Tracked Entities ──────────────────────────────────────────────────────────
+
+def _next_run_at(schedule: str, from_dt=None):
+    """Compute the next scheduled run timestamp from now (or a given datetime)."""
+    from datetime import datetime, timedelta
+    base = from_dt or datetime.utcnow()
+    if schedule == "weekly":
+        return base + timedelta(weeks=1)
+    if schedule == "monthly":
+        # Advance by ~30 days
+        return base + timedelta(days=30)
+    return None  # 'manual' — no auto-schedule
+
+
+def create_tracked_entity(
+    entity_name: str, city: str, state: str,
+    specialty: str | None, aggregate: bool,
+    schedule: str, created_by: str, notes: str = "",
+) -> dict:
+    import uuid
+    from datetime import datetime
+    con = get_connection()
+    eid = str(uuid.uuid4())
+    now = datetime.utcnow()
+    next_run = _next_run_at(schedule, now)
+    con.execute(
+        """INSERT INTO tracked_entities
+           (id, entity_name, city, state, specialty, aggregate, schedule,
+            last_run_at, next_run_at, created_by, created_at, active, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, TRUE, ?)""",
+        [eid, entity_name, city, state, specialty, aggregate, schedule,
+         next_run, created_by, now, notes or ""],
+    )
+    con.close()
+    return get_tracked_entity(eid)
+
+
+def get_tracked_entity(entity_id: str) -> dict | None:
+    con = get_connection()
+    row = con.execute(
+        "SELECT * FROM tracked_entities WHERE id = ?", [entity_id]
+    ).fetchone()
+    if not row:
+        con.close()
+        return None
+    cols = [d[0] for d in con.description]
+    con.close()
+    return dict(zip(cols, row))
+
+
+def list_tracked_entities() -> list[dict]:
+    con = get_connection()
+    rows = con.execute(
+        "SELECT * FROM tracked_entities ORDER BY created_at DESC"
+    ).fetchall()
+    cols = [d[0] for d in con.description]
+    con.close()
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def update_tracked_entity(entity_id: str, **kwargs) -> None:
+    allowed = {"entity_name", "city", "state", "specialty", "aggregate",
+               "schedule", "active", "notes", "next_run_at"}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        return
+    con = get_connection()
+    sets = ", ".join(f"{k}=?" for k in fields)
+    con.execute(
+        f"UPDATE tracked_entities SET {sets} WHERE id=?",
+        list(fields.values()) + [entity_id],
+    )
+    con.close()
+
+
+def mark_tracked_entity_ran(entity_id: str, schedule: str) -> None:
+    """Record last_run_at = now and advance next_run_at by the schedule interval."""
+    from datetime import datetime
+    now = datetime.utcnow()
+    next_run = _next_run_at(schedule, now)
+    con = get_connection()
+    con.execute(
+        "UPDATE tracked_entities SET last_run_at=?, next_run_at=? WHERE id=?",
+        [now, next_run, entity_id],
+    )
+    con.close()
+
+
+def get_due_tracked_entities() -> list[dict]:
+    """Return active entities whose next_run_at is in the past (due for a run)."""
+    from datetime import datetime
+    con = get_connection()
+    rows = con.execute(
+        """SELECT * FROM tracked_entities
+           WHERE active = TRUE
+             AND schedule != 'manual'
+             AND (next_run_at IS NULL OR next_run_at <= ?)
+           ORDER BY next_run_at ASC""",
+        [datetime.utcnow()],
+    ).fetchall()
+    cols = [d[0] for d in con.description]
+    con.close()
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def get_entity_trend(entity_name: str) -> list[dict]:
+    """Return all historical individual-report snapshots for the named entity,
+    oldest first, with AI Visibility Score, tier scores, and Google front-door data."""
+    import json
+    con = get_connection()
+    rows = con.execute(
+        """SELECT
+               a.run_id,
+               a.generated_at,
+               a.pdf_path,
+               p.ai_visibility_score,
+               p.tier_scores,
+               p.google_footprint,
+               p.leapfrog_grade,
+               p.cms_star_rating,
+               p.accreditations
+           FROM analysis_runs a
+           JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
+           WHERE LOWER(a.entity_name) = LOWER(?)
+             AND a.individual_report = TRUE
+           ORDER BY a.generated_at ASC, a.run_id ASC""",
+        [entity_name],
+    ).fetchall()
+    cols = ["run_id", "generated_at", "pdf_path", "ai_visibility_score",
+            "tier_scores", "google_footprint", "leapfrog_grade",
+            "cms_star_rating", "accreditations"]
+    con.close()
+
+    results = []
+    for row in rows:
+        d = dict(zip(cols, row))
+        ts = json.loads(d.pop("tier_scores") or "{}")
+        fp = json.loads(d.pop("google_footprint") or "{}")
+        fd = fp.get("front_door", {})
+        d["tier_outcomes"]     = ts.get("clinical_outcomes_safety")
+        d["tier_credentials"]  = ts.get("credentials_recognition")
+        d["tier_experience"]   = ts.get("patient_experience_reviews")
+        d["tier_access"]       = ts.get("access_fit")
+        d["google_rating"]     = fd.get("rating")
+        d["google_count"]      = fd.get("count")
+        d["generated_at"]      = str(d["generated_at"])
+        results.append(d)
+    return results

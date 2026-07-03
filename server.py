@@ -363,6 +363,14 @@ async def start_batch(req: BatchRequest, payload: dict = Depends(get_current_use
     return {"job_id": job_id}
 
 
+@app.get("/api/jobs/{job_id}")
+async def job_status(job_id: str, _: str = Depends(require_auth)):
+    if job_id not in _jobs:
+        raise HTTPException(404, "Job not found")
+    job = _jobs[job_id]
+    return {"job_id": job_id, "status": job.get("status", "running")}
+
+
 @app.get("/api/jobs/{job_id}/stream")
 async def stream_job(job_id: str, _: str = Depends(require_auth)):
     if job_id not in _jobs:
@@ -917,6 +925,151 @@ async def patch_feedback(feedback_id: str, req: FeedbackActionRequest, _: dict =
     init_db()
     update_feedback_action(feedback_id, req.action)
     return {"ok": True}
+
+
+# ── Tracked Entities ──────────────────────────────────────────────────────────
+
+class TrackEntityRequest(BaseModel):
+    entity_name: str
+    city: str
+    state: str
+    specialty: Optional[str] = None
+    aggregate: bool = True
+    schedule: str = "monthly"   # "monthly" | "weekly" | "manual"
+    notes: str = ""
+
+class TrackEntityUpdate(BaseModel):
+    active: Optional[bool] = None
+    schedule: Optional[str] = None
+    notes: Optional[str] = None
+    aggregate: Optional[bool] = None
+
+
+@app.get("/api/track/entities")
+async def track_list(_: dict = Depends(require_admin)):
+    from perception.db import init_db, list_tracked_entities
+    init_db()
+    entities = list_tracked_entities()
+    for e in entities:
+        for k in ("last_run_at", "next_run_at", "created_at"):
+            if e.get(k):
+                e[k] = str(e[k])
+    return entities
+
+
+@app.post("/api/track/entities")
+async def track_create(req: TrackEntityRequest, payload: dict = Depends(require_admin)):
+    from perception.db import init_db, create_tracked_entity
+    if req.schedule not in ("monthly", "weekly", "manual"):
+        raise HTTPException(400, "schedule must be monthly, weekly, or manual")
+    init_db()
+    created_by = payload.get("email") or payload.get("uid") or "admin"
+    entity = create_tracked_entity(
+        entity_name=_normalize_input(req.entity_name),
+        city=_normalize_input(req.city),
+        state=req.state.upper().strip(),
+        specialty=_normalize_input(req.specialty) if req.specialty else None,
+        aggregate=req.aggregate,
+        schedule=req.schedule,
+        created_by=created_by,
+        notes=req.notes,
+    )
+    for k in ("last_run_at", "next_run_at", "created_at"):
+        if entity and entity.get(k):
+            entity[k] = str(entity[k])
+    return entity
+
+
+@app.put("/api/track/entities/{entity_id}")
+async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends(require_admin)):
+    from perception.db import init_db, get_tracked_entity, update_tracked_entity
+    init_db()
+    if not get_tracked_entity(entity_id):
+        raise HTTPException(404, "tracked entity not found")
+    updates = {k: v for k, v in req.dict().items() if v is not None}
+    if "schedule" in updates and updates["schedule"] not in ("monthly", "weekly", "manual"):
+        raise HTTPException(400, "schedule must be monthly, weekly, or manual")
+    update_tracked_entity(entity_id, **updates)
+    entity = get_tracked_entity(entity_id)
+    for k in ("last_run_at", "next_run_at", "created_at"):
+        if entity and entity.get(k):
+            entity[k] = str(entity[k])
+    return entity
+
+
+@app.delete("/api/track/entities/{entity_id}")
+async def track_delete(entity_id: str, _: dict = Depends(require_admin)):
+    from perception.db import init_db, update_tracked_entity
+    init_db()
+    update_tracked_entity(entity_id, active=False)
+    return {"ok": True}
+
+
+@app.get("/api/track/entities/{entity_id}/trend")
+async def track_trend(entity_id: str, _: dict = Depends(require_admin)):
+    from perception.db import init_db, get_tracked_entity, get_entity_trend
+    init_db()
+    entity = get_tracked_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "tracked entity not found")
+    data = get_entity_trend(entity["entity_name"])
+    return {"entity": entity, "data_points": data}
+
+
+@app.post("/api/track/entities/{entity_id}/run")
+async def track_run_now(entity_id: str, payload: dict = Depends(require_admin)):
+    from perception.db import init_db, get_tracked_entity, mark_tracked_entity_ran
+    init_db()
+    entity = get_tracked_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "tracked entity not found")
+
+    brand = payload.get("brand", "original")
+    job_id = _new_job("admin", brand)
+    _jobs[job_id]["entity_name"]      = entity["entity_name"]
+    _jobs[job_id]["individual_report"] = True
+    _jobs[job_id]["skip_pdf"]          = True
+    _jobs[job_id]["patient_perspective"] = False
+    _jobs[job_id]["teaser_report"]     = False
+    _jobs[job_id]["zip_code"]          = None
+    _pool.submit(
+        _job_run_single, job_id,
+        entity["city"], entity["state"], entity.get("specialty"),
+        entity.get("aggregate", True), None,
+    )
+    mark_tracked_entity_ran(entity_id, entity.get("schedule", "monthly"))
+    return {"job_id": job_id}
+
+
+@app.post("/api/track/scheduled")
+async def track_scheduled(request: Request):
+    """Called by Cloud Scheduler. Runs all entities due for a collection."""
+    from perception.db import init_db, get_due_tracked_entities, mark_tracked_entity_ran
+    # Simple shared-secret auth — set SCHEDULER_SECRET env var, pass in header.
+    secret = request.headers.get("X-Scheduler-Secret", "")
+    import os
+    expected = os.environ.get("SCHEDULER_SECRET", "")
+    if expected and secret != expected:
+        raise HTTPException(403, "invalid scheduler secret")
+    init_db()
+    due = get_due_tracked_entities()
+    launched = []
+    for entity in due:
+        job_id = _new_job("admin", "original")
+        _jobs[job_id]["entity_name"]       = entity["entity_name"]
+        _jobs[job_id]["individual_report"]  = True
+        _jobs[job_id]["skip_pdf"]           = True
+        _jobs[job_id]["patient_perspective"] = False
+        _jobs[job_id]["teaser_report"]      = False
+        _jobs[job_id]["zip_code"]           = None
+        _pool.submit(
+            _job_run_single, job_id,
+            entity["city"], entity["state"], entity.get("specialty"),
+            entity.get("aggregate", True), None,
+        )
+        mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
+        launched.append({"entity_id": entity["id"], "entity_name": entity["entity_name"], "job_id": job_id})
+    return {"launched": launched}
 
 
 # ── Frontend (catch-all — must be last) ───────────────────────────────────────
