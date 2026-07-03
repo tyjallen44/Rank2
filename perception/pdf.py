@@ -40,10 +40,20 @@ _BRAND_CONFIGS: dict[str, dict] = {
         ),
     },
     "extension2": {
-        "primary": _TEAL,
-        "pale":    _PALE_GREEN,
-        "accent":  _SEAFOAM,
-        "logo_html": None,
+        "primary":   "#3E332A",   # espresso/walnut
+        "pale":      "#F6F1E9",   # linen
+        "accent":    "#8C9A82",   # dusty sage
+        "logo_html": (
+            '<div class="cover-logo-wordmark">'
+            '<span style="font-size:7pt;font-weight:400;letter-spacing:0.3em;display:block;opacity:0.8">ASHLEIGH</span>'
+            '<span style="font-size:22pt;font-weight:700;letter-spacing:0.05em;display:block">Jane</span>'
+            '<span style="display:block;height:1px;background:#8C9A82;width:60px;margin-top:6px"></span>'
+            '</div>'
+        ),
+        "css_overrides": (
+            "    .accent-bar { background: #8C9A82; }\n"
+            "    .cover-meta { border-top-color: rgba(140,154,130,0.3); }\n"
+        ),
     },
 }
 
@@ -1832,4 +1842,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         _html = _html.replace(_PALE_GREEN, _pale)
     if _accent != _SEAFOAM:
         _html = _html.replace(_SEAFOAM, _accent)
+    # Inject any brand-specific CSS overrides before the closing </style>
+    if brand_cfg.get("css_overrides"):
+        _html = _html.replace("</style>", brand_cfg["css_overrides"] + "  </style>", 1)
     return _html

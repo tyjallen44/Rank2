@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rank2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700&family=Barlow+Condensed:wght@700&family=Inter:wght@300;400;500;600;700&family=Work+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -69,6 +69,55 @@
 }
 [data-brand="extension1"] .login-logo .accent-line {
   background: linear-gradient(to right, var(--seafoam), var(--blue), var(--teal));
+}
+
+/* ── Brand: Extension 2 (Ashleigh Jane) ─────────────────────── */
+[data-brand="extension2"] {
+  --teal:       #3E332A;
+  --teal-mid:   #5B4C3D;
+  --seafoam:    #8C9A82;
+  --blue:       #BC7A5E;
+  --blue-light: #F0E8DE;
+  --pale:       #F6F1E9;
+  --sidebar:    #3E332A;
+  --bg:         #F6F1E9;
+  --card:       #FBF9F5;
+  --card2:      #F0EAE1;
+  --border:     #DDD5C8;
+  --text:       #3E332A;
+  --muted:      #8F7F6C;
+  --accent:     #3E332A;
+  --accent-h:   #5B4C3D;
+  --seafoam-bg: rgba(140,154,130,0.12);
+  --stream-bg:  #2A201A;
+  --sh:         0 1px 6px rgba(62,51,42,0.08);
+}
+[data-brand="extension2"] #login-screen {
+  background: #3E332A;
+}
+[data-brand="extension2"] .sb-logo {
+  border-bottom-color: rgba(140,154,130,0.3);
+}
+[data-brand="extension2"] .sb-logo .sub { color: rgba(140,154,130,0.75); }
+[data-brand="extension2"] .sb-logo .accent-line,
+[data-brand="extension2"] .login-logo .accent-line {
+  background: #8C9A82;
+  border-radius: 0;
+}
+[data-brand="extension2"] .nav-btn.active {
+  background: rgba(140,154,130,0.18);
+}
+[data-brand="extension2"] body,
+[data-brand="extension2"] .fi,
+[data-brand="extension2"] .btn {
+  font-family: 'Work Sans', 'Inter', sans-serif;
+}
+[data-brand="extension2"] .wordmark,
+[data-brand="extension2"] .sb-logo .wordmark,
+[data-brand="extension2"] .page-title {
+  font-family: 'Archivo', 'Barlow Condensed', sans-serif;
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 
 html, body {
@@ -1724,7 +1773,7 @@ html, body {
       <select id="inv-brand" class="fi">
         <option value="original">Original</option>
         <option value="extension1">Extension 1 — Montecito Medical</option>
-        <option value="extension2">Extension 2</option>
+        <option value="extension2">Extension 2 — Ashleigh Jane</option>
       </select>
     </div>
     <div class="modal-footer">
@@ -1770,9 +1819,9 @@ function _storeSession(token, displayName, role, brand) {
 }
 
 const _BRAND_WORDMARKS = {
-  original:   {wordmark: 'Rank<span>2</span>', sub: 'Market Intelligence'},
+  original:   {wordmark: 'Rank<span>2</span>',             sub: 'Market Intelligence'},
   extension1: {wordmark: 'Montecito<span> Medical</span>', sub: 'Market Intelligence'},
-  extension2: {wordmark: 'Rank<span>2</span>', sub: 'Market Intelligence'},
+  extension2: {wordmark: 'Ashleigh<span> Jane</span>',     sub: 'Market Intelligence'},
 };
 
 function applyBrand(brand) {
@@ -3093,7 +3142,7 @@ async function loadAdminUsers() {
     }
     const roles  = ['user','rldatix','customersuccess','salesteam','marketing','partner','admin'];
     const brands = ['original','extension1','extension2'];
-    const brandLabels = {original:'Original', extension1:'Ext 1 — Montecito', extension2:'Extension 2'};
+    const brandLabels = {original:'Original', extension1:'Ext 1 — Montecito', extension2:'Ext 2 — Ashleigh Jane'};
     el.innerHTML = `
       <table class="admin-tbl">
         <thead><tr>
