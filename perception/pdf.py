@@ -44,7 +44,7 @@ _BRAND_CONFIGS: dict[str, dict] = {
         "pale":      "#F6F1E9",   # linen
         "accent":    "#8C9A82",   # dusty sage
         "logo_html": None,        # resolved lazily from logo_path below
-        "logo_path": Path(__file__).parent / "assets" / "aj-monogram-tile.svg",
+        "logo_path": Path(__file__).parent / "assets" / "ashleigh-jane-wordmark-reverse.svg",
         "css_overrides": (
             "    .accent-bar { background: #8C9A82; }\n"
             "    .cover-meta { border-top-color: rgba(140,154,130,0.3); }\n"
@@ -1065,7 +1065,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         _luri = f"data:image/svg+xml;base64,{_ldat}"
         logo_tag = (
             f'<img src="{_luri}" alt="Logo"'
-            f' style="height:40px;display:block;margin-bottom:30px">'
+            f' style="height:52px;width:auto;display:block;margin-bottom:28px">'
         )
     else:
         logo_tag = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
