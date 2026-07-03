@@ -946,7 +946,7 @@ class TrackEntityUpdate(BaseModel):
 
 
 @app.get("/api/track/entities")
-async def track_list(_: dict = Depends(require_admin)):
+async def track_list(_: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, list_tracked_entities
     init_db()
     entities = list_tracked_entities()
@@ -958,7 +958,7 @@ async def track_list(_: dict = Depends(require_admin)):
 
 
 @app.post("/api/track/entities")
-async def track_create(req: TrackEntityRequest, payload: dict = Depends(require_admin)):
+async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, create_tracked_entity, mark_tracked_entity_ran
     if req.schedule not in ("monthly", "weekly", "manual"):
         raise HTTPException(400, "schedule must be monthly, weekly, or manual")
@@ -997,7 +997,7 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(require_
 
 
 @app.put("/api/track/entities/{entity_id}")
-async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends(require_admin)):
+async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, get_tracked_entity, update_tracked_entity
     init_db()
     if not get_tracked_entity(entity_id):
@@ -1014,7 +1014,7 @@ async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends
 
 
 @app.delete("/api/track/entities/{entity_id}")
-async def track_delete(entity_id: str, _: dict = Depends(require_admin)):
+async def track_delete(entity_id: str, _: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, update_tracked_entity
     init_db()
     update_tracked_entity(entity_id, active=False)
@@ -1022,7 +1022,7 @@ async def track_delete(entity_id: str, _: dict = Depends(require_admin)):
 
 
 @app.get("/api/track/entities/{entity_id}/trend")
-async def track_trend(entity_id: str, _: dict = Depends(require_admin)):
+async def track_trend(entity_id: str, _: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, get_tracked_entity, get_entity_trend
     init_db()
     entity = get_tracked_entity(entity_id)
@@ -1033,7 +1033,7 @@ async def track_trend(entity_id: str, _: dict = Depends(require_admin)):
 
 
 @app.post("/api/track/entities/{entity_id}/run")
-async def track_run_now(entity_id: str, payload: dict = Depends(require_admin)):
+async def track_run_now(entity_id: str, payload: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, get_tracked_entity, mark_tracked_entity_ran
     init_db()
     entity = get_tracked_entity(entity_id)

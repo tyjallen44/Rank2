@@ -205,6 +205,16 @@ html, body {
 }
 .nav-btn .ni { width: 20px; text-align: center; font-size: 15px; }
 
+.nav-section-label {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: rgba(255,255,255,0.32);
+  padding: 14px 14px 4px;
+}
+.nav-divider {
+  height: 1px; background: rgba(255,255,255,0.1);
+  margin: 6px 14px 6px;
+}
+
 /* ── Main ────────────────────────────────────────────────────── */
 #main { flex: 1; overflow-y: auto; background: var(--bg); }
 #main.patient-bg { background: #fff; }
@@ -397,6 +407,7 @@ html, body {
   .nav-btn .ni { width: auto; font-size: 18px; }
   .nav-btn .nb-lbl { display: none; }
   .nav-btn.active { border-left: 3px solid var(--seafoam); padding-left: 1px; }
+  .nav-section-label, .nav-divider { display: none; }
   .sb-user-info { display: none; }
   .sb-footer { padding: 8px 6px 10px; }
   .page { padding: 28px 22px; }
@@ -420,6 +431,7 @@ html, body {
   .sb-logo .wordmark { display: block; font-size: 18px; }
   .sb-logo .sub, .sb-logo .accent-line { display: none; }
   .sb-nav { padding: 0 6px; display: flex; flex-direction: row; flex: 1; }
+  .nav-section-label, .nav-divider { display: none; }
   .nav-btn {
     flex-direction: row; gap: 6px;
     padding: 0 12px; height: 52px;
@@ -866,6 +878,7 @@ html, body {
       <div class="accent-line"></div>
     </div>
     <div class="sb-nav">
+      <div class="nav-section-label">Report Creation</div>
       <button class="nav-btn active" id="nav-new" onclick="navigate('new')" title="Analysis Tools for Internal RLDatix Teams">
         <span class="ni">✦</span><span class="nb-lbl">Market Research</span>
       </button>
@@ -875,17 +888,23 @@ html, body {
       <button class="nav-btn" id="nav-individual" onclick="navigate('individual')" title="Generate a focused AI Visibility report for a single hospital or practice">
         <span class="ni">◎</span><span class="nb-lbl">Individual Report</span>
       </button>
-      <button class="nav-btn" id="nav-track" onclick="navigate('track')" title="Track AI Visibility trends over time for specific entities" style="display:none">
-        <span class="ni">↗</span><span class="nb-lbl">Trends</span>
-      </button>
+
+      <div class="nav-divider"></div>
+      <div class="nav-section-label">Reporting</div>
       <button class="nav-btn" id="nav-history" onclick="navigate('history')" title="Access to Previous Reports">
         <span class="ni">◷</span><span class="nb-lbl">History</span>
       </button>
-      <button class="nav-btn" id="nav-admin" onclick="navigate('admin')" title="User &amp; Access Management" style="display:none">
-        <span class="ni">⚙</span><span class="nb-lbl">Admin</span>
+      <button class="nav-btn" id="nav-track" onclick="navigate('track')" title="Track AI Visibility trends over time for specific entities">
+        <span class="ni">↗</span><span class="nb-lbl">Trends</span>
       </button>
+
+      <div class="nav-divider"></div>
+      <div class="nav-section-label">Administrative</div>
       <button class="nav-btn" id="nav-feedback" onclick="navigate('feedback')" title="Submit a bug report or feature request">
         <span class="ni">✉</span><span class="nb-lbl">Feedback</span>
+      </button>
+      <button class="nav-btn" id="nav-admin" onclick="navigate('admin')" title="User &amp; Access Management" style="display:none">
+        <span class="ni">⚙</span><span class="nb-lbl">Admin</span>
       </button>
     </div>
     <div class="sb-footer">
@@ -2231,8 +2250,6 @@ function showApp() {
   document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
   const adminBtn = document.getElementById('nav-admin');
   if (adminBtn) adminBtn.style.display = (_role === 'admin') ? 'flex' : 'none';
-  const trackBtn = document.getElementById('nav-track');
-  if (trackBtn) trackBtn.style.display = (_role === 'admin') ? 'flex' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
     el.textContent = 'build ' + d.build;
