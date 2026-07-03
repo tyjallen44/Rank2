@@ -25,6 +25,7 @@ def create_user(
     auth_type: str,
     password: Optional[str] = None,
     invited_by: Optional[str] = None,
+    brand: str = "original",
 ) -> dict:
     user_id = str(uuid.uuid4())
     pw_hash = pw_salt = None
@@ -35,11 +36,11 @@ def create_user(
         """
         INSERT INTO users
             (id, email, name, role, auth_type, password_hash, password_salt,
-             is_active, created_at, invited_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?)
+             is_active, created_at, invited_by, brand)
+        VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?)
         """,
         [user_id, email.lower(), name, role, auth_type, pw_hash, pw_salt,
-         datetime.now(timezone.utc), invited_by],
+         datetime.now(timezone.utc), invited_by, brand],
     )
     con.close()
     return get_user_by_id(user_id)
@@ -102,13 +103,19 @@ def update_last_login(user_id: str) -> None:
 def list_users() -> list[dict]:
     con = get_connection()
     con.execute("""
-        SELECT id, email, name, role, auth_type, is_active, created_at, last_login
+        SELECT id, email, name, role, auth_type, is_active, created_at, last_login, brand
         FROM users ORDER BY created_at DESC
     """)
     rows = con.fetchall()
-    cols = ["id", "email", "name", "role", "auth_type", "is_active", "created_at", "last_login"]
+    cols = ["id", "email", "name", "role", "auth_type", "is_active", "created_at", "last_login", "brand"]
     con.close()
     return [dict(zip(cols, r)) for r in rows]
+
+
+def update_user_brand(user_id: str, brand: str) -> None:
+    con = get_connection()
+    con.execute("UPDATE users SET brand=? WHERE id=?", [brand, user_id])
+    con.close()
 
 
 def deactivate_user(user_id: str) -> None:

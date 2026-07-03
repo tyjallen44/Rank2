@@ -7,7 +7,7 @@ from pathlib import Path
 from .models import AffiliationType, AnalysisResult, RankedProvider, SizeCategory
 from .scoring import TIER_LABELS
 
-# RLDatix brand palette
+# RLDatix brand palette (original)
 _TEAL        = "#0F4146"
 _PALE_GREEN  = "#EEF7F1"
 _SEAFOAM     = "#80F8E4"
@@ -20,6 +20,32 @@ _RANK_COLORS = {1: _TEAL, 2: _BLUE, 3: _GREEN}
 _RANK_DEFAULT = "#96DDE9"
 
 _LOGO_PATH = Path(__file__).parent / "assets" / "logo-white.svg"
+
+# Brand configurations: color overrides + optional text logo
+_BRAND_CONFIGS: dict[str, dict] = {
+    "original": {
+        "primary": _TEAL,
+        "pale":    _PALE_GREEN,
+        "accent":  _SEAFOAM,
+        "logo_html": None,
+    },
+    "extension1": {
+        "primary": "#9B1C22",
+        "pale":    "#FBF0F1",
+        "accent":  "#C8888C",
+        "logo_html": (
+            '<div class="cover-logo-wordmark">'
+            'Montecito<span class="wm-sub">Medical</span>'
+            '</div>'
+        ),
+    },
+    "extension2": {
+        "primary": _TEAL,
+        "pale":    _PALE_GREEN,
+        "accent":  _SEAFOAM,
+        "logo_html": None,
+    },
+}
 
 
 _PHYSICIAN_COUNT_MAP = {
@@ -44,11 +70,12 @@ def _logo_data_uri() -> str:
     return ""
 
 
-def render_pdf(result: AnalysisResult, pdf_path: Path) -> None:
+def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") -> None:
     """Render a structured AnalysisResult to a branded PDF using Playwright."""
     from playwright.sync_api import sync_playwright
 
-    html = _build_html(result)
+    cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
+    html = _build_html(result, cfg)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -973,11 +1000,12 @@ def _appendix_html() -> str:
 """
 
 
-def _build_html(result: AnalysisResult) -> str:
+def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
+    brand_cfg = brand_cfg or _BRAND_CONFIGS["original"]
     location        = _e(result.location)
     specialty_label = _e(result.specialty or "Hospital Market")
     date_str        = result.generated_at.strftime("%B %d, %Y")
-    logo_uri        = _logo_data_uri()
+    logo_uri        = None if brand_cfg.get("logo_html") else _logo_data_uri()
 
     if result.individual_report and result.teaser_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
@@ -1023,7 +1051,10 @@ def _build_html(result: AnalysisResult) -> str:
         )
 
     advice_items   = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
-    logo_tag       = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
+    if brand_cfg.get("logo_html"):
+        logo_tag = brand_cfg["logo_html"]
+    else:
+        logo_tag = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
 
     # Cover eyebrow
     if result.individual_report and result.teaser_report:
@@ -1079,7 +1110,7 @@ def _build_html(result: AnalysisResult) -> str:
 
     appendix_html = _appendix_html()
 
-    return f"""<!DOCTYPE html>
+    _html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1110,6 +1141,25 @@ def _build_html(result: AnalysisResult) -> str:
       height: 30px;
       margin-bottom: 34px;
       display: block;
+    }}
+    .cover-logo-wordmark {{
+      font-family: 'Barlow Condensed', Impact, sans-serif;
+      font-size: 22pt;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      line-height: 1.0;
+      margin-bottom: 34px;
+      display: block;
+    }}
+    .cover-logo-wordmark .wm-sub {{
+      font-size: 11pt;
+      font-weight: 300;
+      letter-spacing: 0.2em;
+      opacity: 0.82;
+      display: block;
+      margin-top: 2px;
     }}
     .cover-eyebrow {{
       font-size: 7.5pt;
@@ -1772,3 +1822,14 @@ def _build_html(result: AnalysisResult) -> str:
 </div>
 </body>
 </html>"""
+    # Apply brand color overrides via string replacement
+    _primary = brand_cfg["primary"]
+    _pale    = brand_cfg["pale"]
+    _accent  = brand_cfg["accent"]
+    if _primary != _TEAL:
+        _html = _html.replace(_TEAL, _primary)
+    if _pale != _PALE_GREEN:
+        _html = _html.replace(_PALE_GREEN, _pale)
+    if _accent != _SEAFOAM:
+        _html = _html.replace(_SEAFOAM, _accent)
+    return _html

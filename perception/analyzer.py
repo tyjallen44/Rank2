@@ -454,6 +454,7 @@ def analyze_location(
     individual_report: bool = False,
     output_dir: str | Path = "reports",
     on_event: Callable | None = None,
+    brand: str = "original",
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -686,7 +687,7 @@ def analyze_location(
     with console.status("[bold dark_sea_green4]Rendering PDF…[/bold dark_sea_green4]"):
         from .pdf import render_pdf
         pdf_path = output_dir / f"{_stem}.pdf"
-        render_pdf(result, pdf_path)
+        render_pdf(result, pdf_path, brand=brand)
     console.print(f"[green]✓[/green] PDF saved    → [dim]{pdf_path}[/dim]")
 
     result.pdf_path = str(pdf_path)

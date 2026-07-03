@@ -159,9 +159,19 @@ def init_db() -> None:
             is_active     BOOLEAN DEFAULT TRUE,
             created_at    TIMESTAMP,
             last_login    TIMESTAMP,
-            invited_by    VARCHAR
+            invited_by    VARCHAR,
+            brand         VARCHAR DEFAULT 'original'
         )
     """)
+    existing_user_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='users'"
+    ).fetchall()}
+    for col, definition in [
+        ("brand", "VARCHAR DEFAULT 'original'"),
+    ]:
+        if col not in existing_user_cols:
+            con.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
+    con.execute("UPDATE users SET brand = 'original' WHERE brand IS NULL")
     con.execute("""
         CREATE TABLE IF NOT EXISTS access_requests (
             id           VARCHAR PRIMARY KEY,

@@ -38,6 +38,39 @@
   --sh:        0 2px 14px rgba(15,65,70,0.10);
 }
 
+/* ── Brand: Extension 1 (Montecito Medical) ─────────────────── */
+[data-brand="extension1"] {
+  --teal:       #9B1C22;
+  --teal-mid:   #B52228;
+  --seafoam:    #C8888C;
+  --blue:       #5C6B7B;
+  --blue-light: #E8ECF0;
+  --pale:       #FBF0F1;
+  --sidebar:    #9B1C22;
+  --bg:         #F9F2F2;
+  --card2:      #FBF0F1;
+  --border:     #E0C0C2;
+  --text:       #2C0A0D;
+  --accent:     #9B1C22;
+  --accent-h:   #B52228;
+  --seafoam-bg: rgba(200,136,140,0.12);
+  --stream-bg:  #2A0608;
+  --sh:         0 2px 14px rgba(155,28,34,0.10);
+}
+[data-brand="extension1"] .sb-logo {
+  border-bottom-color: rgba(200,136,140,0.3);
+}
+[data-brand="extension1"] .sb-logo .sub { color: rgba(200,136,140,0.7); }
+[data-brand="extension1"] .sb-logo .accent-line {
+  background: linear-gradient(to right, var(--seafoam), var(--blue), var(--teal));
+}
+[data-brand="extension1"] .nav-btn.active {
+  background: rgba(200,136,140,0.18);
+}
+[data-brand="extension1"] .login-logo .accent-line {
+  background: linear-gradient(to right, var(--seafoam), var(--blue), var(--teal));
+}
+
 html, body {
   height: 100%;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -1686,6 +1719,14 @@ html, body {
         <option value="admin">Admin</option>
       </select>
     </div>
+    <div class="fg">
+      <label class="fl">Brand</label>
+      <select id="inv-brand" class="fi">
+        <option value="original">Original</option>
+        <option value="extension1">Extension 1 — Montecito Medical</option>
+        <option value="extension2">Extension 2</option>
+      </select>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" onclick="closeInviteModal()">Cancel</button>
       <button class="btn btn-primary" id="inv-btn" onclick="submitInvite()">Send Invite</button>
@@ -1699,6 +1740,7 @@ html, body {
 let _token       = localStorage.getItem('rk2') || '';
 let _displayName = localStorage.getItem('rk2_name') || '';
 let _role        = localStorage.getItem('rk2_role') || '';
+let _brand       = localStorage.getItem('rk2_brand') || 'original';
 let _mode        = 'manual';
 let _type        = 'hospital';
 let _groups      = [];       // parsed CSV groups
@@ -1716,13 +1758,34 @@ const PHASE_MAP = {
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 
-function _storeSession(token, displayName, role) {
+function _storeSession(token, displayName, role, brand) {
   _token = token;
   _displayName = displayName;
   _role = role || '';
+  _brand = brand || 'original';
   localStorage.setItem('rk2', token);
   localStorage.setItem('rk2_name', displayName);
   localStorage.setItem('rk2_role', _role);
+  localStorage.setItem('rk2_brand', _brand);
+}
+
+const _BRAND_WORDMARKS = {
+  original:   {wordmark: 'Rank<span>2</span>', sub: 'Market Intelligence'},
+  extension1: {wordmark: 'Montecito<span> Medical</span>', sub: 'Market Intelligence'},
+  extension2: {wordmark: 'Rank<span>2</span>', sub: 'Market Intelligence'},
+};
+
+function applyBrand(brand) {
+  _brand = brand || 'original';
+  if (_brand === 'original') {
+    delete document.documentElement.dataset.brand;
+  } else {
+    document.documentElement.dataset.brand = _brand;
+  }
+  const cfg = _BRAND_WORDMARKS[_brand] || _BRAND_WORDMARKS.original;
+  document.querySelectorAll('.wordmark').forEach(el => el.innerHTML = cfg.wordmark);
+  const sidebarSub = document.querySelector('#sidebar .sb-logo .sub');
+  if (sidebarSub) sidebarSub.textContent = cfg.sub;
 }
 
 function doGoogleLogin() {
@@ -1776,8 +1839,8 @@ async function doNativeLogin() {
       body: JSON.stringify({email, password: pw}),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Invalid email or password'));
-    const { token, display_name, role } = await r.json();
-    _storeSession(token, display_name, role);
+    const { token, display_name, role, brand } = await r.json();
+    _storeSession(token, display_name, role, brand);
     showApp();
   } catch(e) {
     err.textContent = e.message;
@@ -1880,9 +1943,9 @@ async function submitSetPassword() {
       body: JSON.stringify({token, password: pw}),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Link is invalid or has expired'));
-    const { token: appToken, display_name, role } = await r.json();
+    const { token: appToken, display_name, role, brand } = await r.json();
     document.getElementById('set-password-screen').style.display = 'none';
-    _storeSession(appToken, display_name, role);
+    _storeSession(appToken, display_name, role, brand);
     showApp();
   } catch(e) {
     showErr(err, e.message);
@@ -1892,6 +1955,7 @@ async function submitSetPassword() {
 }
 
 function showApp() {
+  applyBrand(_brand);
   document.getElementById('login-screen').style.display         = 'none';
   document.getElementById('request-access-screen').style.display = 'none';
   document.getElementById('set-password-screen').style.display   = 'none';
@@ -2876,9 +2940,11 @@ function doLogout() {
   localStorage.removeItem('rk2');
   localStorage.removeItem('rk2_name');
   localStorage.removeItem('rk2_role');
+  localStorage.removeItem('rk2_brand');
   _token = '';
   _displayName = '';
   _role = '';
+  _brand = 'original';
   location.reload();
 }
 
@@ -3025,11 +3091,13 @@ async function loadAdminUsers() {
       el.innerHTML = '<div class="empty" style="padding:20px 0"><div>No users yet.</div></div>';
       return;
     }
-    const roles = ['user','rldatix','customersuccess','salesteam','marketing','partner','admin'];
+    const roles  = ['user','rldatix','customersuccess','salesteam','marketing','partner','admin'];
+    const brands = ['original','extension1','extension2'];
+    const brandLabels = {original:'Original', extension1:'Ext 1 — Montecito', extension2:'Extension 2'};
     el.innerHTML = `
       <table class="admin-tbl">
         <thead><tr>
-          <th>Email</th><th>Name</th><th>Role</th>
+          <th>Email</th><th>Name</th><th>Role</th><th>Brand</th>
           <th>Auth</th><th>Status</th><th>Last Login</th><th>Actions</th>
         </tr></thead>
         <tbody>
@@ -3040,6 +3108,11 @@ async function loadAdminUsers() {
               <td>
                 <select onchange="adminUpdateRole('${u.id}',this.value)" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;background:#fff">
                   ${roles.map(ro => `<option value="${ro}" ${ro===u.role?'selected':''}>${ro}</option>`).join('')}
+                </select>
+              </td>
+              <td>
+                <select onchange="adminUpdateBrand('${u.id}',this.value)" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;background:#fff">
+                  ${brands.map(b => `<option value="${b}" ${b===(u.brand||'original')?'selected':''}>${brandLabels[b]||b}</option>`).join('')}
                 </select>
               </td>
               <td><span class="badge badge-${u.auth_type}">${u.auth_type}</span></td>
@@ -3113,6 +3186,20 @@ async function adminUpdateRole(userId, role) {
   }
 }
 
+async function adminUpdateBrand(userId, brand) {
+  try {
+    const r = await api(`/api/admin/users/${userId}/brand`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({brand}),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Update failed'));
+  } catch(e) {
+    alert(e.message);
+    loadAdminUsers();
+  }
+}
+
 async function adminDeactivate(userId) {
   if (!confirm('Deactivate this user?')) return;
   try {
@@ -3160,10 +3247,11 @@ async function adminResendReq(reqId, status) {
 function showInviteModal() {
   document.getElementById('invite-modal').classList.add('open');
   document.getElementById('invite-err').classList.add('hidden');
-  document.getElementById('inv-email').value = '';
-  document.getElementById('inv-name').value  = '';
-  document.getElementById('inv-auth').value  = 'native';
-  document.getElementById('inv-role').value  = 'user';
+  document.getElementById('inv-email').value  = '';
+  document.getElementById('inv-name').value   = '';
+  document.getElementById('inv-auth').value   = 'native';
+  document.getElementById('inv-role').value   = 'user';
+  document.getElementById('inv-brand').value  = 'original';
   document.getElementById('inv-btn').disabled = false;
   document.getElementById('inv-btn').textContent = 'Send Invite';
 }
@@ -3177,6 +3265,7 @@ async function submitInvite() {
   const name      = document.getElementById('inv-name').value.trim();
   const auth_type = document.getElementById('inv-auth').value;
   const role      = document.getElementById('inv-role').value;
+  const brand     = document.getElementById('inv-brand').value;
   const btn       = document.getElementById('inv-btn');
   const err       = document.getElementById('invite-err');
   if (!email) { showErr(err, 'Email is required.'); return; }
@@ -3187,7 +3276,7 @@ async function submitInvite() {
     const r = await api('/api/admin/users/invite', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({email, name: name || null, auth_type, role}),
+      body: JSON.stringify({email, name: name || null, auth_type, role, brand}),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Invite failed'));
     closeInviteModal();
@@ -3210,8 +3299,8 @@ async function submitInvite() {
     try {
       const r = await fetch('/api/auth/me', {headers:{'Authorization':`Bearer ${googleToken}`}});
       if (r.ok) {
-        const { display_name, role } = await r.json();
-        _storeSession(googleToken, display_name, role);
+        const { display_name, role, brand } = await r.json();
+        _storeSession(googleToken, display_name, role, brand);
         showApp();
         return;
       }
@@ -3256,11 +3345,13 @@ async function submitInvite() {
     try {
       const r = await fetch('/api/auth/me', {headers:{'Authorization':`Bearer ${_token}`}});
       if (r.ok) {
-        const { display_name, role } = await r.json();
+        const { display_name, role, brand } = await r.json();
         _displayName = display_name;
         _role = role || '';
+        _brand = brand || 'original';
         localStorage.setItem('rk2_name', display_name);
         localStorage.setItem('rk2_role', _role);
+        localStorage.setItem('rk2_brand', _brand);
         showApp();
         return;
       }
@@ -3268,9 +3359,11 @@ async function submitInvite() {
     localStorage.removeItem('rk2');
     localStorage.removeItem('rk2_name');
     localStorage.removeItem('rk2_role');
+    localStorage.removeItem('rk2_brand');
     _token = '';
     _displayName = '';
     _role = '';
+    _brand = 'original';
   }
   setMode('manual');
   setType('hospital');

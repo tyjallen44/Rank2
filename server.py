@@ -163,7 +163,12 @@ def require_admin(payload: dict = Depends(get_current_user_payload)) -> dict:
 async def me(payload: dict = Depends(get_current_user_payload)):
     role = payload.get("role", "")
     name = payload.get("name") or _ROLE_DISPLAY.get(role, "Admin")
-    return {"role": role, "display_name": name, "email": payload.get("email")}
+    return {
+        "role": role,
+        "display_name": name,
+        "email": payload.get("email"),
+        "brand": payload.get("brand", "original"),
+    }
 
 
 _SERVER_START = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
@@ -210,6 +215,7 @@ def _job_run_single(
             entity_name=job.get("entity_name"),
             individual_report=job.get("individual_report", False),
             output_dir=REPORTS_DIR, on_event=emit,
+            brand=job.get("brand", "original"),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -251,6 +257,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
             result = analyze_location(
                 city=g["city"], state=g["state"], specialty=g.get("specialty"),
                 output_dir=REPORTS_DIR, on_event=emit,
+                brand=job.get("brand", "original"),
             )
             set_run_role(result.run_id, job["role"])
             results.append({
@@ -270,11 +277,11 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
         _put(loop, queue, None)
 
 
-def _new_job(role: str) -> str:
+def _new_job(role: str, brand: str = "original") -> str:
     job_id = str(uuid.uuid4())
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
-    _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role}
+    _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role, "brand": brand}
     return job_id
 
 
@@ -315,7 +322,9 @@ class BatchRequest(BaseModel):
 
 
 @app.post("/api/analyze")
-async def start_analysis(req: AnalyzeRequest, role: str = Depends(require_auth)):
+async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_current_user_payload)):
+    role  = payload["role"]
+    brand = payload.get("brand", "original")
     city, state = req.city, req.state
     radius = None
 
@@ -332,7 +341,7 @@ async def start_analysis(req: AnalyzeRequest, role: str = Depends(require_auth))
     specialty = _normalize_input(req.specialty)
     entity_name = _normalize_input(req.entity_name)
 
-    job_id = _new_job(role)
+    job_id = _new_job(role, brand)
     _jobs[job_id]["zip_code"] = req.zip_code if req.zip_code else None
     _jobs[job_id]["patient_perspective"] = req.patient_perspective
     _jobs[job_id]["teaser_report"] = req.teaser_report
@@ -343,8 +352,10 @@ async def start_analysis(req: AnalyzeRequest, role: str = Depends(require_auth))
 
 
 @app.post("/api/analyze/batch")
-async def start_batch(req: BatchRequest, role: str = Depends(require_auth)):
-    job_id = _new_job(role)
+async def start_batch(req: BatchRequest, payload: dict = Depends(get_current_user_payload)):
+    role  = payload["role"]
+    brand = payload.get("brand", "original")
+    job_id = _new_job(role, brand)
     _pool.submit(_job_run_batch, job_id, [g.dict() for g in req.groups])
     return {"job_id": job_id}
 
@@ -478,11 +489,16 @@ class UpdateRoleRequest(BaseModel):
     role: str
 
 
+class UpdateBrandRequest(BaseModel):
+    brand: str
+
+
 class InviteUserRequest(BaseModel):
     email: str
     name: Optional[str] = None
     auth_type: str = "native"
     role: str = "user"
+    brand: str = "original"
 
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────
@@ -561,8 +577,9 @@ async def google_callback(
         if not user["is_active"]:
             return RedirectResponse(f"{base}/?auth_error=deactivated")
         update_last_login(user["id"])
+        _brand = user.get("brand") or "original"
         tok = _create_token(user["role"], uid=user["id"], email=email,
-                            name=user.get("name") or name)
+                            name=user.get("name") or name, brand=_brand)
         return RedirectResponse(f"{base}/?google_token={tok}")
 
     req = get_access_request_by_email(email)
@@ -570,7 +587,7 @@ async def google_callback(
     if req and req["status"] == "approved":
         new_user = create_user(email, name, "user", "google")
         update_last_login(new_user["id"])
-        tok = _create_token(new_user["role"], uid=new_user["id"], email=email, name=name)
+        tok = _create_token(new_user["role"], uid=new_user["id"], email=email, name=name, brand="original")
         return RedirectResponse(f"{base}/?google_token={tok}")
     elif req and req["status"] == "pending":
         return RedirectResponse(
@@ -602,10 +619,12 @@ async def native_login(req: NativeLoginRequest):
     if not verify_password(user, req.password):
         raise HTTPException(401, "Invalid email or password")
     update_last_login(user["id"])
+    _brand = user.get("brand") or "original"
     tok = _create_token(user["role"], uid=user["id"], email=user["email"],
-                        name=user.get("name") or user["email"])
+                        name=user.get("name") or user["email"], brand=_brand)
     return {"token": tok, "role": user["role"],
-            "display_name": user.get("name") or user["email"]}
+            "display_name": user.get("name") or user["email"],
+            "brand": _brand}
 
 
 # ── Access request submission ─────────────────────────────────────────────────
@@ -648,10 +667,12 @@ async def set_password_endpoint(req: SetPasswordRequest):
     user = get_user_by_id(user_id)
     if not user:
         raise HTTPException(500, "User not found")
+    _brand = user.get("brand") or "original"
     tok = _create_token(user["role"], uid=user["id"], email=user["email"],
-                        name=user.get("name") or user["email"])
+                        name=user.get("name") or user["email"], brand=_brand)
     return {"token": tok, "role": user["role"],
-            "display_name": user.get("name") or user["email"]}
+            "display_name": user.get("name") or user["email"],
+            "brand": _brand}
 
 
 # ── Forgot password ───────────────────────────────────────────────────────────
@@ -806,6 +827,19 @@ async def admin_update_role(
     return {"status": "updated"}
 
 
+@app.put("/api/admin/users/{user_id}/brand")
+async def admin_update_brand(
+    user_id: str, req: UpdateBrandRequest, _: dict = Depends(require_admin)
+):
+    if req.brand not in ("original", "extension1", "extension2"):
+        raise HTTPException(400, "brand must be original, extension1, or extension2")
+    from perception.db import init_db
+    from perception.auth import update_user_brand
+    init_db()
+    update_user_brand(user_id, req.brand)
+    return {"status": "updated"}
+
+
 @app.post("/api/admin/users/{user_id}/deactivate")
 async def admin_deactivate(user_id: str, _: dict = Depends(require_admin)):
     from perception.db import init_db
@@ -834,7 +868,7 @@ async def admin_invite_user(req: InviteUserRequest, payload: dict = Depends(requ
     if get_user_by_email(email):
         raise HTTPException(400, "A user with this email already exists")
     by = payload.get("email") or payload.get("uid") or payload.get("role", "admin")
-    user = create_user(email, req.name, req.role, req.auth_type, invited_by=by)
+    user = create_user(email, req.name, req.role, req.auth_type, invited_by=by, brand=req.brand)
     if req.auth_type == "native":
         tok = create_password_token(user["id"])
         try:
