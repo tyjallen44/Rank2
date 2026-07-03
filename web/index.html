@@ -875,8 +875,8 @@ html, body {
       <button class="nav-btn" id="nav-individual" onclick="navigate('individual')" title="Generate a focused AI Visibility report for a single hospital or practice">
         <span class="ni">◎</span><span class="nb-lbl">Individual Report</span>
       </button>
-      <button class="nav-btn" id="nav-track" onclick="navigate('track')" title="Track AI Visibility progress over time for specific entities" style="display:none">
-        <span class="ni">↗</span><span class="nb-lbl">Progress</span>
+      <button class="nav-btn" id="nav-track" onclick="navigate('track')" title="Track AI Visibility trends over time for specific entities" style="display:none">
+        <span class="ni">↗</span><span class="nb-lbl">Trends</span>
       </button>
       <button class="nav-btn" id="nav-history" onclick="navigate('history')" title="Access to Previous Reports">
         <span class="ni">◷</span><span class="nb-lbl">History</span>
@@ -1457,24 +1457,113 @@ html, body {
       </div>
     </div>
 
-    <!-- ── Progress Tracking ──────────────────────────────────────────────── -->
+    <!-- ── Trends ─────────────────────────────────────────────────────────── -->
     <div id="page-track" class="page">
-      <div class="page-title">AI Visibility Progress</div>
+      <div class="page-title">AI Visibility Trends</div>
       <div class="page-sub">Track how a provider's AI visibility changes over time.</div>
 
       <!-- Entity list view -->
-      <div id="track-list-view">
+      <div id="track-list-view" style="max-width:860px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
           <div id="track-entity-count" style="font-size:13px;color:var(--muted)"></div>
-          <button class="btn btn-primary btn-sm" onclick="showAddEntityModal()">+ Add Entity</button>
+          <button class="btn btn-primary btn-sm" onclick="showAddEntityFlow()">+ Track New Entity</button>
         </div>
         <div id="track-entities-body">
           <div class="empty"><div class="ei">↗</div><div>Loading…</div></div>
         </div>
       </div>
 
-      <!-- Trend view (shown when an entity is selected) -->
-      <div id="track-trend-view" style="display:none">
+      <!-- Add entity flow (3 steps, inline — hidden until + button clicked) -->
+      <div id="track-add-flow" style="display:none;max-width:580px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+          <button class="btn btn-ghost btn-sm" onclick="showTrackList()">← Back to Trends</button>
+          <div style="font-size:16px;font-weight:700">Track New Entity</div>
+        </div>
+
+        <!-- Step 1: Search -->
+        <div id="te-step1" class="card">
+          <div class="fg">
+            <label class="fl">Organization Name</label>
+            <input id="te-name" class="fi" type="text" placeholder="e.g. USA Health University Hospital"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter')runTeSearch()">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 100px;gap:14px">
+            <div class="fg" style="margin:0">
+              <label class="fl">City</label>
+              <input id="te-city" class="fi" type="text" placeholder="Mobile"
+                oninput="this.value=this.value.toUpperCase()"
+                onkeydown="if(event.key==='Enter')runTeSearch()">
+            </div>
+            <div class="fg" style="margin:0">
+              <label class="fl">State</label>
+              <input id="te-state" class="fi" type="text" placeholder="AL" maxlength="2"
+                oninput="this.value=this.value.toUpperCase()"
+                onkeydown="if(event.key==='Enter')runTeSearch()">
+            </div>
+          </div>
+          <div class="fg mt16" style="margin-bottom:0">
+            <label class="fl">Analysis Type</label>
+            <div class="tg-group">
+              <button class="tg-opt on" id="te-tg-hospital"  onclick="setTeType('hospital')">Hospital / Health System</button>
+              <button class="tg-opt"    id="te-tg-specialty" onclick="setTeType('specialty')">Specialty Practice</button>
+            </div>
+          </div>
+          <div id="te-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
+            <label class="fl">Specialty</label>
+            <input id="te-specialty" class="fi" type="text" placeholder="e.g. Orthopedics, Cardiology"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter')runTeSearch()">
+          </div>
+          <div id="te-search-err" class="err hidden mt16"></div>
+          <div class="mt20">
+            <button class="btn btn-primary" id="te-search-btn" onclick="runTeSearch()">Search →</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Candidates -->
+        <div id="te-step2" class="hidden mt16">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Select the matching organization, or use the name as entered.</div>
+          <div id="te-candidates"></div>
+          <div class="mt12">
+            <button class="btn btn-ghost btn-sm" onclick="teResetSearch()">← Search Again</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Configure & Save -->
+        <div id="te-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Selected Organization</div>
+          <div id="te-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:20px"></div>
+
+          <div class="fg">
+            <label class="fl">Collection Schedule</label>
+            <select class="fi" id="te-schedule">
+              <option value="monthly">Monthly (recommended)</option>
+              <option value="weekly">Weekly</option>
+              <option value="manual">Manual only</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label class="fl">Options</label>
+            <label class="aggregate-toggle" title="Include affiliated campuses and aggregate their data.">
+              <input type="checkbox" id="te-aggregate" checked>
+              <span class="agg-label">Aggregate related facilities into parent system</span>
+            </label>
+          </div>
+          <div class="fg">
+            <label class="fl">Notes <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+            <input class="fi" id="te-notes" placeholder="Internal label or client name">
+          </div>
+          <div id="te-err" class="err hidden mt16"></div>
+          <div class="mt20 row-actions">
+            <button class="btn btn-primary" onclick="submitAddEntity()">Add to Trends</button>
+            <button class="btn btn-ghost btn-sm" onclick="teResetSearch()">← Search Again</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trend view (shown when an entity row is clicked) -->
+      <div id="track-trend-view" style="display:none;max-width:860px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="showTrackList()">← All Entities</button>
           <div>
@@ -1490,20 +1579,17 @@ html, body {
         <div id="trend-no-data" class="card" style="display:none;text-align:center;padding:40px;color:var(--muted)">
           <div style="font-size:32px;margin-bottom:12px">📊</div>
           <div style="font-weight:600;margin-bottom:6px">No data yet</div>
-          <div style="font-size:13px">Run the first collection to start tracking progress.</div>
+          <div style="font-size:13px">Run the first collection above to start tracking progress.</div>
         </div>
 
         <div id="trend-charts" style="display:none">
-          <!-- Delta summary row -->
           <div id="trend-delta-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px"></div>
 
-          <!-- AI Visibility Score chart -->
           <div class="card" style="margin-bottom:16px;padding:20px 24px">
             <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">AI Visibility Score</div>
             <div style="position:relative;height:200px"><canvas id="chart-score"></canvas></div>
           </div>
 
-          <!-- Tier breakdown chart -->
           <div class="card" style="margin-bottom:16px;padding:20px 24px">
             <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Tier Scores Over Time</div>
             <div style="position:relative;height:220px"><canvas id="chart-tiers"></canvas></div>
@@ -1515,65 +1601,15 @@ html, body {
             </div>
           </div>
 
-          <!-- Google rating chart -->
           <div class="card" style="margin-bottom:16px;padding:20px 24px">
             <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Google Rating &amp; Review Volume</div>
             <div style="position:relative;height:200px"><canvas id="chart-google"></canvas></div>
           </div>
 
-          <!-- Snapshot table -->
           <div class="card" style="padding:20px 24px">
             <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">All Snapshots</div>
             <div id="trend-snapshot-table" style="overflow-x:auto"></div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add Entity Modal -->
-    <div id="add-entity-modal" class="modal-backdrop hidden">
-      <div class="modal-box" style="max-width:480px">
-        <div style="font-size:17px;font-weight:700;margin-bottom:18px">Track New Entity</div>
-        <div class="fg">
-          <label class="fl">Organization Name *</label>
-          <input class="fi" id="te-name" placeholder="e.g. USA Health University Hospital" autocomplete="off">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="fg">
-            <label class="fl">City *</label>
-            <input class="fi" id="te-city" placeholder="Mobile" autocomplete="off">
-          </div>
-          <div class="fg">
-            <label class="fl">State *</label>
-            <input class="fi" id="te-state" placeholder="AL" maxlength="2" autocomplete="off">
-          </div>
-        </div>
-        <div class="fg">
-          <label class="fl">Specialty <span style="font-weight:400;color:var(--muted)">(leave blank for hospital)</span></label>
-          <input class="fi" id="te-specialty" placeholder="e.g. Orthopedics" autocomplete="off">
-        </div>
-        <div class="fg">
-          <label class="fl">Collection Schedule</label>
-          <select class="fi" id="te-schedule">
-            <option value="monthly">Monthly (recommended)</option>
-            <option value="weekly">Weekly</option>
-            <option value="manual">Manual only</option>
-          </select>
-        </div>
-        <div class="fg">
-          <label class="aggregate-toggle">
-            <input type="checkbox" id="te-aggregate" checked>
-            <span class="agg-label">Aggregate related facilities</span>
-          </label>
-        </div>
-        <div class="fg">
-          <label class="fl">Notes <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-          <input class="fi" id="te-notes" placeholder="Internal label or client name">
-        </div>
-        <div id="te-err" class="err hidden mt16"></div>
-        <div class="mt20 row-actions">
-          <button class="btn btn-primary" onclick="submitAddEntity()">Add Entity</button>
-          <button class="btn btn-ghost" onclick="closeAddEntityModal()">Cancel</button>
         </div>
       </div>
     </div>
@@ -3605,11 +3641,16 @@ async function submitInvite() {
   setType('hospital');
 })();
 
-// ── Progress Tracking ──────────────────────────────────────────────────────
+// ── Trends ────────────────────────────────────────────────────────────────
 
-let _trackEntities = [];
+let _trackEntities      = [];
 let _trackCurrentEntity = null;
-let _trackCharts = {};
+let _trackCharts        = {};
+let _teCandidates       = [];
+let _teSelected         = null;
+let _teResolvedCity     = null;
+let _teResolvedState    = null;
+let _teType             = 'hospital';
 
 async function loadTrackPage() {
   showTrackList();
@@ -3628,13 +3669,13 @@ async function refreshTrackEntities() {
 }
 
 function renderTrackEntityList() {
-  const body = document.getElementById('track-entities-body');
+  const body  = document.getElementById('track-entities-body');
   const count = document.getElementById('track-entity-count');
   const active = _trackEntities.filter(e => e.active);
   count.textContent = `${active.length} tracked ${active.length === 1 ? 'entity' : 'entities'}`;
 
   if (!_trackEntities.length) {
-    body.innerHTML = `<div class="empty"><div class="ei">↗</div><div>No entities tracked yet. Add one to start.</div></div>`;
+    body.innerHTML = `<div class="empty"><div class="ei">↗</div><div>No entities tracked yet. Click "+ Track New Entity" to start.</div></div>`;
     return;
   }
 
@@ -3642,7 +3683,7 @@ function renderTrackEntityList() {
   const rows = _trackEntities.map(e => {
     const lastRun = e.last_run_at ? e.last_run_at.split('T')[0] : '—';
     const nextRun = e.schedule !== 'manual' && e.next_run_at ? e.next_run_at.split('T')[0] : '—';
-    const status = e.active
+    const status  = e.active
       ? `<span style="color:#1a7a4a;font-weight:600">Active</span>`
       : `<span style="color:var(--muted)">Inactive</span>`;
     return `<tr>
@@ -3669,20 +3710,160 @@ function renderTrackEntityList() {
   </table>`;
 }
 
+// ── Add-entity search flow ─────────────────────────────────────────────────
+
+function showAddEntityFlow() {
+  document.getElementById('track-list-view').style.display   = 'none';
+  document.getElementById('track-trend-view').style.display  = 'none';
+  document.getElementById('track-add-flow').style.display    = '';
+  // Reset to step 1
+  ['te-name','te-city','te-state','te-specialty','te-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('te-schedule').value = 'monthly';
+  document.getElementById('te-aggregate').checked = true;
+  document.getElementById('te-step2').classList.add('hidden');
+  document.getElementById('te-step3').classList.add('hidden');
+  document.getElementById('te-search-err').classList.add('hidden');
+  document.getElementById('te-err').classList.add('hidden');
+  setTeType('hospital');
+  _teCandidates   = [];
+  _teSelected     = null;
+  _teResolvedCity = null;
+  _teResolvedState = null;
+  document.getElementById('te-name').focus();
+}
+
+function setTeType(type) {
+  _teType = type;
+  ['hospital','specialty'].forEach(t => {
+    document.getElementById('te-tg-' + t).classList.toggle('on', t === type);
+  });
+  document.getElementById('te-specialty-wrap').classList.toggle('hidden', type !== 'specialty');
+}
+
+async function runTeSearch() {
+  const errEl = document.getElementById('te-search-err');
+  errEl.classList.add('hidden');
+  const name  = document.getElementById('te-name').value.trim();
+  const city  = document.getElementById('te-city').value.trim();
+  const state = document.getElementById('te-state').value.trim().toUpperCase();
+  if (!name)                         return showErr(errEl, 'Please enter an organization name.');
+  if (!city)                         return showErr(errEl, 'Please enter a city.');
+  if (!state || state.length !== 2)  return showErr(errEl, 'Please enter a 2-letter state code.');
+
+  const btn = document.getElementById('te-search-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Searching…';
+  try {
+    const r = await api('/api/search/entity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, city, state }),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Search failed'));
+    const data      = await r.json();
+    _teCandidates   = data.candidates || [];
+    _teResolvedCity  = data.city  || city;
+    _teResolvedState = data.state || state;
+    showTeCandidates();
+  } catch(e) {
+    showErr(errEl, e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Search →';
+  }
+}
+
+function showTeCandidates() {
+  document.getElementById('te-step2').classList.remove('hidden');
+  document.getElementById('te-step3').classList.add('hidden');
+  _teSelected = null;
+
+  const container = document.getElementById('te-candidates');
+  const enteredName = document.getElementById('te-name').value.trim();
+  let html = '';
+
+  if (!_teCandidates.length) {
+    html += `<div style="color:var(--muted);font-size:13px;margin-bottom:10px">No Google Places results found. You can proceed with the name as entered.</div>`;
+  }
+
+  html += _teCandidates.map((c, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;gap:12px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px;color:var(--teal)">${c.name || ''}</div>
+        ${c.address ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${c.address}</div>` : ''}
+        <div style="margin-top:4px">
+          ${c.rating != null
+            ? `<span style="font-size:12px;color:var(--teal);font-weight:600">${c.rating.toFixed(1)}★</span>` +
+              (c.review_count ? ` <span style="font-size:11px;color:var(--muted)">${c.review_count.toLocaleString()} reviews</span>` : '')
+            : `<span style="font-size:11px;color:var(--muted)">No rating available</span>`}
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="selectTeCandidate(${i})">Select</button>
+    </div>`).join('');
+
+  html += `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--pale);border:1.5px dashed var(--border);border-radius:8px;margin-top:${_teCandidates.length ? '6' : '0'}px;gap:12px">
+      <div style="font-size:13px;color:var(--muted)">
+        ${_teCandidates.length ? 'Not the right match? Use:' : 'Proceed with:'}
+        <strong style="color:var(--teal)">${enteredName}</strong>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="selectTeCandidate(-1)">Use This Name</button>
+    </div>`;
+
+  container.innerHTML = html;
+}
+
+function selectTeCandidate(idx) {
+  const enteredName = document.getElementById('te-name').value.trim();
+  _teSelected = idx === -1
+    ? { name: enteredName, address: '', rating: null, review_count: null }
+    : (_teCandidates[idx] || { name: enteredName, address: '', rating: null, review_count: null });
+
+  document.getElementById('te-step3').classList.remove('hidden');
+  document.getElementById('te-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  const ratingLine = _teSelected.rating != null
+    ? ` <span style="font-size:12px;color:var(--teal);font-weight:600">${_teSelected.rating.toFixed(1)}★</span>` +
+      (_teSelected.review_count ? ` <span style="font-size:12px;color:var(--muted)">${_teSelected.review_count.toLocaleString()} reviews</span>` : '')
+    : '';
+  const addrLine = _teSelected.address
+    ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_teSelected.address}</div>` : '';
+
+  document.getElementById('te-selected-display').innerHTML = `
+    <div style="font-weight:700;font-size:15px;color:var(--teal)">${_teSelected.name}${ratingLine}</div>
+    ${addrLine}
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">${_teResolvedCity}, ${_teResolvedState}</div>`;
+}
+
+function teResetSearch() {
+  _teSelected = null;
+  _teCandidates = [];
+  document.getElementById('te-step2').classList.add('hidden');
+  document.getElementById('te-step3').classList.add('hidden');
+  document.getElementById('te-search-err').classList.add('hidden');
+  document.getElementById('te-err').classList.add('hidden');
+}
+
+// ── Trend view ─────────────────────────────────────────────────────────────
+
 async function loadEntityTrend(entityId) {
   _trackCurrentEntity = _trackEntities.find(e => e.id === entityId);
   if (!_trackCurrentEntity) return;
 
-  document.getElementById('track-list-view').style.display = 'none';
+  document.getElementById('track-list-view').style.display  = 'none';
+  document.getElementById('track-add-flow').style.display   = 'none';
   document.getElementById('track-trend-view').style.display = '';
-  document.getElementById('trend-entity-name').textContent = _trackCurrentEntity.entity_name;
-  document.getElementById('trend-entity-meta').textContent =
+  document.getElementById('trend-entity-name').textContent  = _trackCurrentEntity.entity_name;
+  document.getElementById('trend-entity-meta').textContent  =
     `${_trackCurrentEntity.city}, ${_trackCurrentEntity.state}` +
     (_trackCurrentEntity.specialty ? ` · ${_trackCurrentEntity.specialty}` : '') +
     ` · ${_trackCurrentEntity.schedule === 'manual' ? 'Manual collection' : _trackCurrentEntity.schedule + ' schedule'}`;
   document.getElementById('trend-run-status').textContent = '';
-  document.getElementById('trend-no-data').style.display = 'none';
-  document.getElementById('trend-charts').style.display = 'none';
+  document.getElementById('trend-no-data').style.display  = 'none';
+  document.getElementById('trend-charts').style.display   = 'none';
 
   try {
     const res = await _fetch(`/api/track/entities/${entityId}/trend`);
@@ -3694,7 +3875,8 @@ async function loadEntityTrend(entityId) {
 }
 
 function showTrackList() {
-  document.getElementById('track-list-view').style.display = '';
+  document.getElementById('track-list-view').style.display  = '';
+  document.getElementById('track-add-flow').style.display   = 'none';
   document.getElementById('track-trend-view').style.display = 'none';
   _trackCurrentEntity = null;
 }
@@ -3901,48 +4083,33 @@ async function toggleTrackActive(entityId, active) {
   await refreshTrackEntities();
 }
 
-function showAddEntityModal() {
-  ['te-name','te-city','te-state','te-specialty','te-notes'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  document.getElementById('te-schedule').value = 'monthly';
-  document.getElementById('te-aggregate').checked = true;
-  document.getElementById('te-err').classList.add('hidden');
-  document.getElementById('add-entity-modal').classList.remove('hidden');
-  document.getElementById('te-name').focus();
-}
-
-function closeAddEntityModal() {
-  document.getElementById('add-entity-modal').classList.add('hidden');
-}
-
 async function submitAddEntity() {
-  const name     = document.getElementById('te-name').value.trim();
-  const city     = document.getElementById('te-city').value.trim();
-  const state    = document.getElementById('te-state').value.trim();
-  const errEl    = document.getElementById('te-err');
-
-  if (!name || !city || !state) {
-    errEl.textContent = 'Name, city, and state are required.';
+  const errEl = document.getElementById('te-err');
+  if (!_teSelected) {
+    errEl.textContent = 'Please select an organization first.';
     errEl.classList.remove('hidden');
     return;
   }
   errEl.classList.add('hidden');
-
+  const specialty = _teType === 'specialty'
+    ? (document.getElementById('te-specialty').value.trim() || null)
+    : null;
   try {
     await _fetch('/api/track/entities', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        entity_name: name, city, state,
-        specialty: document.getElementById('te-specialty').value.trim() || null,
-        schedule:   document.getElementById('te-schedule').value,
-        aggregate:  document.getElementById('te-aggregate').checked,
-        notes:      document.getElementById('te-notes').value.trim(),
+        entity_name: _teSelected.name,
+        city:        _teResolvedCity,
+        state:       _teResolvedState,
+        specialty,
+        schedule:    document.getElementById('te-schedule').value,
+        aggregate:   document.getElementById('te-aggregate').checked,
+        notes:       document.getElementById('te-notes').value.trim(),
       }),
     });
-    closeAddEntityModal();
     await refreshTrackEntities();
+    showTrackList();
   } catch (e) {
     errEl.textContent = 'Failed to add entity — try again.';
     errEl.classList.remove('hidden');
