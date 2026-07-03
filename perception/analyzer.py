@@ -23,6 +23,7 @@ from .models import (
     Entity,
     GoogleFootprint,
     GoogleFrontDoor,
+    ImprovementSection,
     RankedProvider,
     SizeCategory,
     SystemAggregate,
@@ -144,6 +145,28 @@ _STRUCTURED_OUTPUT_TOOL = {
             },
             "top_recommendation": {"type": "string"},
             "practical_advice": {"type": "array", "items": {"type": "string"}},
+            "improvement_sections": {
+                "type": "array",
+                "description": (
+                    "The improvement actions grouped into logical sections. "
+                    "Standard sections (use these titles exactly where items fit): "
+                    "'Your Website (Technical & Content Fixes)' — things the owner controls on their own site; "
+                    "'Third-Party Listings & Profiles' — platforms they don't own (Google, Healthgrades, Yelp, etc.); "
+                    "'Reputation, Press & Community (Long-Term Training Data)' — Wikipedia, Reddit, press, awards. "
+                    "Create additional sections with a clear title and one-line description for items that don't fit those three. "
+                    "Maintain globally sequential item numbers across all sections."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Section title (without leading number, e.g. 'Your Website (Technical & Content Fixes)')"},
+                        "description": {"type": "string", "description": "One-line description of the section's scope, e.g. 'Things you control directly on your own site'"},
+                        "items": {"type": "array", "items": {"type": "string"}, "description": "The action items in this section"},
+                    },
+                    "required": ["title", "description", "items"],
+                    "additionalProperties": False,
+                },
+            },
             "disclaimer": {"type": "string"},
             "rankings": {
                 "type": "array",
@@ -528,12 +551,21 @@ def analyze_location(
         "INDIVIDUAL REPORT — field mapping:\n"
         "• market_overview = the full text of the '### Organization Overview' section\n"
         "• ai_visibility_verdict = the '### AI Visibility Verdict' section\n"
-        "• top_recommendation = the COMPLETE 2–3 paragraph prose of the "
-        "'### AI Visibility Assessment' section. Extract ALL paragraphs of analysis "
-        "text that appear after that heading. Do NOT put the entity name or any "
-        "sub-heading here — only the analysis paragraphs (joined with newlines).\n"
-        "• practical_advice = the bullet points from '### Key Takeaways'\n\n"
-    ) if individual_report else ""
+        "• top_recommendation = the COMPLETE introductory prose of the "
+        "'### AI Visibility Assessment & Improvement Opportunities' section — the "
+        "2–3 paragraphs of analysis text that appear BEFORE the grouped improvement sections. "
+        "Do NOT include any section headers or bullet items here — only the prose paragraphs.\n"
+        "• improvement_sections = the grouped sections that follow the prose in "
+        "'### AI Visibility Assessment & Improvement Opportunities'. For each bold-headed "
+        "section (e.g. '**1. Your Website...**'), capture: title (strip the leading number), "
+        "description (the line below the header), items (the bulleted action items).\n"
+        "• practical_advice = empty array []\n\n"
+    ) if individual_report else (
+        "• improvement_sections = the grouped sections from '### AI Visibility Assessment "
+        "& Improvement Opportunities'. For each labeled section in that part, capture: "
+        "title (strip any leading number), description (the line below the header), "
+        "items (the bulleted action items in that section). Leave practical_advice as [].\n\n"
+    )
     extraction_prompt = (
         "Extract the structured data from the completed market analysis report below "
         "by calling submit_analysis_result. Include every provider in the rankings.\n\n"
@@ -658,6 +690,15 @@ def analyze_location(
         coverage_note=coverage_note_text,
         top_recommendation=_clean(structured_data.get("top_recommendation", "")),
         practical_advice=[_clean(a) for a in structured_data.get("practical_advice", []) if isinstance(a, str)],
+        improvement_sections=[
+            ImprovementSection(
+                title=_clean(s.get("title", "")),
+                description=_clean(s.get("description", "")),
+                items=[_clean(i) for i in s.get("items", []) if isinstance(i, str)],
+            )
+            for s in structured_data.get("improvement_sections", [])
+            if isinstance(s, dict) and s.get("title")
+        ],
         disclaimer=disclaimer,
         rankings=rankings,
         report_markdown=report_markdown,

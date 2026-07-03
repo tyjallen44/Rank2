@@ -1056,7 +1056,21 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
             + _rankings_section(unclassified, "Additional Hospitals", "Size not classified")
         )
 
-    advice_items   = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
+    def _advice_html() -> str:
+        if result.improvement_sections:
+            parts = []
+            for i, sec in enumerate(result.improvement_sections, 1):
+                items_li = "\n".join(f"<li>{_e(item)}</li>" for item in sec.items)
+                parts.append(
+                    f'<div class="advice-group">'
+                    f'<div class="advice-group-title">{i}. {_e(sec.title)}</div>'
+                    f'<div class="advice-group-desc">{_e(sec.description)}</div>'
+                    f'<ol>{items_li}</ol>'
+                    f'</div>'
+                )
+            return "\n".join(parts)
+        flat = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
+        return f"<ol>{flat}</ol>"
     if brand_cfg.get("logo_html"):
         logo_tag = brand_cfg["logo_html"]
     elif brand_cfg.get("logo_path") and brand_cfg["logo_path"].exists():
@@ -1600,12 +1614,26 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
     /* ── Practical advice ───────────────────────────── */
     .advice {{ margin-bottom: 22px; }}
-    .advice ol {{ padding-left: 18px; }}
+    .advice ol {{ padding-left: 18px; margin-top: 0; }}
     .advice li {{
       font-size: 8.5pt;
       margin-bottom: 6px;
       color: {_TEAL};
       line-height: 1.5;
+    }}
+    .advice-group {{ margin-bottom: 18px; }}
+    .advice-group-title {{
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: {_TEAL};
+      margin: 14px 0 2px;
+      letter-spacing: 0.1px;
+    }}
+    .advice-group-desc {{
+      font-size: 8pt;
+      color: #555;
+      font-style: italic;
+      margin-bottom: 5px;
     }}
 
     /* ── Patient Voice ─────────────────────────────── */
@@ -1823,7 +1851,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
   <div class="advice">
     <div class="section-title">{advice_title}</div>
-    <ol>{advice_items}</ol>
+    {_advice_html()}
   </div>
 
   <div class="disclaimer">

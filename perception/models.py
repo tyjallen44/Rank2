@@ -171,6 +171,13 @@ class RankedProvider(BaseModel):
     teaching_status: Optional[str] = None         # "major" / "minor" / "not_teaching"
 
 
+class ImprovementSection(BaseModel):
+    """A labeled group of improvement action items within the AI Visibility Assessment."""
+    title: str
+    description: str
+    items: list[str] = Field(default_factory=list)
+
+
 class AnalysisResult(BaseModel):
     """Structured result from a Claude-powered market analysis."""
     run_id: str
@@ -190,6 +197,7 @@ class AnalysisResult(BaseModel):
     coverage_note: str = ""                # "covered N of M registry facilities"
     top_recommendation: str = ""
     practical_advice: list[str] = Field(default_factory=list)
+    improvement_sections: list[ImprovementSection] = Field(default_factory=list)
     disclaimer: str = ""
     rankings: list[RankedProvider] = Field(default_factory=list)
     report_markdown: str = ""              # full narrative report text

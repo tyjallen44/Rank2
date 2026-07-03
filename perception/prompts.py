@@ -290,7 +290,25 @@ U.S. News, and What AI Currently Says.]
 community hospital is the better choice for simpler needs.]
 
 ### AI Visibility Assessment & Improvement Opportunities
-[A thorough, action-oriented assessment of this market's AI visibility gaps. Begin with 2–3 sentences on the overall posture. Then provide a comprehensive, uncapped list of specific improvement actions. For each gap, specify: (1) the current state, (2) the concrete action to take, (3) which channel it primarily affects — training-data presence (Wikipedia, Reddit, forums, long-lived web content) vs. retrieval-time signals (Google listings, CMS pages, accreditation sites, hospital website crawlability). Cover all applicable gaps: Wikipedia/Wikidata presence, Google listing hygiene, Reddit/forum monitoring, website machine-readability (Schema.org, llms.txt), CMS data surfacing, credential documentation, Yelp/Facebook listings, Nursing Home Compare (if SNF/LTC present), and any provider-specific issues found. Frame every recommendation as improving the accuracy and machine-readability of the public evidence record — never as "gaming" AI outputs. Do NOT cap at 5 items — list everything material.]
+[Begin with 2–3 sentences on the overall posture of this market's AI visibility. Then list ALL specific improvement actions grouped under these labeled sections. Use the three standard section headers below wherever items fit, and add additional sections with a descriptive title and one-line description for any items that don't fit:
+
+**1. Your Website (Technical & Content Fixes)**
+*Things you control directly on your own site:*
+#N – [item with: current gap · concrete action · channel (retrieval-time)]
+
+**2. Third-Party Listings & Profiles**
+*Claiming and cleaning up your presence on platforms you don't own:*
+#N – [item with: current gap · concrete action · channel (retrieval-time)]
+
+**3. Reputation, Press & Community (Long-Term Training Data)**
+*Building the durable public record that AI models learn from:*
+#N – [item with: current gap · concrete action · channel (training-data)]
+
+[Additional Section Title if needed]
+*[One-line description of what this section covers]:*
+#N – [item...]
+
+Maintain globally sequential item numbers (#1, #2, #3...) across all sections. Cover every material gap: Wikipedia/Wikidata, Google listing hygiene, Reddit/forum monitoring, website machine-readability (Schema.org, llms.txt), CMS data surfacing, credential documentation, Yelp/Facebook listings, Nursing Home Compare (if SNF/LTC present), and any provider-specific issues. Frame every item as improving the accuracy and machine-readability of the public record. Do NOT cap the total — include everything material.]
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits; verify with insurer and treating \
@@ -415,7 +433,25 @@ and What AI Currently Says.]
 hospital-affiliated and why that matters.]
 
 ### AI Visibility Assessment & Improvement Opportunities
-[A thorough, action-oriented assessment of this market's AI visibility gaps. Begin with 2–3 sentences on the overall posture. Then provide a comprehensive, uncapped list of specific improvement actions. For each gap, specify: (1) the current state, (2) the concrete action to take, (3) which channel it primarily affects — training-data presence (Wikipedia, Reddit, forums, long-lived web content) vs. retrieval-time signals (Google listings, CMS pages, accreditation sites, practice website crawlability). Cover all applicable gaps: Wikipedia/Wikidata presence, Google listing hygiene, Reddit/forum monitoring, website machine-readability (Schema.org, llms.txt), CMS and accreditation data surfacing, physician credential visibility (NPI, ABMS, state board), Yelp/Facebook listings, and any practice-specific issues. Frame every recommendation as improving the accuracy and machine-readability of the public evidence record. Do NOT cap at 5 items — list everything material.]
+[Begin with 2–3 sentences on the overall posture of this market's AI visibility. Then list ALL specific improvement actions grouped under these labeled sections. Use the three standard section headers below wherever items fit, and add additional sections with a descriptive title and one-line description for any items that don't fit:
+
+**1. Your Website (Technical & Content Fixes)**
+*Things you control directly on your own site:*
+#N – [item with: current gap · concrete action · channel (retrieval-time)]
+
+**2. Third-Party Listings & Profiles**
+*Claiming and cleaning up your presence on platforms you don't own:*
+#N – [item with: current gap · concrete action · channel (retrieval-time)]
+
+**3. Reputation, Press & Community (Long-Term Training Data)**
+*Building the durable public record that AI models learn from:*
+#N – [item with: current gap · concrete action · channel (training-data)]
+
+[Additional Section Title if needed]
+*[One-line description of what this section covers]:*
+#N – [item...]
+
+Maintain globally sequential item numbers (#1, #2, #3...) across all sections. Cover every material gap: Wikipedia/Wikidata, Google listing hygiene, Reddit/forum monitoring, website machine-readability (Schema.org, llms.txt), CMS and accreditation data surfacing, physician credential visibility (NPI, ABMS, state board), Yelp/Facebook listings, and any practice-specific issues. Frame every item as improving the accuracy and machine-readability of the public record. Do NOT cap the total — include everything material.]
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits; verify with insurer and treating \
@@ -526,16 +562,33 @@ Write 2–3 paragraphs covering: where {entity_name} stands in its AI visibility
 the single most important lever for improving how it surfaces to AI assistants, \
 and what a decision-maker should understand about the gap between its clinical \
 record and its current digital presence. Write as a senior analyst advising leadership. \
-Then provide a comprehensive, uncapped bulleted list of specific improvement actions. \
-For each item: state the current gap, the concrete action to take, and whether it \
-primarily targets training-data presence (Wikipedia, Reddit, forums, long-lived web content) \
-or retrieval-time signals (Google listings, CMS pages, accreditation sites, website crawlability). \
-Cover every material gap found: Wikipedia/Wikidata article status, Google Business Profile hygiene \
-across all locations, Reddit and community forum sentiment, website machine-readability \
-(Schema.org Hospital/Physician markup, llms.txt, PDF-buried vs. crawlable HTML), CMS data surfacing, \
-credential and accreditation documentation visibility, Yelp/Facebook listings, \
-Nursing Home Compare (if SNF/LTC operations exist), and any entity-specific findings. \
-Do NOT cap the list — include every actionable item found.]
+Then list ALL specific improvement actions grouped under these labeled sections. \
+Use the three standard section headers below wherever items fit, and add additional \
+sections with a descriptive title and one-line description for any items that don't fit:
+
+**1. Your Website (Technical & Content Fixes)**
+*Things you control directly on your own site:*
+#N – [item with: current gap · concrete action · channel (retrieval-time)]
+
+**2. Third-Party Listings & Profiles**
+*Claiming and cleaning up your presence on platforms you don't own:*
+#N – [item with: current gap · concrete action · channel (retrieval-time)]
+
+**3. Reputation, Press & Community (Long-Term Training Data)**
+*Building the durable public record that AI models learn from:*
+#N – [item with: current gap · concrete action · channel (training-data)]
+
+[Additional Section Title if needed]
+*[One-line description of what this section covers]:*
+#N – [item...]
+
+Maintain globally sequential item numbers (#1, #2, #3...) across all sections. Cover every \
+material gap found: Wikipedia/Wikidata article status, Google Business Profile hygiene across \
+all locations, Reddit and community forum sentiment, website machine-readability (Schema.org \
+markup, llms.txt, PDF-buried vs. crawlable HTML), CMS data surfacing, credential and \
+accreditation documentation visibility, Yelp/Facebook listings, Nursing Home Compare \
+(if SNF/LTC operations exist), and any entity-specific findings. Do NOT cap the total — \
+include every actionable item found.]
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits; verify with insurer and treating \
