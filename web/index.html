@@ -3660,7 +3660,7 @@ async function loadTrackPage() {
 async function refreshTrackEntities() {
   const body = document.getElementById('track-entities-body');
   try {
-    const res = await _fetch('/api/track/entities');
+    const res = await api('/api/track/entities');
     _trackEntities = await res.json();
     renderTrackEntityList();
   } catch (e) {
@@ -3866,7 +3866,7 @@ async function loadEntityTrend(entityId) {
   document.getElementById('trend-charts').style.display   = 'none';
 
   try {
-    const res = await _fetch(`/api/track/entities/${entityId}/trend`);
+    const res = await api(`/api/track/entities/${entityId}/trend`);
     const { data_points } = await res.json();
     renderTrendCharts(data_points);
   } catch (e) {
@@ -4050,13 +4050,13 @@ async function triggerTrackRun() {
   btn.disabled = true;
   status.textContent = 'Collecting data…';
   try {
-    const res = await _fetch(`/api/track/entities/${_trackCurrentEntity.id}/run`, { method: 'POST' });
+    const res = await api(`/api/track/entities/${_trackCurrentEntity.id}/run`, { method: 'POST' });
     const { job_id } = await res.json();
     status.textContent = `Job ${job_id.slice(0,8)}… running`;
     // Poll until done then reload trend
     const poll = setInterval(async () => {
       try {
-        const jr = await _fetch(`/api/jobs/${job_id}`);
+        const jr = await api(`/api/jobs/${job_id}`);
         const jd = await jr.json();
         if (jd.status === 'done' || jd.status === 'error') {
           clearInterval(poll);
@@ -4075,7 +4075,7 @@ async function triggerTrackRun() {
 }
 
 async function toggleTrackActive(entityId, active) {
-  await _fetch(`/api/track/entities/${entityId}`, {
+  await api(`/api/track/entities/${entityId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ active }),
@@ -4095,7 +4095,7 @@ async function submitAddEntity() {
     ? (document.getElementById('te-specialty').value.trim() || null)
     : null;
   try {
-    await _fetch('/api/track/entities', {
+    await api('/api/track/entities', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
