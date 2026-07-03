@@ -1824,6 +1824,15 @@ const _BRAND_WORDMARKS = {
   extension2: {wordmark: 'Ashleigh<span> Jane</span>',     sub: 'Market Intelligence'},
 };
 
+// AJ monogram tile (linen bg + walnut circle + AJ) — used in sidebar for extension2
+const _AJ_TILE_SRC = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+  '<rect width="100" height="100" rx="18" fill="#F6F1E9"/>' +
+  '<circle cx="50" cy="50" r="40" fill="none" stroke="#3E332A" stroke-width="1.5"/>' +
+  '<text x="50" y="63" text-anchor="middle" font-family="Helvetica Neue,Arial,sans-serif"' +
+  ' font-weight="700" font-size="36" letter-spacing="-1.2" fill="#3E332A">AJ</text></svg>'
+);
+
 function applyBrand(brand) {
   _brand = brand || 'original';
   if (_brand === 'original') {
@@ -1835,6 +1844,29 @@ function applyBrand(brand) {
   document.querySelectorAll('.wordmark').forEach(el => el.innerHTML = cfg.wordmark);
   const sidebarSub = document.querySelector('#sidebar .sb-logo .sub');
   if (sidebarSub) sidebarSub.textContent = cfg.sub;
+
+  // Extension 2: inject/remove the AJ monogram tile above sidebar + login wordmarks
+  document.querySelectorAll('.brand-mono-img').forEach(el => el.remove());
+  if (_brand === 'extension2') {
+    const targets = [
+      document.querySelector('#sidebar .sb-logo'),
+      document.querySelector('#login-screen .login-logo'),
+      document.querySelector('#forgot-password-screen .login-logo'),
+      document.querySelector('#set-password-screen .login-logo'),
+    ];
+    targets.forEach(container => {
+      if (!container) return;
+      const img = document.createElement('img');
+      img.className = 'brand-mono-img';
+      img.src = _AJ_TILE_SRC;
+      img.alt = 'AJ';
+      const isSidebar = container.closest('#sidebar');
+      img.style.cssText = isSidebar
+        ? 'height:36px;display:block;margin-bottom:10px'
+        : 'height:44px;display:block;margin:0 auto 12px';
+      container.prepend(img);
+    });
+  }
 }
 
 function doGoogleLogin() {

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="AJ monogram, tile">
+  <rect width="100" height="100" rx="18" fill="#F6F1E9"></rect>
+  <circle cx="50" cy="50" r="40" fill="none" stroke="#3E332A" stroke-width="1.5"></circle>
+  <text x="50" y="63" text-anchor="middle" font-family="&#39;Helvetica Neue&#39;, Arial, sans-serif" font-weight="700" font-size="36" letter-spacing="-1.2" fill="#3E332A">AJ</text>
+</svg>

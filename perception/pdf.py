@@ -43,13 +43,8 @@ _BRAND_CONFIGS: dict[str, dict] = {
         "primary":   "#3E332A",   # espresso/walnut
         "pale":      "#F6F1E9",   # linen
         "accent":    "#8C9A82",   # dusty sage
-        "logo_html": (
-            '<div class="cover-logo-wordmark">'
-            '<span style="font-size:7pt;font-weight:400;letter-spacing:0.3em;display:block;opacity:0.8">ASHLEIGH</span>'
-            '<span style="font-size:22pt;font-weight:700;letter-spacing:0.05em;display:block">Jane</span>'
-            '<span style="display:block;height:1px;background:#8C9A82;width:60px;margin-top:6px"></span>'
-            '</div>'
-        ),
+        "logo_html": None,        # resolved lazily from logo_path below
+        "logo_path": Path(__file__).parent / "assets" / "aj-monogram-tile.svg",
         "css_overrides": (
             "    .accent-bar { background: #8C9A82; }\n"
             "    .cover-meta { border-top-color: rgba(140,154,130,0.3); }\n"
@@ -1015,7 +1010,8 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     location        = _e(result.location)
     specialty_label = _e(result.specialty or "Hospital Market")
     date_str        = result.generated_at.strftime("%B %d, %Y")
-    logo_uri        = None if brand_cfg.get("logo_html") else _logo_data_uri()
+    _has_custom_logo = brand_cfg.get("logo_html") or brand_cfg.get("logo_path")
+    logo_uri         = None if _has_custom_logo else _logo_data_uri()
 
     if result.individual_report and result.teaser_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
@@ -1063,6 +1059,14 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     advice_items   = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
     if brand_cfg.get("logo_html"):
         logo_tag = brand_cfg["logo_html"]
+    elif brand_cfg.get("logo_path") and brand_cfg["logo_path"].exists():
+        _lp   = brand_cfg["logo_path"]
+        _ldat = base64.b64encode(_lp.read_bytes()).decode()
+        _luri = f"data:image/svg+xml;base64,{_ldat}"
+        logo_tag = (
+            f'<img src="{_luri}" alt="Logo"'
+            f' style="height:40px;display:block;margin-bottom:30px">'
+        )
     else:
         logo_tag = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
 
