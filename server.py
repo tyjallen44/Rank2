@@ -959,7 +959,7 @@ async def track_list(_: dict = Depends(require_admin)):
 
 @app.post("/api/track/entities")
 async def track_create(req: TrackEntityRequest, payload: dict = Depends(require_admin)):
-    from perception.db import init_db, create_tracked_entity
+    from perception.db import init_db, create_tracked_entity, mark_tracked_entity_ran
     if req.schedule not in ("monthly", "weekly", "manual"):
         raise HTTPException(400, "schedule must be monthly, weekly, or manual")
     init_db()
@@ -974,9 +974,25 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(require_
         created_by=created_by,
         notes=req.notes,
     )
+    # Fire initial collection run immediately so the first data point is captured now.
+    brand = payload.get("brand", "original")
+    job_id = _new_job("admin", brand)
+    _jobs[job_id]["entity_name"]        = entity["entity_name"]
+    _jobs[job_id]["individual_report"]  = True
+    _jobs[job_id]["skip_pdf"]           = True
+    _jobs[job_id]["patient_perspective"] = False
+    _jobs[job_id]["teaser_report"]      = False
+    _jobs[job_id]["zip_code"]           = None
+    _pool.submit(
+        _job_run_single, job_id,
+        entity["city"], entity["state"], entity.get("specialty"),
+        entity.get("aggregate", True), None,
+    )
+    mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
     for k in ("last_run_at", "next_run_at", "created_at"):
         if entity and entity.get(k):
             entity[k] = str(entity[k])
+    entity["initial_job_id"] = job_id
     return entity
 
 

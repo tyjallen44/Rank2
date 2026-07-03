@@ -3680,9 +3680,11 @@ function renderTrackEntityList() {
   }
 
   const scheduleLabel = { monthly: 'Monthly', weekly: 'Weekly', manual: 'Manual' };
+  const dateOnly = v => v ? v.substring(0, 10) : '—';
   const rows = _trackEntities.map(e => {
-    const lastRun = e.last_run_at ? e.last_run_at.split('T')[0] : '—';
-    const nextRun = e.schedule !== 'manual' && e.next_run_at ? e.next_run_at.split('T')[0] : '—';
+    const lastRun = dateOnly(e.last_run_at);
+    const nextRun = e.schedule !== 'manual' ? dateOnly(e.next_run_at) : '—';
+    const runs    = e.run_count != null ? e.run_count : '—';
     const status  = e.active
       ? `<span style="color:#1a7a4a;font-weight:600">Active</span>`
       : `<span style="color:var(--muted)">Inactive</span>`;
@@ -3693,6 +3695,7 @@ function renderTrackEntityList() {
       <td>${scheduleLabel[e.schedule] || e.schedule}</td>
       <td>${lastRun}</td>
       <td>${nextRun}</td>
+      <td style="text-align:center">${runs}</td>
       <td>${status}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="loadEntityTrend('${e.id}')">View</button>
@@ -3704,7 +3707,7 @@ function renderTrackEntityList() {
   body.innerHTML = `<table class="data-table">
     <thead><tr>
       <th>Entity</th><th>Location</th><th>Schedule</th>
-      <th>Last Run</th><th>Next Run</th><th>Status</th><th>Actions</th>
+      <th>Last Run</th><th>Next Run</th><th style="text-align:center">Runs</th><th>Status</th><th>Actions</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;

@@ -355,9 +355,14 @@ def get_tracked_entity(entity_id: str) -> dict | None:
 
 def list_tracked_entities() -> list[dict]:
     con = get_connection()
-    rows = con.execute(
-        "SELECT * FROM tracked_entities ORDER BY created_at DESC"
-    ).fetchall()
+    rows = con.execute("""
+        SELECT te.*,
+               (SELECT COUNT(*) FROM analysis_runs a
+                WHERE LOWER(a.entity_name) = LOWER(te.entity_name)
+                  AND a.individual_report = TRUE) AS run_count
+        FROM tracked_entities te
+        ORDER BY te.created_at DESC
+    """).fetchall()
     cols = [d[0] for d in con.description]
     con.close()
     return [dict(zip(cols, r)) for r in rows]
