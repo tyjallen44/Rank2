@@ -1056,7 +1056,22 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
             + _rankings_section(unclassified, "Additional Hospitals", "Size not classified")
         )
 
+    _MARKET_ADVICE_CTA = (
+        "The recommendations in this section are most valuable when focused on a "
+        "single organization. This report covers multiple providers across a market — "
+        "to receive a personalized AI Visibility Improvement Plan for your organization, "
+        "contact the RLDatix team for an Individual Deep-Dive Report. An individual "
+        "report delivers a prioritized, action-ready roadmap specific to your digital "
+        "footprint, naming exactly what to fix, where to fix it, and which AI visibility "
+        "channel each action improves. Reach us at "
+        "<a href='mailto:info@rldatix.com' style='color:#2aa198'>info@rldatix.com</a> "
+        "or visit <a href='https://www.rldatix.com' style='color:#2aa198'>rldatix.com</a> "
+        "to get started."
+    )
+
     def _advice_html() -> str:
+        if not result.individual_report:
+            return f'<p style="font-size:9pt;line-height:1.6;color:#444">{_MARKET_ADVICE_CTA}</p>'
         if result.improvement_sections:
             parts = []
             for i, sec in enumerate(result.improvement_sections, 1):
@@ -1118,7 +1133,11 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     # Section title overrides for individual reports
     overview_title      = "Organization Overview"      if result.individual_report else "Market Overview"
     recommendation_title = "AI Visibility Assessment"   if result.individual_report else "Top Recommendation"
-    advice_title        = "AI Visibility Assessment & Improvement Opportunities"
+    advice_title        = (
+        "AI Visibility Assessment & Improvement Opportunities"
+        if result.individual_report
+        else "Improve Your AI Visibility"
+    )
 
     def _paras(text: str) -> str:
         return "".join(f"<p>{_e(para.strip())}</p>" for para in (text or "").split("\n") if para.strip())
