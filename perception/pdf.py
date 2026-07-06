@@ -1063,10 +1063,9 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         "contact the RLDatix team for an Individual Deep-Dive Report. An individual "
         "report delivers a prioritized, action-ready roadmap specific to your digital "
         "footprint, naming exactly what to fix, where to fix it, and which AI visibility "
-        "channel each action improves. Reach us at "
-        "<a href='mailto:info@rldatix.com' style='color:#2aa198'>info@rldatix.com</a> "
-        "or visit <a href='https://www.rldatix.com' style='color:#2aa198'>rldatix.com</a> "
-        "to get started."
+        "channel each action improves. Call us at 801.998.2830 or "
+        "<a href='https://www.rldatix.com/en-nam/book-a-demo/' style='color:#2aa198'>"
+        "Get Your Report</a>."
     )
 
     def _advice_html() -> str:
