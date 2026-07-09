@@ -404,7 +404,7 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
         )
         job["status"] = "done"
         job["result"] = {
-            "run_id": result_a.run_id,
+            "run_id": job_id,          # use job_id so download URL is /api/compare/{job_id}/pdf
             "location": f"{result_a.entity_name} vs {result_b.entity_name}",
             "specialty": result_a.specialty,
             "provider_count": 2,
@@ -425,6 +425,20 @@ async def start_comparison(req: CompareRequest, payload: dict = Depends(get_curr
     job_id = _new_job(role, brand)
     _pool.submit(_job_run_comparison, job_id, req.dict())
     return {"job_id": job_id}
+
+
+@app.get("/api/compare/{job_id}/pdf")
+async def download_comparison_pdf(job_id: str, _: str = Depends(require_auth)):
+    job = _jobs.get(job_id)
+    if not job or job.get("status") != "done":
+        raise HTTPException(404, "Comparison report not found")
+    pdf_path = job.get("result", {}).get("pdf_path")
+    if not pdf_path:
+        raise HTTPException(404, "PDF not available")
+    pdf = Path(pdf_path)
+    if not pdf.exists():
+        raise HTTPException(404, "PDF file not found on disk")
+    return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
 
 
 @app.get("/api/jobs/{job_id}")

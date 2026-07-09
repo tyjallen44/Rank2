@@ -3177,22 +3177,22 @@ function onSSE(ev) {
 }
 
 function showSingleDone(r) {
-  document.getElementById('done-sub').textContent = `${r.provider_count || 0} providers analyzed`;
-  document.getElementById('done-body').innerHTML = `
-    <div class="stat-row">
-      <div class="stat-box">
-        <div class="stat-val">${r.provider_count || 0}</div>
-        <div class="stat-lbl">Providers Ranked</div>
-      </div>
-    </div>`;
+  const subText = r.comparison ? 'Comparison report ready' : `${r.provider_count || 0} providers analyzed`;
+  document.getElementById('done-sub').textContent = subText;
+  document.getElementById('done-body').innerHTML = r.comparison
+    ? `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`
+    : `<div class="stat-row"><div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Providers Ranked</div></div></div>`;
   const backLabel = _lastPage === 'patient'   ? 'New Patient Perspective'
     : _lastPage === 'individual' ? 'New Individual Report'
     : _lastPage === 'compare'   ? 'New Comparison'
     : 'New Market Research';
+  const dlUrl = r.comparison
+    ? `/api/compare/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
+    : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
   document.getElementById('done-actions').innerHTML = `
-    <button class="btn btn-gold" onclick="dlPdf('${r.run_id}')">⬇ Download PDF</button>
+    <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download PDF</button>
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
-    <button class="btn btn-ghost btn-sm" onclick="navigate('history')">History</button>`;
+    ${r.comparison ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
   document.getElementById('prog-done').classList.remove('hidden');
 }
 
