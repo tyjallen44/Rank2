@@ -904,11 +904,11 @@ class FeedbackActionRequest(BaseModel):
     action: str
 
 class FeedbackEditRequest(BaseModel):
-    title:  str | None = None
-    type:   str | None = None
-    body:   str | None = None
-    action: str | None = None
-    notes:  str | None = None
+    title:  Optional[str] = None
+    type:   Optional[str] = None
+    body:   Optional[str] = None
+    action: Optional[str] = None
+    notes:  Optional[str] = None
 
 @app.post("/api/feedback")
 async def submit_feedback(req: FeedbackSubmitRequest, payload: dict = Depends(get_current_user_payload)):
