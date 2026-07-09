@@ -2911,6 +2911,7 @@ let _feedbackSortField = 'date';
 let _feedbackSortDir = 'desc';
 let _feedbackSearch = '';
 let _feedbackExpanded = null;
+let _feedbackEditing = null;
 
 async function loadFeedback() {
   const el = document.getElementById('feedback-body');
@@ -2975,7 +2976,8 @@ function feedbackSearch(val) {
 }
 
 function toggleFeedbackDetail(id) {
-  _feedbackExpanded = _feedbackExpanded === id ? null : id;
+  if (_feedbackEditing === id) { _feedbackEditing = null; _feedbackExpanded = null; }
+  else _feedbackExpanded = _feedbackExpanded === id ? null : id;
   renderFeedback();
 }
 
@@ -2995,6 +2997,42 @@ async function updateFeedbackAction(id, action) {
   }
 }
 
+function startEditFeedback(id) {
+  _feedbackEditing = id;
+  _feedbackExpanded = id;
+  renderFeedback();
+  // focus title field after render
+  setTimeout(() => { const el = document.getElementById('fb-edit-title-' + id); if (el) el.focus(); }, 50);
+}
+
+function cancelEditFeedback() {
+  _feedbackEditing = null;
+  renderFeedback();
+}
+
+async function saveEditFeedback(id) {
+  const title  = document.getElementById('fb-edit-title-'  + id)?.value.trim();
+  const type   = document.getElementById('fb-edit-type-'   + id)?.value;
+  const body   = document.getElementById('fb-edit-body-'   + id)?.value.trim();
+  const action = document.getElementById('fb-edit-action-' + id)?.value;
+  const notes  = document.getElementById('fb-edit-notes-'  + id)?.value.trim();
+  if (!title || !body) { alert('Title and details are required.'); return; }
+  try {
+    const r = await api(`/api/feedback/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title, type, body, action, notes})
+    });
+    if (!r.ok) throw new Error('Save failed');
+    const item = _feedbackItems.find(f => f.id === id);
+    if (item) { item.title = title; item.type = type; item.body = body; item.action = action; item.notes = notes || ''; }
+    _feedbackEditing = null;
+    renderFeedback();
+  } catch(e) {
+    alert('Failed to save: ' + e.message);
+  }
+}
+
 function renderFeedback() {
   const searchWasFocused = document.activeElement && document.activeElement.id === 'feedback-search';
   const el = document.getElementById('feedback-body');
@@ -3006,13 +3044,15 @@ function renderFeedback() {
         f.title.toLowerCase().includes(q) ||
         f.body.toLowerCase().includes(q) ||
         f.type.toLowerCase().includes(q) ||
-        (f.submitted_by || '').toLowerCase().includes(q)
+        (f.submitted_by || '').toLowerCase().includes(q) ||
+        String(f.number || '').includes(q)
       )
     : _feedbackItems.slice();
 
   items.sort((a, b) => {
     let va, vb;
-    if      (_feedbackSortField === 'date')         { va = a.submitted_at; vb = b.submitted_at; }
+    if      (_feedbackSortField === 'number')       { va = a.number || 0; vb = b.number || 0; }
+    else if (_feedbackSortField === 'date')         { va = a.submitted_at; vb = b.submitted_at; }
     else if (_feedbackSortField === 'title')        { va = a.title.toLowerCase(); vb = b.title.toLowerCase(); }
     else if (_feedbackSortField === 'type')         { va = a.type; vb = b.type; }
     else if (_feedbackSortField === 'submitted_by') { va = (a.submitted_by || '').toLowerCase(); vb = (b.submitted_by || '').toLowerCase(); }
@@ -3034,17 +3074,7 @@ function renderFeedback() {
 
   const actionLabel = a => ({pending: '—', fixed: 'Fixed', completed: 'Completed', accepted: 'Accepted', rejected: 'Rejected'})[a] || '—';
   const _doneSt = new Set(['fixed', 'completed']);
-
-  const actionCell = (id, current) => _role === 'admin'
-    ? `<select onchange="updateFeedbackAction('${id}',this.value)" onclick="event.stopPropagation()"
-         style="font-size:12px;padding:3px 6px;border:1px solid var(--pale);border-radius:4px;background:#fff;cursor:pointer;color:var(--ink)">
-         <option value="pending"   ${current==='pending'   ?'selected':''}>—</option>
-         <option value="accepted"  ${current==='accepted'  ?'selected':''}>Accepted</option>
-         <option value="fixed"     ${current==='fixed'     ?'selected':''}>Fixed</option>
-         <option value="completed" ${current==='completed' ?'selected':''}>Completed</option>
-         <option value="rejected"  ${current==='rejected'  ?'selected':''}>Rejected</option>
-       </select>`
-    : `<span style="font-size:13px;color:var(--muted)">${actionLabel(current)}</span>`;
+  const COLS = 8;
 
   if (!_feedbackItems.length) {
     el.innerHTML = `
@@ -3066,12 +3096,14 @@ function renderFeedback() {
     <div class="card" style="padding:0;overflow:hidden">
       <table class="tbl">
         <thead><tr>
+          ${th('#','number')}
           ${th('Title','title')}
           ${th('Type','type')}
           ${th('Submitted By','submitted_by')}
           ${th('Date','date')}
           ${th('Action','action')}
           <th style="width:24px"></th>
+          ${_role === 'admin' ? '<th style="width:60px"></th>' : ''}
         </tr></thead>
         <tbody>
           ${(() => {
@@ -3079,30 +3111,68 @@ function renderFeedback() {
             const done   = items.filter(f =>  _doneSt.has(f.action));
             const renderRow = f => {
               const expanded = _feedbackExpanded === f.id;
+              const editing  = _feedbackEditing  === f.id;
               const dateStr  = (f.submitted_at || '').slice(0, 10) || '—';
+              const actionOpts = ['pending','accepted','fixed','completed','rejected'];
+              const actionNames = {pending:'—',accepted:'Accepted',fixed:'Fixed',completed:'Completed',rejected:'Rejected'};
+
+              const detailRow = editing
+                ? `<tr><td colspan="${COLS}" style="background:#f0f7f7;padding:20px;border-top:1px solid var(--pale)" onclick="event.stopPropagation()">
+                    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:12px">
+                      <input id="fb-edit-title-${f.id}" class="input" value="${f.title.replace(/"/g,'&quot;')}" placeholder="Title" style="width:100%">
+                      <select id="fb-edit-type-${f.id}" class="input" style="min-width:130px">
+                        <option value="bug"     ${f.type==='bug'?'selected':''}>Bug Report</option>
+                        <option value="feature" ${f.type==='feature'?'selected':''}>Feature Request</option>
+                      </select>
+                    </div>
+                    <textarea id="fb-edit-body-${f.id}" class="input" rows="5" style="width:100%;resize:vertical;font-family:inherit;line-height:1.6;margin-bottom:12px">${f.body.replace(/</g,'&lt;')}</textarea>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+                      <div>
+                        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em">Status</div>
+                        <select id="fb-edit-action-${f.id}" class="input" style="width:100%">
+                          ${actionOpts.map(a => `<option value="${a}" ${f.action===a?'selected':''}>${actionNames[a]}</option>`).join('')}
+                        </select>
+                      </div>
+                      <div>
+                        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em">Internal Notes</div>
+                        <input id="fb-edit-notes-${f.id}" class="input" value="${(f.notes||'').replace(/"/g,'&quot;')}" placeholder="Optional notes…" style="width:100%">
+                      </div>
+                    </div>
+                    <div style="display:flex;gap:10px">
+                      <button class="btn btn-primary btn-sm" onclick="saveEditFeedback('${f.id}')">Save</button>
+                      <button class="btn btn-ghost btn-sm" onclick="cancelEditFeedback()">Cancel</button>
+                    </div>
+                  </td></tr>`
+                : expanded
+                  ? `<tr><td colspan="${COLS}" style="background:#f8fafb;padding:16px 20px;border-top:1px solid var(--pale)">
+                      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+                        Submitted by <strong>${f.submitted_by}</strong> · ${(f.submitted_at||'').slice(0,16).replace('T',' ')} UTC
+                      </div>
+                      <div style="white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--ink)">${f.body.replace(/</g,'&lt;')}</div>
+                      ${f.notes ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--pale);font-size:12px;color:var(--muted)"><strong>Notes:</strong> ${f.notes.replace(/</g,'&lt;')}</div>` : ''}
+                    </td></tr>`
+                  : '';
+
               return `
-                <tr onclick="toggleFeedbackDetail('${f.id}')" style="cursor:pointer">
-                  <td style="font-weight:500">${f.title}</td>
+                <tr onclick="toggleFeedbackDetail('${f.id}')" style="cursor:pointer${editing?' background:#f0f7f7':''}">
+                  <td style="color:var(--muted);font-size:13px;font-weight:600;white-space:nowrap">#${f.number || '—'}</td>
+                  <td style="font-weight:500">${f.title.replace(/</g,'&lt;')}</td>
                   <td>${typeBadge(f.type)}</td>
                   <td style="font-size:13px;color:var(--muted)">${f.submitted_by || '—'}</td>
                   <td style="color:var(--muted);font-size:13px;white-space:nowrap">${dateStr}</td>
-                  <td onclick="event.stopPropagation()">${actionCell(f.id, f.action || 'pending')}</td>
-                  <td style="color:var(--muted);font-size:11px;text-align:center">${expanded ? '▲' : '▼'}</td>
+                  <td style="font-size:13px;color:var(--muted)">${actionNames[f.action||'pending']}</td>
+                  <td style="color:var(--muted);font-size:11px;text-align:center">${expanded||editing ? '▲' : '▼'}</td>
+                  ${_role === 'admin' ? `<td onclick="event.stopPropagation()">
+                    <button class="btn btn-ghost btn-sm" onclick="startEditFeedback('${f.id}')" style="font-size:11px;padding:3px 8px">Edit</button>
+                  </td>` : ''}
                 </tr>
-                ${expanded ? `<tr>
-                  <td colspan="6" style="background:#f8fafb;padding:16px 20px;border-top:1px solid var(--pale)">
-                    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
-                      Submitted by <strong>${f.submitted_by}</strong> · ${(f.submitted_at||'').slice(0,16).replace('T',' ')} UTC
-                    </div>
-                    <div style="white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--ink)">${f.body}</div>
-                  </td>
-                </tr>` : ''}`;
+                ${detailRow}`;
             };
             if (!active.length && !done.length) {
-              return `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`;
+              return `<tr><td colspan="${COLS}" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`;
             }
             const divider = done.length
-              ? `<tr><td colspan="6" style="padding:0;border-top:2px solid var(--pale)"></td></tr>`
+              ? `<tr><td colspan="${COLS}" style="padding:0;border-top:2px solid var(--pale)"></td></tr>`
               : '';
             return active.map(renderRow).join('') + divider + done.map(renderRow).join('');
           })()}

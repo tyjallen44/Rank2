@@ -903,6 +903,13 @@ class FeedbackSubmitRequest(BaseModel):
 class FeedbackActionRequest(BaseModel):
     action: str
 
+class FeedbackEditRequest(BaseModel):
+    title:  str | None = None
+    type:   str | None = None
+    body:   str | None = None
+    action: str | None = None
+    notes:  str | None = None
+
 @app.post("/api/feedback")
 async def submit_feedback(req: FeedbackSubmitRequest, payload: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, create_feedback
@@ -918,12 +925,16 @@ async def get_feedback(_: str = Depends(require_auth)):
     return list_feedback()
 
 @app.patch("/api/feedback/{feedback_id}")
-async def patch_feedback(feedback_id: str, req: FeedbackActionRequest, _: dict = Depends(require_admin)):
-    from perception.db import init_db, update_feedback_action
-    if req.action not in ("pending", "accepted", "fixed", "completed", "rejected"):
+async def patch_feedback(feedback_id: str, req: FeedbackEditRequest, _: dict = Depends(require_admin)):
+    from perception.db import init_db, update_feedback
+    valid_actions = {"pending", "accepted", "fixed", "completed", "rejected"}
+    if req.action is not None and req.action not in valid_actions:
         raise HTTPException(400, "invalid action")
+    if req.type is not None and req.type not in ("bug", "feature"):
+        raise HTTPException(400, "type must be 'bug' or 'feature'")
     init_db()
-    update_feedback_action(feedback_id, req.action)
+    updates = {k: v for k, v in req.dict().items() if v is not None}
+    update_feedback(feedback_id, **updates)
     return {"ok": True}
 
 

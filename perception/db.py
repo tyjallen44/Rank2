@@ -195,13 +195,34 @@ def init_db() -> None:
     con.execute("""
         CREATE TABLE IF NOT EXISTS feedback (
             id           VARCHAR PRIMARY KEY,
+            number       INTEGER,
             title        VARCHAR NOT NULL,
             type         VARCHAR NOT NULL,
             body         TEXT NOT NULL,
             submitted_by VARCHAR NOT NULL,
             submitted_at TIMESTAMP NOT NULL,
-            action       VARCHAR DEFAULT 'pending'
+            action       VARCHAR DEFAULT 'pending',
+            notes        VARCHAR DEFAULT ''
         )
+    """)
+    existing_fb_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='feedback'"
+    ).fetchall()}
+    for col, definition in [
+        ("number", "INTEGER"),
+        ("notes",  "VARCHAR DEFAULT ''"),
+    ]:
+        if col not in existing_fb_cols:
+            con.execute(f"ALTER TABLE feedback ADD COLUMN {col} {definition}")
+    # Assign sequential numbers to any rows that don't have one yet
+    con.execute("""
+        UPDATE feedback SET number = sub.rn
+        FROM (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY submitted_at ASC, id ASC) AS rn
+            FROM feedback
+            WHERE number IS NULL
+        ) sub
+        WHERE feedback.id = sub.id
     """)
     con.execute("""
         CREATE TABLE IF NOT EXISTS tracked_entities (
@@ -276,25 +297,39 @@ def create_feedback(title: str, ftype: str, body: str, submitted_by: str) -> dic
     con = get_connection()
     fid = str(uuid.uuid4())
     now = datetime.utcnow()
+    row = con.execute("SELECT COALESCE(MAX(number), 0) + 1 FROM feedback").fetchone()
+    next_num = row[0] if row else 1
     con.execute(
-        "INSERT INTO feedback VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [fid, title, ftype, body, submitted_by, now, "pending"]
+        "INSERT INTO feedback (id, number, title, type, body, submitted_by, submitted_at, action, notes) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', '')",
+        [fid, next_num, title, ftype, body, submitted_by, now]
     )
     con.close()
-    return {"id": fid, "title": title, "type": ftype, "body": body,
-            "submitted_by": submitted_by, "submitted_at": str(now), "action": "pending"}
+    return {"id": fid, "number": next_num, "title": title, "type": ftype, "body": body,
+            "submitted_by": submitted_by, "submitted_at": str(now), "action": "pending", "notes": ""}
 
 
 def list_feedback() -> list[dict]:
     con = get_connection()
     rows = con.execute("""
-        SELECT id, title, type, body, submitted_by, submitted_at, action
+        SELECT id, number, title, type, body, submitted_by, submitted_at, action, notes
         FROM feedback
         ORDER BY submitted_at DESC
     """).fetchall()
     con.close()
-    cols = ["id", "title", "type", "body", "submitted_by", "submitted_at", "action"]
-    return [dict(zip(cols, r)) | {"submitted_at": str(r[5])} for r in rows]
+    cols = ["id", "number", "title", "type", "body", "submitted_by", "submitted_at", "action", "notes"]
+    return [dict(zip(cols, r)) | {"submitted_at": str(r[6])} for r in rows]
+
+
+def update_feedback(feedback_id: str, **kwargs) -> None:
+    allowed = {"title", "type", "body", "action", "notes"}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        return
+    con = get_connection()
+    sets = ", ".join(f"{k}=?" for k in fields)
+    con.execute(f"UPDATE feedback SET {sets} WHERE id=?", list(fields.values()) + [feedback_id])
+    con.close()
 
 
 def update_feedback_action(feedback_id: str, action: str) -> None:
