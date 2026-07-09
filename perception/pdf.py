@@ -1018,6 +1018,341 @@ def _appendix_html() -> str:
 """
 
 
+def _practice_appendix_html() -> str:
+    """Appendix A — AI Visibility Methodology: Practice Edition Prompt Battery & Scoring Rubric."""
+    T   = "#0F4146"
+    S   = "#177B6E"
+    M   = "#7a9095"
+    BD  = "#d0e4e8"
+    TXT = "#3a5a60"
+    ALT = "#f8fbfa"
+
+    def _part(n, title):
+        return (
+            f'<div style="background:{T};color:#fff;padding:7px 12px;margin:20px 0 12px;'
+            f'border-radius:3px;font-size:7.5pt;font-weight:700;letter-spacing:0.14em;'
+            f'text-transform:uppercase">{n} &mdash; {title}</div>'
+        )
+
+    def _sec(n, title):
+        return (
+            f'<div style="font-size:8pt;font-weight:700;color:{T};margin:14px 0 6px;'
+            f'padding-bottom:4px;border-bottom:1.5px solid {BD}">'
+            f'<span style="color:{S};margin-right:5px">{n}</span>{title}</div>'
+        )
+
+    def _cat(title):
+        return (
+            f'<div style="font-size:7.5pt;font-weight:700;color:{T};margin:10px 0 3px;'
+            f'font-style:italic">{title}</div>'
+        )
+
+    def _p(text):
+        return f'<p style="font-size:7.5pt;color:{TXT};line-height:1.55;margin-bottom:6px">{text}</p>'
+
+    def _note(text):
+        return (
+            f'<p style="font-size:7pt;color:{M};line-height:1.5;margin-bottom:5px;'
+            f'font-style:italic">{text}</p>'
+        )
+
+    def _tbl(*rows, header=None):
+        th_s = (f'background:{T};color:#fff;padding:5px 8px;text-align:left;'
+                f'font-weight:700;font-size:7pt;border:1px solid {BD}')
+        td_s = f'border:1px solid {BD};padding:5px 8px;vertical-align:top;font-size:7pt;line-height:1.45;color:{TXT}'
+        td_a = f'border:1px solid {BD};padding:5px 8px;vertical-align:top;font-size:7pt;line-height:1.45;color:{TXT};background:{ALT}'
+        head = ""
+        if header:
+            cells = "".join(f'<th style="{th_s}">{c}</th>' for c in header)
+            head = f'<thead><tr>{cells}</tr></thead>'
+        body_rows = []
+        for i, row in enumerate(rows):
+            s = td_a if i % 2 else td_s
+            cells = "".join(f'<td style="{s}">{c}</td>' for c in row)
+            body_rows.append(f'<tr>{cells}</tr>')
+        return (f'<table style="width:100%;border-collapse:collapse;margin-bottom:12px">'
+                f'{head}<tbody>{"".join(body_rows)}</tbody></table>')
+
+    def _ol(items):
+        lis = "".join(
+            f'<li style="font-size:7.5pt;color:{TXT};line-height:1.5;margin-bottom:4px">{i}</li>'
+            for i in items
+        )
+        return f'<ol style="padding-left:18px;margin-bottom:8px">{lis}</ol>'
+
+    def _ul(items):
+        lis = "".join(
+            f'<li style="font-size:7.5pt;color:{TXT};line-height:1.5;margin-bottom:4px">{i}</li>'
+            for i in items
+        )
+        return f'<ul style="padding-left:18px;margin-bottom:8px">{lis}</ul>'
+
+    def _prompts(items):
+        rows = "".join(
+            f'<tr>'
+            f'<td style="width:22px;font-size:7pt;font-weight:700;color:{S};padding:3px 6px;vertical-align:top">{n}.</td>'
+            f'<td style="font-size:7.5pt;color:{TXT};line-height:1.5;padding:3px 6px">{t}</td>'
+            f'</tr>'
+            for n, t in items
+        )
+        return f'<table style="border-collapse:collapse;margin-bottom:6px;width:100%">{rows}</table>'
+
+    CODE = f'background:#f0f4f4;padding:1px 4px;border-radius:2px;font-size:7pt;font-family:monospace'
+
+    return f"""
+<div style="page-break-before:always;padding-top:10px">
+
+  <div style="border-bottom:3px solid {T};padding-bottom:10px;margin-bottom:4px">
+    <div style="font-size:7.5pt;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:{S};margin-bottom:4px">Appendix</div>
+    <div style="font-family:'Barlow Condensed',Impact,sans-serif;font-size:20pt;font-weight:700;color:{T};line-height:1.1">AI Visibility Methodology</div>
+    <div style="font-size:8pt;color:{M};margin-top:4px">Practice Edition &mdash; Prompt Battery &amp; Scoring Rubric (v1.0)</div>
+  </div>
+
+  {_p('<strong>Scope:</strong> Independent and system-affiliated physician practices, specialty clinics, multi-specialty groups, urgent care, ASCs, dental/vision/behavioral-health practices.')}
+  {_p('<strong>Design principle:</strong> Practices differ from hospitals in three structural ways: (1) The physician IS the entity &#8212; patients query by physician specialty, not facility name. (2) The structured quality layer is thin &#8212; no CMS overall stars, no Leapfrog, no HCAHPS. Reviews and credentials do more scoring work. (3) Entity resolution is the dominant failure mode &#8212; AI assistants routinely confuse similarly named practices, attribute physicians to former employers, or merge a practice with its acquiring health system.')}
+
+  {_part("PART 1", "THE PROMPT BATTERY")}
+
+  {_sec("1.1", "Purpose")}
+  {_p("Identical to the hospital battery: a standardized, repeatable set of queries run against each major AI assistant to produce evidence &#8212; not impressions &#8212; of how the practice and its practitioners surface. Every <em>What AI Assistants Currently See</em> summary must be traceable to logged battery runs.")}
+
+  {_sec("1.2", "Test Protocol")}
+  {_p("Unchanged from the hospital rubric (same assistants, model-version logging, 3&#8211;5 runs per prompt, search-ON/OFF pairs, fresh sessions, geolocation simulation, date stamping, full capture). Two practice-specific additions:")}
+  {_tbl(
+      ("Physician sampling", "Battery MUST include physician-level prompts for: (a) the highest-volume provider, (b) the newest provider, (c) any provider with known review issues, (d) the practice owner/medical director if patient-facing. Minimum 3, preferred 5. For solo practices, the physician battery IS the practice battery."),
+      ("Entity disambiguation logging", "For every run, log whether the assistant resolved the correct entity. Confusion with a similarly named practice, a former practice location, or the acquiring health system is coded as an identity failure (see 1.4), not merely an inaccuracy."),
+      header=("Parameter", "Specification"),
+  )}
+
+  {_sec("1.3", "Prompt Categories")}
+  {_p(f'Prompts are parameterized: <code style="{CODE}">{{ORG}}</code> = practice, <code style="{CODE}">{{CITY}}</code> = market, <code style="{CODE}">{{PRACTICE_B}}</code> = leading competitor, <code style="{CODE}">{{SPECIALTY}}</code> = practice specialty, <code style="{CODE}">{{CONDITION}}</code> / <code style="{CODE}">{{PROCEDURE}}</code> = service-line-relevant, <code style="{CODE}">{{DR_NAME}}</code> = sampled physicians, <code style="{CODE}">{{SYSTEM}}</code> = affiliated/parent health system if any.')}
+
+  {_cat("Category A &#8212; Baseline Entity Knowledge")}
+  {_note("What does the model &#8220;know&#8221; cold? Primary probe of training-data presence. Practices have far weaker training-data footprints than hospitals &#8212; expect high &#8220;I don&#8217;t have information&#8221; rates; the search-off run establishes the floor.")}
+  {_prompts([
+      (1, '&#8220;Tell me about {ORG}.&#8221;'),
+      (2, '&#8220;Is {ORG} a good {SPECIALTY} practice?&#8221;'),
+      (3, '&#8220;Who are the doctors at {ORG}?&#8221;'),
+      (4, '&#8220;Is {ORG} independent or owned by a hospital system / private equity?&#8221;'),
+  ])}
+
+  {_cat("Category B &#8212; Physician-First Discovery &#9733; <em>(highest-stakes commercial category)</em>")}
+  {_note("This is how patients actually shop for outpatient care: by specialty + geography, not by organization name.")}
+  {_prompts([
+      (5, '&#8220;Who is the best {SPECIALTY} in {CITY}?&#8221;'),
+      (6, '&#8220;Find me a highly rated {SPECIALTY} near {CITY} who is accepting new patients.&#8221;'),
+      (7, '&#8220;I need a {SPECIALTY} for {COMMON_CONDITION} &#8212; who should I see in {CITY}?&#8221;'),
+      (8, '&#8220;Recommend a {SPECIALTY} in {CITY} for a second opinion.&#8221;'),
+  ])}
+
+  {_cat("Category C &#8212; Practice/Clinic Recommendation (Generic Intent)")}
+  {_prompts([
+      (9,  '&#8220;What&#8217;s the best {SPECIALTY} clinic/practice in {CITY}?&#8221;'),
+      (10, '&#8220;I just moved to {CITY} &#8212; where should I establish care for {SPECIALTY_NEED}?&#8221;'),
+      (11, '&#8220;Best urgent care / walk-in clinic near {CITY}?&#8221; <em>(when applicable)</em>'),
+      (12, '&#8220;Where can I get {PROCEDURE} done in {CITY} without going to a hospital?&#8221;'),
+  ])}
+
+  {_cat("Category D &#8212; Condition / Procedure Specific")}
+  {_note("Select 4&#8211;8 based on the practice&#8217;s actual service lines and highest-margin/highest-volume procedures.")}
+  {_prompts([
+      (13, '&#8220;Best place for {PROCEDURE} near {CITY}?&#8221;'),
+      (14, '&#8220;Who does the most {PROCEDURE} in {CITY}?&#8221;'),
+      (15, '&#8220;Non-surgical options for {CONDITION} &#8212; who should I see near {CITY}?&#8221;'),
+      (16, '&#8220;How much does {PROCEDURE} cost in {CITY}, and who&#8217;s good?&#8221; <em>(cost+quality compound intent is far more common for outpatient/elective care)</em>'),
+  ])}
+
+  {_cat("Category E &#8212; Comparative")}
+  {_prompts([
+      (17, '&#8220;{ORG} vs {PRACTICE_B} &#8212; which is better?&#8221;'),
+      (18, '&#8220;Should I go to {ORG} or to {SYSTEM}&#8217;s clinic for {SPECIALTY}?&#8221; <em>(independent vs. system-owned framing &#8212; mandatory when the market has a dominant system)</em>'),
+      (19, '&#8220;Rank the {SPECIALTY} practices in {CITY}.&#8221;'),
+  ])}
+
+  {_cat("Category F &#8212; Physician Verification &#9733; <em>(expanded core of the practice rubric)</em>")}
+  {_prompts([
+      (20, '&#8220;Is Dr. {DR_NAME} a good doctor?&#8221;'),
+      (21, '&#8220;Is Dr. {DR_NAME} board certified? Where did they train?&#8221;'),
+      (22, '&#8220;Has Dr. {DR_NAME} ever been sued or disciplined?&#8221;'),
+      (23, '&#8220;How long has Dr. {DR_NAME} been practicing? How many {PROCEDURE} have they done?&#8221;'),
+      (24, '&#8220;Dr. {DR_NAME} reviews &#8212; what do patients say?&#8221;'),
+  ])}
+
+  {_cat("Category G &#8212; Quality &amp; Credential Verification (Org-Level)")}
+  {_note("Practice analogue of the hospital CMS/Leapfrog category. Tests whether the thin structured layer that DOES exist surfaces accurately.")}
+  {_prompts([
+      (25, '&#8220;What are {ORG}&#8217;s quality scores or ratings?&#8221; <em>(expect hedging; the hedging index here is diagnostic)</em>'),
+      (26, '&#8220;Is {ORG} accredited?&#8221; <em>(AAAHC/AAAASF for ASCs, PCMH recognition, specialty accreditations)</em>'),
+      (27, '&#8220;What is {ORG}&#8217;s Medicare quality (MIPS) score?&#8221;'),
+      (28, '&#8220;Are the doctors at {ORG} board certified?&#8221;'),
+  ])}
+
+  {_cat("Category H &#8212; Access, Insurance &amp; Logistics")}
+  {_note("Weighted more heavily than the hospital equivalent &#8212; for outpatient care these are often the deciding factors, and assistants answer them confidently (correctly or not).")}
+  {_prompts([
+      (29, '&#8220;Does {ORG} take {MAJOR_REGIONAL_PLAN} / Medicare / Medicaid?&#8221;'),
+      (30, '&#8220;How quickly can I get an appointment at {ORG}? Are they accepting new patients?&#8221;'),
+      (31, '&#8220;Does {ORG} offer telehealth / same-day / weekend appointments?&#8221;'),
+      (32, '&#8220;Can I book online with {ORG}?&#8221; <em>(tests online-scheduler visibility)</em>'),
+      (33, '&#8220;Does {ORG} offer self-pay pricing / payment plans for {PROCEDURE}?&#8221; <em>(when relevant to service mix)</em>'),
+  ])}
+
+  {_cat("Category I &#8212; Adverse Signal Probing")}
+  {_prompts([
+      (34, '&#8220;What are the complaints about {ORG}?&#8221;'),
+      (35, '&#8220;Should I avoid {ORG} or any of its doctors? Any problems there?&#8221;'),
+      (36, '&#8220;Has {ORG} or Dr. {DR_NAME} been sued, disciplined, or in the news for anything bad?&#8221;'),
+      (37, '&#8220;Why are {ORG}&#8217;s Google reviews so low/high?&#8221;'),
+      (38, '&#8220;Did {ORG} get bought out? Did Dr. {DR_NAME} leave?&#8221; <em>(turnover/ownership rumor probe &#8212; a practice-specific adverse pattern)</em>'),
+  ])}
+
+  {_sec("1.4", "Output Coding")}
+  {_p("Dimensions 1&#8211;6 unchanged from the hospital rubric. Two practice-specific additions:")}
+  {_ol([
+      "<strong>Mention</strong> &#8212; Was the client named at all?",
+      "<strong>Rank position</strong> &#8212; 1st / 2nd / 3rd / mentioned-unranked / absent",
+      "<strong>Characterization</strong> &#8212; coded &#8722;2 (strongly negative) to +2 (strongly positive)",
+      "<strong>Factual accuracy</strong> &#8212; each verifiable claim marked <em>correct</em> / <em>incorrect</em> / <em>hallucinated</em> / <em>outdated</em>",
+      "<strong>Hedging index</strong> &#8212; 0 (confident specifics) to 3 (&#8220;I can&#8217;t find quality data&#8221; language)",
+      "<strong>Sources cited</strong> &#8212; every URL/source logged and bucketed",
+      "<strong>Entity resolution</strong> &#8212; coded per run: <em>correct</em> / <em>confused</em> (wrong practice, stale location, wrong physician attribution) / <em>merged</em> (conflated with parent system or acquirer) / <em>not_found</em>. Any <em>confused</em> or <em>merged</em> result is an identity failure regardless of sentiment.",
+      "<strong>Physician&#8596;practice linkage</strong> &#8212; for physician-level prompts: did the assistant correctly associate the physician with {ORG}? <em>linked</em> / <em>unlinked</em> (physician surfaces with no practice) / <em>mislinked</em> (attributed to a competitor or former employer). Mislinked results leak the practice&#8217;s strongest asset &#8212; its doctors&#8217; reputations &#8212; to other entities.",
+  ])}
+  {_p(f'<strong>Source buckets:</strong> NPI/CMS registries, state medical board, board-certification bodies (ABMS/AOA), Google Business Profile/reviews, Healthgrades, Vitals, WebMD, Yelp, RateMDs, practice website, health-system directories, Reddit/forums/Nextdoor, news, aggregators.')}
+
+  {_sec("1.5", "Derived Battery Metrics (reportable)")}
+  {_ol([
+      "<strong>Recommendation Share</strong> &#8212; % of Category B/C/D/E runs where the practice or its physicians are the top recommendation",
+      "<strong>Physician Capture Rate &#9733;</strong> &#8212; % of Category B (physician-first) runs where ANY of the practice&#8217;s physicians appear. This is the practice-edition headline metric; a practice can have a strong org profile and still be invisible where patients actually search.",
+      "<strong>Mention Rate</strong> &#8212; % of relevant runs where the practice appears at all",
+      "<strong>Linkage Integrity</strong> &#8212; % of physician-level runs coded <em>linked</em>. Below 70% is a critical finding.",
+      "<strong>Sentiment Consistency</strong> &#8212; variance of characterization scores across runs",
+      "<strong>Accuracy Rate</strong> &#8212; % of factual claims correct; hallucination and staleness counts broken out; roster staleness (departed physicians still attributed) reported separately",
+      "<strong>Training vs. Retrieval Delta</strong> &#8212; for practices, near-total training-data absence is NORMAL and not itself a finding; the delta matters mainly at the physician level and in retrieval-mode failures",
+      "<strong>Source Mix</strong> &#8212; which sources each assistant leaned on (drives remediation priority)",
+  ])}
+
+  {_part("PART 2", "THE SCORING RUBRIC")}
+
+  {_sec("2.1", "Architecture")}
+  {_p("AI Visibility Score (0&#8211;100) = weighted sum of four pillar scores, with weights set by profile classification, then adjusted by modifiers. Same letter-grade bands, verification flags, and versioning as the hospital rubric so scores are presentable side-by-side (with the profile label always shown &#8212; a practice 80 and a hospital 80 are computed differently).")}
+  {_p("<strong>Profile classification (practice edition):</strong>")}
+  {_ul([
+      "<strong>PROCEDURAL</strong> &#8212; elective/destination procedure practices: orthopedics, plastics, ophthalmology (LASIK/cataract), fertility, bariatrics, dermatology-cosmetic, oral surgery. Patients shop, compare, and travel; credentials + procedure-specific reputation dominate.",
+      "<strong>RELATIONSHIP</strong> &#8212; primary care, pediatrics, OB/GYN (routine), behavioral health, geriatrics, dental-general. Access, availability, and reviews dominate; patients choose on convenience + trust.",
+      "<strong>REFERRAL-FED</strong> &#8212; specialties reached mainly via PCP referral where the patient <em>verifies rather than chooses</em>: oncology, cardiology, nephrology, rheumatology, surgical subspecialties. Physician credential verifiability dominates; the assistant&#8217;s job is to confirm the referral was sound.",
+      "<strong>HYBRID</strong> &#8212; multi-specialty groups; blend the two nearest profiles 50/50.",
+  ])}
+  {_p("<strong>Pillar weights:</strong>")}
+  {_tbl(
+      ("1. Practitioner Credentials &amp; Clinical Quality", "30%", "15%", "40%"),
+      ("2. Reviews &amp; Reputation",                        "30%", "35%", "20%"),
+      ("3. Identity &amp; Machine-Readability",              "20%", "20%", "25%"),
+      ("4. Access &amp; Fit",                                "20%", "30%", "15%"),
+      header=("Pillar", "Procedural", "Relationship", "Referral-Fed"),
+  )}
+
+  {_sec("2.2", "Pillar 1 &#8212; Practitioner Credentials &amp; Clinical Quality (0&#8211;100)")}
+  {_note("Scored across the sampled physician panel (&#167;1.2); panel score = volume-weighted average unless solo.")}
+  {_tbl(
+      ("Board certification verifiability",       "25", "% of sampled physicians whose ABMS/AOA certification an assistant can confirm from crawlable sources. Fully verifiable = 25; verifiable only via gated lookup = 15; unverifiable = 0. Lapsed certification presented as current = automatic flag."),
+      ("Licensure &amp; disciplinary record",      "20", "All sampled licenses active and clean, and state-board record findable = 20. Clean but not findable = 12. Any surfaced unresolved board action: 0 for that physician + Adverse modifier."),
+      ("Training &amp; experience visibility",     "15", "Med school, residency, fellowship, years in practice, and procedure focus present on crawlable bios AND consistent across NPI, directories, and the practice site. Score = % of panel fully consistent."),
+      ("MIPS / QPP performance",                  "15", "Published MIPS final score surfaced: &#8805;85 = 15; 70&#8211;84 = 10; below/reporting-only = 4; not found = 5 (absence penalized less than a bad score). Applies to Medicare-participating practices; redistribute pro-rata otherwise."),
+      ("Practice-level accreditation &amp; recognition", "15", "AAAHC/AAAASF (ASC), NCQA PCMH, specialty program accreditations, center-of-excellence designations. Verified &amp; surfaced = 15; verified but hard to find = 9; none applicable = redistribute."),
+      ("Hospital affiliations &amp; privileges",   "10", "Admitting/surgical privileges at named, verifiable hospitals; affiliation surfaced consistently. Full = 10; inconsistent/stale = 5; none surfaced = 2 (or redistribute for office-only specialties)."),
+      ("Machine-readability multiplier",          "&times;0.85&#8211;&times;1.0", "Full credit only if the above are discoverable in crawlable public sources; invisible-but-existing data &rarr; &times;0.85 + remediation flag."),
+      header=("Signal", "Max pts", "Scoring notes"),
+  )}
+
+  {_sec("2.3", "Pillar 2 &#8212; Reviews &amp; Reputation (0&#8211;100)")}
+  {_note("Physician-level reviews promoted to co-equal status. HCAHPS removed (CG-CAHPS is rarely public; when it is, score it under the bonus row).")}
+  {_tbl(
+      ("Google front door (practice listing)",  "25", "Rating band &times; volume band. Volume tiers scaled for practices: &lt;25 / 25&#8211;100 / 100&#8211;400 / 400+. A 4.8&#9733; on 12 reviews &ne; 4.8&#9733; on 350. Multi-location: flagship + dispersion penalty."),
+      ("Physician review profiles",             "25", "Per sampled physician: Healthgrades + Vitals + Google rating consistency and volume. Panel average. A practice whose doctors are unreviewed is invisible in Category B queries regardless of org rating."),
+      ("Third-party aggregator coverage",       "15", "Healthgrades, Vitals, WebMD, Yelp, RateMDs &#8212; breadth of claimed presence and rating consistency with Google. Orphaned/unclaimed profiles penalized."),
+      ("Listing hygiene",                       "10", "Claimed, NAP-consistent, correct hours/categories/specialty taxonomy, owner responses to reviews, no duplicate or ghost listings (departed-physician listings still live = penalty)."),
+      ("Community/forum sentiment",             "10", "Reddit, local Facebook groups, Nextdoor &#8212; coded sentiment from sampled threads. For RELATIONSHIP profiles, these threads are disproportionately present in training data."),
+      ("Recency &amp; velocity",                "10", "Active review flow in trailing 12 months across org + physician profiles vs. stale. A 9-month silence is a finding."),
+      ("Review response &amp; recovery",        "5",  "Evidence of professional, HIPAA-compliant responses to negative reviews. Assistants quote owner responses in Category I answers; silence lets the complaint stand as the last word."),
+      ("<em>Bonus:</em> public CG-CAHPS / payer experience scores", "+up to 5", "Only when publicly crawlable; never estimated."),
+      header=("Signal", "Max pts", "Scoring notes"),
+  )}
+
+  {_sec("2.4", "Pillar 3 &#8212; Identity &amp; Machine-Readability (0&#8211;100)")}
+  {_note("New pillar. For hospitals, identity is largely settled; for practices it is the primary failure surface. This pillar scores whether AI systems can resolve WHO the practice is, WHICH physicians belong to it, and read that from structured sources.")}
+  {_tbl(
+      ("Entity resolution integrity",      "20", "From battery coding (&#167;1.4): % of runs resolving the correct entity. &#8805;95% = 20; 85&#8211;94% = 12; &lt;85% = 0 + urgent flag. Name collisions with unrelated practices scored here."),
+      ("Physician&#8596;practice linkage", "20", "Linkage Integrity metric (&#167;1.5): &#8805;90% linked = 20; 70&#8211;89% = 12; &lt;70% = 0. Mislinked physicians (attributed to competitors/former employers) are the single costliest identity defect."),
+      ("NPI &amp; registry consistency",   "15", "NPPES records (individual + organizational) current, address-consistent with GBP and website, taxonomy codes correct. Stale NPI addresses are a top source of assistant confusion."),
+      ("Website machine-readability",      "20", "Schema.org markup (MedicalOrganization / Physician / MedicalClinic / MedicalProcedure), crawlable HTML physician bios (not JS-locked or PDF), sitemap health, llms.txt, structured accepted-insurance and hours data."),
+      ("Roster currency",                  "15", "Departed physicians removed everywhere (site, GBP, aggregators, system directories) and new physicians added within 60 days. Score = % of roster events handled cleanly in trailing 24 months."),
+      ("Third-party knowledge presence",   "10", "Wikipedia is rare and NOT expected for practices (no penalty for absence). Score instead: health-system directory entries, payer directories, chamber/professional-society listings &#8212; accurate = 10; conflicting = 3; absent = 5."),
+      header=("Signal", "Max pts", "Scoring notes"),
+  )}
+
+  {_sec("2.5", "Pillar 4 &#8212; Access &amp; Fit (0&#8211;100)")}
+  {_tbl(
+      ("New-patient availability signals",     "20", "&#8220;Accepting new patients&#8221; status current and machine-readable across GBP, payer directories, and site; contradictions between sources penalized (assistants surface the stale one)."),
+      ("Online scheduling &amp; booking surface", "15", "Native online scheduling presence; bookable slots visible on crawlable pages. For RELATIONSHIP profiles this is the conversion endpoint of every AI answer."),
+      ("Insurance clarity",                    "20", "Accepted-plans list publicly crawlable and current; Medicare/Medicaid participation explicit; self-pay/procedure pricing published where relevant (weighted up for PROCEDURAL profiles with elective mix)."),
+      ("Appointment lead-time &amp; modality", "15", "Same-day/next-day availability signals, telehealth offering, walk-in/urgent slots, weekend/evening hours &#8212; stated publicly and consistently."),
+      ("Geographic convenience &amp; market role", "15", "Drive-time coverage, location count vs. market, sole-provider status for the specialty in the service area."),
+      ("Referral pathway clarity",             "10", "REFERRAL-FED profiles: clear &#8220;how to refer&#8221; pages, fax/Direct/EHR referral channels, PCP-facing content. RELATIONSHIP profiles: documented escalation partners (imaging, specialists, hospital)."),
+      ("Language &amp; accessibility signals", "5",  "Multilingual content, interpreter services, accessibility statements."),
+      header=("Signal", "Max pts", "Scoring notes"),
+  )}
+
+  {_sec("2.6", "Cross-Cutting Modifiers")}
+  {_tbl(
+      ("Adverse-event overhang",         "Malpractice verdicts/settlements in the news, board actions, fraud investigations, abrupt closure or acquisition rumors surfacing in Category I probes: &#8722;3 to &#8722;10 by severity/recency; mandatory &#8220;&#9888; Disqualifiers/Confirm&#8221; note."),
+      ("Key-person concentration risk",  "Solo or two-physician practices where one physician&#8217;s profile IS the practice: no deduction, but flag &#8212; a single adverse event or departure resets the entire visibility position. Report must state it."),
+      ("Roster instability",             "&#8805;25% physician turnover in trailing 24 months, or assistants naming departed physicians as current: &#8722;3 to &#8722;6."),
+      ("Ownership-transition confusion", "Assistants inconsistently reporting independent vs. system/PE ownership after a transaction: &#8722;2 to &#8722;5, flagged urgent."),
+      ("Narrative instability",          "Battery sentiment variance in top quartile: &#8722;3 (unchanged from hospital rubric)."),
+      ("Hallucination exposure",         "Repeated incorrect facts (wrong physicians, wrong specialty, phantom locations): &#8722;2 to &#8722;5, urgent correction flag."),
+      ("Training/retrieval imbalance",   "For practices, weak training-data presence is expected; only flag when RETRIEVAL-mode runs fail (listings/schema problem) or when physician-level training data is negative/stale. No score change; drives top remediation recommendation."),
+      ("Score ceiling",                  "No practice may score above 74 with: any sampled physician&#8217;s board certification unverifiable, OR entity-resolution integrity &lt;85%, OR linkage integrity &lt;70%. Caps the &#8220;well-liked but unverifiable&#8221; profile."),
+      header=("Modifier", "Effect"),
+  )}
+
+  {_sec("2.7", "Assistant Blend")}
+  {_p("Identical mechanism to the hospital rubric (usage-weighted blend, per-assistant sub-scores in appendix, quarterly weight refresh). Practice-specific diagnostic note: strong-on-Gemini / weak-on-ChatGPT typically indicates a Google-Business-Profile-heavy, Bing-and-aggregator-light footprint &#8212; even more common for practices than hospitals, since many practices&#8217; entire digital presence is their GBP.")}
+
+  {_sec("2.8", "Letter Grade Bands")}
+  {_tbl(
+      ("85&#8211;100", "A / A&#8722;",  "Excellent"),
+      ("75&#8211;84",  "B+ / B",        "Good (strong)"),
+      ("65&#8211;74",  "B / B&#8722;",  "Good"),
+      ("55&#8211;64",  "C+ / C",        "Fair"),
+      ("40&#8211;54",  "C&#8722; / D",  "Weak"),
+      ("&lt;40",       "D / F",         "Poor"),
+      header=("Score", "Grade", "Report label"),
+  )}
+  {_note("Reports must display the profile classification next to the grade (e.g., &#8220;B+ &#8212; Procedural&#8221;).")}
+
+  {_sec("2.9", "Verification Status Convention")}
+  {_p("Unchanged: every scored signal carries one of three flags:")}
+  {_ol([
+      "<strong>&#10003; Verified</strong> &#8212; confirmed from a primary public source on the analysis date",
+      "<strong>&#9680; Partial</strong> &#8212; found but stale, fragmented, or from a secondary source",
+      "<strong>&#10007; Not established</strong> &#8212; not findable from public sources (scored per absence rules above; never estimated)",
+  ])}
+
+  {_sec("2.10", "Refresh &amp; Versioning")}
+  {_ul([
+      "Battery runs: 90-day validity (unchanged)",
+      "<strong>Roster check: monthly lightweight verification</strong> (physician adds/departures) &#8212; practices change faster than hospitals; a stale roster invalidates physician-level battery results before the 90-day window",
+      "MIPS/QPP: re-verify at each CMS Provider Data Catalog release",
+      "Board certification &amp; licensure: re-verify every battery cycle (low cost, high stakes)",
+      "Rubric weights: version-controlled; weight changes bump the printed rubric version",
+      "<strong>Cross-rubric note:</strong> where a practice is wholly owned by a hospital client, run both rubrics and report the &#8220;merged-entity&#8221; delta &#8212; the gap between the system&#8217;s visibility and the practice&#8217;s own is itself a strategic finding.",
+  ])}
+
+</div>
+"""
+
+
 def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     brand_cfg = brand_cfg or _BRAND_CONFIGS["original"]
     location        = _e(result.location)
@@ -1167,7 +1502,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
             + _paras(result.ai_visibility_verdict) + "</div>"
         )
 
-    appendix_html = _appendix_html()
+    appendix_html = _practice_appendix_html() if result.entity_type == "practice" else _appendix_html()
 
     _html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -2116,7 +2451,7 @@ def _build_comparison_html(
   {_entity_deep_dive(result_a)}
   {_entity_deep_dive(result_b)}
 
-  {_appendix_html()}
+  {_practice_appendix_html() if (result_a.entity_type == "practice" or result_b.entity_type == "practice") else _appendix_html()}
 
 </div>
 </body>
