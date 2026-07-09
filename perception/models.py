@@ -178,6 +178,14 @@ class ImprovementSection(BaseModel):
     items: list[str] = Field(default_factory=list)
 
 
+class ComparisonSummary(BaseModel):
+    """Structured comparison between two individual-report entities."""
+    headline: str = ""                          # one-line synthesis
+    similarities: list[str] = Field(default_factory=list)
+    differences: list[str] = Field(default_factory=list)
+    verdict: str = ""                           # 2–3 paragraph analyst narrative
+
+
 class AnalysisResult(BaseModel):
     """Structured result from a Claude-powered market analysis."""
     run_id: str

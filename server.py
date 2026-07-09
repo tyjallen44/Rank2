@@ -323,6 +323,20 @@ class BatchRequest(BaseModel):
     groups: List[AnalyzeRequest]
 
 
+class CompareRequest(BaseModel):
+    entity_a_name: str
+    city_a: str
+    state_a: str
+    specialty_a: Optional[str] = None
+    aggregate_a: bool = True
+    entity_b_name: str
+    city_b: str
+    state_b: str
+    specialty_b: Optional[str] = None
+    aggregate_b: bool = True
+    teaser_report: bool = False
+
+
 @app.post("/api/analyze")
 async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_current_user_payload)):
     role  = payload["role"]
@@ -360,6 +374,56 @@ async def start_batch(req: BatchRequest, payload: dict = Depends(get_current_use
     brand = payload.get("brand", "original")
     job_id = _new_job(role, brand)
     _pool.submit(_job_run_batch, job_id, [g.dict() for g in req.groups])
+    return {"job_id": job_id}
+
+
+def _job_run_comparison(job_id: str, req_dict: dict) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+    try:
+        from perception.db import init_db
+        from perception.analyzer import compare_locations
+        init_db()
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        result_a, result_b, comparison, pdf_path = compare_locations(
+            entity_a_name=req_dict["entity_a_name"],
+            city_a=req_dict["city_a"],
+            state_a=req_dict["state_a"],
+            entity_b_name=req_dict["entity_b_name"],
+            city_b=req_dict["city_b"],
+            state_b=req_dict["state_b"],
+            specialty_a=req_dict.get("specialty_a"),
+            specialty_b=req_dict.get("specialty_b"),
+            aggregate_a=req_dict.get("aggregate_a", True),
+            aggregate_b=req_dict.get("aggregate_b", True),
+            teaser_report=req_dict.get("teaser_report", False),
+            output_dir=REPORTS_DIR,
+            on_event=emit,
+            brand=job.get("brand", "original"),
+        )
+        job["status"] = "done"
+        job["result"] = {
+            "run_id": result_a.run_id,
+            "location": f"{result_a.entity_name} vs {result_b.entity_name}",
+            "specialty": result_a.specialty,
+            "provider_count": 2,
+            "pdf_path": pdf_path,
+            "comparison": True,
+        }
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = str(exc)
+    finally:
+        _put(loop, queue, None)
+
+
+@app.post("/api/compare")
+async def start_comparison(req: CompareRequest, payload: dict = Depends(get_current_user_payload)):
+    brand = payload.get("brand", "original")
+    role  = payload.get("role", "user")
+    job_id = _new_job(role, brand)
+    _pool.submit(_job_run_comparison, job_id, req.dict())
     return {"job_id": job_id}
 
 

@@ -1896,3 +1896,249 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     if brand_cfg.get("css_overrides"):
         _html = _html.replace("</style>", brand_cfg["css_overrides"] + "  </style>", 1)
     return _html
+
+
+# ── Comparison PDF ────────────────────────────────────────────────────────────
+
+def _comparison_overview_block(result: AnalysisResult, label: str) -> str:
+    """Organization overview + AI Visibility verdict for one entity in the comparison."""
+    p = result.rankings[0] if result.rankings else None
+    name = _e(result.entity_name or result.location)
+    score_html = ""
+    if p and p.ai_visibility_score is not None:
+        band_label, band_cls = _score_band(p.ai_visibility_score)
+        score_html = (
+            f'<span style="font-size:24pt;font-weight:800;color:{_TEAL}">{p.ai_visibility_score}</span>'
+            f'<span style="font-size:11pt;color:{_TEAL};margin-left:6px">{band_label}</span>'
+        )
+    tier_html = ""
+    if p:
+        ts = p.tier_scores
+        tiers = [
+            ("Outcomes & Safety",        ts.clinical_outcomes_safety),
+            ("Credentials & Recognition", ts.credentials_recognition),
+            ("Patient Experience",        ts.patient_experience_reviews),
+            ("Access & Fit",              ts.access_fit),
+        ]
+        bars = []
+        for tier_name, val in tiers:
+            if val is None:
+                continue
+            pct = max(0, min(100, val))
+            bars.append(
+                f'<div style="margin-bottom:6px">'
+                f'<div style="font-size:8pt;color:#666;margin-bottom:2px">{_e(tier_name)}</div>'
+                f'<div style="background:#e8f5f3;border-radius:4px;height:8px;overflow:hidden">'
+                f'<div style="background:{_TEAL};height:100%;width:{pct}%"></div>'
+                f'</div>'
+                f'<div style="font-size:8pt;color:{_TEAL};font-weight:600;text-align:right">{val}</div>'
+                f'</div>'
+            )
+        tier_html = "".join(bars)
+
+    verdict = _e(result.ai_visibility_verdict or result.market_overview or "")
+    return f"""
+  <div style="margin-bottom:24px;padding:20px;border:2px solid {_TEAL};border-radius:8px;page-break-inside:avoid">
+    <div style="font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:6px">{_e(label)}</div>
+    <div style="font-size:15pt;font-weight:700;color:{_TEAL};margin-bottom:10px">{name}</div>
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:20px">
+      <div>
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#999;margin-bottom:8px">AI Visibility Score</div>
+        <div style="margin-bottom:14px">{score_html}</div>
+        {tier_html}
+      </div>
+      <div>
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#999;margin-bottom:8px">AI Visibility Verdict</div>
+        <div style="font-size:9pt;line-height:1.65;color:#333">{verdict}</div>
+      </div>
+    </div>
+  </div>"""
+
+
+def _comparison_summary_block(comparison) -> str:
+    """Renders the comparison summary section."""
+    sims = "".join(f"<li>{_e(s)}</li>" for s in comparison.similarities)
+    diffs = "".join(f"<li>{_e(d)}</li>" for d in comparison.differences)
+    verdict_paras = "".join(
+        f"<p style='margin:0 0 10px'>{_e(para.strip())}</p>"
+        for para in (comparison.verdict or "").split("\n")
+        if para.strip()
+    )
+    return f"""
+  <div style="margin-bottom:28px;page-break-inside:avoid">
+    <div class="section-title">Comparison Summary</div>
+    {f'<div style="font-size:11pt;font-weight:600;color:{_TEAL};margin-bottom:16px">{_e(comparison.headline)}</div>' if comparison.headline else ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px">
+      <div style="background:#f0faf7;border-radius:6px;padding:14px 16px">
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1a7a4a;margin-bottom:8px">Where They Are Similar</div>
+        <ul style="margin:0;padding-left:16px;font-size:9pt;line-height:1.7;color:#333">{sims}</ul>
+      </div>
+      <div style="background:#fdf4f4;border-radius:6px;padding:14px 16px">
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#991b1b;margin-bottom:8px">Key Differences</div>
+        <ul style="margin:0;padding-left:16px;font-size:9pt;line-height:1.7;color:#333">{diffs}</ul>
+      </div>
+    </div>
+    <div style="font-size:9pt;line-height:1.65;color:#333">{verdict_paras}</div>
+  </div>"""
+
+
+def _entity_deep_dive(result: AnalysisResult) -> str:
+    """Full individual-report content for one entity: card + assessment + improvement."""
+    p = result.rankings[0] if result.rankings else None
+    name = _e(result.entity_name or result.location)
+    divider = f'<div style="border-top:2px solid {_TEAL};margin:28px 0 20px;opacity:0.3"></div>'
+
+    card_html = _individual_entity_card(p) if p else ""
+
+    # AI Visibility Assessment
+    assessment = _e(result.top_recommendation or "")
+    assessment_html = f"""
+  <div class="recommendation" style="margin-top:20px">
+    <div class="section-title" style="margin-bottom:10px">AI Visibility Assessment</div>
+    <p>{assessment}</p>
+  </div>"""
+
+    # Improvement Opportunities
+    if result.improvement_sections:
+        parts = []
+        for i, sec in enumerate(result.improvement_sections, 1):
+            items_li = "\n".join(f"<li>{_e(item)}</li>" for item in sec.items)
+            parts.append(
+                f'<div class="advice-group">'
+                f'<div class="advice-group-title">{i}. {_e(sec.title)}</div>'
+                f'<div class="advice-group-desc">{_e(sec.description)}</div>'
+                f'<ol>{items_li}</ol>'
+                f'</div>'
+            )
+        improvement_body = "\n".join(parts)
+    elif result.practical_advice:
+        flat = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
+        improvement_body = f"<ol>{flat}</ol>"
+    else:
+        improvement_body = ""
+
+    improvement_html = f"""
+  <div class="advice" style="margin-top:20px">
+    <div class="section-title">AI Visibility Assessment &amp; Improvement Opportunities</div>
+    {improvement_body}
+  </div>"""
+
+    disclaimer_html = f"""
+  <div class="disclaimer" style="margin-top:20px">
+    <strong>Data Limitations &amp; Disclaimer</strong><br>
+    {_e(result.disclaimer)}
+  </div>"""
+
+    return f"""
+  <div style="page-break-before:always">
+    <div class="section-title" style="font-size:13pt;margin-bottom:16px">
+      Deep-Dive Report — {name}
+    </div>
+    {card_html}
+    {assessment_html}
+    {improvement_html}
+    {disclaimer_html}
+  </div>"""
+
+
+def _build_comparison_html(
+    result_a: AnalysisResult,
+    result_b: AnalysisResult,
+    comparison,
+    brand_cfg: dict,
+    teaser: bool = False,
+) -> str:
+    """Build the full HTML for a comparison PDF."""
+    import base64 as _b64
+    date_str = result_a.generated_at.strftime("%B %d, %Y")
+    name_a = _e(result_a.entity_name or result_a.location)
+    name_b = _e(result_b.entity_name or result_b.location)
+
+    _has_custom_logo = brand_cfg.get("logo_html") or brand_cfg.get("logo_path")
+    logo_uri = None if _has_custom_logo else _logo_data_uri()
+    if brand_cfg.get("logo_html"):
+        logo_tag = brand_cfg["logo_html"]
+    elif brand_cfg.get("logo_path") and brand_cfg["logo_path"].exists():
+        _lp = brand_cfg["logo_path"]
+        _ldat = _b64.b64encode(_lp.read_bytes()).decode()
+        logo_tag = f'<img src="data:image/svg+xml;base64,{_ldat}" alt="Logo" style="height:52px;width:auto;display:block;margin-bottom:28px">'
+    else:
+        logo_tag = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
+
+    # Reuse the base HTML/CSS from a minimal individual result (entity_a) then override content
+    base_html = _build_html(result_a, brand_cfg)
+    # Extract everything up to and including <body>
+    body_start = base_html.index("<body>") + len("<body>")
+    head_section = base_html[:body_start]
+    # Strip the existing body content — we'll replace entirely
+    body_content = f"""
+<div class="cover">
+  {logo_tag}
+  <div class="cover-eyebrow">AI Visibility Comparison Report</div>
+  <div class="cover-location">{name_a}</div>
+  <div class="cover-specialty" style="font-size:13pt">vs.</div>
+  <div class="cover-location" style="font-size:18pt">{name_b}</div>
+  <div class="cover-meta">
+    <span>Generated {date_str}</span>
+    <span>Confidential — For Client Use Only</span>
+  </div>
+</div>
+
+<div class="accent-bar"></div>
+
+<div class="content">
+
+  <div class="section-title" style="font-size:13pt;margin-bottom:20px">Organization Overviews &amp; AI Visibility Verdicts</div>
+
+  {_comparison_overview_block(result_a, "Entity A")}
+  {_comparison_overview_block(result_b, "Entity B")}
+
+  {_comparison_summary_block(comparison)}
+
+  {_entity_deep_dive(result_a)}
+  {_entity_deep_dive(result_b)}
+
+</div>
+</body>
+</html>"""
+
+    html = head_section + body_content
+    # Apply brand color overrides
+    _primary = brand_cfg["primary"]
+    _pale    = brand_cfg["pale"]
+    _accent  = brand_cfg["accent"]
+    if _primary != _TEAL:
+        html = html.replace(_TEAL, _primary)
+    if _pale != _PALE_GREEN:
+        html = html.replace(_PALE_GREEN, _pale)
+    if _accent != _SEAFOAM:
+        html = html.replace(_SEAFOAM, _accent)
+    if brand_cfg.get("css_overrides"):
+        html = html.replace("</style>", brand_cfg["css_overrides"] + "  </style>", 1)
+    return html
+
+
+def render_comparison_pdf(
+    result_a: AnalysisResult,
+    result_b: AnalysisResult,
+    comparison,
+    pdf_path: "Path",
+    brand: str = "original",
+    teaser: bool = False,
+) -> None:
+    """Render a comparison report PDF from two AnalysisResult objects."""
+    from playwright.sync_api import sync_playwright
+
+    cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
+    html = _build_comparison_html(result_a, result_b, comparison, cfg, teaser=teaser)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html, wait_until="networkidle")
+        page.pdf(
+            path=str(pdf_path),
+            format="Letter",
+            margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
+            print_background=True,
+        )
+        browser.close()

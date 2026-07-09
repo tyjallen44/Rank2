@@ -888,6 +888,9 @@ html, body {
       <button class="nav-btn" id="nav-individual" onclick="navigate('individual')" title="Generate a focused AI Visibility report for a single hospital or practice">
         <span class="ni">◎</span><span class="nb-lbl">Individual Report</span>
       </button>
+      <button class="nav-btn" id="nav-compare" onclick="navigate('compare')" title="Compare two organizations head-to-head on AI Visibility">
+        <span class="ni">⇄</span><span class="nb-lbl">Comparison Report</span>
+      </button>
 
       <div class="nav-divider"></div>
       <div class="nav-section-label">Reporting</div>
@@ -1339,6 +1342,139 @@ html, body {
             Run Individual Report →
           </button>
           <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Comparison Report ─────────────────────────────────────────────── -->
+    <div id="page-compare" class="page">
+      <div class="page-title">Comparison Report</div>
+      <div class="page-sub">Select two organizations to compare head-to-head on AI Visibility. Each will be analyzed with the same depth as an Individual Report.</div>
+
+      <!-- Entity A -->
+      <div style="margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal)">Entity A</div>
+      <div id="cmp-a-step1" class="card">
+        <div class="fg">
+          <label class="fl">Organization Name</label>
+          <input id="cmp-a-name" class="fi" type="text" placeholder="e.g. Intermountain Medical Center"
+            oninput="this.value=this.value.toUpperCase()"
+            onkeydown="if(event.key==='Enter')runCmpSearch('a')">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 120px;gap:14px">
+          <div class="fg" style="margin:0">
+            <label class="fl">City</label>
+            <input id="cmp-a-city" class="fi" type="text" placeholder="Salt Lake City"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter')runCmpSearch('a')">
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fl">State</label>
+            <input id="cmp-a-state" class="fi" type="text" placeholder="UT" maxlength="2"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter')runCmpSearch('a')">
+          </div>
+        </div>
+        <div class="fg mt16" style="margin-bottom:0">
+          <label class="fl">Type</label>
+          <div class="tg-group">
+            <button class="tg-opt on" id="cmp-a-tg-hospital"  onclick="setCmpType('a','hospital')">Hospital / Health System</button>
+            <button class="tg-opt"    id="cmp-a-tg-specialty" onclick="setCmpType('a','specialty')">Specialty Practice</button>
+          </div>
+        </div>
+        <div id="cmp-a-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
+          <label class="fl">Specialty</label>
+          <input id="cmp-a-specialty" class="fi" type="text" placeholder="e.g. Orthopedics"
+            oninput="this.value=this.value.toUpperCase()"
+            onkeydown="if(event.key==='Enter')runCmpSearch('a')">
+        </div>
+        <div id="cmp-a-err" class="err hidden mt16"></div>
+        <div class="mt20">
+          <button class="btn btn-primary" id="cmp-a-search-btn" onclick="runCmpSearch('a')">Search →</button>
+        </div>
+      </div>
+      <div id="cmp-a-step2" class="hidden mt16">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Select the matching organization, or use the name as entered.</div>
+        <div id="cmp-a-candidates"></div>
+        <div class="mt12"><button class="btn btn-ghost btn-sm" onclick="cmpResetSearch('a')">← Search Again</button></div>
+      </div>
+      <div id="cmp-a-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Entity A Selected</div>
+        <div id="cmp-a-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
+        <label class="aggregate-toggle">
+          <input type="checkbox" id="cmp-a-agg" checked>
+          <span class="agg-label">Aggregate related facilities into parent system</span>
+        </label>
+      </div>
+
+      <!-- Entity B -->
+      <div id="cmp-b-section" class="hidden">
+        <div style="margin:28px 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal)">Entity B</div>
+        <div id="cmp-b-step1" class="card">
+          <div class="fg">
+            <label class="fl">Organization Name</label>
+            <input id="cmp-b-name" class="fi" type="text" placeholder="e.g. HCA Houston Healthcare"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter')runCmpSearch('b')">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 120px;gap:14px">
+            <div class="fg" style="margin:0">
+              <label class="fl">City</label>
+              <input id="cmp-b-city" class="fi" type="text" placeholder="Houston"
+                oninput="this.value=this.value.toUpperCase()"
+                onkeydown="if(event.key==='Enter')runCmpSearch('b')">
+            </div>
+            <div class="fg" style="margin:0">
+              <label class="fl">State</label>
+              <input id="cmp-b-state" class="fi" type="text" placeholder="TX" maxlength="2"
+                oninput="this.value=this.value.toUpperCase()"
+                onkeydown="if(event.key==='Enter')runCmpSearch('b')">
+            </div>
+          </div>
+          <div class="fg mt16" style="margin-bottom:0">
+            <label class="fl">Type</label>
+            <div class="tg-group">
+              <button class="tg-opt on" id="cmp-b-tg-hospital"  onclick="setCmpType('b','hospital')">Hospital / Health System</button>
+              <button class="tg-opt"    id="cmp-b-tg-specialty" onclick="setCmpType('b','specialty')">Specialty Practice</button>
+            </div>
+          </div>
+          <div id="cmp-b-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
+            <label class="fl">Specialty</label>
+            <input id="cmp-b-specialty" class="fi" type="text" placeholder="e.g. Orthopedics"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter')runCmpSearch('b')">
+          </div>
+          <div id="cmp-b-err" class="err hidden mt16"></div>
+          <div class="mt20">
+            <button class="btn btn-primary" id="cmp-b-search-btn" onclick="runCmpSearch('b')">Search →</button>
+          </div>
+        </div>
+        <div id="cmp-b-step2" class="hidden mt16">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Select the matching organization, or use the name as entered.</div>
+          <div id="cmp-b-candidates"></div>
+          <div class="mt12"><button class="btn btn-ghost btn-sm" onclick="cmpResetSearch('b')">← Search Again</button></div>
+        </div>
+        <div id="cmp-b-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Entity B Selected</div>
+          <div id="cmp-b-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
+          <label class="aggregate-toggle">
+            <input type="checkbox" id="cmp-b-agg" checked>
+            <span class="agg-label">Aggregate related facilities into parent system</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Run -->
+      <div id="cmp-run-section" class="hidden mt24">
+        <div class="card" style="background:var(--bg);border-color:var(--border)">
+          <label class="aggregate-toggle">
+            <input type="checkbox" id="cmp-teaser">
+            <span class="agg-label">Create Teaser version</span>
+          </label>
+          <div id="cmp-run-err" class="err hidden mt16"></div>
+          <div class="mt20 row-actions">
+            <button class="btn btn-primary" id="cmp-run-btn" onclick="runComparison()">Run Comparison Report →</button>
+            <button class="btn btn-ghost btn-sm" onclick="resetComparison()">← Start Over</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2003,11 +2139,14 @@ let _lastPage    = 'new';    // page that launched the current analysis
 
 const PHASES = ['starting', 'generating', 'structured', 'pdf'];
 const PHASE_MAP = {
-  starting:  'starting',
-  generating:'generating',
-  structured:'structured',
-  pdf:       'pdf',
-  done_item: 'pdf',
+  starting:    'starting',
+  generating:  'generating',
+  structured:  'structured',
+  pdf:         'pdf',
+  done_item:   'pdf',
+  entity_a:    'starting',
+  entity_b:    'generating',
+  comparison:  'structured',
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────
@@ -2613,6 +2752,190 @@ function irResetSearch() {
   document.getElementById('ir-run-err').classList.add('hidden');
 }
 
+// ── Comparison Report ─────────────────────────────────────────────────────
+
+const _cmp = {
+  a: { type: 'hospital', candidates: [], selected: null, city: null, state: null },
+  b: { type: 'hospital', candidates: [], selected: null, city: null, state: null },
+};
+
+function setCmpType(side, type) {
+  _cmp[side].type = type;
+  ['hospital','specialty'].forEach(t => {
+    document.getElementById(`cmp-${side}-tg-${t}`).classList.toggle('on', t === type);
+  });
+  document.getElementById(`cmp-${side}-specialty-wrap`).classList.toggle('hidden', type !== 'specialty');
+}
+
+async function runCmpSearch(side) {
+  const errEl  = document.getElementById(`cmp-${side}-err`);
+  const btn    = document.getElementById(`cmp-${side}-search-btn`);
+  errEl.classList.add('hidden');
+  const name  = document.getElementById(`cmp-${side}-name`).value.trim();
+  const city  = document.getElementById(`cmp-${side}-city`).value.trim();
+  const state = document.getElementById(`cmp-${side}-state`).value.trim().toUpperCase();
+  if (!name)                        return showErr(errEl, 'Please enter an organization name.');
+  if (!city)                        return showErr(errEl, 'Please enter a city.');
+  if (!state || state.length !== 2) return showErr(errEl, 'Please enter a 2-letter state code.');
+  const specialty = _cmp[side].type === 'specialty'
+    ? (document.getElementById(`cmp-${side}-specialty`).value.trim() || null) : null;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Searching…';
+  try {
+    const r = await api('/api/search/entity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, city, state, specialty }),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Search failed'));
+    const data = await r.json();
+    _cmp[side].candidates = data.candidates || [];
+    _cmp[side].city  = data.city  || city;
+    _cmp[side].state = data.state || state;
+    renderCmpCandidates(side, name);
+  } catch(e) {
+    showErr(errEl, e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Search →';
+  }
+}
+
+function renderCmpCandidates(side, enteredName) {
+  const step1 = document.getElementById(`cmp-${side}-step1`);
+  const step2 = document.getElementById(`cmp-${side}-step2`);
+  const box   = document.getElementById(`cmp-${side}-candidates`);
+  step1.classList.add('hidden');
+  step2.classList.remove('hidden');
+  const cands = _cmp[side].candidates;
+  let html = cands.map((c, i) => `
+    <div onclick="selectCmpCandidate('${side}',${i})" style="cursor:pointer;padding:10px 14px;border:1.5px solid var(--pale);border-radius:8px;margin-bottom:8px;background:#fff;transition:border-color 0.15s"
+         onmouseover="this.style.borderColor='var(--teal)'" onmouseout="this.style.borderColor='var(--pale)'">
+      <div style="font-weight:600;font-size:14px">${c.name}</div>
+      ${c.address ? `<div style="font-size:12px;color:var(--muted)">${c.address}</div>` : ''}
+      ${c.rating != null ? `<div style="font-size:12px;color:var(--teal);font-weight:600">${c.rating.toFixed(1)}★ ${c.review_count ? `(${c.review_count.toLocaleString()})` : ''}</div>` : ''}
+    </div>`).join('');
+  html += `
+    <div onclick="selectCmpCandidate('${side}',-1)" style="cursor:pointer;padding:10px 14px;border:1.5px dashed var(--border);border-radius:8px;margin-top:${cands.length ? '6':'0'}px;background:#fff"
+         onmouseover="this.style.borderColor='var(--teal)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-size:13px;color:var(--muted)">${cands.length ? 'Not finding the right match? Use:' : 'Proceed with:'}</div>
+      <div style="font-weight:600">${enteredName}</div>
+    </div>`;
+  box.innerHTML = html;
+}
+
+function selectCmpCandidate(side, idx) {
+  const enteredName = document.getElementById(`cmp-${side}-name`).value.trim();
+  const cands = _cmp[side].candidates;
+  _cmp[side].selected = idx === -1
+    ? { name: enteredName, address: '', rating: null, review_count: null }
+    : (cands[idx] || { name: enteredName, address: '', rating: null, review_count: null });
+
+  const s = _cmp[side].selected;
+  const ratingLine = s.rating != null
+    ? ` <span style="font-size:12px;color:var(--teal);font-weight:600">${s.rating.toFixed(1)}★</span>`
+      + (s.review_count ? ` <span style="font-size:12px;color:var(--muted)">${s.review_count.toLocaleString()} reviews</span>` : '')
+    : '';
+  document.getElementById(`cmp-${side}-selected-display`).innerHTML = `
+    <div style="font-weight:700;font-size:15px;color:var(--teal)">${s.name}${ratingLine}</div>
+    ${s.address ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${s.address}</div>` : ''}
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">${_cmp[side].city}, ${_cmp[side].state}</div>`;
+
+  document.getElementById(`cmp-${side}-step2`).classList.add('hidden');
+  document.getElementById(`cmp-${side}-step3`).classList.remove('hidden');
+
+  if (side === 'a') {
+    document.getElementById('cmp-b-section').classList.remove('hidden');
+  }
+  if (_cmp.a.selected && _cmp.b.selected) {
+    document.getElementById('cmp-run-section').classList.remove('hidden');
+  }
+}
+
+function cmpResetSearch(side) {
+  _cmp[side].selected = null;
+  _cmp[side].candidates = [];
+  document.getElementById(`cmp-${side}-step1`).classList.remove('hidden');
+  document.getElementById(`cmp-${side}-step2`).classList.add('hidden');
+  document.getElementById(`cmp-${side}-step3`).classList.add('hidden');
+  if (side === 'a') {
+    document.getElementById('cmp-b-section').classList.add('hidden');
+    document.getElementById('cmp-run-section').classList.add('hidden');
+    _cmp.b.selected = null;
+    _cmp.b.candidates = [];
+    ['step1','step2','step3'].forEach(s => {
+      document.getElementById(`cmp-b-${s}`).classList.toggle('hidden', s !== 'step1');
+    });
+  }
+  if (!_cmp.a.selected || !_cmp.b.selected) {
+    document.getElementById('cmp-run-section').classList.add('hidden');
+  }
+}
+
+function resetComparison() {
+  ['a','b'].forEach(side => {
+    _cmp[side] = { type: 'hospital', candidates: [], selected: null, city: null, state: null };
+    document.getElementById(`cmp-${side}-name`).value = '';
+    document.getElementById(`cmp-${side}-city`).value = '';
+    document.getElementById(`cmp-${side}-state`).value = '';
+    document.getElementById(`cmp-${side}-step1`).classList.remove('hidden');
+    document.getElementById(`cmp-${side}-step2`).classList.add('hidden');
+    document.getElementById(`cmp-${side}-step3`).classList.add('hidden');
+    setCmpType(side, 'hospital');
+  });
+  document.getElementById('cmp-b-section').classList.add('hidden');
+  document.getElementById('cmp-run-section').classList.add('hidden');
+  document.getElementById('cmp-run-err').classList.add('hidden');
+}
+
+async function runComparison() {
+  if (!_cmp.a.selected || !_cmp.b.selected) return;
+  const errEl = document.getElementById('cmp-run-err');
+  errEl.classList.add('hidden');
+
+  const specA = _cmp.a.type === 'specialty'
+    ? (document.getElementById('cmp-a-specialty').value.trim() || null) : null;
+  const specB = _cmp.b.type === 'specialty'
+    ? (document.getElementById('cmp-b-specialty').value.trim() || null) : null;
+  if (_cmp.a.type === 'specialty' && !specA) return showErr(errEl, 'Please enter a specialty for Entity A.');
+  if (_cmp.b.type === 'specialty' && !specB) return showErr(errEl, 'Please enter a specialty for Entity B.');
+
+  const body = {
+    entity_a_name: _cmp.a.selected.name,
+    city_a:        _cmp.a.city,
+    state_a:       _cmp.a.state,
+    specialty_a:   specA,
+    aggregate_a:   document.getElementById('cmp-a-agg').checked,
+    entity_b_name: _cmp.b.selected.name,
+    city_b:        _cmp.b.city,
+    state_b:       _cmp.b.state,
+    specialty_b:   specB,
+    aggregate_b:   document.getElementById('cmp-b-agg').checked,
+    teaser_report: document.getElementById('cmp-teaser').checked,
+  };
+
+  const btn = document.getElementById('cmp-run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Starting…';
+  try {
+    const r = await api('/api/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start'));
+    const { job_id } = await r.json();
+    _lastPage = 'compare';
+    startProgress(job_id, `${_cmp.a.selected.name} vs ${_cmp.b.selected.name}`, false);
+  } catch(e) {
+    showErr(errEl, e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Run Comparison Report →';
+  }
+}
+
 async function runIndividual() {
   if (!_irSelected) return;
   const errEl = document.getElementById('ir-run-err');
@@ -2862,8 +3185,9 @@ function showSingleDone(r) {
         <div class="stat-lbl">Providers Ranked</div>
       </div>
     </div>`;
-  const backLabel = _lastPage === 'patient' ? 'New Patient Perspective'
+  const backLabel = _lastPage === 'patient'   ? 'New Patient Perspective'
     : _lastPage === 'individual' ? 'New Individual Report'
+    : _lastPage === 'compare'   ? 'New Comparison'
     : 'New Market Research';
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="dlPdf('${r.run_id}')">⬇ Download PDF</button>

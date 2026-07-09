@@ -31,7 +31,7 @@ from .models import (
     TierScores,
     UsNewsRanking,
 )
-from .prompts import build_hospital_prompt, build_specialty_prompt, build_individual_prompt
+from .prompts import build_hospital_prompt, build_specialty_prompt, build_individual_prompt, build_comparison_prompt
 
 _MODEL = "claude-opus-4-8"
 
@@ -922,6 +922,85 @@ def analyze_entities(
             aggregate=False, output_dir=output_dir, on_event=on_event,
         ))
     return results
+
+
+def compare_locations(
+    entity_a_name: str, city_a: str, state_a: str,
+    entity_b_name: str, city_b: str, state_b: str,
+    specialty_a: str | None = None,
+    specialty_b: str | None = None,
+    aggregate_a: bool = True,
+    aggregate_b: bool = True,
+    teaser_report: bool = False,
+    output_dir: str | Path = "reports",
+    on_event: Callable | None = None,
+    brand: str = "original",
+) -> tuple[AnalysisResult, AnalysisResult, object]:
+    """Run two individual-report analyses then synthesize a structured comparison.
+
+    Returns (result_a, result_b, comparison_summary).
+    """
+    from .models import ComparisonSummary
+    from .pdf import render_comparison_pdf
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    def emit(ev: dict) -> None:
+        if on_event:
+            on_event(ev)
+
+    # ── Phase 1: Entity A ────────────────────────────────────────────────────
+    emit({"type": "phase", "name": "entity_a", "text": f"Analyzing {entity_a_name}"})
+    result_a = analyze_location(
+        city=city_a, state=state_a, specialty=specialty_a,
+        aggregate=aggregate_a, entity_name=entity_a_name,
+        individual_report=True, skip_pdf=True,
+        output_dir=output_dir, on_event=on_event, brand=brand,
+    )
+
+    # ── Phase 2: Entity B ────────────────────────────────────────────────────
+    emit({"type": "phase", "name": "entity_b", "text": f"Analyzing {entity_b_name}"})
+    result_b = analyze_location(
+        city=city_b, state=state_b, specialty=specialty_b,
+        aggregate=aggregate_b, entity_name=entity_b_name,
+        individual_report=True, skip_pdf=True,
+        output_dir=output_dir, on_event=on_event, brand=brand,
+    )
+
+    # ── Phase 3: Comparison synthesis ───────────────────────────────────────
+    emit({"type": "phase", "name": "comparison", "text": "Synthesizing comparison"})
+    client = _get_client()
+    sys_prompt, user_prompt = build_comparison_prompt(result_a, result_b)
+    raw = client.messages.create(
+        model=_MODEL,
+        max_tokens=4096,
+        system=sys_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    ).content[0].text.strip()
+
+    try:
+        comp_data = json.loads(raw)
+    except Exception:
+        # Fallback if JSON parse fails
+        comp_data = {"headline": "", "similarities": [], "differences": [], "verdict": raw}
+
+    comparison = ComparisonSummary(
+        headline=comp_data.get("headline", ""),
+        similarities=comp_data.get("similarities", []),
+        differences=comp_data.get("differences", []),
+        verdict=comp_data.get("verdict", ""),
+    )
+
+    # ── Phase 4: Build PDF ───────────────────────────────────────────────────
+    emit({"type": "phase", "name": "pdf", "text": "Generating Comparison Report PDF"})
+    safe_a = re.sub(r"[^\w\-]", "_", entity_a_name)[:30]
+    safe_b = re.sub(r"[^\w\-]", "_", entity_b_name)[:30]
+    pdf_name = f"comparison_{safe_a}_vs_{safe_b}_{result_a.run_id[:8]}.pdf"
+    pdf_path = output_dir / pdf_name
+    render_comparison_pdf(result_a, result_b, comparison, pdf_path, brand=brand, teaser=teaser_report)
+
+    return result_a, result_b, comparison, str(pdf_path)
 
 
 def _save_to_db(result: AnalysisResult) -> None:

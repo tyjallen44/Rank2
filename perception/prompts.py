@@ -731,3 +731,67 @@ def build_specialty_prompt(
     if radius_miles:
         user += _RADIUS_INSTRUCTIONS.format(radius_miles=radius_miles)
     return SPECIALTY_SYSTEM_PROMPT, user
+
+
+# ── Comparison prompt ─────────────────────────────────────────────────────────
+
+COMPARISON_SYSTEM_PROMPT = """\
+You are a neutral, data-driven healthcare market analyst producing a structured
+head-to-head AI Visibility comparison between two named organizations.
+
+Your task is to produce a JSON object with exactly four keys:
+  "headline"      – one crisp sentence summarizing the most important contrast
+  "similarities"  – array of 3–6 bullet strings where the two entities are on par
+  "differences"   – array of 4–8 bullet strings calling out meaningful gaps or advantages
+  "verdict"       – 2–3 paragraph narrative synthesizing the comparison: who is stronger
+                    overall on AI Visibility, where each has room to improve, and what the
+                    data suggests about their relative digital footprints
+
+Each bullet in similarities/differences must be specific and evidence-grounded
+(cite scores, grades, ratings, or named signals). Do not pad with vague claims.
+Lead each differences bullet with the entity that has the advantage, e.g.
+"[Entity A] scores 12 points higher on Credentials & Recognition (78 vs 66)…"
+
+Produce ONLY the JSON object — no markdown fences, no preamble.
+"""
+
+
+def build_comparison_prompt(result_a: object, result_b: object) -> tuple[str, str]:
+    """Return (system_prompt, user_prompt) to synthesize a comparison between two
+    AnalysisResult objects. Caller passes the full results; we extract the key signals."""
+
+    def _summarize(r: object) -> str:
+        p = r.rankings[0] if r.rankings else None
+        if not p:
+            return f"Name: {r.entity_name or r.location}\nNo structured data available."
+        ts = p.tier_scores
+        fd = p.google_footprint.front_door
+        lines = [
+            f"Name: {p.name}",
+            f"Location: {r.location}",
+            f"AI Visibility Score: {p.ai_visibility_score}",
+            f"Overall grade: {p.overall_rating}",
+            f"Weighting profile: {p.weighting_profile}",
+            f"Tier – Outcomes & Safety: {ts.clinical_outcomes_safety}",
+            f"Tier – Credentials & Recognition: {ts.credentials_recognition}",
+            f"Tier – Patient Experience & Reviews: {ts.patient_experience_reviews}",
+            f"Tier – Access & Fit: {ts.access_fit}",
+            f"Google rating: {fd.rating} ({fd.count} reviews)",
+            f"Leapfrog grade: {p.leapfrog_grade or 'N/A'}",
+            f"CMS star rating: {p.cms_star_rating or 'N/A'}",
+            f"Accreditations: {', '.join(p.accreditations) if p.accreditations else 'None listed'}",
+            f"Key strengths: {'; '.join(p.key_strengths[:3]) if p.key_strengths else 'N/A'}",
+            f"Notable weaknesses: {'; '.join(p.notable_weaknesses[:3]) if p.notable_weaknesses else 'N/A'}",
+            f"AI Visibility Verdict: {r.ai_visibility_verdict[:500] if r.ai_visibility_verdict else 'N/A'}",
+        ]
+        return "\n".join(lines)
+
+    user = f"""Compare the following two organizations on AI Visibility and produce the structured JSON.
+
+=== ENTITY A ===
+{_summarize(result_a)}
+
+=== ENTITY B ===
+{_summarize(result_b)}
+"""
+    return COMPARISON_SYSTEM_PROMPT, user
