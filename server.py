@@ -234,6 +234,51 @@ def _job_run_single(
         _put(loop, queue, None)  # sentinel → closes SSE stream
 
 
+def _job_run_practice(
+    job_id: str, entity_name: str, city: str, state: str,
+    specialty: Optional[str] = None, aggregate: bool = False,
+    radius_miles: Optional[int] = None,
+) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+
+    try:
+        from perception.db import init_db, set_run_role
+        from perception.practice_analyzer import analyze_practice
+
+        init_db()
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        result = analyze_practice(
+            entity_name=entity_name,
+            city=city,
+            state=state,
+            specialty=specialty,
+            aggregate=aggregate,
+            practice_profile=job.get("practice_profile"),
+            teaser_report=job.get("teaser_report", False),
+            output_dir=REPORTS_DIR,
+            on_event=emit,
+            brand=job.get("brand", "original"),
+            skip_pdf=job.get("skip_pdf", False),
+        )
+        set_run_role(result.run_id, job["role"])
+        job["status"] = "done"
+        job["result"] = {
+            "run_id": result.run_id,
+            "location": result.location,
+            "specialty": result.specialty,
+            "provider_count": len(result.rankings),
+            "pdf_path": result.pdf_path,
+        }
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = str(exc)
+    finally:
+        _put(loop, queue, None)
+
+
 def _job_run_batch(job_id: str, groups: List[dict]) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
@@ -317,6 +362,8 @@ class AnalyzeRequest(BaseModel):
     entity_name: Optional[str] = None
     individual_report: bool = False
     skip_pdf: bool = False
+    entity_type: Optional[str] = None       # "practice" routes to practice_analyzer
+    practice_profile: Optional[str] = None  # override auto-classified profile
 
 
 class BatchRequest(BaseModel):
@@ -335,6 +382,10 @@ class CompareRequest(BaseModel):
     specialty_b: Optional[str] = None
     aggregate_b: bool = True
     teaser_report: bool = False
+    entity_type_a: Optional[str] = None    # "practice" or None/hospital
+    entity_type_b: Optional[str] = None
+    practice_profile_a: Optional[str] = None
+    practice_profile_b: Optional[str] = None
 
 
 @app.post("/api/analyze")
@@ -364,7 +415,13 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["entity_name"] = entity_name
     _jobs[job_id]["individual_report"] = req.individual_report
     _jobs[job_id]["skip_pdf"] = req.skip_pdf
-    _pool.submit(_job_run_single, job_id, city, state, specialty, req.aggregate, radius)
+    _jobs[job_id]["entity_type"] = req.entity_type
+    _jobs[job_id]["practice_profile"] = req.practice_profile
+
+    if req.entity_type == "practice" and entity_name:
+        _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)
+    else:
+        _pool.submit(_job_run_single, job_id, city, state, specialty, req.aggregate, radius)
     return {"job_id": job_id}
 
 
@@ -401,6 +458,10 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
             output_dir=REPORTS_DIR,
             on_event=emit,
             brand=job.get("brand", "original"),
+            entity_type_a=req_dict.get("entity_type_a"),
+            entity_type_b=req_dict.get("entity_type_b"),
+            practice_profile_a=req_dict.get("practice_profile_a"),
+            practice_profile_b=req_dict.get("practice_profile_b"),
         )
         job["status"] = "done"
         job["result"] = {
@@ -506,6 +567,34 @@ async def download_pdf(run_id: str, role: str = Depends(require_auth)):
     if not pdf.exists():
         raise HTTPException(404, "PDF file not found on disk")
     return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
+
+
+@app.get("/api/practice/profiles")
+async def practice_profiles(_: str = Depends(require_auth)):
+    """Return the four practice profile options for the UI profile selector."""
+    return {
+        "profiles": [
+            {"value": "practice_procedural",   "label": "Procedural",   "description": "Elective/destination procedures (ortho, plastics, ophthalmology, fertility, bariatrics, cosmetic dermatology, oral surgery)"},
+            {"value": "practice_relationship",  "label": "Relationship", "description": "Primary care, pediatrics, OB/GYN, behavioral health, geriatrics, dental-general"},
+            {"value": "practice_referral_fed",  "label": "Referral-Fed", "description": "Reached mainly via PCP referral: oncology, cardiology, nephrology, rheumatology, surgical subspecialties"},
+            {"value": "practice_hybrid",        "label": "Hybrid",       "description": "Multi-specialty groups: blend of procedural and relationship profiles"},
+        ]
+    }
+
+
+class ClassifyPracticeRequest(BaseModel):
+    specialty: Optional[str] = None
+
+
+@app.post("/api/practice/classify")
+async def classify_practice(req: ClassifyPracticeRequest, _: str = Depends(require_auth)):
+    """Auto-classify a specialty into a practice profile."""
+    from perception.practice_models import classify_practice_profile, PROFILE_DISPLAY
+    profile = classify_practice_profile(req.specialty)
+    return {
+        "profile": profile,
+        "label": PROFILE_DISPLAY.get(profile, "Procedural"),
+    }
 
 
 @app.post("/api/search/entity")

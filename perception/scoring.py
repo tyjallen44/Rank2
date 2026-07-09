@@ -112,6 +112,36 @@ def composite_score(tier_scores: dict[str, float], profile: str) -> Optional[int
     return round(total / weight_used)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Practice Edition constants (practice-rubric.md §2.1–§2.5)
+# Tier keys are REUSED from TIER_KEYS with semantic remapping per profile:
+#   clinical_outcomes_safety   → Pillar 1: Practitioner Credentials & Clinical Quality
+#   credentials_recognition    → Pillar 2: Reviews & Reputation
+#   patient_experience_reviews → Pillar 3: Identity & Machine-Readability
+#   access_fit                 → Pillar 4: Access & Fit
+# ─────────────────────────────────────────────────────────────────────────────
+
+PRACTICE_TIER_LABELS: dict[str, dict[str, str]] = {
+    profile: {
+        "clinical_outcomes_safety":   "Practitioner Credentials & Clinical Quality",
+        "credentials_recognition":    "Reviews & Reputation",
+        "patient_experience_reviews": "Identity & Machine-Readability",
+        "access_fit":                 "Access & Fit",
+    }
+    for profile in (
+        "practice_procedural", "practice_relationship",
+        "practice_referral_fed", "practice_hybrid",
+    )
+}
+
+PRACTICE_PROFILE_DISPLAY: dict[str, str] = {
+    "practice_procedural":   "Procedural",
+    "practice_relationship": "Relationship",
+    "practice_referral_fed": "Referral-Fed",
+    "practice_hybrid":       "Hybrid",
+}
+
+
 def experience_band(
     rating: Optional[float],
     review_count: Optional[int],

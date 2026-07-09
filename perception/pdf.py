@@ -5,7 +5,14 @@ import html as _html_lib
 from pathlib import Path
 
 from .models import AffiliationType, AnalysisResult, RankedProvider, SizeCategory
-from .scoring import TIER_LABELS
+from .scoring import TIER_LABELS, PRACTICE_TIER_LABELS, PRACTICE_PROFILE_DISPLAY
+
+
+def _tier_labels(profile: str | None) -> dict[str, str]:
+    """Return the correct tier-label dict for a given weighting profile."""
+    if profile and profile.startswith("practice_"):
+        return PRACTICE_TIER_LABELS.get(profile, PRACTICE_TIER_LABELS["practice_procedural"])
+    return TIER_LABELS.get(profile or "procedural", TIER_LABELS["procedural"])
 
 # RLDatix brand palette (original)
 _TEAL        = "#0F4146"
@@ -176,14 +183,19 @@ def _tier_row(label: str, value: int | None) -> str:
 
 def _aivs_block(p: RankedProvider) -> str:
     """AI Visibility score + band + weighting profile + the four tier bars."""
-    labels = TIER_LABELS.get(p.weighting_profile or "procedural", TIER_LABELS["procedural"])
+    profile = p.weighting_profile or "procedural"
+    labels = _tier_labels(profile)
     ts = p.tier_scores
     score = p.ai_visibility_score
     score_txt = str(score) if score is not None else "—"
     band, band_cls = _score_band(score)
     band_html = f'<span class="score-band {band_cls}">{band}</span>' if band else ""
-    profile = p.weighting_profile or "procedural"
-    profile_label = "Procedural" if profile == "procedural" else "Relationship"
+    if profile.startswith("practice_"):
+        profile_label = PRACTICE_PROFILE_DISPLAY.get(profile, "Procedural")
+    elif profile == "relationship":
+        profile_label = "Relationship"
+    else:
+        profile_label = "Procedural"
     rows = "".join([
         _tier_row(labels["clinical_outcomes_safety"], ts.clinical_outcomes_safety),
         _tier_row(labels["credentials_recognition"], ts.credentials_recognition),
@@ -196,6 +208,7 @@ def _aivs_block(p: RankedProvider) -> str:
         <div class="aivs-label">AI Visibility</div>
         <div class="aivs-score">{score_txt}<span class="out">/100</span>{band_html}</div>
         <div class="profile-chip">{profile_label}</div>
+        {f'<div class="ceiling-note">⚠ Score capped at 74 ({_e(p.score_ceiling_reason)})</div>' if p.score_ceiling_applied else ""}
       </div>
       <div class="tier-bars">{rows}
         <div style="font-size:6pt;color:#aabcc0;margin-top:3px;font-style:italic">Scored per Appendix A methodology</div>
@@ -1783,6 +1796,11 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     .profile-chip {{
       font-size: 6pt; font-weight: 600; letter-spacing: 0.08em;
       text-transform: uppercase; color: #7a9095; margin-top: 3px;
+    }}
+    .ceiling-note {{
+      font-size: 5.5pt; font-weight: 600; color: #8b3a00;
+      background: #fef0e6; border-radius: 3px; padding: 2px 5px;
+      margin-top: 4px; display: inline-block;
     }}
 
     /* ── Public & Social Ratings section header ─────── */

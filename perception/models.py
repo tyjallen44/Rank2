@@ -169,6 +169,13 @@ class RankedProvider(BaseModel):
     ai_says: str = ""                              # how AI assistants currently describe this provider
     trauma_level: Optional[str] = None            # "Level I" / "Level II" / "Level III"
     teaching_status: Optional[str] = None         # "major" / "minor" / "not_teaching"
+    # Practice Edition derived metrics (None for hospital runs)
+    entity_resolution_pct: Optional[float] = None   # % of runs resolving the correct practice
+    linkage_integrity_pct: Optional[float] = None   # % of physician runs correctly linked
+    physician_capture_rate: Optional[float] = None  # % of physician-first queries capturing any physician
+    key_person_flag: bool = False                   # solo/two-physician practice flag
+    score_ceiling_applied: bool = False             # True if the ≤74 ceiling was applied
+    score_ceiling_reason: Optional[str] = None      # which triggers fired the ceiling
 
 
 class ImprovementSection(BaseModel):
@@ -200,6 +207,9 @@ class AnalysisResult(BaseModel):
     radius_miles: Optional[int] = None     # set when search was by ZIP code
     generated_at: date
     weighting_profile: Optional[str] = None  # the profile used for the whole run
+    entity_type: Optional[str] = None        # "hospital" | "practice" — None means hospital
+    rubric_version: Optional[str] = None     # e.g. "practice-v1.0"
+    practice_profile: Optional[str] = None  # e.g. "practice_procedural"
     market_overview: str = ""              # 2–3 paragraph landscape narrative
     ai_visibility_verdict: str = ""        # neutral analyst read on the market's AI visibility
     coverage_note: str = ""                # "covered N of M registry facilities"

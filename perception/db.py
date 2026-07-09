@@ -87,6 +87,9 @@ def init_db() -> None:
         ("market_overview", "VARCHAR"),
         ("ai_visibility_verdict", "VARCHAR"),
         ("coverage_note", "VARCHAR"),
+        ("entity_type", "VARCHAR DEFAULT 'hospital'"),
+        ("rubric_version", "VARCHAR"),
+        ("practice_profile", "VARCHAR"),
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -143,6 +146,13 @@ def init_db() -> None:
         ("ai_says", "VARCHAR DEFAULT ''"),
         ("trauma_level", "VARCHAR"),
         ("teaching_status", "VARCHAR"),
+        # Practice Edition derived metrics
+        ("entity_resolution_pct",  "DOUBLE"),
+        ("linkage_integrity_pct",  "DOUBLE"),
+        ("physician_capture_rate", "DOUBLE"),
+        ("key_person_flag",        "BOOLEAN DEFAULT FALSE"),
+        ("score_ceiling_applied",  "BOOLEAN DEFAULT FALSE"),
+        ("score_ceiling_reason",   "VARCHAR"),
     ]:
         if col not in existing_provider_cols:
             con.execute(f"ALTER TABLE ranked_providers ADD COLUMN {col} {definition}")

@@ -1315,6 +1315,30 @@ html, body {
         </div>
       </div>
 
+      <!-- Step 2b: Practice Profile Confirmation (specialty practice only) -->
+      <div id="ir-step2b" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Practice Profile Classification</div>
+        <div style="font-size:13px;color:var(--text);margin-bottom:16px">
+          Based on the specialty, this practice has been auto-classified as
+          <strong id="ir-profile-proposed" style="color:var(--teal)"></strong>.
+          You can override the classification below if needed.
+        </div>
+        <div class="fg" style="margin-bottom:8px">
+          <label class="fl">Practice Profile</label>
+          <select id="ir-profile-select" class="fi" onchange="updateIrProfileDesc(this.value)">
+            <option value="practice_procedural">Procedural — elective/destination procedures (ortho, plastics, ophthalmology, fertility, bariatrics, cosmetic derm, oral surgery)</option>
+            <option value="practice_relationship">Relationship — primary care, pediatrics, OB/GYN, behavioral health, geriatrics, dental</option>
+            <option value="practice_referral_fed">Referral-Fed — reached via PCP referral (oncology, cardiology, nephrology, rheumatology, surgical subspecialties)</option>
+            <option value="practice_hybrid">Hybrid — multi-specialty groups: blend of procedural and relationship</option>
+          </select>
+        </div>
+        <div id="ir-profile-desc" style="font-size:11px;color:var(--muted);margin-bottom:16px"></div>
+        <div class="row-actions">
+          <button class="btn btn-primary" onclick="irConfirmProfile()">Confirm Profile → Continue</button>
+          <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
+        </div>
+      </div>
+
       <!-- Step 3: Options + Run -->
       <div id="ir-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Selected Organization</div>
@@ -2669,9 +2693,10 @@ async function runPatient() {
 let _irLocMode = 'city';
 let _irType    = 'hospital';
 let _irCandidates   = [];
-let _irSelected     = null;
-let _irResolvedCity  = null;
-let _irResolvedState = null;
+let _irSelected       = null;
+let _irResolvedCity   = null;
+let _irResolvedState  = null;
+let _irPracticeProfile = null;
 
 function setIrLocMode(m) {
   _irLocMode = m;
@@ -2778,9 +2803,6 @@ function selectIrCandidate(idx) {
     ? { name: enteredName, address: '', rating: null, review_count: null }
     : (_irCandidates[idx] || { name: enteredName, address: '', rating: null, review_count: null });
 
-  document.getElementById('ir-step3').classList.remove('hidden');
-  document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
   const ratingLine = _irSelected.rating != null
     ? ` <span style="font-size:12px;color:var(--teal);font-weight:600">${_irSelected.rating.toFixed(1)}★</span>` +
       (_irSelected.review_count ? ` <span style="font-size:12px;color:var(--muted)">${_irSelected.review_count.toLocaleString()} reviews</span>` : '')
@@ -2794,12 +2816,63 @@ function selectIrCandidate(idx) {
     <div style="font-weight:700;font-size:15px;color:var(--teal)">${_irSelected.name}${ratingLine}</div>
     ${addrLine}
     ${cityStateLine}`;
+
+  if (_irType === 'specialty') {
+    showIrProfileStep();
+  } else {
+    document.getElementById('ir-step2b').classList.add('hidden');
+    document.getElementById('ir-step3').classList.remove('hidden');
+    document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+const _IR_PROFILE_DESCS = {
+  practice_procedural:   'Patients shop and compare; credentials and procedure-specific reputation dominate.',
+  practice_relationship: 'Patients choose on convenience and trust; access, availability, and reviews dominate.',
+  practice_referral_fed: 'Patients verify rather than choose; physician credential verifiability dominates.',
+  practice_hybrid:       'Multi-specialty mix; blends procedural and relationship weighting equally.',
+};
+
+function updateIrProfileDesc(profile) {
+  document.getElementById('ir-profile-desc').textContent = _IR_PROFILE_DESCS[profile] || '';
+}
+
+async function showIrProfileStep() {
+  const specialty = document.getElementById('ir-specialty').value.trim();
+  let proposed = 'practice_procedural';
+  let proposedLabel = 'Procedural';
+  try {
+    const r = await api('/api/practice/classify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ specialty }),
+    });
+    const data = await r.json();
+    proposed = data.profile || 'practice_procedural';
+    proposedLabel = data.label || 'Procedural';
+  } catch(e) { /* use defaults */ }
+  _irPracticeProfile = proposed;
+  document.getElementById('ir-profile-proposed').textContent = proposedLabel;
+  document.getElementById('ir-profile-select').value = proposed;
+  updateIrProfileDesc(proposed);
+  document.getElementById('ir-step2b').classList.remove('hidden');
+  document.getElementById('ir-step3').classList.add('hidden');
+  document.getElementById('ir-step2b').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function irConfirmProfile() {
+  _irPracticeProfile = document.getElementById('ir-profile-select').value;
+  document.getElementById('ir-step2b').classList.add('hidden');
+  document.getElementById('ir-step3').classList.remove('hidden');
+  document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function irResetSearch() {
   _irSelected = null;
   _irCandidates = [];
+  _irPracticeProfile = null;
   document.getElementById('ir-step2').classList.add('hidden');
+  document.getElementById('ir-step2b').classList.add('hidden');
   document.getElementById('ir-step3').classList.add('hidden');
   document.getElementById('ir-search-err').classList.add('hidden');
   document.getElementById('ir-run-err').classList.add('hidden');
@@ -2808,8 +2881,8 @@ function irResetSearch() {
 // ── Comparison Report ─────────────────────────────────────────────────────
 
 const _cmp = {
-  a: { type: 'hospital', candidates: [], selected: null, city: null, state: null },
-  b: { type: 'hospital', candidates: [], selected: null, city: null, state: null },
+  a: { type: 'hospital', candidates: [], selected: null, city: null, state: null, practiceProfile: null },
+  b: { type: 'hospital', candidates: [], selected: null, city: null, state: null, practiceProfile: null },
 };
 
 function setCmpType(side, type) {
@@ -2898,6 +2971,18 @@ function selectCmpCandidate(side, idx) {
   document.getElementById(`cmp-${side}-step2`).classList.add('hidden');
   document.getElementById(`cmp-${side}-step3`).classList.remove('hidden');
 
+  // Auto-classify practice profile when it's a specialty entity
+  if (_cmp[side].type === 'specialty') {
+    const spec = document.getElementById(`cmp-${side}-specialty`).value.trim();
+    api('/api/practice/classify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ specialty: spec }),
+    }).then(r => r.json())
+      .then(d => { _cmp[side].practiceProfile = d.profile || 'practice_procedural'; })
+      .catch(() => { _cmp[side].practiceProfile = 'practice_procedural'; });
+  }
+
   if (side === 'a') {
     document.getElementById('cmp-b-section').classList.remove('hidden');
   }
@@ -2928,7 +3013,7 @@ function cmpResetSearch(side) {
 
 function resetComparison() {
   ['a','b'].forEach(side => {
-    _cmp[side] = { type: 'hospital', candidates: [], selected: null, city: null, state: null };
+    _cmp[side] = { type: 'hospital', candidates: [], selected: null, city: null, state: null, practiceProfile: null };
     document.getElementById(`cmp-${side}-name`).value = '';
     document.getElementById(`cmp-${side}-city`).value = '';
     document.getElementById(`cmp-${side}-state`).value = '';
@@ -2955,17 +3040,21 @@ async function runComparison() {
   if (_cmp.b.type === 'specialty' && !specB) return showErr(errEl, 'Please enter a specialty for Entity B.');
 
   const body = {
-    entity_a_name: _cmp.a.selected.name,
-    city_a:        _cmp.a.city,
-    state_a:       _cmp.a.state,
-    specialty_a:   specA,
-    aggregate_a:   document.getElementById('cmp-a-agg').checked,
-    entity_b_name: _cmp.b.selected.name,
-    city_b:        _cmp.b.city,
-    state_b:       _cmp.b.state,
-    specialty_b:   specB,
-    aggregate_b:   document.getElementById('cmp-b-agg').checked,
-    teaser_report: document.getElementById('cmp-teaser').checked,
+    entity_a_name:    _cmp.a.selected.name,
+    city_a:           _cmp.a.city,
+    state_a:          _cmp.a.state,
+    specialty_a:      specA,
+    aggregate_a:      document.getElementById('cmp-a-agg').checked,
+    entity_b_name:    _cmp.b.selected.name,
+    city_b:           _cmp.b.city,
+    state_b:          _cmp.b.state,
+    specialty_b:      specB,
+    aggregate_b:      document.getElementById('cmp-b-agg').checked,
+    teaser_report:    document.getElementById('cmp-teaser').checked,
+    entity_type_a:    _cmp.a.type === 'specialty' ? 'practice' : null,
+    entity_type_b:    _cmp.b.type === 'specialty' ? 'practice' : null,
+    practice_profile_a: _cmp.a.type === 'specialty' ? (_cmp.a.practiceProfile || 'practice_procedural') : null,
+    practice_profile_b: _cmp.b.type === 'specialty' ? (_cmp.b.practiceProfile || 'practice_procedural') : null,
   };
 
   const btn = document.getElementById('cmp-run-btn');
@@ -3012,6 +3101,8 @@ async function runIndividual() {
     patient_perspective: false,
     teaser_report,
     skip_pdf,
+    entity_type: _irType === 'specialty' ? 'practice' : null,
+    practice_profile: _irType === 'specialty' ? (_irPracticeProfile || 'practice_procedural') : null,
   };
 
   const btn = document.getElementById('ir-run-btn');

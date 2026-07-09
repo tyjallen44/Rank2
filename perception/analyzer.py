@@ -935,6 +935,10 @@ def compare_locations(
     output_dir: str | Path = "reports",
     on_event: Callable | None = None,
     brand: str = "original",
+    entity_type_a: str | None = None,
+    entity_type_b: str | None = None,
+    practice_profile_a: str | None = None,
+    practice_profile_b: str | None = None,
 ) -> tuple[AnalysisResult, AnalysisResult, object]:
     """Run two individual-report analyses then synthesize a structured comparison.
 
@@ -952,21 +956,39 @@ def compare_locations(
 
     # ── Phase 1: Entity A ────────────────────────────────────────────────────
     emit({"type": "phase", "name": "entity_a", "text": f"Analyzing {entity_a_name}"})
-    result_a = analyze_location(
-        city=city_a, state=state_a, specialty=specialty_a,
-        aggregate=aggregate_a, entity_name=entity_a_name,
-        individual_report=True, skip_pdf=True,
-        output_dir=output_dir, on_event=on_event, brand=brand,
-    )
+    if entity_type_a == "practice":
+        from .practice_analyzer import analyze_practice
+        result_a = analyze_practice(
+            entity_name=entity_a_name, city=city_a, state=state_a,
+            specialty=specialty_a, aggregate=aggregate_a,
+            practice_profile=practice_profile_a, skip_pdf=True,
+            output_dir=output_dir, on_event=on_event, brand=brand,
+        )
+    else:
+        result_a = analyze_location(
+            city=city_a, state=state_a, specialty=specialty_a,
+            aggregate=aggregate_a, entity_name=entity_a_name,
+            individual_report=True, skip_pdf=True,
+            output_dir=output_dir, on_event=on_event, brand=brand,
+        )
 
     # ── Phase 2: Entity B ────────────────────────────────────────────────────
     emit({"type": "phase", "name": "entity_b", "text": f"Analyzing {entity_b_name}"})
-    result_b = analyze_location(
-        city=city_b, state=state_b, specialty=specialty_b,
-        aggregate=aggregate_b, entity_name=entity_b_name,
-        individual_report=True, skip_pdf=True,
-        output_dir=output_dir, on_event=on_event, brand=brand,
-    )
+    if entity_type_b == "practice":
+        from .practice_analyzer import analyze_practice
+        result_b = analyze_practice(
+            entity_name=entity_b_name, city=city_b, state=state_b,
+            specialty=specialty_b, aggregate=aggregate_b,
+            practice_profile=practice_profile_b, skip_pdf=True,
+            output_dir=output_dir, on_event=on_event, brand=brand,
+        )
+    else:
+        result_b = analyze_location(
+            city=city_b, state=state_b, specialty=specialty_b,
+            aggregate=aggregate_b, entity_name=entity_b_name,
+            individual_report=True, skip_pdf=True,
+            output_dir=output_dir, on_event=on_event, brand=brand,
+        )
 
     # ── Phase 3: Comparison synthesis ───────────────────────────────────────
     emit({"type": "phase", "name": "comparison", "text": "Synthesizing comparison"})
