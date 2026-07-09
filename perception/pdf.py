@@ -2098,6 +2098,8 @@ def _build_comparison_html(
   {_entity_deep_dive(result_a)}
   {_entity_deep_dive(result_b)}
 
+  {_appendix_html()}
+
 </div>
 </body>
 </html>"""
