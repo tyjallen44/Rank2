@@ -16,8 +16,10 @@ with a clear reason rather than raising.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -87,6 +89,59 @@ def _api_key(explicit: str | None = None) -> str | None:
     return explicit or settings.google_places_api_key or os.environ.get("GOOGLE_PLACES_API_KEY") or None
 
 
+# --- shared Places transport: pacing + 429 backoff + in-run cache -----------
+# Market runs fire several Places calls per provider across the fetchers below
+# with no spacing; bursts trip Google's PER-MINUTE quota and every fetcher
+# hard-fails on the first 429 (observed on the shared key 2026-07-09 while the
+# daily quota was fine). Three rules: pace real calls, retry transient 429/5xx
+# honoring Retry-After, and answer identical requests from an in-run cache.
+# After the retry budget the original exceptions propagate unchanged.
+_MIN_INTERVAL_S = 0.12
+_MAX_ATTEMPTS = 3
+_RETRYABLE = {429, 500, 502, 503, 504}
+_places_cache: dict = {}
+_last_call_ts = [0.0]
+
+
+def clear_places_cache() -> None:
+    """Reset the in-process response cache (tests / long-lived servers)."""
+    _places_cache.clear()
+
+
+def _places_search(key: str, field_mask: str, payload: dict, timeout: float) -> list:
+    """POST to Places searchText with pacing, 429/5xx backoff, and caching."""
+    cache_key = (field_mask, json.dumps(payload, sort_keys=True))
+    if cache_key in _places_cache:
+        return _places_cache[cache_key]
+    attempt = 0
+    while True:
+        wait = _MIN_INTERVAL_S - (time.monotonic() - _last_call_ts[0])
+        if wait > 0:
+            time.sleep(wait)
+        _last_call_ts[0] = time.monotonic()
+        resp = httpx.post(
+            _SEARCH_TEXT,
+            headers={"Content-Type": "application/json",
+                     "X-Goog-Api-Key": key, "X-Goog-FieldMask": field_mask},
+            json=payload,
+            timeout=timeout,
+        )
+        attempt += 1
+        status_code = getattr(resp, "status_code", None)
+        if status_code in _RETRYABLE and attempt < _MAX_ATTEMPTS:
+            retry_after = (getattr(resp, "headers", None) or {}).get("Retry-After")
+            try:
+                delay = min(float(retry_after), 10.0) if retry_after else 1.5 ** attempt
+            except ValueError:
+                delay = 1.5 ** attempt
+            time.sleep(delay)
+            continue
+        resp.raise_for_status()
+        places = resp.json().get("places", [])
+        _places_cache[cache_key] = places
+        return places
+
+
 def _tokens(name: str) -> set[str]:
     raw = re.findall(r"[a-z0-9]+", (name or "").lower())
     return {t for t in raw if t not in _STOPWORDS and len(t) > 1}
@@ -126,21 +181,12 @@ def fetch_google_rating(
         return GoogleRead(query=query, verified=False, reason="Places API key not configured")
 
     try:
-        resp = httpx.post(
-            _SEARCH_TEXT,
-            headers={
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": key,
-                "X-Goog-FieldMask": (
-                    "places.displayName,places.rating,"
-                    "places.userRatingCount,places.businessStatus"
-                ),
-            },
-            json={"textQuery": query, "pageSize": 1},
-            timeout=timeout,
+        places = _places_search(
+            key,
+            "places.displayName,places.rating,places.userRatingCount,places.businessStatus",
+            {"textQuery": query, "pageSize": 1},
+            timeout,
         )
-        resp.raise_for_status()
-        places = resp.json().get("places", [])
     except httpx.HTTPStatusError as exc:
         body = exc.response.text[:400] if exc.response else ""
         return GoogleRead(query=query, verified=False, reason=f"Places lookup failed: {exc} | {body}")
@@ -201,21 +247,12 @@ def fetch_provider(
         )
 
     try:
-        resp = httpx.post(
-            _SEARCH_TEXT,
-            headers={
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": key,
-                "X-Goog-FieldMask": (
-                    "places.displayName,places.rating,"
-                    "places.userRatingCount,places.businessStatus"
-                ),
-            },
-            json={"textQuery": query, "pageSize": max_results},
-            timeout=timeout,
+        places = _places_search(
+            key,
+            "places.displayName,places.rating,places.userRatingCount,places.businessStatus",
+            {"textQuery": query, "pageSize": max_results},
+            timeout,
         )
-        resp.raise_for_status()
-        places = resp.json().get("places", [])
     except httpx.HTTPStatusError as exc:
         body = exc.response.text[:400] if exc.response else ""
         return (
@@ -291,20 +328,12 @@ def search_listings(
     if not key:
         return []
     try:
-        resp = httpx.post(
-            _SEARCH_TEXT,
-            headers={
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": key,
-                "X-Goog-FieldMask": (
-                    "places.id,places.displayName,places.rating,places.userRatingCount"
-                ),
-            },
-            json={"textQuery": query, "pageSize": min(max_results, 20)},
-            timeout=timeout,
+        places = _places_search(
+            key,
+            "places.id,places.displayName,places.rating,places.userRatingCount",
+            {"textQuery": query, "pageSize": min(max_results, 20)},
+            timeout,
         )
-        resp.raise_for_status()
-        places = resp.json().get("places", [])
     except (httpx.HTTPError, ValueError):
         return []
     out: list[Listing] = []
@@ -340,21 +369,12 @@ def search_entity_candidates(
     if not key:
         return []
     try:
-        resp = httpx.post(
-            _SEARCH_TEXT,
-            headers={
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": key,
-                "X-Goog-FieldMask": (
-                    "places.displayName,places.formattedAddress,"
-                    "places.rating,places.userRatingCount"
-                ),
-            },
-            json={"textQuery": query, "pageSize": min(max_results, 20)},
-            timeout=timeout,
+        raw = _places_search(
+            key,
+            "places.displayName,places.formattedAddress,places.rating,places.userRatingCount",
+            {"textQuery": query, "pageSize": min(max_results, 20)},
+            timeout,
         )
-        resp.raise_for_status()
-        raw = resp.json().get("places", [])
     except (httpx.HTTPError, ValueError):
         return []
     return [
@@ -384,18 +404,12 @@ def fetch_footprint(
         return Footprint(query=query, note="footprint not sampled (no API key)")
 
     try:
-        resp = httpx.post(
-            _SEARCH_TEXT,
-            headers={
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": key,
-                "X-Goog-FieldMask": "places.displayName,places.rating",
-            },
-            json={"textQuery": query, "pageSize": max_results},
-            timeout=timeout,
+        places = _places_search(
+            key,
+            "places.displayName,places.rating",
+            {"textQuery": query, "pageSize": max_results},
+            timeout,
         )
-        resp.raise_for_status()
-        places = resp.json().get("places", [])
     except (httpx.HTTPError, ValueError):
         return Footprint(query=query, note="footprint sample unavailable")
 
