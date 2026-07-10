@@ -234,6 +234,98 @@ def init_db() -> None:
         ) sub
         WHERE feedback.id = sub.id
     """)
+    # ── System Composite (Tier 3) tables ─────────────────────────────────────
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS network_registries (
+            id               VARCHAR PRIMARY KEY,
+            anchor_run_id    VARCHAR NOT NULL,
+            system_name      VARCHAR NOT NULL,
+            market_cbsa      VARCHAR,
+            radius_miles     INTEGER DEFAULT 50,
+            attested_at      TIMESTAMP,
+            re_attest_due    TIMESTAMP,
+            created_at       TIMESTAMP
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS network_entities (
+            id                              VARCHAR PRIMARY KEY,
+            registry_id                     VARCHAR NOT NULL,
+            name                            VARCHAR NOT NULL,
+            entity_type                     VARCHAR NOT NULL,
+            city                            VARCHAR,
+            state                           VARCHAR,
+            inclusion_tier                  VARCHAR NOT NULL,
+            ownership_evidence_source       VARCHAR DEFAULT '',
+            ownership_verified              BOOLEAN DEFAULT FALSE,
+            inclusion_weight                DOUBLE DEFAULT 1.0,
+            fte_count                       INTEGER,
+            encounter_volume_share          DOUBLE,
+            strategic_multiplier            DOUBLE DEFAULT 1.0,
+            strategic_multiplier_rationale  VARCHAR,
+            transition_close_date           DATE,
+            linked_run_id                   VARCHAR,
+            created_at                      TIMESTAMP
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS network_battery_runs (
+            id                VARCHAR PRIMARY KEY,
+            registry_id       VARCHAR NOT NULL,
+            composite_run_id  VARCHAR NOT NULL,
+            prompt_category   VARCHAR NOT NULL,
+            prompt_number     INTEGER NOT NULL,
+            prompt_text       VARCHAR NOT NULL,
+            assistant         VARCHAR NOT NULL,
+            retrieval_mode    VARCHAR NOT NULL,
+            response_text     VARCHAR,
+            network_resolution VARCHAR NOT NULL,
+            run_date          TIMESTAMP,
+            created_at        TIMESTAMP
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS composite_results (
+            id                        VARCHAR PRIMARY KEY,
+            registry_id               VARCHAR NOT NULL,
+            anchor_run_id             VARCHAR NOT NULL,
+            hospital_score            DOUBLE,
+            network_score             DOUBLE,
+            attributed_network_score  DOUBLE,
+            sar                       DOUBLE,
+            footprint_class           VARCHAR,
+            w_h                       DOUBLE,
+            w_n                       DOUBLE,
+            continuum_coherence       DOUBLE,
+            continuum_bonus           DOUBLE,
+            composite_score           DOUBLE,
+            composite_grade           VARCHAR,
+            merged_entity_delta       DOUBLE,
+            network_capture_rate      DOUBLE,
+            leakage_index             DOUBLE,
+            score_ceiling_applied     BOOLEAN DEFAULT FALSE,
+            score_ceiling_reason      VARCHAR,
+            small_network_refused     BOOLEAN DEFAULT FALSE,
+            proxy_weighted            BOOLEAN DEFAULT FALSE,
+            modifier_ledger           VARCHAR DEFAULT '[]',
+            per_assistant_sar         VARCHAR DEFAULT '{}',
+            orphan_entity_ids         VARCHAR DEFAULT '[]',
+            rubric_version_hospital   VARCHAR DEFAULT 'hospital-v1.0',
+            rubric_version_practice   VARCHAR DEFAULT 'practice-v1.0',
+            rubric_version_composite  VARCHAR DEFAULT 'composite-v1.0',
+            oldest_input_date         TIMESTAMP,
+            composite_expires_at      TIMESTAMP,
+            composite_mode            VARCHAR DEFAULT 'hospitals_and_practices',
+            created_at                TIMESTAMP
+        )
+    """)
+    # composite_mode on analysis_runs (NULL = plain run, 'hospitals_only', 'hospitals_and_practices')
+    existing_run_cols2 = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='analysis_runs'"
+    ).fetchall()}
+    if "composite_mode" not in existing_run_cols2:
+        con.execute("ALTER TABLE analysis_runs ADD COLUMN composite_mode VARCHAR DEFAULT NULL")
+
     con.execute("""
         CREATE TABLE IF NOT EXISTS tracked_entities (
             id           VARCHAR PRIMARY KEY,

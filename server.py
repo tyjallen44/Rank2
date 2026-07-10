@@ -1266,6 +1266,175 @@ async def track_scheduled(request: Request):
     return {"launched": launched}
 
 
+# ── System Composite (Tier 3) endpoints ──────────────────────────────────────
+
+class CompositeDiscoverRequest(BaseModel):
+    anchor_run_id: str
+    entity_name: str
+    city: str
+    state: str
+
+
+class CompositeEntityInput(BaseModel):
+    name: str
+    entity_type: str = "practice"           # "practice" | "hospital"
+    city: Optional[str] = None
+    state: Optional[str] = None
+    inclusion_tier: str = "OWNED"           # OWNED | CONTROLLED | AFFILIATED | IN-TRANSITION
+    ownership_evidence_source: str = "client_attested"
+    ownership_verified: bool = True
+    fte_count: Optional[int] = None
+    encounter_volume_share: Optional[float] = None
+    strategic_multiplier: float = 1.0
+    strategic_multiplier_rationale: Optional[str] = None
+    transition_close_date: Optional[str] = None
+    linked_run_id: Optional[str] = None
+
+
+class CompositeConfirmRequest(BaseModel):
+    anchor_run_id: str
+    system_name: str
+    market_cbsa: Optional[str] = None
+    radius_miles: int = 50
+    entities: List[CompositeEntityInput]
+
+
+class CompositeStartRequest(BaseModel):
+    registry_id: str
+
+
+def _estimate_scope(entity_count: int) -> dict:
+    """Rough scope estimate for the confirmation screen."""
+    prompts_per_entity = 9    # N1–N4 battery
+    runs_per_prompt    = 3
+    assistants         = 1    # Claude only for MVP
+    network_prompts    = 9    # fixed network battery
+    return {
+        "entity_count": entity_count,
+        "estimated_battery_runs": (
+            entity_count * prompts_per_entity * runs_per_prompt * assistants
+            + network_prompts * runs_per_prompt
+        ),
+        "note": "Estimate; actual run count depends on reuse of existing Tier 1/2 results.",
+    }
+
+
+@app.post("/api/composite/discover")
+async def composite_discover(
+    req: CompositeDiscoverRequest,
+    _: str = Depends(require_auth),
+):
+    """Discover candidate network entities for a health system via Claude."""
+    try:
+        from perception.db import init_db
+        from perception.composite_analyzer import discover_network
+        init_db()
+        city  = _normalize_input(req.city)
+        state = req.state.strip().upper()
+        system_name, market_cbsa, drafts = discover_network(
+            req.entity_name, city, state
+        )
+        return {
+            "system_name": system_name,
+            "market_cbsa": market_cbsa,
+            "candidates": [d.dict() for d in drafts],
+            "scope_estimate": _estimate_scope(len(drafts)),
+        }
+    except Exception as exc:
+        raise HTTPException(500, f"Network discovery error: {exc}")
+
+
+@app.post("/api/composite/confirm")
+async def composite_confirm(
+    req: CompositeConfirmRequest,
+    _: str = Depends(require_auth),
+):
+    """Persist a confirmed network registry and return the registry_id."""
+    try:
+        from perception.db import init_db
+        from perception.composite_analyzer import save_registry
+        init_db()
+        registry = save_registry(
+            anchor_run_id=req.anchor_run_id,
+            system_name=req.system_name,
+            market_cbsa=req.market_cbsa,
+            radius_miles=req.radius_miles,
+            confirmed_entities=[e.dict() for e in req.entities],
+        )
+        return {
+            "registry_id": registry.id,
+            "system_name": registry.system_name,
+            "entity_count": len(registry.entities),
+            "scope_estimate": _estimate_scope(len(registry.entities)),
+            "re_attest_due": registry.re_attest_due,
+        }
+    except Exception as exc:
+        raise HTTPException(500, f"Registry save error: {exc}")
+
+
+def _job_run_composite(job_id: str, registry_id: str) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+
+    try:
+        from perception.db import init_db
+        from perception.composite_analyzer import analyze_composite
+        init_db()
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        result = analyze_composite(
+            registry_id=registry_id,
+            output_dir=REPORTS_DIR,
+            on_event=emit,
+            brand=job.get("brand", "original"),
+        )
+        job["status"] = "done"
+        job["result"] = {
+            "run_id": result.id,
+            "location": result.system_name,
+            "specialty": "System Composite",
+            "provider_count": len(result.entities),
+            "pdf_path": result.pdf_path,
+            "composite": True,
+            "composite_score": result.composite_score,
+            "composite_grade": result.composite_grade,
+            "sar": result.sar,
+            "small_network_refused": result.small_network_refused,
+        }
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = str(exc)
+    finally:
+        _put(loop, queue, None)
+
+
+@app.post("/api/composite/start")
+async def composite_start(
+    req: CompositeStartRequest,
+    payload: dict = Depends(get_current_user_payload),
+):
+    """Launch the composite analysis job for a confirmed registry."""
+    brand  = payload.get("brand", "original")
+    role   = payload.get("role", "user")
+    job_id = _new_job(role, brand)
+    _pool.submit(_job_run_composite, job_id, req.registry_id)
+    return {"job_id": job_id}
+
+
+@app.get("/api/composite/{job_id}/pdf")
+async def download_composite_pdf(job_id: str, _: str = Depends(require_auth)):
+    job = _jobs.get(job_id)
+    if not job or job.get("status") != "done":
+        raise HTTPException(404, "Composite report not ready")
+    pdf_path = job.get("result", {}).get("pdf_path")
+    if not pdf_path:
+        raise HTTPException(404, "PDF not available")
+    pdf = Path(pdf_path)
+    if not pdf.exists():
+        raise HTTPException(404, "PDF file not found on disk")
+    return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
+
+
 # ── Frontend (catch-all — must be last) ───────────────────────────────────────
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 async def frontend(full_path: str):

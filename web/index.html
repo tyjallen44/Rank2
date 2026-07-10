@@ -1346,10 +1346,17 @@ html, body {
 
         <div class="fg" style="margin-bottom:0">
           <label class="fl">Options</label>
-          <label class="aggregate-toggle" title="Include all affiliated campuses and locations and aggregate their data into this report.">
-            <input type="checkbox" id="ir-agg-toggle" checked>
-            <span class="agg-label">Aggregate related facilities into parent systems</span>
-          </label>
+          <!-- Composite checkboxes — hospital/health system only -->
+          <div id="ir-composite-opts">
+            <label class="aggregate-toggle" title="Analyze related hospitals and aggregate their data into this report.">
+              <input type="checkbox" id="ir-agg-toggle" checked onchange="irCompositeExclude('agg')">
+              <span class="agg-label">Composite analysis related hospitals only</span>
+            </label>
+            <label class="aggregate-toggle" style="margin-top:10px" title="Extend the composite to include hospital-owned practices. Requires network confirmation step.">
+              <input type="checkbox" id="ir-composite-toggle" onchange="irCompositeExclude('composite')">
+              <span class="agg-label">Composite analysis of hospitals and hospital owned practices</span>
+            </label>
+          </div>
           <label class="aggregate-toggle" style="margin-top:10px" title="Collect and store analysis data without generating a PDF — useful for tracking AI visibility trends over time.">
             <input type="checkbox" id="ir-skip-pdf-toggle">
             <span class="agg-label">Skip PDF — collect data only</span>
@@ -1366,6 +1373,83 @@ html, body {
             Run Individual Report →
           </button>
           <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
+        </div>
+      </div>
+
+      <!-- ── Network Assembly (composite mode) ──────────────────────────── -->
+      <div id="ir-step-composite" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Network Assembly — Confirm Roster</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          Review the discovered network entities below. Uncheck any that should be excluded, then confirm to begin analysis.
+        </p>
+
+        <div id="ir-composite-scope" style="font-size:12px;color:var(--teal);font-weight:600;margin-bottom:12px"></div>
+
+        <table id="ir-roster-table" style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+          <thead>
+            <tr style="background:#f0f6f7;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">
+              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Include</th>
+              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
+              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Type</th>
+              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">City, ST</th>
+              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Tier</th>
+            </tr>
+          </thead>
+          <tbody id="ir-roster-tbody"></tbody>
+        </table>
+
+        <div style="margin-bottom:16px">
+          <a href="#" id="ir-add-entity-link" onclick="openAddEntityModal();return false;"
+             style="font-size:12px;color:var(--teal);text-decoration:underline">Add entities manually</a>
+        </div>
+
+        <div id="ir-composite-err" class="err hidden mt8"></div>
+        <div class="mt16 row-actions">
+          <button class="btn btn-primary" id="ir-confirm-btn" onclick="confirmRoster()">
+            Confirm &amp; Run Composite →
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="irBackToStep3()">← Back</button>
+        </div>
+      </div>
+
+      <!-- Add Entity Modal -->
+      <div id="add-entity-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center">
+        <div style="background:#fff;border-radius:12px;padding:28px 32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,0.18)">
+          <div style="font-size:14px;font-weight:700;color:var(--teal);margin-bottom:18px">Add Entity Manually</div>
+          <div class="fg">
+            <label class="fl">Name</label>
+            <input id="ae-name" class="fi" type="text" placeholder="e.g. Lakeside Orthopedics" oninput="this.value=this.value.toUpperCase()">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="fg" style="margin:0">
+              <label class="fl">City</label>
+              <input id="ae-city" class="fi" type="text" placeholder="Birmingham" oninput="this.value=this.value.toUpperCase()">
+            </div>
+            <div class="fg" style="margin:0">
+              <label class="fl">State</label>
+              <input id="ae-state" class="fi" type="text" placeholder="AL" maxlength="2" oninput="this.value=this.value.toUpperCase()">
+            </div>
+          </div>
+          <div class="fg mt12">
+            <label class="fl">Type</label>
+            <div class="tg-group">
+              <button class="tg-opt on" id="ae-tg-practice" onclick="setAeType('practice')">Practice</button>
+              <button class="tg-opt" id="ae-tg-hospital" onclick="setAeType('hospital')">Hospital</button>
+            </div>
+          </div>
+          <div class="fg mt12">
+            <label class="fl">Inclusion Tier</label>
+            <select id="ae-tier" class="fi" style="height:36px">
+              <option value="OWNED">Owned</option>
+              <option value="CONTROLLED">Controlled</option>
+              <option value="IN-TRANSITION">In-Transition</option>
+            </select>
+          </div>
+          <div id="ae-err" class="err hidden mt8"></div>
+          <div class="mt20" style="display:flex;gap:10px">
+            <button class="btn btn-primary" onclick="addEntityToRoster()">Add to Roster</button>
+            <button class="btn btn-ghost btn-sm" onclick="closeAddEntityModal()">Cancel</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1426,7 +1510,7 @@ html, body {
         <div id="cmp-a-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
         <label class="aggregate-toggle">
           <input type="checkbox" id="cmp-a-agg" checked>
-          <span class="agg-label">Aggregate related facilities into parent system</span>
+          <span class="agg-label">Composite analysis related hospitals only</span>
         </label>
       </div>
 
@@ -1482,7 +1566,7 @@ html, body {
           <div id="cmp-b-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
           <label class="aggregate-toggle">
             <input type="checkbox" id="cmp-b-agg" checked>
-            <span class="agg-label">Aggregate related facilities into parent system</span>
+            <span class="agg-label">Composite analysis related hospitals only</span>
           </label>
         </div>
       </div>
@@ -2711,6 +2795,20 @@ function setIrType(t) {
   document.getElementById('ir-tg-hospital').classList.toggle('on',  t === 'hospital');
   document.getElementById('ir-tg-specialty').classList.toggle('on', t === 'specialty');
   document.getElementById('ir-specialty-wrap').classList.toggle('hidden', t !== 'specialty');
+  // composite checkboxes only apply to hospital type
+  document.getElementById('ir-composite-opts').style.display = t === 'hospital' ? '' : 'none';
+  if (t !== 'hospital') {
+    document.getElementById('ir-agg-toggle').checked       = false;
+    document.getElementById('ir-composite-toggle').checked = false;
+  }
+}
+
+function irCompositeExclude(src) {
+  if (src === 'agg' && document.getElementById('ir-agg-toggle').checked) {
+    document.getElementById('ir-composite-toggle').checked = false;
+  } else if (src === 'composite' && document.getElementById('ir-composite-toggle').checked) {
+    document.getElementById('ir-agg-toggle').checked = false;
+  }
 }
 
 async function runIrSearch() {
@@ -3083,6 +3181,12 @@ async function runIndividual() {
   const errEl = document.getElementById('ir-run-err');
   errEl.classList.add('hidden');
 
+  // If composite (hospitals + practices) is checked, go to network assembly step
+  if (document.getElementById('ir-composite-toggle').checked) {
+    openNetworkAssembly();
+    return;
+  }
+
   const specialty = _irType === 'specialty'
     ? (document.getElementById('ir-specialty').value.trim() || null) : null;
   if (_irType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
@@ -3124,6 +3228,170 @@ async function runIndividual() {
     btn.disabled = false;
     btn.innerHTML = 'Run Individual Report →';
   }
+}
+
+// ── System Composite (Tier 3) ─────────────────────────────────────────────
+
+let _compositeRoster = [];   // {name, entity_type, city, state, inclusion_tier, _manual}
+let _aeType = 'practice';
+let _compositeRegistryId = null;
+
+function irBackToStep3() {
+  document.getElementById('ir-step-composite').classList.add('hidden');
+  document.getElementById('ir-step3').classList.remove('hidden');
+  document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function openNetworkAssembly() {
+  const btn = document.getElementById('ir-run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Discovering network…';
+  document.getElementById('ir-run-err').classList.add('hidden');
+
+  try {
+    const r = await api('/api/composite/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        anchor_run_id: null,
+        entity_name:   _irSelected.name,
+        city:          _irResolvedCity,
+        state:         _irResolvedState,
+      }),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Discovery failed'));
+    const data = await r.json();
+    _compositeRoster = (data.candidates || []).map(c => ({ ...c, _manual: false }));
+    _renderRoster();
+    document.getElementById('ir-composite-scope').textContent =
+      `Estimated scope: ${data.estimated_scope || _compositeRoster.length + ' entities'}`;
+    document.getElementById('ir-step3').classList.add('hidden');
+    document.getElementById('ir-step-composite').classList.remove('hidden');
+    document.getElementById('ir-step-composite').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) {
+    showErr(document.getElementById('ir-run-err'), e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Run Individual Report →';
+  }
+}
+
+function _renderRoster() {
+  const tbody = document.getElementById('ir-roster-tbody');
+  tbody.innerHTML = '';
+  _compositeRoster.forEach((ent, i) => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--border)';
+    tr.innerHTML = `
+      <td style="padding:8px 10px"><input type="checkbox" data-idx="${i}" checked></td>
+      <td style="padding:8px 10px;font-weight:${ent._manual ? '600' : '400'}">${ent.name}${ent._manual ? ' <span style="font-size:10px;color:var(--muted)">(manual)</span>' : ''}</td>
+      <td style="padding:8px 10px;text-transform:capitalize">${ent.entity_type}</td>
+      <td style="padding:8px 10px">${ent.city}, ${ent.state}</td>
+      <td style="padding:8px 10px">${ent.inclusion_tier || 'OWNED'}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function confirmRoster() {
+  const errEl = document.getElementById('ir-composite-err');
+  errEl.classList.add('hidden');
+
+  const checkboxes = document.querySelectorAll('#ir-roster-tbody input[type=checkbox]');
+  const included = _compositeRoster.filter((_, i) => checkboxes[i] && checkboxes[i].checked);
+  if (included.length === 0) return showErr(errEl, 'Select at least one entity to include.');
+
+  const btn = document.getElementById('ir-confirm-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+  try {
+    const r = await api('/api/composite/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        anchor_run_id: null,
+        system_name:   _irSelected.name,
+        market_cbsa:   `${_irResolvedCity}, ${_irResolvedState}`,
+        radius_miles:  50,
+        entities:      included.map(e => ({
+          name:                      e.name,
+          entity_type:               e.entity_type,
+          city:                      e.city,
+          state:                     e.state,
+          inclusion_tier:            e.inclusion_tier || 'OWNED',
+          ownership_evidence_source: e._manual ? 'client_supplied' : 'claude_discovery',
+          ownership_verified:        !e._manual,
+          fte_count:                 null,
+          encounter_volume_share:    null,
+          strategic_multiplier:      null,
+          strategic_multiplier_rationale: null,
+          transition_close_date:     null,
+          linked_run_id:             null,
+        })),
+      }),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to save registry'));
+    const { registry_id } = await r.json();
+    _compositeRegistryId = registry_id;
+    await runComposite(registry_id);
+  } catch (e) {
+    showErr(errEl, e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Confirm &amp; Run Composite →';
+  }
+}
+
+async function runComposite(registryId) {
+  const r = await api('/api/composite/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ registry_id: registryId }),
+  });
+  if (!r.ok) throw new Error(await errDetail(r, 'Failed to start composite'));
+  const { job_id } = await r.json();
+  _lastPage = 'individual';
+  startProgress(job_id, _irSelected.name + ' (System Composite)', false);
+}
+
+function openAddEntityModal() {
+  document.getElementById('ae-name').value  = '';
+  document.getElementById('ae-city').value  = '';
+  document.getElementById('ae-state').value = '';
+  document.getElementById('ae-tier').value  = 'OWNED';
+  document.getElementById('ae-err').classList.add('hidden');
+  setAeType('practice');
+  const modal = document.getElementById('add-entity-modal');
+  modal.style.display = 'flex';
+}
+
+function closeAddEntityModal() {
+  document.getElementById('add-entity-modal').style.display = 'none';
+}
+
+function setAeType(t) {
+  _aeType = t;
+  document.getElementById('ae-tg-practice').classList.toggle('on', t === 'practice');
+  document.getElementById('ae-tg-hospital').classList.toggle('on', t === 'hospital');
+}
+
+function addEntityToRoster() {
+  const name  = document.getElementById('ae-name').value.trim();
+  const city  = document.getElementById('ae-city').value.trim();
+  const state = document.getElementById('ae-state').value.trim().toUpperCase();
+  const tier  = document.getElementById('ae-tier').value;
+  const errEl = document.getElementById('ae-err');
+  errEl.classList.add('hidden');
+
+  if (!name)  return showErr(errEl, 'Name is required.');
+  if (!city)  return showErr(errEl, 'City is required.');
+  if (!state || state.length !== 2) return showErr(errEl, 'Enter a 2-letter state code.');
+
+  _compositeRoster.push({ name, entity_type: _aeType, city, state, inclusion_tier: tier, _manual: true });
+  _renderRoster();
+  closeAddEntityModal();
+  document.getElementById('ir-composite-scope').textContent =
+    `Estimated scope: ${_compositeRoster.length} entities`;
 }
 
 // ── Manual run ────────────────────────────────────────────────────────────
