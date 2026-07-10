@@ -234,7 +234,7 @@ def save_registry(
         fte     = e.get("fte_count")
 
         # Strategic multiplier
-        mult = float(e.get("strategic_multiplier", 1.0))
+        mult = float(e.get("strategic_multiplier") or 1.0)
         mult = max(1.0, min(sm_cfg["max_value"], mult))
 
         # Raw weight: prefer encounter_volume_share, fallback fte, fallback 1.0
