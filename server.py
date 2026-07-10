@@ -1285,7 +1285,7 @@ class CompositeEntityInput(BaseModel):
     ownership_verified: bool = True
     fte_count: Optional[int] = None
     encounter_volume_share: Optional[float] = None
-    strategic_multiplier: float = 1.0
+    strategic_multiplier: Optional[float] = None
     strategic_multiplier_rationale: Optional[str] = None
     transition_close_date: Optional[str] = None
     linked_run_id: Optional[str] = None
