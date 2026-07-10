@@ -68,7 +68,7 @@ class NetworkEntity(BaseModel):
 class NetworkRegistry(BaseModel):
     """Confirmed ownership registry for one market / composite run."""
     id: str
-    anchor_run_id: str
+    anchor_run_id: Optional[str] = None
     system_name: str
     market_cbsa: Optional[str] = None
     radius_miles: int = 50
@@ -104,7 +104,7 @@ class CompositeResult(BaseModel):
     """Final output of a System Composite analysis."""
     id: str
     registry_id: str
-    anchor_run_id: str
+    anchor_run_id: Optional[str] = None
     system_name: str = ""
     hospital_score: float
     network_score: float
