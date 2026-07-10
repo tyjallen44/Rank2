@@ -235,10 +235,22 @@ def init_db() -> None:
         WHERE feedback.id = sub.id
     """)
     # ── System Composite (Tier 3) tables ─────────────────────────────────────
+    # Migration: if network_registries was created with NOT NULL on anchor_run_id, drop and
+    # recreate it — the table is always empty at this point (no composite has ever succeeded).
+    try:
+        info = con.execute(
+            "SELECT is_nullable FROM information_schema.columns "
+            "WHERE table_name='network_registries' AND column_name='anchor_run_id'"
+        ).fetchone()
+        if info and info[0] == 'NO':
+            con.execute("DROP TABLE network_registries")
+    except Exception:
+        pass
+
     con.execute("""
         CREATE TABLE IF NOT EXISTS network_registries (
             id               VARCHAR PRIMARY KEY,
-            anchor_run_id    VARCHAR NOT NULL,
+            anchor_run_id    VARCHAR,
             system_name      VARCHAR NOT NULL,
             market_cbsa      VARCHAR,
             radius_miles     INTEGER DEFAULT 50,
