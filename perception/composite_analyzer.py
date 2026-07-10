@@ -895,9 +895,42 @@ def analyze_composite(
 
     # ── Hospital score ────────────────────────────────────────────────────────
     emit({"type": "phase", "name": "generating", "text": "Fetching tier scores"})
+
+    # If no anchor run exists yet, run the hospital analysis now as phase 1
+    if not registry.anchor_run_id:
+        emit({"type": "text", "text": "No prior hospital run found — running anchor hospital analysis first…\n"})
+        from .analyzer import analyze_location
+        # Parse market_cbsa "City, ST" → city, state
+        cbsa = registry.market_cbsa or ""
+        if "," in cbsa:
+            cbsa_city, cbsa_state = cbsa.rsplit(",", 1)
+            cbsa_city  = cbsa_city.strip()
+            cbsa_state = cbsa_state.strip()
+        else:
+            cbsa_city  = cbsa.strip()
+            cbsa_state = ""
+        anchor_result = analyze_location(
+            city=cbsa_city,
+            state=cbsa_state,
+            entity_name=registry.system_name,
+            individual_report=True,
+            aggregate=True,
+            output_dir=output_dir,
+            on_event=on_event,
+            brand=brand,
+        )
+        # Persist anchor_run_id into the registry row
+        con = get_connection()
+        con.execute(
+            "UPDATE network_registries SET anchor_run_id = ? WHERE id = ?",
+            [anchor_result.run_id, registry_id],
+        )
+        con.close()
+        registry.anchor_run_id = anchor_result.run_id
+
     hospital_score = _fetch_hospital_score(registry.anchor_run_id)
     if hospital_score is None:
-        raise ValueError("Anchor hospital run not found or has no AI Visibility Score")
+        raise ValueError("Anchor hospital run completed but returned no AI Visibility Score")
 
     # ── Practice scores ───────────────────────────────────────────────────────
     practice_scores_map = _fetch_practice_scores(practice_entities)
