@@ -1391,6 +1391,7 @@ def _job_run_composite(job_id: str, registry_id: str) -> None:
         job["status"] = "done"
         job["result"] = {
             "run_id": result.id,
+            "job_id": job_id,
             "location": result.system_name,
             "specialty": "System Composite",
             "provider_count": len(result.entities),

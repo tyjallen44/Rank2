@@ -3595,22 +3595,45 @@ function onSSE(ev) {
 }
 
 function showSingleDone(r) {
-  const subText = r.comparison ? 'Comparison report ready' : `${r.provider_count || 0} providers analyzed`;
+  const isComposite = !!r.composite;
+  const isComparison = !!r.comparison;
+
+  // Subtitle and stat block
+  let subText, bodyHtml;
+  if (isComposite) {
+    subText = r.small_network_refused ? 'Composite complete — small network (narrative only)' : 'System Composite report ready';
+    const scoreDisplay = r.small_network_refused ? 'N/A' : (r.composite_score != null ? Math.round(r.composite_score) : '—');
+    bodyHtml = `<div class="stat-row">
+      <div class="stat-box"><div class="stat-val">${scoreDisplay}</div><div class="stat-lbl">Composite Score</div></div>
+      <div class="stat-box"><div class="stat-val">${r.composite_grade || '—'}</div><div class="stat-lbl">Grade</div></div>
+      <div class="stat-box"><div class="stat-val">${r.sar != null ? Math.round(r.sar * 100) + '%' : '—'}</div><div class="stat-lbl">SAR</div></div>
+      <div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Entities</div></div>
+    </div>`;
+  } else if (isComparison) {
+    subText = 'Comparison report ready';
+    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`;
+  } else {
+    subText = `${r.provider_count || 0} providers analyzed`;
+    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Providers Ranked</div></div></div>`;
+  }
   document.getElementById('done-sub').textContent = subText;
-  document.getElementById('done-body').innerHTML = r.comparison
-    ? `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`
-    : `<div class="stat-row"><div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Providers Ranked</div></div></div>`;
+  document.getElementById('done-body').innerHTML = bodyHtml;
+
   const backLabel = _lastPage === 'patient'   ? 'New Patient Perspective'
     : _lastPage === 'individual' ? 'New Individual Report'
     : _lastPage === 'compare'   ? 'New Comparison'
     : 'New Market Research';
-  const dlUrl = r.comparison
-    ? `/api/compare/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
-    : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
+
+  const dlUrl = isComposite
+    ? `/api/composite/${r.job_id}/pdf?token=${encodeURIComponent(_token)}`
+    : isComparison
+      ? `/api/compare/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
+      : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
+
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download PDF</button>
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
-    ${r.comparison ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
+    ${isComparison ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
   document.getElementById('prog-done').classList.remove('hidden');
 }
 
