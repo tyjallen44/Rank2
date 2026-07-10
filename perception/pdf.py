@@ -2701,7 +2701,7 @@ def _build_composite_html(
     System Composite Report &mdash; {_e(mode_label)}
   </div>
   <div style="font-family:'Barlow Condensed',Impact,sans-serif;font-size:28pt;font-weight:700;line-height:1.05;margin-bottom:8px">
-    {_e(result.system_name)}
+    {_e(result.system_name)} &mdash; Composite
   </div>
   <div style="font-size:11pt;opacity:0.85">
     System Composite: <strong style="font-size:16pt">{composite_display}</strong>
