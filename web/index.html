@@ -2586,7 +2586,13 @@ async function api(path, opts = {}) {
 }
 
 async function errDetail(r, fallback) {
-  try { return (await r.json()).detail || fallback; } catch { return fallback; }
+  try {
+    const d = (await r.json()).detail;
+    if (!d) return fallback;
+    if (typeof d === 'string') return d;
+    if (Array.isArray(d)) return d.map(x => x.msg || JSON.stringify(x)).join('; ');
+    return JSON.stringify(d);
+  } catch { return fallback; }
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────
@@ -3243,33 +3249,33 @@ function irBackToStep3() {
 }
 
 async function openNetworkAssembly() {
-  const btn = document.getElementById('ir-run-btn');
+  const btn    = document.getElementById('ir-run-btn');
+  const errEl  = document.getElementById('ir-run-err');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Discovering network…';
-  document.getElementById('ir-run-err').classList.add('hidden');
+  errEl.classList.add('hidden');
 
   try {
     const r = await api('/api/composite/discover', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        anchor_run_id: null,
-        entity_name:   _irSelected.name,
-        city:          _irResolvedCity,
-        state:         _irResolvedState,
+        entity_name: _irSelected.name,
+        city:        _irResolvedCity,
+        state:       _irResolvedState,
       }),
     });
-    if (!r.ok) throw new Error(await errDetail(r, 'Discovery failed'));
+    if (!r.ok) throw new Error(await errDetail(r, 'Network discovery failed'));
     const data = await r.json();
     _compositeRoster = (data.candidates || []).map(c => ({ ...c, _manual: false }));
     _renderRoster();
     document.getElementById('ir-composite-scope').textContent =
-      `Estimated scope: ${data.estimated_scope || _compositeRoster.length + ' entities'}`;
+      `Estimated scope: ${data.scope_estimate ? data.scope_estimate.entity_count + ' entities' : _compositeRoster.length + ' entities'}`;
     document.getElementById('ir-step3').classList.add('hidden');
     document.getElementById('ir-step-composite').classList.remove('hidden');
     document.getElementById('ir-step-composite').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
-    showErr(document.getElementById('ir-run-err'), e.message);
+    showErr(errEl, e.message);
   } finally {
     btn.disabled = false;
     btn.innerHTML = 'Run Individual Report →';

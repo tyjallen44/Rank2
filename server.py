@@ -1269,7 +1269,7 @@ async def track_scheduled(request: Request):
 # ── System Composite (Tier 3) endpoints ──────────────────────────────────────
 
 class CompositeDiscoverRequest(BaseModel):
-    anchor_run_id: str
+    anchor_run_id: Optional[str] = None
     entity_name: str
     city: str
     state: str
@@ -1292,7 +1292,7 @@ class CompositeEntityInput(BaseModel):
 
 
 class CompositeConfirmRequest(BaseModel):
-    anchor_run_id: str
+    anchor_run_id: Optional[str] = None
     system_name: str
     market_cbsa: Optional[str] = None
     radius_miles: int = 50
