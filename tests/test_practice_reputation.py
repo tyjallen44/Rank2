@@ -356,7 +356,29 @@ def _make_row(**kwargs):
     return {**defaults, **kwargs}
 
 
-def test_table_html_not_established_is_unlinked():
+def test_table_html_practice_name_is_plain_text():
+    """Practice name must never be wrapped in an anchor tag."""
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row(primary_url="https://maps.google.com/?cid=123")]
+    html = _practice_reputation_table_html(rows)
+    assert "Test Clinic" in html
+    # primary_url must not appear as an href — it's stored but not rendered
+    assert 'href="https://maps.google.com/?cid=123"' not in html
+
+
+def test_table_html_practice_name_plain_text_even_with_url():
+    """primary_url being present still yields no link on the name cell."""
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row(primary_url="https://maps.google.com/?cid=999",
+                      platform_entries=[("google", 100, "https://maps.google.com/?cid=999")])]
+    html = _practice_reputation_table_html(rows)
+    # The Google URL appears in the platforms column, not the name column
+    # Verify name cell has no href by checking the td containing the name
+    td_segment = html.split("Test Clinic")[0].split("<td")[-1]
+    assert "href" not in td_segment
+
+
+def test_table_html_not_established_entirely_plain():
     from perception.pdf import _practice_reputation_table_html
     rows = [_make_row(practice_name="Empty Clinic", not_established=True,
                       avg_rating=None, total_reviews=0, platforms_found=0,
@@ -364,29 +386,25 @@ def test_table_html_not_established_is_unlinked():
     html = _practice_reputation_table_html(rows)
     assert "Not established" in html
     assert "Empty Clinic" in html
-    # Must not generate a link for unestablished practice
-    assert 'href' not in html.split("Empty Clinic")[0].split("<tr")[-1]
+    assert "href" not in html
 
 
-def test_table_html_links_practice_name():
+def test_table_html_no_raw_urls_in_text():
+    """No URL strings should appear as visible text content in the table."""
     from perception.pdf import _practice_reputation_table_html
-    rows = [_make_row(primary_url="https://maps.google.com/?cid=123")]
+    import re
+    rows = [_make_row(
+        platform_entries=[
+            ("google", 100, "https://maps.google.com/?cid=999"),
+            ("healthgrades", 50, "https://www.healthgrades.com/group/test"),
+        ],
+        platforms_found=2,
+        platforms_list="Google, Healthgrades",
+    )]
     html = _practice_reputation_table_html(rows)
-    assert 'href="https://maps.google.com/?cid=123"' in html
-    assert 'target="_blank"' in html
-    assert 'rel="noopener noreferrer"' in html
-
-
-def test_table_html_no_link_when_no_primary_url():
-    from perception.pdf import _practice_reputation_table_html
-    rows = [_make_row(primary_url=None,
-                      platform_entries=[("healthgrades", 50, None)])]
-    html = _practice_reputation_table_html(rows)
-    # Name cell should render plain text, no anchor tag wrapping the name
-    assert "Test Clinic" in html
-    # No href in the name column — check via absence of href near the name
-    name_segment = html.split("Test Clinic")[0].split("<tr")[-1]
-    assert "href" not in name_segment
+    # Extract text nodes — strip all tags and check no http URL survives
+    text_only = re.sub(r"<[^>]+>", " ", html)
+    assert "http" not in text_only
 
 
 def test_table_html_platform_entries_linked():
@@ -400,11 +418,13 @@ def test_table_html_platform_entries_linked():
         ],
     )]
     html = _practice_reputation_table_html(rows)
-    assert "https://maps.google.com/?cid=999" in html
-    assert "https://www.healthgrades.com/group/test" in html
+    assert 'href="https://maps.google.com/?cid=999"' in html
+    assert 'href="https://www.healthgrades.com/group/test"' in html
+    assert 'target="_blank"' in html
+    assert 'rel="noopener noreferrer"' in html
 
 
-def test_table_html_platform_entries_unlinked_when_no_url():
+def test_table_html_platform_unlinked_when_no_url():
     from perception.pdf import _practice_reputation_table_html
     rows = [_make_row(
         platforms_found=1,
@@ -413,8 +433,9 @@ def test_table_html_platform_entries_unlinked_when_no_url():
     )]
     html = _practice_reputation_table_html(rows)
     assert "Healthgrades" in html
-    # No href for this platform since URL is None
     assert "healthgrades.com" not in html
+    # Only one href maximum (none here since name is plain and platform has no url)
+    assert "href" not in html
 
 
 def test_table_html_unverified_affiliation():
@@ -436,9 +457,42 @@ def test_table_html_staleness_note():
     assert "90" in html
 
 
-def test_table_html_print_css_present():
+def test_table_html_no_print_url_footnotes():
+    """The @media print URL-appending CSS must not be present."""
     from perception.pdf import _practice_reputation_table_html
     rows = [_make_row()]
     html = _practice_reputation_table_html(rows)
-    assert "@media print" in html
-    assert "pc-link" in html
+    assert 'attr(href)' not in html
+    assert '@media print' not in html
+
+
+def test_csv_url_columns_present_in_result_dict(monkeypatch):
+    """URL fields are retained in the collected data dict (CSV/DB path)."""
+    from perception import practice_reputation as pr
+
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(
+            verified=True, rating=4.0, count=50,
+            maps_url="https://maps.google.com/?cid=abc",
+        ),
+    )
+    payload = [{"name": "Test Clinic", "affiliation_verified": True,
+                "healthgrades_rating": 4.1, "healthgrades_count": 30,
+                "healthgrades_url": "https://www.healthgrades.com/group/test",
+                "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+                "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+                "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+                "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None}]
+    monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(payload))
+
+    results = pr.collect_platform_data(
+        [{"name": "Test Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
+    row = results[0]
+    for col in ("google_url", "healthgrades_url", "vitals_url",
+                "webmd_url", "yelp_url", "ratemds_url", "primary_url"):
+        assert col in row, f"URL column '{col}' missing from result dict"
+    assert row["google_url"] == "https://maps.google.com/?cid=abc"
+    assert row["healthgrades_url"] == "https://www.healthgrades.com/group/test"

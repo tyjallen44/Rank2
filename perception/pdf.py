@@ -2520,9 +2520,9 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
     """HTML for the Practice Composite appendix table.
 
     Columns: Practice (Entity) | Avg Rating | Total Reviews | Platforms Found | Collected
-    Practice names link to the primary profile URL (GBP first, then highest-count platform).
-    Each platform name in the Platforms Found column links to that platform's profile page.
-    Zero-platform rows render unlinked plain text.
+    Practice names are plain text. Each platform name in Platforms Found links to that
+    platform's captured profile page; platforms without a captured URL render unlinked.
+    Zero-platform rows are entirely plain text.
     """
     if not rows:
         return ""
@@ -2559,7 +2559,6 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
         count = row.get("platforms_found", 0)
         if not count:
             return "&#8212;"
-        # Build individually linked platform names using platform_entries when available
         entries = row.get("platform_entries")
         if entries:
             linked = []
@@ -2574,12 +2573,10 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
     for i, row in enumerate(rows):
         bg = f'background:{ALT}' if i % 2 == 1 else ''
         collection = row.get("collection_date", "")
-        name = row.get("practice_name", "")
-        primary_url = row.get("primary_url") if not row.get("not_established") else None
-        name_cell = _link(name, primary_url)
+        name = _e(row.get("practice_name", ""))
         rows_html += f"""
     <tr style="border-bottom:1px solid {BD};{bg}">
-      <td style="padding:9px 12px;font-weight:500">{name_cell}</td>
+      <td style="padding:9px 12px;font-weight:500">{name}</td>
       <td style="padding:9px 12px">{_rating_cell(row)}</td>
       <td style="padding:9px 12px;text-align:right">{row.get('total_reviews') or '&#8212;'}</td>
       <td style="padding:9px 12px">{_platforms_cell(row)}</td>
@@ -2595,21 +2592,7 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
             f'Ratings may become stale after 90 days.</p>'
         )
 
-    # Print stylesheet: append primary profile URL after practice name for printed copies
-    print_css = """
-<style>
-@media print {
-  .pc-link[href]::after {
-    content: " (" attr(href) ")";
-    font-size: 7pt;
-    color: #555;
-    font-weight: normal;
-  }
-}
-</style>"""
-
     return f"""
-{print_css}
 <div style="margin-top:32px">
   <div style="font-size:12pt;font-weight:700;color:{T};margin-bottom:6px">
     Practice Composite &#8212; Associated Practice Reputation
