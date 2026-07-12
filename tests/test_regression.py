@@ -1,10 +1,6 @@
-"""Tier 1/2 regression: verify Composite additions didn't alter existing outputs.
+"""Tier 1/2 regression: verify existing pipelines are intact after composite rollback.
 
-These are structural/import-only tests. Byte-identical PDF output requires a
-running server + Claude API, so we verify that:
-  1. All original pdf.py functions still exist and are callable.
-  2. Adding composite_mode to AnalysisResult doesn't break existing serialization.
-  3. db.py schema additions don't clobber existing tables.
+Structural/import-only tests — no server or Claude API required.
 Run with: python -m pytest tests/test_regression.py -v
 """
 import sys
@@ -19,8 +15,13 @@ import pytest
 
 def test_pdf_original_functions_present():
     from perception import pdf
-    for fn in ("render_pdf", "render_comparison_pdf", "render_composite_pdf"):
+    for fn in ("render_pdf", "render_comparison_pdf"):
         assert callable(getattr(pdf, fn, None)), f"pdf.{fn} missing"
+
+def test_pdf_composite_function_removed():
+    from perception import pdf
+    assert not hasattr(pdf, "render_composite_pdf"), \
+        "render_composite_pdf should have been removed in composite rollback"
 
 def test_pdf_render_pdf_signature_unchanged():
     from perception.pdf import render_pdf
@@ -36,6 +37,11 @@ def test_pdf_render_comparison_signature_unchanged():
     assert "result_a" in params
     assert "result_b" in params
 
+def test_pdf_practice_reputation_table_present():
+    from perception import pdf
+    assert callable(getattr(pdf, "_practice_reputation_table_html", None)), \
+        "pdf._practice_reputation_table_html missing"
+
 
 # ── models.py unchanged for existing fields ───────────────────────────────────
 
@@ -47,56 +53,61 @@ def test_analysis_result_existing_fields():
         location="Mobile, Alabama",
         generated_at=date.today(),
     )
-    # composite_mode defaults to None — old code unaffected
-    assert r.composite_mode is None
     assert r.aggregate is False
     assert r.teaser_report is False
+    assert r.individual_report is False
 
-def test_analysis_result_composite_mode_field():
+def test_analysis_result_no_composite_mode_field():
     from perception.models import AnalysisResult
     from datetime import date
-    r = AnalysisResult(
-        run_id="test-002",
-        location="Mobile, Alabama",
-        generated_at=date.today(),
-        composite_mode="hospitals_only",
-    )
-    assert r.composite_mode == "hospitals_only"
+    r = AnalysisResult(run_id="x", location="y", generated_at=date.today())
+    assert not hasattr(r, "composite_mode"), \
+        "composite_mode should have been removed from AnalysisResult"
 
-def test_analysis_result_serializes_without_composite():
+def test_analysis_result_practice_composite_rows_default():
+    from perception.models import AnalysisResult
+    from datetime import date
+    r = AnalysisResult(run_id="x", location="y", generated_at=date.today())
+    assert r.practice_composite_rows == []
+
+def test_analysis_result_serializes_cleanly():
     from perception.models import AnalysisResult
     from datetime import date
     r = AnalysisResult(run_id="x", location="y", generated_at=date.today())
     d = r.model_dump()
-    assert "composite_mode" in d
-    assert d["composite_mode"] is None
+    assert "practice_composite_rows" in d
+    assert d["practice_composite_rows"] == []
 
 
-# ── composite_config.py constants ────────────────────────────────────────────
+# ── composite files removed ────────────────────────────────────────────────────
 
-def test_composite_config_keys_present():
-    from perception.composite_config import COMPOSITE_CONFIG
-    required = [
-        "attribution_gate", "footprint_classes", "continuum_bonus",
-        "ceilings", "small_network", "inclusion_weights",
-        "sar_tier2_weight", "sar_battery_weight",
-    ]
-    for key in required:
-        assert key in COMPOSITE_CONFIG, f"COMPOSITE_CONFIG missing '{key}'"
-
-def test_composite_config_no_inline_magic():
-    """Verify ceilings dict has all referenced keys so scoring never KeyErrors."""
-    from perception.composite_config import COMPOSITE_CONFIG
-    c = COMPOSITE_CONFIG["ceilings"]
-    for key in ("attribution_sar_threshold", "attribution_max_lift",
-                "orphan_volume_threshold", "orphan_cap", "no_masking_max_lift"):
-        assert key in c
+def test_composite_modules_removed():
+    import importlib
+    for mod in (
+        "perception.composite_analyzer",
+        "perception.composite_config",
+        "perception.composite_models",
+        "perception.composite_scoring",
+    ):
+        spec = importlib.util.find_spec(mod)
+        assert spec is None, f"{mod} should have been deleted"
 
 
-# ── db.py tables exist after init ────────────────────────────────────────────
+# ── new practice modules importable ───────────────────────────────────────────
+
+def test_practice_discovery_importable():
+    from perception.practice_discovery import discover_practices
+    assert callable(discover_practices)
+
+def test_practice_reputation_importable():
+    from perception.practice_reputation import collect_platform_data, save_practice_reputation
+    assert callable(collect_platform_data)
+    assert callable(save_practice_reputation)
+
+
+# ── db.py schema after init ───────────────────────────────────────────────────
 
 def _run_init_db_on_temp():
-    """Run init_db() against a fresh temp DB and return (con, tmp_path)."""
     import duckdb
     import tempfile
     from perception import db as _db
@@ -104,7 +115,7 @@ def _run_init_db_on_temp():
 
     fd, path = tempfile.mkstemp(suffix=".duckdb")
     os.close(fd)
-    os.unlink(path)  # DuckDB must create it from scratch
+    os.unlink(path)
 
     orig_path = _db.settings.db_path
     try:
@@ -115,22 +126,34 @@ def _run_init_db_on_temp():
     finally:
         _db.settings.db_path = orig_path
 
-def test_db_new_tables_exist():
+def test_db_composite_tables_absent():
     con, path = _run_init_db_on_temp()
     try:
         tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
-        for t in ("network_registries", "network_entities", "network_battery_runs", "composite_results"):
+        for t in ("composite_results", "network_battery_runs", "network_entities", "network_registries"):
+            assert t not in tables, f"Composite table '{t}' should have been dropped"
+        con.close()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+
+def test_db_practice_reputation_tables_present():
+    con, path = _run_init_db_on_temp()
+    try:
+        tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
+        for t in ("practice_reputation_runs", "practice_reputation_practices"):
             assert t in tables, f"Table '{t}' missing from schema"
         con.close()
     finally:
         if os.path.exists(path):
             os.unlink(path)
 
-def test_db_analysis_runs_has_composite_mode():
+def test_db_analysis_runs_no_composite_mode_col():
     con, path = _run_init_db_on_temp()
     try:
         cols = {row[0] for row in con.execute("DESCRIBE analysis_runs").fetchall()}
-        assert "composite_mode" in cols
+        assert "composite_mode" not in cols, \
+            "composite_mode column should have been dropped from analysis_runs"
         con.close()
     finally:
         if os.path.exists(path):

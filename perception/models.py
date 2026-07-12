@@ -210,7 +210,7 @@ class AnalysisResult(BaseModel):
     entity_type: Optional[str] = None        # "hospital" | "practice" — None means hospital
     rubric_version: Optional[str] = None     # e.g. "practice-v1.0"
     practice_profile: Optional[str] = None  # e.g. "practice_procedural"
-    composite_mode: Optional[str] = None    # None | "hospitals_only" | "hospitals_and_practices"
+    practice_composite_rows: list[dict] = Field(default_factory=list)  # practice reputation data
     market_overview: str = ""              # 2–3 paragraph landscape narrative
     ai_visibility_verdict: str = ""        # neutral analyst read on the market's AI visibility
     coverage_note: str = ""                # "covered N of M registry facilities"

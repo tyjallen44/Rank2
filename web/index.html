@@ -1346,15 +1346,15 @@ html, body {
 
         <div class="fg" style="margin-bottom:0">
           <label class="fl">Options</label>
-          <!-- Composite checkboxes — hospital/health system only -->
+          <!-- Hospital-only options -->
           <div id="ir-composite-opts">
             <label class="aggregate-toggle" title="Analyze related hospitals and aggregate their data into this report.">
-              <input type="checkbox" id="ir-agg-toggle" checked onchange="irCompositeExclude('agg')">
+              <input type="checkbox" id="ir-agg-toggle" checked>
               <span class="agg-label">Composite analysis related hospitals only</span>
             </label>
-            <label class="aggregate-toggle" style="margin-top:10px" title="Extend the composite to include hospital-owned practices. Requires network confirmation step.">
-              <input type="checkbox" id="ir-composite-toggle" onchange="irCompositeExclude('composite')">
-              <span class="agg-label">Composite analysis of hospitals and hospital owned practices</span>
+            <label class="aggregate-toggle" style="margin-top:10px" title="Append a practice reputation table showing public ratings for associated practices and clinics.">
+              <input type="checkbox" id="ir-practice-composite">
+              <span class="agg-label">Practice Composite</span>
             </label>
           </div>
           <label class="aggregate-toggle" style="margin-top:10px" title="Collect and store analysis data without generating a PDF — useful for tracking AI visibility trends over time.">
@@ -1376,80 +1376,32 @@ html, body {
         </div>
       </div>
 
-      <!-- ── Network Assembly (composite mode) ──────────────────────────── -->
-      <div id="ir-step-composite" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Network Assembly — Confirm Roster</div>
+      <!-- ── Practice Discovery confirmation step ──────────────────────── -->
+      <div id="ir-step-practice-discovery" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Practice Composite — Confirm Practice List</div>
         <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
-          Review the discovered network entities below. Uncheck any that should be excluded, then confirm to begin analysis.
+          Review the discovered practices below. Uncheck any that should be excluded from the reputation table, then confirm to run.
         </p>
+        <div id="ir-pd-count" style="font-size:12px;color:var(--teal);font-weight:600;margin-bottom:12px"></div>
 
-        <div id="ir-composite-scope" style="font-size:12px;color:var(--teal);font-weight:600;margin-bottom:12px"></div>
-
-        <table id="ir-roster-table" style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
           <thead>
             <tr style="background:#f0f6f7;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">
               <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Include</th>
               <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
               <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Type</th>
               <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">City, ST</th>
-              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Tier</th>
             </tr>
           </thead>
-          <tbody id="ir-roster-tbody"></tbody>
+          <tbody id="ir-pd-tbody"></tbody>
         </table>
 
-        <div style="margin-bottom:16px">
-          <a href="#" id="ir-add-entity-link" onclick="openAddEntityModal();return false;"
-             style="font-size:12px;color:var(--teal);text-decoration:underline">Add entities manually</a>
-        </div>
-
-        <div id="ir-composite-err" class="err hidden mt8"></div>
+        <div id="ir-pd-err" class="err hidden mt8"></div>
         <div class="mt16 row-actions">
-          <button class="btn btn-primary" id="ir-confirm-btn" onclick="confirmRoster()">
-            Confirm &amp; Run Composite →
+          <button class="btn btn-primary" id="ir-pd-confirm-btn" onclick="confirmPracticeRoster()">
+            Confirm &amp; Run →
           </button>
-          <button class="btn btn-ghost btn-sm" onclick="irBackToStep3()">← Back</button>
-        </div>
-      </div>
-
-      <!-- Add Entity Modal -->
-      <div id="add-entity-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center">
-        <div style="background:#fff;border-radius:12px;padding:28px 32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,0.18)">
-          <div style="font-size:14px;font-weight:700;color:var(--teal);margin-bottom:18px">Add Entity Manually</div>
-          <div class="fg">
-            <label class="fl">Name</label>
-            <input id="ae-name" class="fi" type="text" placeholder="e.g. Lakeside Orthopedics" oninput="this.value=this.value.toUpperCase()">
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-            <div class="fg" style="margin:0">
-              <label class="fl">City</label>
-              <input id="ae-city" class="fi" type="text" placeholder="Birmingham" oninput="this.value=this.value.toUpperCase()">
-            </div>
-            <div class="fg" style="margin:0">
-              <label class="fl">State</label>
-              <input id="ae-state" class="fi" type="text" placeholder="AL" maxlength="2" oninput="this.value=this.value.toUpperCase()">
-            </div>
-          </div>
-          <div class="fg mt12">
-            <label class="fl">Type</label>
-            <div class="tg-group">
-              <button class="tg-opt on" id="ae-tg-practice" onclick="setAeType('practice')">Practice</button>
-              <button class="tg-opt" id="ae-tg-hospital" onclick="setAeType('hospital')">Hospital</button>
-            </div>
-          </div>
-          <div class="fg mt12">
-            <label class="fl">Inclusion Tier</label>
-            <select id="ae-tier" class="fi" style="height:36px">
-              <option value="OWNED">Owned</option>
-              <option value="CONTROLLED">Controlled</option>
-              <option value="IN-TRANSITION">In-Transition</option>
-            </select>
-          </div>
-          <div id="ae-err" class="err hidden mt8"></div>
-          <div class="mt20" style="display:flex;gap:10px">
-            <button class="btn btn-primary" onclick="addEntityToRoster()">Add to Roster</button>
-            <button class="btn btn-ghost btn-sm" onclick="closeAddEntityModal()">Cancel</button>
-          </div>
+          <button class="btn btn-ghost btn-sm" onclick="irBackFromPracticeDiscovery()">← Back</button>
         </div>
       </div>
     </div>
@@ -1508,10 +1460,16 @@ html, body {
       <div id="cmp-a-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Entity A Selected</div>
         <div id="cmp-a-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
-        <label class="aggregate-toggle">
-          <input type="checkbox" id="cmp-a-agg" checked>
-          <span class="agg-label">Composite analysis related hospitals only</span>
-        </label>
+        <div id="cmp-a-hosp-opts">
+          <label class="aggregate-toggle">
+            <input type="checkbox" id="cmp-a-agg" checked>
+            <span class="agg-label">Composite analysis related hospitals only</span>
+          </label>
+          <label class="aggregate-toggle" style="margin-top:10px">
+            <input type="checkbox" id="cmp-a-practice-composite">
+            <span class="agg-label">Practice Composite</span>
+          </label>
+        </div>
       </div>
 
       <!-- Entity B -->
@@ -1564,10 +1522,16 @@ html, body {
         <div id="cmp-b-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Entity B Selected</div>
           <div id="cmp-b-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
-          <label class="aggregate-toggle">
-            <input type="checkbox" id="cmp-b-agg" checked>
-            <span class="agg-label">Composite analysis related hospitals only</span>
-          </label>
+          <div id="cmp-b-hosp-opts">
+            <label class="aggregate-toggle">
+              <input type="checkbox" id="cmp-b-agg" checked>
+              <span class="agg-label">Composite analysis related hospitals only</span>
+            </label>
+            <label class="aggregate-toggle" style="margin-top:10px">
+              <input type="checkbox" id="cmp-b-practice-composite">
+              <span class="agg-label">Practice Composite</span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -2801,19 +2765,11 @@ function setIrType(t) {
   document.getElementById('ir-tg-hospital').classList.toggle('on',  t === 'hospital');
   document.getElementById('ir-tg-specialty').classList.toggle('on', t === 'specialty');
   document.getElementById('ir-specialty-wrap').classList.toggle('hidden', t !== 'specialty');
-  // composite checkboxes only apply to hospital type
+  // hospital-only options
   document.getElementById('ir-composite-opts').style.display = t === 'hospital' ? '' : 'none';
   if (t !== 'hospital') {
-    document.getElementById('ir-agg-toggle').checked       = false;
-    document.getElementById('ir-composite-toggle').checked = false;
-  }
-}
-
-function irCompositeExclude(src) {
-  if (src === 'agg' && document.getElementById('ir-agg-toggle').checked) {
-    document.getElementById('ir-composite-toggle').checked = false;
-  } else if (src === 'composite' && document.getElementById('ir-composite-toggle').checked) {
-    document.getElementById('ir-agg-toggle').checked = false;
+    document.getElementById('ir-agg-toggle').checked          = false;
+    document.getElementById('ir-practice-composite').checked  = false;
   }
 }
 
@@ -2995,6 +2951,12 @@ function setCmpType(side, type) {
     document.getElementById(`cmp-${side}-tg-${t}`).classList.toggle('on', t === type);
   });
   document.getElementById(`cmp-${side}-specialty-wrap`).classList.toggle('hidden', type !== 'specialty');
+  const hospOpts = document.getElementById(`cmp-${side}-hosp-opts`);
+  if (hospOpts) hospOpts.style.display = type === 'hospital' ? '' : 'none';
+  if (type !== 'hospital') {
+    const pc = document.getElementById(`cmp-${side}-practice-composite`);
+    if (pc) pc.checked = false;
+  }
 }
 
 async function runCmpSearch(side) {
@@ -3143,6 +3105,8 @@ async function runComparison() {
   if (_cmp.a.type === 'specialty' && !specA) return showErr(errEl, 'Please enter a specialty for Entity A.');
   if (_cmp.b.type === 'specialty' && !specB) return showErr(errEl, 'Please enter a specialty for Entity B.');
 
+  const pcA = _cmp.a.type === 'hospital' && document.getElementById('cmp-a-practice-composite')?.checked;
+  const pcB = _cmp.b.type === 'hospital' && document.getElementById('cmp-b-practice-composite')?.checked;
   const body = {
     entity_a_name:    _cmp.a.selected.name,
     city_a:           _cmp.a.city,
@@ -3159,6 +3123,10 @@ async function runComparison() {
     entity_type_b:    _cmp.b.type === 'specialty' ? 'practice' : null,
     practice_profile_a: _cmp.a.type === 'specialty' ? (_cmp.a.practiceProfile || 'practice_procedural') : null,
     practice_profile_b: _cmp.b.type === 'specialty' ? (_cmp.b.practiceProfile || 'practice_procedural') : null,
+    practice_composite_a: !!pcA,
+    practice_roster_a:    pcA ? _practiceRoster : [],
+    practice_composite_b: !!pcB,
+    practice_roster_b:    pcB ? _practiceRoster : [],
   };
 
   const btn = document.getElementById('cmp-run-btn');
@@ -3187,11 +3155,18 @@ async function runIndividual() {
   const errEl = document.getElementById('ir-run-err');
   errEl.classList.add('hidden');
 
-  // If composite (hospitals + practices) is checked, go to network assembly step
-  if (document.getElementById('ir-composite-toggle').checked) {
-    openNetworkAssembly();
+  // If Practice Composite is checked, go to practice discovery step first
+  if (_irType === 'hospital' && document.getElementById('ir-practice-composite')?.checked) {
+    openPracticeDiscovery();
     return;
   }
+
+  await _submitIndividual();
+}
+
+async function _submitIndividual(practiceComposite = false, practiceRoster = []) {
+  const errEl = document.getElementById('ir-run-err');
+  errEl.classList.add('hidden');
 
   const specialty = _irType === 'specialty'
     ? (document.getElementById('ir-specialty').value.trim() || null) : null;
@@ -3213,6 +3188,8 @@ async function runIndividual() {
     skip_pdf,
     entity_type: _irType === 'specialty' ? 'practice' : null,
     practice_profile: _irType === 'specialty' ? (_irPracticeProfile || 'practice_procedural') : null,
+    practice_composite: practiceComposite,
+    practice_roster:    practiceRoster,
   };
 
   const btn = document.getElementById('ir-run-btn');
@@ -3236,27 +3213,25 @@ async function runIndividual() {
   }
 }
 
-// ── System Composite (Tier 3) ─────────────────────────────────────────────
+// ── Practice Composite Discovery ──────────────────────────────────────────
 
-let _compositeRoster = [];   // {name, entity_type, city, state, inclusion_tier, _manual}
-let _aeType = 'practice';
-let _compositeRegistryId = null;
+let _practiceRoster = [];   // {name, entity_type, city, state}
 
-function irBackToStep3() {
-  document.getElementById('ir-step-composite').classList.add('hidden');
+function irBackFromPracticeDiscovery() {
+  document.getElementById('ir-step-practice-discovery').classList.add('hidden');
   document.getElementById('ir-step3').classList.remove('hidden');
   document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-async function openNetworkAssembly() {
+async function openPracticeDiscovery() {
   const btn    = document.getElementById('ir-run-btn');
   const errEl  = document.getElementById('ir-run-err');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Discovering network…';
+  btn.innerHTML = '<span class="spinner"></span> Discovering practices…';
   errEl.classList.add('hidden');
 
   try {
-    const r = await api('/api/composite/discover', {
+    const r = await api('/api/practice/discover', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3265,15 +3240,15 @@ async function openNetworkAssembly() {
         state:       _irResolvedState,
       }),
     });
-    if (!r.ok) throw new Error(await errDetail(r, 'Network discovery failed'));
+    if (!r.ok) throw new Error(await errDetail(r, 'Practice discovery failed'));
     const data = await r.json();
-    _compositeRoster = (data.candidates || []).map(c => ({ ...c, _manual: false }));
-    _renderRoster();
-    document.getElementById('ir-composite-scope').textContent =
-      `Estimated scope: ${data.scope_estimate ? data.scope_estimate.entity_count + ' entities' : _compositeRoster.length + ' entities'}`;
+    _practiceRoster = (data.practices || []);
+    _renderPracticeRoster();
+    document.getElementById('ir-pd-count').textContent =
+      `${_practiceRoster.length} practice${_practiceRoster.length !== 1 ? 's' : ''} discovered`;
     document.getElementById('ir-step3').classList.add('hidden');
-    document.getElementById('ir-step-composite').classList.remove('hidden');
-    document.getElementById('ir-step-composite').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById('ir-step-practice-discovery').classList.remove('hidden');
+    document.getElementById('ir-step-practice-discovery').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
     showErr(errEl, e.message);
   } finally {
@@ -3282,122 +3257,31 @@ async function openNetworkAssembly() {
   }
 }
 
-function _renderRoster() {
-  const tbody = document.getElementById('ir-roster-tbody');
+function _renderPracticeRoster() {
+  const tbody = document.getElementById('ir-pd-tbody');
   tbody.innerHTML = '';
-  _compositeRoster.forEach((ent, i) => {
+  _practiceRoster.forEach((ent, i) => {
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid var(--border)';
     tr.innerHTML = `
       <td style="padding:8px 10px"><input type="checkbox" data-idx="${i}" checked></td>
-      <td style="padding:8px 10px;font-weight:${ent._manual ? '600' : '400'}">${ent.name}${ent._manual ? ' <span style="font-size:10px;color:var(--muted)">(manual)</span>' : ''}</td>
-      <td style="padding:8px 10px;text-transform:capitalize">${ent.entity_type}</td>
-      <td style="padding:8px 10px">${ent.city}, ${ent.state}</td>
-      <td style="padding:8px 10px">${ent.inclusion_tier || 'OWNED'}</td>`;
+      <td style="padding:8px 10px">${ent.name}</td>
+      <td style="padding:8px 10px;text-transform:capitalize">${ent.entity_type || 'practice'}</td>
+      <td style="padding:8px 10px">${ent.city}, ${ent.state}</td>`;
     tbody.appendChild(tr);
   });
 }
 
-async function confirmRoster() {
-  const errEl = document.getElementById('ir-composite-err');
+async function confirmPracticeRoster() {
+  const errEl = document.getElementById('ir-pd-err');
   errEl.classList.add('hidden');
 
-  const checkboxes = document.querySelectorAll('#ir-roster-tbody input[type=checkbox]');
-  const included = _compositeRoster.filter((_, i) => checkboxes[i] && checkboxes[i].checked);
-  if (included.length === 0) return showErr(errEl, 'Select at least one entity to include.');
+  const checkboxes = document.querySelectorAll('#ir-pd-tbody input[type=checkbox]');
+  const included = _practiceRoster.filter((_, i) => checkboxes[i] && checkboxes[i].checked);
+  if (included.length === 0) return showErr(errEl, 'Select at least one practice to include.');
 
-  const btn = document.getElementById('ir-confirm-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Saving…';
-
-  try {
-    const r = await api('/api/composite/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        anchor_run_id: null,
-        system_name:   _irSelected.name,
-        market_cbsa:   `${_irResolvedCity}, ${_irResolvedState}`,
-        radius_miles:  50,
-        entities:      included.map(e => ({
-          name:                      e.name,
-          entity_type:               e.entity_type,
-          city:                      e.city,
-          state:                     e.state,
-          inclusion_tier:            e.inclusion_tier || 'OWNED',
-          ownership_evidence_source: e._manual ? 'client_supplied' : 'claude_discovery',
-          ownership_verified:        !e._manual,
-          fte_count:                 null,
-          encounter_volume_share:    null,
-          strategic_multiplier:      null,
-          strategic_multiplier_rationale: null,
-          transition_close_date:     null,
-          linked_run_id:             null,
-        })),
-      }),
-    });
-    if (!r.ok) throw new Error(await errDetail(r, 'Failed to save registry'));
-    const { registry_id } = await r.json();
-    _compositeRegistryId = registry_id;
-    await runComposite(registry_id);
-  } catch (e) {
-    showErr(errEl, e.message);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = 'Confirm &amp; Run Composite →';
-  }
-}
-
-async function runComposite(registryId) {
-  const r = await api('/api/composite/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ registry_id: registryId }),
-  });
-  if (!r.ok) throw new Error(await errDetail(r, 'Failed to start composite'));
-  const { job_id } = await r.json();
-  _lastPage = 'individual';
-  startProgress(job_id, _irSelected.name + ' (System Composite)', false);
-}
-
-function openAddEntityModal() {
-  document.getElementById('ae-name').value  = '';
-  document.getElementById('ae-city').value  = '';
-  document.getElementById('ae-state').value = '';
-  document.getElementById('ae-tier').value  = 'OWNED';
-  document.getElementById('ae-err').classList.add('hidden');
-  setAeType('practice');
-  const modal = document.getElementById('add-entity-modal');
-  modal.style.display = 'flex';
-}
-
-function closeAddEntityModal() {
-  document.getElementById('add-entity-modal').style.display = 'none';
-}
-
-function setAeType(t) {
-  _aeType = t;
-  document.getElementById('ae-tg-practice').classList.toggle('on', t === 'practice');
-  document.getElementById('ae-tg-hospital').classList.toggle('on', t === 'hospital');
-}
-
-function addEntityToRoster() {
-  const name  = document.getElementById('ae-name').value.trim();
-  const city  = document.getElementById('ae-city').value.trim();
-  const state = document.getElementById('ae-state').value.trim().toUpperCase();
-  const tier  = document.getElementById('ae-tier').value;
-  const errEl = document.getElementById('ae-err');
-  errEl.classList.add('hidden');
-
-  if (!name)  return showErr(errEl, 'Name is required.');
-  if (!city)  return showErr(errEl, 'City is required.');
-  if (!state || state.length !== 2) return showErr(errEl, 'Enter a 2-letter state code.');
-
-  _compositeRoster.push({ name, entity_type: _aeType, city, state, inclusion_tier: tier, _manual: true });
-  _renderRoster();
-  closeAddEntityModal();
-  document.getElementById('ir-composite-scope').textContent =
-    `Estimated scope: ${_compositeRoster.length} entities`;
+  document.getElementById('ir-step-practice-discovery').classList.add('hidden');
+  await _submitIndividual(true, included);
 }
 
 // ── Manual run ────────────────────────────────────────────────────────────
@@ -3595,21 +3479,10 @@ function onSSE(ev) {
 }
 
 function showSingleDone(r) {
-  const isComposite = !!r.composite;
   const isComparison = !!r.comparison;
 
-  // Subtitle and stat block
   let subText, bodyHtml;
-  if (isComposite) {
-    subText = r.small_network_refused ? 'Composite complete — small network (narrative only)' : 'System Composite report ready';
-    const scoreDisplay = r.small_network_refused ? 'N/A' : (r.composite_score != null ? Math.round(r.composite_score) : '—');
-    bodyHtml = `<div class="stat-row">
-      <div class="stat-box"><div class="stat-val">${scoreDisplay}</div><div class="stat-lbl">Composite Score</div></div>
-      <div class="stat-box"><div class="stat-val">${r.composite_grade || '—'}</div><div class="stat-lbl">Grade</div></div>
-      <div class="stat-box"><div class="stat-val">${r.sar != null ? Math.round(r.sar * 100) + '%' : '—'}</div><div class="stat-lbl">SAR</div></div>
-      <div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Entities</div></div>
-    </div>`;
-  } else if (isComparison) {
+  if (isComparison) {
     subText = 'Comparison report ready';
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`;
   } else {
@@ -3624,11 +3497,9 @@ function showSingleDone(r) {
     : _lastPage === 'compare'   ? 'New Comparison'
     : 'New Market Research';
 
-  const dlUrl = isComposite
-    ? `/api/composite/${r.job_id}/pdf?token=${encodeURIComponent(_token)}`
-    : isComparison
-      ? `/api/compare/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
-      : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
+  const dlUrl = isComparison
+    ? `/api/compare/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
+    : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
 
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download PDF</button>

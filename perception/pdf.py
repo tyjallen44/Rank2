@@ -2230,6 +2230,8 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     {_e(result.disclaimer)}
   </div>
 
+  {_practice_reputation_table_html(result.practice_composite_rows, result.generated_at.strftime("%B %d, %Y")) if result.practice_composite_rows else ""}
+
   {appendix_html}
 
 </div>
@@ -2449,7 +2451,10 @@ def _build_comparison_html(
   {_comparison_summary_block(comparison)}
 
   {_entity_deep_dive(result_a)}
+  {_practice_reputation_table_html(result_a.practice_composite_rows, result_a.generated_at.strftime("%B %d, %Y")) if result_a.practice_composite_rows else ""}
+
   {_entity_deep_dive(result_b)}
+  {_practice_reputation_table_html(result_b.practice_composite_rows, result_b.generated_at.strftime("%B %d, %Y")) if result_b.practice_composite_rows else ""}
 
   {_practice_appendix_html() if (result_a.entity_type == "practice" or result_b.entity_type == "practice") else _appendix_html()}
 
@@ -2499,443 +2504,89 @@ def render_comparison_pdf(
         browser.close()
 
 
-# ── System Composite PDF ──────────────────────────────────────────────────────
+# ── Practice Composite reputation table ──────────────────────────────────────
 
-def _paras(text: str) -> str:
-    """Convert double-newline-separated text into HTML paragraphs."""
-    if not text:
+def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str:
+    """HTML for the Practice Composite appendix table.
+
+    Columns: Practice (Entity) | Avg Rating | Total Reviews | Platforms Found
+    Zero-platform rows show 'Not established'.
+    """
+    if not rows:
         return ""
-    return "".join(f"<p>{p.strip()}</p>" for p in text.split("\n\n") if p.strip())
 
-
-def _composite_appendix_html() -> str:
-    """Appendix — System Composite Rubric methodology summary."""
     T   = "#0F4146"
-    S   = "#177B6E"
     M   = "#7a9095"
     BD  = "#d0e4e8"
-    TXT = "#3a5a60"
     ALT = "#f8fbfa"
 
-    def _part(n, title):
-        return (
-            f'<div style="background:{T};color:#fff;padding:7px 12px;margin:20px 0 12px;'
-            f'border-radius:3px;font-size:7.5pt;font-weight:700;letter-spacing:0.14em;'
-            f'text-transform:uppercase">{n} &mdash; {title}</div>'
+    def _rating_cell(row: dict) -> str:
+        if row.get("not_established"):
+            return '<span style="color:#7a9095;font-style:italic">Not established</span>'
+        avg = row.get("avg_rating")
+        if avg is None:
+            return "&#8212;"
+        unverified = not row.get("affiliation_verified", True)
+        suffix = (
+            ' <span style="font-size:8pt;color:#7a9095">(unverified affiliation)</span>'
+            if unverified else ""
         )
-    def _sec(n, title):
-        return (
-            f'<div style="font-size:8pt;font-weight:700;color:{T};margin:14px 0 6px;'
-            f'padding-bottom:4px;border-bottom:1.5px solid {BD}">'
-            f'<span style="color:{S};margin-right:5px">{n}</span>{title}</div>'
+        return f'<strong>{avg:.1f}</strong> / 5{suffix}'
+
+    def _platforms_cell(row: dict) -> str:
+        count = row.get("platforms_found", 0)
+        lst   = row.get("platforms_list", "")
+        if not count:
+            return "&#8212;"
+        return f"{count}: {lst}"
+
+    rows_html = ""
+    for i, row in enumerate(rows):
+        bg = f'background:{ALT}' if i % 2 == 1 else ''
+        collection = row.get("collection_date", "")
+        rows_html += f"""
+    <tr style="border-bottom:1px solid {BD};{bg}">
+      <td style="padding:9px 12px;font-weight:500">{_e(row.get('practice_name', ''))}</td>
+      <td style="padding:9px 12px">{_rating_cell(row)}</td>
+      <td style="padding:9px 12px;text-align:right">{row.get('total_reviews') or '&#8212;'}</td>
+      <td style="padding:9px 12px">{_platforms_cell(row)}</td>
+      <td style="padding:9px 12px;font-size:8pt;color:{M}">{_e(collection)}</td>
+    </tr>"""
+
+    footer = ""
+    if run_date:
+        footer = (
+            f'<p style="font-size:8pt;color:{M};margin-top:10px">'
+            f'Run date: {_e(run_date)} &ensp;&middot;&ensp; '
+            f'Platform data sourced from publicly available listings, current as of collection date. '
+            f'Ratings may become stale after 90 days.</p>'
         )
-    def _p(text):
-        return f'<p style="font-size:7.5pt;color:{TXT};line-height:1.55;margin-bottom:6px">{text}</p>'
-    def _tbl(*rows, header=None):
-        th_s = (f'background:{T};color:#fff;padding:5px 8px;text-align:left;'
-                f'font-weight:700;font-size:7pt;border:1px solid {BD}')
-        td_s  = f'border:1px solid {BD};padding:5px 8px;vertical-align:top;font-size:7pt;line-height:1.45;color:{TXT}'
-        td_a  = f'border:1px solid {BD};padding:5px 8px;vertical-align:top;font-size:7pt;line-height:1.45;color:{TXT};background:{ALT}'
-        head  = ""
-        if header:
-            cells = "".join(f'<th style="{th_s}">{c}</th>' for c in header)
-            head  = f'<thead><tr>{cells}</tr></thead>'
-        body_rows = []
-        for i, row in enumerate(rows):
-            s = td_a if i % 2 else td_s
-            cells = "".join(f'<td style="{s}">{c}</td>' for c in row)
-            body_rows.append(f'<tr>{cells}</tr>')
-        return (f'<table style="width:100%;border-collapse:collapse;margin-bottom:12px">'
-                f'{head}<tbody>{"".join(body_rows)}</tbody></table>')
-    def _ul(items):
-        lis = "".join(
-            f'<li style="font-size:7.5pt;color:{TXT};line-height:1.5;margin-bottom:4px">{i}</li>'
-            for i in items
-        )
-        return f'<ul style="padding-left:18px;margin-bottom:8px">{lis}</ul>'
 
     return f"""
-<div style="page-break-before:always;padding-top:10px">
-  <div style="border-bottom:3px solid {T};padding-bottom:10px;margin-bottom:4px">
-    <div style="font-size:7.5pt;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:{S};margin-bottom:4px">Appendix</div>
-    <div style="font-family:'Barlow Condensed',Impact,sans-serif;font-size:20pt;font-weight:700;color:{T};line-height:1.1">AI Visibility Methodology</div>
-    <div style="font-size:8pt;color:{M};margin-top:4px">System Composite Edition (Tier 3) &mdash; v1.0</div>
+<div style="margin-top:32px">
+  <div style="font-size:12pt;font-weight:700;color:{T};margin-bottom:6px">
+    Practice Composite &#8212; Associated Practice Reputation
   </div>
-
-  {_p("<strong>Scope:</strong> Health systems with owned/employed physician practices. The composite answers: when a patient asks an AI for care at any level, how often does this system win &mdash; and does it get credit for winning?")}
-
-  {_part("PART 1", "COMPOSITE FORMULA")}
-
-  {_sec("2.1", "Architecture")}
-  {_tbl(
-      ("Network Score (NS)",            "&#931;(practice_score_i &times; w_i)",                                                 "Volume-weighted avg of all included practice scores"),
-      ("Attributed Network Score (ANS)","NS &times; (0.5 + 0.5 &times; SAR)",                                                  "Attribution gate: 50% floor + 50% proportional to SAR"),
-      ("System Composite (SC)",         "(Hospital &times; W_h) + (ANS &times; W_n) + Continuum Bonus &minus; Modifiers",      "Clamped 0&ndash;100"),
-      header=("Metric", "Formula", "Notes"),
-  )}
-
-  {_sec("2.2", "Footprint Classes &amp; Blend Weights")}
-  {_tbl(
-      ("FACILITY-CENTRIC",   "Network &lt; 25% of encounters", "75% / 25%"),
-      ("BALANCED",           "25&ndash;50% of encounters",     "60% / 40%"),
-      ("AMBULATORY-FORWARD", "&gt; 50% of encounters",         "50% / 50%"),
-      header=("Class", "Definition", "W_h / W_n"),
-  )}
-
-  {_sec("2.3", "Continuum Bonus &amp; SAR")}
-  {_p("Continuum Bonus (from N3 battery): &ge;80% coherent = +4; 60&ndash;79% = +2; below = 0.")}
-  {_p("System Attribution Rate (SAR): volume-weighted % of practice-level runs where AI correctly associates the practice with the system. 70% from Tier 2 linkage_integrity_pct + 30% from N1/N4 battery.")}
-
-  {_sec("2.5", "Ceilings &amp; Floors")}
-  {_tbl(
-      ("Attribution ceiling",  "SAR &lt; 40%",                                "Composite &le; Hospital Score + 5 pts"),
-      ("Orphan ceiling",       "&gt;30% of network volume in Orphan List",     "Composite capped at 74"),
-      ("No-masking floor",     "Always",                                        "Composite &le; max(Hospital, Network) + 6 pts"),
-      ("Small-network refusal","&lt;3 practices OR &lt;10 providers",           "No composite issued &mdash; narrative only"),
-      header=("Rule", "Trigger", "Effect"),
-  )}
-
-  {_sec("2.6", "Modifiers")}
-  {_ul([
-      "Integration grace: IN-TRANSITION entities exclude attribution failures from SAR for 12 months post-close",
-      "Divestiture confusion: assistants still attributing SOLD practices: &minus;2 to &minus;5",
-      "Roster contagion: physician mislinkage within the network: &minus;1 each, capped &minus;4",
-      "Adverse-event overhang: flows through from Tier 1/2 arithmetically &mdash; NOT re-applied at Tier 3",
-      "System-level adverse events (new at Tier 3 only): &minus;3 to &minus;10",
-  ])}
-
-  {_sec("2.8", "Mandatory Labeling")}
-  {_p("Every composite grade: <strong>SYSTEM COMPOSITE: [score] ([grade])</strong> &middot; [Footprint class] (W W_h/W_n) &middot; SAR [%] &middot; Hospital [score] &middot; Network [score] &middot; Delta [&plusmn;pts].")}
-
-  {_sec("2.10", "Refresh &amp; Versioning")}
-  {_ul([
-      "Composite expires when earliest Tier 1/2 battery passes 90 days",
-      "Ownership registry: re-attest quarterly and at any announced transaction",
-      "SAR: recomputed at every Tier 2 refresh",
-      "Three rubric versions printed on every composite report",
-  ])}
+  <p style="font-size:9pt;color:{M};margin-bottom:14px">
+    Publicly available reputation data for practices and facilities associated with this
+    health system. Avg Rating = review-count-weighted average across all platforms found.
+    Platforms: Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs (Zocdoc excluded).
+  </p>
+  <table style="width:100%;border-collapse:collapse;font-size:10pt">
+    <thead>
+      <tr style="background:{T};color:#fff;font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:0.06em">
+        <th style="padding:9px 12px;text-align:left">Practice (Entity)</th>
+        <th style="padding:9px 12px;text-align:left">Avg Rating</th>
+        <th style="padding:9px 12px;text-align:right">Total Reviews</th>
+        <th style="padding:9px 12px;text-align:left">Platforms Found</th>
+        <th style="padding:9px 12px;text-align:left">Collected</th>
+      </tr>
+    </thead>
+    <tbody>{rows_html}
+    </tbody>
+  </table>
+  {footer}
 </div>
 """
 
 
-def _build_composite_html(
-    result: "CompositeResult",
-    registry: "NetworkRegistry",
-    brand_cfg: dict,
-) -> str:
-    """Build the full HTML for a System Composite PDF report (8 mandatory sections)."""
-    from .composite_models import OwnershipTier
-
-    T = brand_cfg["primary"]
-
-    def _grade_color(grade: str) -> str:
-        if grade.startswith("A"):   return "#177B6E"
-        if grade.startswith("B+"): return "#177B6E"
-        if grade.startswith("B"):  return "#2D7DA8"
-        if grade.startswith("C"):  return "#D97706"
-        return "#DC2626"
-
-    def _metric_block(label: str, value: str, sub: str = "") -> str:
-        sub_html = (f'<div style="font-size:7pt;color:#7a9095;margin-top:2px">{sub}</div>'
-                    if sub else "")
-        return (
-            f'<div style="text-align:center;padding:12px 16px;background:#f8fbfa;'
-            f'border:1px solid #d0e4e8;border-radius:8px">'
-            f'<div style="font-size:7pt;font-weight:700;text-transform:uppercase;'
-            f'letter-spacing:0.1em;color:#7a9095;margin-bottom:4px">{label}</div>'
-            f'<div style="font-size:18pt;font-weight:700;color:{T}">{value}</div>'
-            f'{sub_html}</div>'
-        )
-
-    # shared cell styles
-    th_s = (f'background:{T};color:#fff;padding:7px 10px;text-align:left;'
-            f'font-size:7.5pt;font-weight:700;border:1px solid #d0e4e8')
-    td_s = 'border:1px solid #d0e4e8;padding:7px 10px;font-size:7.5pt;vertical-align:top;color:#3a5a60'
-    td_a = 'border:1px solid #d0e4e8;padding:7px 10px;font-size:7.5pt;vertical-align:top;color:#3a5a60;background:#f8fbfa'
-    sec_hdr = (f'font-size:8pt;font-weight:700;color:{T};margin:20px 0 8px;'
-               f'text-transform:uppercase;letter-spacing:0.1em')
-
-    # ── §1 Header block ───────────────────────────────────────────────────────
-    delta_sign = "+" if result.merged_entity_delta >= 0 else ""
-
-    if result.small_network_refused:
-        composite_display  = "N/A &mdash; Small Network"
-        grade_display_html = ""
-    else:
-        grade_col = _grade_color(result.composite_grade)
-        composite_display  = f"{result.composite_score:.0f}"
-        grade_display_html = (
-            f'<span style="color:{grade_col};background:#fff;padding:2px 8px;'
-            f'border-radius:4px;font-size:12pt;font-weight:700;margin-left:6px">'
-            f'{result.composite_grade}</span>'
-        )
-
-    mode_label = (result.composite_mode or "").replace("_", " ").title()
-
-    ceiling_banner = (
-        f'<div style="margin-top:10px;background:rgba(255,255,255,0.15);padding:6px 12px;'
-        f'border-radius:4px;font-size:8pt">&#9888; Score capped: {_e(result.score_ceiling_reason or "")}</div>'
-        if result.score_ceiling_applied else ""
-    )
-    small_net_banner = (
-        '<div style="margin-top:10px;background:rgba(255,200,0,0.2);padding:6px 12px;'
-        'border-radius:4px;font-size:8pt">&#9888; Small network &mdash; composite score not issued. '
-        'See narrative section for Merged-Entity Delta.</div>'
-        if result.small_network_refused else ""
-    )
-    proxy_banner = (
-        '<div style="margin-top:6px;background:rgba(255,200,0,0.15);padding:5px 12px;'
-        'border-radius:4px;font-size:7.5pt">&#9873; Proxy-weighted (FTE count used &mdash; '
-        'encounter volume unavailable)</div>'
-        if result.proxy_weighted else ""
-    )
-    cross_tier_banner = (
-        '<div style="margin-top:6px;background:rgba(255,200,0,0.15);padding:5px 12px;'
-        'border-radius:4px;font-size:7.5pt">&#9873; Cross-tier flag: battery runs are &gt;45 days apart</div>'
-        if result.cross_tier_flag else ""
-    )
-
-    header_block = f"""
-<div style="background:{T};color:#fff;padding:20px 28px;border-radius:10px;margin-bottom:24px">
-  <div style="font-size:9pt;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;opacity:0.7;margin-bottom:6px">
-    System Composite Report &mdash; {_e(mode_label)}
-  </div>
-  <div style="font-family:'Barlow Condensed',Impact,sans-serif;font-size:28pt;font-weight:700;line-height:1.05;margin-bottom:8px">
-    {_e(result.system_name)} &mdash; Composite
-  </div>
-  <div style="font-size:11pt;opacity:0.85">
-    System Composite: <strong style="font-size:16pt">{composite_display}</strong>
-    {grade_display_html}
-    &ensp;&middot;&ensp; {_e(result.footprint_class.value)} (W {result.w_h:.0%}/{result.w_n:.0%})
-    &ensp;&middot;&ensp; SAR {result.sar:.0%}
-    &ensp;&middot;&ensp; Hospital {result.hospital_score:.0f}
-    &ensp;&middot;&ensp; Network {result.network_score:.0f}
-    &ensp;&middot;&ensp; Delta {delta_sign}{result.merged_entity_delta:.0f}
-  </div>
-  {ceiling_banner}{small_net_banner}{proxy_banner}{cross_tier_banner}
-</div>
-"""
-
-    # ── §2 Three-tier table ───────────────────────────────────────────────────
-    anchor_row = (
-        f'<tr>'
-        f'<td style="{td_s}"><strong>{_e(result.system_name)} (Anchor)</strong></td>'
-        f'<td style="{td_s}">Hospital &mdash; Tier 1</td>'
-        f'<td style="{td_s}">OWNED</td>'
-        f'<td style="{td_s}">1.00</td>'
-        f'<td style="{td_s}"><strong>{result.hospital_score:.0f}</strong></td>'
-        f'<td style="{td_s}">&mdash;</td>'
-        f'</tr>'
-    )
-    entity_rows = []
-    for i, ent in enumerate(result.entities):
-        if ent.inclusion_tier == OwnershipTier.affiliated:
-            continue
-        style = td_a if i % 2 else td_s
-        tier_label = ent.inclusion_tier.value.replace("-", "&#8209;")
-        attribution = "&#9888; Orphan" if ent.id in result.orphan_entity_ids else "&#10003;"
-        entity_rows.append(
-            f'<tr>'
-            f'<td style="{style}">{_e(ent.name)}</td>'
-            f'<td style="{style}">{_e(ent.entity_type.title())} &mdash; Tier {"1" if ent.entity_type == "hospital" else "2"}</td>'
-            f'<td style="{style}">{tier_label}</td>'
-            f'<td style="{style}">{ent.inclusion_weight:.2f}</td>'
-            f'<td style="{style}">{"see run" if ent.linked_run_id else "&mdash;"}</td>'
-            f'<td style="{style}">{attribution}</td>'
-            f'</tr>'
-        )
-
-    tier_table = f"""
-<div style="{sec_hdr}">&sect;2 &mdash; Three-Tier Network Table</div>
-<table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-  <thead><tr>
-    <th style="{th_s}">Entity</th>
-    <th style="{th_s}">Type / Rubric</th>
-    <th style="{th_s}">Inclusion Tier</th>
-    <th style="{th_s}">Weight (w_i)</th>
-    <th style="{th_s}">AI Visibility Score</th>
-    <th style="{th_s}">Attribution</th>
-  </tr></thead>
-  <tbody>{anchor_row}{"".join(entity_rows)}</tbody>
-</table>
-"""
-
-    # ── §3 Delta narrative ────────────────────────────────────────────────────
-    narrative_html = f"""
-<div style="{sec_hdr}">&sect;3 &mdash; Merged-Entity Delta &amp; Strategic Narrative</div>
-<div style="font-size:8pt;color:#3a5a60;line-height:1.6;background:#f8fbfa;padding:16px;border-radius:8px;border-left:4px solid {T};margin-bottom:20px">
-  {_paras(result.report_narrative)}
-</div>
-"""
-
-    # ── §4 Leakage Index & Orphan List ────────────────────────────────────────
-    orphan_entities = [e for e in result.entities if e.id in result.orphan_entity_ids]
-    orphan_rows = "".join(
-        f'<tr>'
-        f'<td style="{td_s}">{_e(ent.name)}</td>'
-        f'<td style="{td_s}">{ent.inclusion_weight:.2f}</td>'
-        f'<td style="{td_s}">Entity resolution / linkage failure</td>'
-        f'<td style="{td_s}">Fix NPI, schema markup, roster consistency</td>'
-        f'</tr>'
-        for ent in orphan_entities
-    )
-    orphan_table = (
-        f"<table style='width:100%;border-collapse:collapse;margin-bottom:20px'>"
-        f"<thead><tr>"
-        + "".join(f'<th style="{th_s}">{h}</th>' for h in ["Practice", "Weight", "Issue", "Remediation"])
-        + f"</tr></thead><tbody>{orphan_rows}</tbody></table>"
-        if orphan_entities else
-        f'<p style="font-size:7.5pt;color:#3a5a60;margin-bottom:20px">No Orphan List practices identified.</p>'
-    )
-    leakage_html = f"""
-<div style="{sec_hdr}">&sect;4 &mdash; Leakage Index &amp; Orphan List</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-  {_metric_block("Leakage Index",    f"{result.leakage_index:.0%}",    "Practice wins unattributed to system")}
-  {_metric_block("Orphan Practices", str(len(orphan_entities)),         "Entity resolution or linkage failures")}
-</div>
-{orphan_table}
-"""
-
-    # ── §5 Network battery findings ───────────────────────────────────────────
-    res_colors = {"correct": "#177B6E", "partial": "#D97706", "confused": "#DC2626", "unknown": "#7a9095"}
-    battery_rows = "".join(
-        f'<tr>'
-        f'<td style="{td_s}">{br.prompt_category}-{br.prompt_number}</td>'
-        f'<td style="{td_s}">{_e(br.prompt_text)}</td>'
-        f'<td style="border:1px solid #d0e4e8;padding:7px 10px;font-size:7.5pt;vertical-align:top;'
-        f'color:{res_colors.get(br.network_resolution.value, "#7a9095")};font-weight:600">{br.network_resolution.value}</td>'
-        f'<td style="{td_s};font-size:6.5pt">{_e(br.response_text[:220])}{"&hellip;" if len(br.response_text) > 220 else ""}</td>'
-        f'</tr>'
-        for br in result.network_battery_runs[:9]
-    )
-    battery_html = f"""
-<div style="{sec_hdr}">&sect;5 &mdash; Network Battery Findings (N1&ndash;N4)</div>
-<table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-  <thead><tr>
-    <th style="{th_s}">Prompt</th><th style="{th_s}">Query</th>
-    <th style="{th_s}">Resolution</th><th style="{th_s}">Response Excerpt</th>
-  </tr></thead>
-  <tbody>{battery_rows or f'<tr><td colspan="4" style="{td_s}">No battery data available.</td></tr>'}</tbody>
-</table>
-"""
-
-    # ── §6 Per-assistant SAR divergence ──────────────────────────────────────
-    sar_rows = "".join(
-        f'<tr>'
-        f'<td style="{td_s}">{_e(ast)}</td>'
-        f'<td style="{td_s}">{val:.0%}</td>'
-        f'<td style="{td_a}">{"Strong" if val > 0.7 else "Weak &mdash; check listings/schema"}</td>'
-        f'</tr>'
-        for ast, val in result.per_assistant_sar.items()
-    )
-    sar_html = f"""
-<div style="{sec_hdr}">&sect;6 &mdash; Per-Assistant SAR Divergence</div>
-<table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-  <thead><tr>
-    <th style="{th_s}">Assistant</th><th style="{th_s}">SAR</th><th style="{th_s}">Implication</th>
-  </tr></thead>
-  <tbody>{sar_rows or f'<tr><td colspan="3" style="{td_s}">No per-assistant data available.</td></tr>'}</tbody>
-</table>
-"""
-
-    # ── §7 Modifier ledger ────────────────────────────────────────────────────
-    mod_rows = "".join(
-        f'<tr>'
-        f'<td style="{td_s}">{_e(m.modifier)}</td>'
-        f'<td style="{td_s}">{_e(m.tier_of_origin)}</td>'
-        f'<td style="{td_s}">{_e(m.effect)}</td>'
-        f'<td style="{td_s}">{m.points:+.1f}</td>'
-        f'</tr>'
-        for m in result.modifier_ledger
-    )
-    mod_html = f"""
-<div style="{sec_hdr}">&sect;7 &mdash; Modifier Ledger (No Double-Counting)</div>
-<table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-  <thead><tr>
-    <th style="{th_s}">Modifier</th><th style="{th_s}">Tier of Origin</th>
-    <th style="{th_s}">Effect</th><th style="{th_s}">Points</th>
-  </tr></thead>
-  <tbody>{mod_rows or f'<tr><td colspan="4" style="{td_s}">No modifiers applied.</td></tr>'}</tbody>
-</table>
-<p style="font-size:7pt;color:#7a9095;font-style:italic">Attestation: No adverse modifier applied at Tier 3 was previously applied at Tier 1 or Tier 2 for this composite.</p>
-"""
-
-    # ── §8 Version stamp ──────────────────────────────────────────────────────
-    version_html = f"""
-<div style="{sec_hdr}">&sect;8 &mdash; Version Stamp</div>
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
-  {_metric_block("Hospital Rubric",  _e(result.rubric_version_hospital))}
-  {_metric_block("Practice Rubric",  _e(result.rubric_version_practice))}
-  {_metric_block("Composite Rubric", _e(result.rubric_version_composite))}
-</div>
-<p style="font-size:7.5pt;color:#3a5a60">
-  Composite generated: {_e(result.generated_at or "&mdash;")} &ensp;&middot;&ensp;
-  Composite expires: {_e(result.composite_expires_at or "&mdash;")} &ensp;&middot;&ensp;
-  Registry attested: {_e(registry.attested_at)} &ensp;&middot;&ensp;
-  Re-attestation due: {_e(registry.re_attest_due)}
-</p>
-"""
-
-    # ── Logo ──────────────────────────────────────────────────────────────────
-    logo_html = ""
-    try:
-        logo_html = f'<img src="{_logo_data_uri()}" style="height:28px;opacity:0.9">'
-    except Exception:
-        pass
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <style>
-    @page {{ size: Letter; }}
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ font-family: 'Inter', sans-serif; background: #fff; color: #0F4146; font-size: 8pt; line-height: 1.5; padding: 32px 36px; }}
-    p {{ margin-bottom: 8px; }}
-  </style>
-</head>
-<body>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #d0e4e8">
-    {logo_html}
-    <div style="font-size:7pt;color:#7a9095;text-align:right">
-      System Composite Report &mdash; Confidential<br>
-      Generated {_e(result.generated_at or "")}
-    </div>
-  </div>
-  {header_block}
-  {tier_table}
-  {narrative_html}
-  {leakage_html}
-  {battery_html}
-  {sar_html}
-  {mod_html}
-  {version_html}
-  {_composite_appendix_html()}
-</body>
-</html>"""
-
-
-def render_composite_pdf(
-    result: "CompositeResult",
-    registry: "NetworkRegistry",
-    pdf_path: "Path",
-    brand: str = "original",
-) -> None:
-    """Render a System Composite PDF using Playwright."""
-    from playwright.sync_api import sync_playwright
-
-    cfg  = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
-    html = _build_composite_html(result, registry, cfg)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page    = browser.new_page()
-        page.set_content(html, wait_until="networkidle")
-        page.pdf(
-            path=str(pdf_path),
-            format="Letter",
-            margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
-            print_background=True,
-        )
-        browser.close()

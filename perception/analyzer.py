@@ -479,6 +479,8 @@ def analyze_location(
     on_event: Callable | None = None,
     brand: str = "original",
     skip_pdf: bool = False,
+    practice_composite: bool = False,
+    practice_roster: list[dict] | None = None,
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -705,6 +707,14 @@ def analyze_location(
         report_markdown=report_markdown,
     )
 
+    # ── Practice Composite reputation collection (before PDF so table is included) ──
+    if practice_composite and individual_report and entity_name and practice_roster:
+        emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
+        from .practice_reputation import collect_platform_data
+        result.practice_composite_rows = collect_platform_data(
+            practice_roster, entity_name, city, state, on_event=emit
+        )
+
     # Save markdown + PDF
     _type = specialty.replace(" ", "-") if specialty else "Hospitals"
     _ts   = datetime.utcnow().strftime("%y%m%d-%H%M")
@@ -739,6 +749,10 @@ def analyze_location(
         result.md_path = str(report_path)
 
     _save_to_db(result)
+
+    if result.practice_composite_rows:
+        from .practice_reputation import save_practice_reputation
+        save_practice_reputation(result.run_id, result.practice_composite_rows)
 
     emit({"type": "phase", "name": "done_item", "text": "Complete"})
     return result
@@ -939,6 +953,10 @@ def compare_locations(
     entity_type_b: str | None = None,
     practice_profile_a: str | None = None,
     practice_profile_b: str | None = None,
+    practice_composite_a: bool = False,
+    practice_composite_b: bool = False,
+    practice_roster_a: list[dict] | None = None,
+    practice_roster_b: list[dict] | None = None,
 ) -> tuple[AnalysisResult, AnalysisResult, object]:
     """Run two individual-report analyses then synthesize a structured comparison.
 
@@ -970,6 +988,8 @@ def compare_locations(
             aggregate=aggregate_a, entity_name=entity_a_name,
             individual_report=True, skip_pdf=True,
             output_dir=output_dir, on_event=on_event, brand=brand,
+            practice_composite=practice_composite_a,
+            practice_roster=practice_roster_a,
         )
 
     # ── Phase 2: Entity B ────────────────────────────────────────────────────
@@ -988,6 +1008,8 @@ def compare_locations(
             aggregate=aggregate_b, entity_name=entity_b_name,
             individual_report=True, skip_pdf=True,
             output_dir=output_dir, on_event=on_event, brand=brand,
+            practice_composite=practice_composite_b,
+            practice_roster=practice_roster_b,
         )
 
     # ── Phase 3: Comparison synthesis ───────────────────────────────────────
