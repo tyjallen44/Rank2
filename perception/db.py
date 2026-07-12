@@ -292,6 +292,21 @@ def init_db() -> None:
         )
     """)
 
+    # Migrate practice_reputation_practices to add URL columns (added in v2)
+    _pr_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name='practice_reputation_practices'"
+    ).fetchall()}
+    for _col in ("google_url", "healthgrades_url", "vitals_url",
+                 "webmd_url", "yelp_url", "ratemds_url", "primary_url"):
+        if _col not in _pr_cols:
+            try:
+                con.execute(
+                    f"ALTER TABLE practice_reputation_practices ADD COLUMN {_col} VARCHAR"
+                )
+            except Exception:
+                pass
+
     con.execute("""
         CREATE TABLE IF NOT EXISTS tracked_entities (
             id           VARCHAR PRIMARY KEY,

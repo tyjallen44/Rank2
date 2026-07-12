@@ -50,6 +50,7 @@ class GoogleRead:
     name_match: str = "none"          # "strong" | "weak" | "none"
     business_status: Optional[str] = None
     reason: Optional[str] = None      # populated when verified is False
+    maps_url: Optional[str] = None    # googleMapsUri from Places API; None if unverified
 
     def as_line(self) -> str:
         """One-line human/LLM-readable summary for the evidence block."""
@@ -208,7 +209,8 @@ def fetch_provider(
                 "X-Goog-Api-Key": key,
                 "X-Goog-FieldMask": (
                     "places.displayName,places.rating,"
-                    "places.userRatingCount,places.businessStatus"
+                    "places.userRatingCount,places.businessStatus,"
+                    "places.googleMapsUri"
                 ),
             },
             json={"textQuery": query, "pageSize": max_results},
@@ -254,6 +256,7 @@ def fetch_provider(
             review_count=int(count) if count is not None else 0,
             matched_name=found_name, name_match=match,
             business_status=top.get("businessStatus"),
+            maps_url=top.get("googleMapsUri") or None,
         )
 
     ratings = [p["rating"] for p in places if p.get("rating") is not None]

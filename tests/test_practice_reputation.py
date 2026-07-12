@@ -7,49 +7,15 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 
-# ── _weighted_average ─────────────────────────────────────────────────────────
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 def _wavg(pairs):
     from perception.practice_reputation import _weighted_average
     return _weighted_average(pairs)
 
-def test_weighted_average_single():
-    avg, total = _wavg([(4.5, 100)])
-    assert avg == pytest.approx(4.5)
-    assert total == 100
-
-def test_weighted_average_two_equal_weights():
-    avg, total = _wavg([(4.0, 50), (5.0, 50)])
-    assert avg == pytest.approx(4.5)
-    assert total == 100
-
-def test_weighted_average_unequal_weights():
-    # 3.0 with 10 reviews, 5.0 with 90 reviews → (30 + 450) / 100 = 4.8
-    avg, total = _wavg([(3.0, 10), (5.0, 90)])
-    assert avg == pytest.approx(4.8)
-    assert total == 100
-
-def test_weighted_average_empty():
-    avg, total = _wavg([])
-    assert avg is None
-    assert total == 0
-
-def test_weighted_average_zero_reviews():
-    avg, total = _wavg([(4.0, 0), (3.5, 0)])
-    assert avg is None
-    assert total == 0
-
-def test_weighted_average_mixed_zero_nonzero():
-    # Only the 4.0/100 pair contributes; zero-count pair is excluded
-    avg, total = _wavg([(4.0, 100), (5.0, 0)])
-    assert avg == pytest.approx(4.0)
-    assert total == 100
-
-
-# ── not_established flag ──────────────────────────────────────────────────────
 
 def _make_stream_mock(practices_payload: list[dict]):
     """Build a mock client whose messages.stream() context manager returns given practices."""
@@ -70,60 +36,299 @@ def _make_stream_mock(practices_payload: list[dict]):
     return mock_client
 
 
-def test_not_established_when_no_platforms(monkeypatch):
-    """A practice that returns no data on any platform should be marked not_established."""
+def _fake_google(verified=False, rating=None, count=0, maps_url=None):
+    return (MagicMock(verified=verified, rating=rating, review_count=count, maps_url=maps_url), None)
+
+
+# ── _weighted_average ─────────────────────────────────────────────────────────
+
+def test_weighted_average_single():
+    avg, total = _wavg([(4.5, 100)])
+    assert avg == pytest.approx(4.5)
+    assert total == 100
+
+def test_weighted_average_two_equal_weights():
+    avg, total = _wavg([(4.0, 50), (5.0, 50)])
+    assert avg == pytest.approx(4.5)
+    assert total == 100
+
+def test_weighted_average_unequal_weights():
+    avg, total = _wavg([(3.0, 10), (5.0, 90)])
+    assert avg == pytest.approx(4.8)
+    assert total == 100
+
+def test_weighted_average_empty():
+    avg, total = _wavg([])
+    assert avg is None
+    assert total == 0
+
+def test_weighted_average_zero_reviews():
+    avg, total = _wavg([(4.0, 0), (3.5, 0)])
+    assert avg is None
+    assert total == 0
+
+def test_weighted_average_mixed_zero_nonzero():
+    avg, total = _wavg([(4.0, 100), (5.0, 0)])
+    assert avg == pytest.approx(4.0)
+    assert total == 100
+
+
+# ── _strip_tracking ───────────────────────────────────────────────────────────
+
+def test_strip_tracking_removes_utm():
+    from perception.practice_reputation import _strip_tracking
+    url = "https://www.healthgrades.com/group-directory/practice-123?utm_source=google&utm_medium=cpc"
+    result = _strip_tracking(url)
+    assert "utm_source" not in result
+    assert "utm_medium" not in result
+    assert "healthgrades.com/group-directory/practice-123" in result
+
+def test_strip_tracking_removes_fbclid():
+    from perception.practice_reputation import _strip_tracking
+    url = "https://www.yelp.com/biz/some-clinic?fbclid=abc123"
+    result = _strip_tracking(url)
+    assert "fbclid" not in result
+    assert "yelp.com/biz/some-clinic" in result
+
+def test_strip_tracking_preserves_path_params():
+    from perception.practice_reputation import _strip_tracking
+    url = "https://www.vitals.com/practice/12345?specialty=cardiology"
+    result = _strip_tracking(url)
+    assert "specialty=cardiology" in result
+
+def test_strip_tracking_none_input():
+    from perception.practice_reputation import _strip_tracking
+    assert _strip_tracking(None) is None
+
+def test_strip_tracking_empty_string():
+    from perception.practice_reputation import _strip_tracking
+    assert _strip_tracking("") is None
+
+
+# ── URL capture in collect_platform_data ─────────────────────────────────────
+
+def test_collector_captures_google_url(monkeypatch):
+    """google_url is populated from places.fetch_provider maps_url when verified."""
     from perception import practice_reputation as pr
 
-    monkeypatch.setattr("perception.data.places.fetch_provider", lambda *a, **kw: (MagicMock(verified=False, rating=None, review_count=0), None))
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(
+            verified=True, rating=4.2, count=150,
+            maps_url="https://maps.google.com/?cid=123456"
+        ),
+    )
+    payload = [{"name": "Test Clinic", "affiliation_verified": True,
+                "healthgrades_rating": None, "healthgrades_count": 0, "healthgrades_url": None,
+                "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+                "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+                "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+                "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None}]
+    monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(payload))
 
+    results = pr.collect_platform_data(
+        [{"name": "Test Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
+    assert results[0]["google_url"] == "https://maps.google.com/?cid=123456"
+    assert results[0]["primary_url"] == "https://maps.google.com/?cid=123456"
+
+
+def test_collector_captures_platform_urls(monkeypatch):
+    """URLs returned by Claude for non-Google platforms are stored and stripped."""
+    from perception import practice_reputation as pr
+
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(verified=False),
+    )
+    payload = [{"name": "Test Clinic", "affiliation_verified": True,
+                "healthgrades_rating": 4.1, "healthgrades_count": 80,
+                "healthgrades_url": "https://www.healthgrades.com/group/test-clinic?utm_source=x",
+                "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+                "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+                "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+                "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None}]
+    monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(payload))
+
+    results = pr.collect_platform_data(
+        [{"name": "Test Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
+    row = results[0]
+    assert row["healthgrades_url"] == "https://www.healthgrades.com/group/test-clinic"
+    assert "utm_source" not in (row["healthgrades_url"] or "")
+
+
+def test_collector_null_url_when_not_returned(monkeypatch):
+    """If Claude returns no URL for a platform, url field is None."""
+    from perception import practice_reputation as pr
+
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(verified=False),
+    )
+    payload = [{"name": "Test Clinic", "affiliation_verified": True,
+                "healthgrades_rating": 4.0, "healthgrades_count": 50,
+                "healthgrades_url": None,
+                "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+                "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+                "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+                "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None}]
+    monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(payload))
+
+    results = pr.collect_platform_data(
+        [{"name": "Test Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
+    assert results[0]["healthgrades_url"] is None
+
+
+# ── not_established flag ──────────────────────────────────────────────────────
+
+def test_not_established_when_no_platforms(monkeypatch):
+    """A practice with no data on any platform is marked not_established and has no primary_url."""
+    from perception import practice_reputation as pr
+
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(verified=False),
+    )
     empty_payload = [{"name": "Empty Clinic", "affiliation_verified": True,
-                      "healthgrades_rating": None, "healthgrades_count": 0,
-                      "vitals_rating": None, "vitals_count": 0,
-                      "webmd_rating": None, "webmd_count": 0,
-                      "yelp_rating": None, "yelp_count": 0,
-                      "ratemds_rating": None, "ratemds_count": 0}]
+                      "healthgrades_rating": None, "healthgrades_count": 0, "healthgrades_url": None,
+                      "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+                      "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+                      "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+                      "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None}]
     monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(empty_payload))
 
-    practices = [{"name": "Empty Clinic", "city": "Mobile", "state": "AL"}]
-    results = pr.collect_platform_data(practices, "Test Hospital", "Mobile", "AL")
-    assert len(results) == 1
+    results = pr.collect_platform_data(
+        [{"name": "Empty Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
     row = results[0]
     assert row["not_established"] is True
     assert row["platforms_found"] == 0
     assert row["avg_rating"] is None
+    assert row["primary_url"] is None
+
+
+# ── primary URL fallback order ────────────────────────────────────────────────
+
+def test_primary_url_prefers_google(monkeypatch):
+    """When Google URL and another platform URL both exist, Google wins."""
+    from perception import practice_reputation as pr
+
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(
+            verified=True, rating=4.0, count=100,
+            maps_url="https://maps.google.com/?cid=999",
+        ),
+    )
+    payload = [{"name": "Test Clinic", "affiliation_verified": True,
+                "healthgrades_rating": 4.1, "healthgrades_count": 200,
+                "healthgrades_url": "https://www.healthgrades.com/group/test-clinic",
+                "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+                "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+                "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+                "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None}]
+    monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(payload))
+
+    results = pr.collect_platform_data(
+        [{"name": "Test Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
+    assert results[0]["primary_url"] == "https://maps.google.com/?cid=999"
+
+
+def test_primary_url_falls_back_to_highest_count_platform(monkeypatch):
+    """When Google is absent, primary_url = URL of platform with highest review count."""
+    from perception import practice_reputation as pr
+
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(verified=False),
+    )
+    payload = [{"name": "Test Clinic", "affiliation_verified": True,
+                "healthgrades_rating": 4.0, "healthgrades_count": 50,
+                "healthgrades_url": "https://www.healthgrades.com/group/test-clinic",
+                "vitals_rating": 3.8, "vitals_count": 200,
+                "vitals_url": "https://www.vitals.com/doctors/test-clinic",
+                "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+                "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+                "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None}]
+    monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(payload))
+
+    results = pr.collect_platform_data(
+        [{"name": "Test Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
+    # Vitals has 200 reviews vs Healthgrades' 50 — Vitals URL should be primary
+    assert results[0]["primary_url"] == "https://www.vitals.com/doctors/test-clinic"
+
+
+def test_primary_url_none_when_no_urls_available(monkeypatch):
+    """When all URLs are None but data exists, primary_url is None (renders unlinked)."""
+    from perception import practice_reputation as pr
+
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(verified=False),
+    )
+    payload = [{"name": "Test Clinic", "affiliation_verified": True,
+                "healthgrades_rating": 4.0, "healthgrades_count": 50, "healthgrades_url": None,
+                "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+                "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+                "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+                "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None}]
+    monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(payload))
+
+    results = pr.collect_platform_data(
+        [{"name": "Test Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
+    assert results[0]["primary_url"] is None
 
 
 # ── sorting ───────────────────────────────────────────────────────────────────
 
 def test_sort_by_total_reviews_desc(monkeypatch):
-    """Practices with more reviews should come first; not_established last."""
+    """Practices with more reviews come first; not_established last."""
     from perception import practice_reputation as pr
 
-    monkeypatch.setattr("perception.data.places.fetch_provider", lambda *a, **kw: (MagicMock(verified=False, rating=None, review_count=0), None))
-
-    practices_input = [
-        {"name": "Small Clinic",   "city": "Mobile", "state": "AL"},
-        {"name": "Big Clinic",     "city": "Mobile", "state": "AL"},
-        {"name": "Empty Clinic",   "city": "Mobile", "state": "AL"},
-    ]
-
+    monkeypatch.setattr(
+        "perception.data.places.fetch_provider",
+        lambda *a, **kw: _fake_google(verified=False),
+    )
     claude_payload = [
-        {"name": "Small Clinic",  "affiliation_verified": True,
-         "healthgrades_rating": 4.0, "healthgrades_count": 20,
-         "vitals_rating": None, "vitals_count": 0, "webmd_rating": None, "webmd_count": 0,
-         "yelp_rating": None, "yelp_count": 0, "ratemds_rating": None, "ratemds_count": 0},
-        {"name": "Big Clinic",    "affiliation_verified": True,
-         "healthgrades_rating": 4.5, "healthgrades_count": 200,
-         "vitals_rating": None, "vitals_count": 0, "webmd_rating": None, "webmd_count": 0,
-         "yelp_rating": None, "yelp_count": 0, "ratemds_rating": None, "ratemds_count": 0},
-        {"name": "Empty Clinic",  "affiliation_verified": True,
-         "healthgrades_rating": None, "healthgrades_count": 0,
-         "vitals_rating": None, "vitals_count": 0, "webmd_rating": None, "webmd_count": 0,
-         "yelp_rating": None, "yelp_count": 0, "ratemds_rating": None, "ratemds_count": 0},
+        {"name": "Small Clinic", "affiliation_verified": True,
+         "healthgrades_rating": 4.0, "healthgrades_count": 20, "healthgrades_url": None,
+         "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+         "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+         "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+         "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None},
+        {"name": "Big Clinic", "affiliation_verified": True,
+         "healthgrades_rating": 4.5, "healthgrades_count": 200, "healthgrades_url": None,
+         "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+         "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+         "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+         "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None},
+        {"name": "Empty Clinic", "affiliation_verified": True,
+         "healthgrades_rating": None, "healthgrades_count": 0, "healthgrades_url": None,
+         "vitals_rating": None, "vitals_count": 0, "vitals_url": None,
+         "webmd_rating": None, "webmd_count": 0, "webmd_url": None,
+         "yelp_rating": None, "yelp_count": 0, "yelp_url": None,
+         "ratemds_rating": None, "ratemds_count": 0, "ratemds_url": None},
     ]
     monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock(claude_payload))
 
-    results = pr.collect_platform_data(practices_input, "Test Hospital", "Mobile", "AL")
+    results = pr.collect_platform_data(
+        [{"name": "Small Clinic", "city": "Mobile", "state": "AL"},
+         {"name": "Big Clinic", "city": "Mobile", "state": "AL"},
+         {"name": "Empty Clinic", "city": "Mobile", "state": "AL"}],
+        "Test Hospital", "Mobile", "AL",
+    )
     names = [r["practice_name"] for r in results]
     assert names[0] == "Big Clinic"
     assert names[1] == "Small Clinic"
@@ -134,45 +339,106 @@ def test_sort_by_total_reviews_desc(monkeypatch):
 # ── avg_rating formatting ─────────────────────────────────────────────────────
 
 def test_avg_rating_one_decimal():
-    avg, _ = __import__("perception.practice_reputation", fromlist=["_weighted_average"])._weighted_average(
-        [(4.333, 100)]
-    )
-    # Should round to 1 decimal when formatted
+    avg, _ = _wavg([(4.333, 100)])
     assert round(avg, 1) == 4.3
 
 
 # ── pdf table HTML ────────────────────────────────────────────────────────────
 
-def test_practice_reputation_table_html_not_established():
+def _make_row(**kwargs):
+    defaults = {
+        "practice_name": "Test Clinic", "not_established": False,
+        "avg_rating": 4.2, "total_reviews": 100, "platforms_found": 1,
+        "platforms_list": "Google", "affiliation_verified": True,
+        "collection_date": "2026-07-12", "primary_url": None,
+        "platform_entries": None,
+    }
+    return {**defaults, **kwargs}
+
+
+def test_table_html_not_established_is_unlinked():
     from perception.pdf import _practice_reputation_table_html
-    rows = [{"practice_name": "Empty Clinic", "not_established": True,
-             "avg_rating": None, "total_reviews": 0, "platforms_found": 0,
-             "platforms_list": "", "affiliation_verified": True,
-             "collection_date": "2026-06-29"}]
+    rows = [_make_row(practice_name="Empty Clinic", not_established=True,
+                      avg_rating=None, total_reviews=0, platforms_found=0,
+                      platforms_list="", primary_url=None)]
     html = _practice_reputation_table_html(rows)
     assert "Not established" in html
     assert "Empty Clinic" in html
+    # Must not generate a link for unestablished practice
+    assert 'href' not in html.split("Empty Clinic")[0].split("<tr")[-1]
 
-def test_practice_reputation_table_html_unverified():
+
+def test_table_html_links_practice_name():
     from perception.pdf import _practice_reputation_table_html
-    rows = [{"practice_name": "Mystery Clinic", "not_established": False,
-             "avg_rating": 4.1, "total_reviews": 50, "platforms_found": 2,
-             "platforms_list": "Google, Healthgrades", "affiliation_verified": False,
-             "collection_date": "2026-06-29"}]
+    rows = [_make_row(primary_url="https://maps.google.com/?cid=123")]
+    html = _practice_reputation_table_html(rows)
+    assert 'href="https://maps.google.com/?cid=123"' in html
+    assert 'target="_blank"' in html
+    assert 'rel="noopener noreferrer"' in html
+
+
+def test_table_html_no_link_when_no_primary_url():
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row(primary_url=None,
+                      platform_entries=[("healthgrades", 50, None)])]
+    html = _practice_reputation_table_html(rows)
+    # Name cell should render plain text, no anchor tag wrapping the name
+    assert "Test Clinic" in html
+    # No href in the name column — check via absence of href near the name
+    name_segment = html.split("Test Clinic")[0].split("<tr")[-1]
+    assert "href" not in name_segment
+
+
+def test_table_html_platform_entries_linked():
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row(
+        platforms_found=2,
+        platforms_list="Google, Healthgrades",
+        platform_entries=[
+            ("google", 100, "https://maps.google.com/?cid=999"),
+            ("healthgrades", 50, "https://www.healthgrades.com/group/test"),
+        ],
+    )]
+    html = _practice_reputation_table_html(rows)
+    assert "https://maps.google.com/?cid=999" in html
+    assert "https://www.healthgrades.com/group/test" in html
+
+
+def test_table_html_platform_entries_unlinked_when_no_url():
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row(
+        platforms_found=1,
+        platforms_list="Healthgrades",
+        platform_entries=[("healthgrades", 50, None)],
+    )]
+    html = _practice_reputation_table_html(rows)
+    assert "Healthgrades" in html
+    # No href for this platform since URL is None
+    assert "healthgrades.com" not in html
+
+
+def test_table_html_unverified_affiliation():
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row(affiliation_verified=False)]
     html = _practice_reputation_table_html(rows)
     assert "unverified affiliation" in html
-    assert "Mystery Clinic" in html
 
-def test_practice_reputation_table_html_empty_rows():
-    from perception.pdf import _practice_reputation_table_html
-    html = _practice_reputation_table_html([])
-    assert html == ""
 
-def test_practice_reputation_table_html_staleness_note():
+def test_table_html_empty_rows():
     from perception.pdf import _practice_reputation_table_html
-    rows = [{"practice_name": "Test", "not_established": False,
-             "avg_rating": 4.0, "total_reviews": 10, "platforms_found": 1,
-             "platforms_list": "Google", "affiliation_verified": True,
-             "collection_date": "2026-06-29"}]
-    html = _practice_reputation_table_html(rows, run_date="2026-06-29")
-    assert "90" in html  # staleness note mentions 90 days
+    assert _practice_reputation_table_html([]) == ""
+
+
+def test_table_html_staleness_note():
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row()]
+    html = _practice_reputation_table_html(rows, run_date="2026-07-12")
+    assert "90" in html
+
+
+def test_table_html_print_css_present():
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row()]
+    html = _practice_reputation_table_html(rows)
+    assert "@media print" in html
+    assert "pc-link" in html

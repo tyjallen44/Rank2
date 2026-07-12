@@ -2506,11 +2506,23 @@ def render_comparison_pdf(
 
 # ── Practice Composite reputation table ──────────────────────────────────────
 
+_PC_PLATFORM_LABELS = {
+    "google": "Google",
+    "healthgrades": "Healthgrades",
+    "vitals": "Vitals",
+    "webmd": "WebMD",
+    "yelp": "Yelp",
+    "ratemds": "RateMDs",
+}
+
+
 def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str:
     """HTML for the Practice Composite appendix table.
 
-    Columns: Practice (Entity) | Avg Rating | Total Reviews | Platforms Found
-    Zero-platform rows show 'Not established'.
+    Columns: Practice (Entity) | Avg Rating | Total Reviews | Platforms Found | Collected
+    Practice names link to the primary profile URL (GBP first, then highest-count platform).
+    Each platform name in the Platforms Found column links to that platform's profile page.
+    Zero-platform rows render unlinked plain text.
     """
     if not rows:
         return ""
@@ -2519,6 +2531,16 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
     M   = "#7a9095"
     BD  = "#d0e4e8"
     ALT = "#f8fbfa"
+    LA  = "#1a6e9e"  # link colour
+
+    def _link(text: str, url: str | None) -> str:
+        if not url:
+            return _e(text)
+        safe_url = _e(url)
+        return (
+            f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer" '
+            f'class="pc-link" style="color:{LA};text-decoration:underline">{_e(text)}</a>'
+        )
 
     def _rating_cell(row: dict) -> str:
         if row.get("not_established"):
@@ -2535,18 +2557,29 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
 
     def _platforms_cell(row: dict) -> str:
         count = row.get("platforms_found", 0)
-        lst   = row.get("platforms_list", "")
         if not count:
             return "&#8212;"
-        return f"{count}: {lst}"
+        # Build individually linked platform names using platform_entries when available
+        entries = row.get("platform_entries")
+        if entries:
+            linked = []
+            for pk, _pc, pu in entries:
+                label = _PC_PLATFORM_LABELS.get(pk, pk.capitalize())
+                linked.append(_link(label, pu))
+            return f"{count}: {', '.join(linked)}"
+        # Fallback for rows loaded from DB (no platform_entries): plain text
+        return f"{count}: {_e(row.get('platforms_list', ''))}"
 
     rows_html = ""
     for i, row in enumerate(rows):
         bg = f'background:{ALT}' if i % 2 == 1 else ''
         collection = row.get("collection_date", "")
+        name = row.get("practice_name", "")
+        primary_url = row.get("primary_url") if not row.get("not_established") else None
+        name_cell = _link(name, primary_url)
         rows_html += f"""
     <tr style="border-bottom:1px solid {BD};{bg}">
-      <td style="padding:9px 12px;font-weight:500">{_e(row.get('practice_name', ''))}</td>
+      <td style="padding:9px 12px;font-weight:500">{name_cell}</td>
       <td style="padding:9px 12px">{_rating_cell(row)}</td>
       <td style="padding:9px 12px;text-align:right">{row.get('total_reviews') or '&#8212;'}</td>
       <td style="padding:9px 12px">{_platforms_cell(row)}</td>
@@ -2562,7 +2595,21 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
             f'Ratings may become stale after 90 days.</p>'
         )
 
+    # Print stylesheet: append primary profile URL after practice name for printed copies
+    print_css = """
+<style>
+@media print {
+  .pc-link[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 7pt;
+    color: #555;
+    font-weight: normal;
+  }
+}
+</style>"""
+
     return f"""
+{print_css}
 <div style="margin-top:32px">
   <div style="font-size:12pt;font-weight:700;color:{T};margin-bottom:6px">
     Practice Composite &#8212; Associated Practice Reputation
