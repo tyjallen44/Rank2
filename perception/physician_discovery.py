@@ -12,16 +12,11 @@ from .analyzer import _get_client, _MODEL, _clean
 
 _NPPES_API = "https://npiregistry.cms.hhs.gov/api/"
 
-# NPPES taxonomy code prefixes that identify clinical providers (physicians,
-# NPs, PAs, CRNAs, CNS, DNPs).  Excludes PTs (225*), OTs (225X*), pharmacists
-# (183P*), dentists (12*), chiropractors (111N*), social workers (101Y*), etc.
-_CLINICAL_TAX: tuple[str, ...] = (
+# NPPES taxonomy code prefixes for physician output (MDs and DOs only).
+# PAs, NPs, CRNAs, and CNS are excluded from the report roster.
+_PHYSICIAN_TAX: tuple[str, ...] = (
     "207",  # Allopathic physicians (all specialties)
     "208",  # Osteopathic physicians
-    "363",  # Physician Assistants (363A) and Nurse Practitioners (363L)
-    "364",  # Clinical Nurse Specialists (364S)
-    "367",  # Advanced Practice Midwives / Anesthesiology Assistants
-    "374",  # CRNAs (374700000X), DNPs (374T)
 )
 
 _PHYSICIAN_DISCOVER_TOOL = {
@@ -67,11 +62,11 @@ def _nppes_get(params: dict) -> list[dict]:
         return []
 
 
-def _is_clinical(rec: dict) -> bool:
-    """Return True if the NPI-1 record is a physician or advanced practitioner."""
+def _is_physician(rec: dict) -> bool:
+    """Return True if the NPI-1 record is an MD or DO."""
     for t in rec.get("taxonomies") or []:
         code = t.get("code", "")
-        if any(code.startswith(p) for p in _CLINICAL_TAX):
+        if any(code.startswith(p) for p in _PHYSICIAN_TAX):
             return True
     return False
 
@@ -186,11 +181,7 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
     # Count how many physician (MD/DO) seeds list each external zip as primary
     physician_zip_freq: Counter[str] = Counter()
     for rec in seed.values():
-        is_phys = any(
-            (t.get("code") or "").startswith(("207", "208"))
-            for t in (rec.get("taxonomies") or [])
-        )
-        if not is_phys:
+        if not _is_physician(rec):
             continue
         pz = _primary_postal(rec)
         if len(pz) >= 9 and pz not in org_zips:
@@ -216,7 +207,7 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
             if npi and npi not in all_recs:
                 all_recs[npi] = rec
 
-    # Phase 4: filter to clinical providers and parse
+    # Phase 4: filter to physicians (MD/DO) only and parse.
     # Only keep providers who have at least one registered address at a
     # confirmed org location (org_zips or validated cascade_zips).
     confirmed_zips = org_zips | cascade_zips
@@ -224,7 +215,7 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
     physicians: list[dict] = []
     seen_names: set[str]   = set()
     for rec in all_recs.values():
-        if not _is_clinical(rec):
+        if not _is_physician(rec):
             continue
         addrs = rec.get("addresses") or []
         if not any((a.get("postal_code") or "").strip() in confirmed_zips
