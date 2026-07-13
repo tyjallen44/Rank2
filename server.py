@@ -1317,7 +1317,9 @@ async def practice_discover(
 
 
 class PhysicianDiscoverRequest(BaseModel):
-    practices: List[dict]   # [{name, entity_type, city, state}] — hospital rows are skipped
+    entity_name: str
+    city: str
+    state: str
 
 
 @app.post("/api/physician/discover")
@@ -1325,22 +1327,16 @@ async def physician_discover(
     req: PhysicianDiscoverRequest,
     _: str = Depends(require_auth),
 ):
-    """Discover physicians for each non-hospital practice in the roster."""
+    """Discover physicians at the organization level (single call for the entire entity)."""
     try:
         from perception.db import init_db
         from perception.physician_discovery import discover_physicians
         init_db()
-        result: dict[str, list] = {}
-        for p in req.practices:
-            if (p.get("entity_type") or "practice") == "hospital":
-                continue
-            name  = p.get("name", "")
-            city  = _normalize_input(p.get("city", ""))
-            state = (p.get("state") or "").strip().upper()
-            if not name:
-                continue
-            result[name] = discover_physicians(name, city, state)
-        return {"physicians": result}
+        name  = req.entity_name.strip()
+        city  = _normalize_input(req.city)
+        state = req.state.strip().upper()
+        physicians = discover_physicians(name, city, state)
+        return {"physicians": {name: physicians}}
     except Exception as exc:
         raise HTTPException(500, f"Physician discovery error: {exc}")
 

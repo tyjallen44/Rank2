@@ -699,18 +699,22 @@ def analyze_practice(
             from .physician_discovery import discover_physicians
             from .physician_reputation import collect_physician_data
             confirmed = physician_roster or {}
-            for prow in result.practice_composite_rows:
-                if prow.get("entity_type") == "hospital":
-                    continue
-                pname = prow["practice_name"]
-                physicians = confirmed.get(pname) or discover_physicians(
-                    pname, prow.get("city") or city, prow.get("state") or state, on_event=emit
-                )
+            # Flatten confirmed physicians (keyed by org name from the UI)
+            all_confirmed = [ph for v in confirmed.values() for ph in v]
+            # Discover at the organization level once — sub-location names yield 0 results
+            # since NPPES indexes physicians under the parent organization, not specific clinics.
+            target_row = (
+                next((r for r in result.practice_composite_rows if r.get("is_anchor")), None)
+                or next((r for r in result.practice_composite_rows if r.get("entity_type") != "hospital"), None)
+            )
+            if target_row:
+                physicians = all_confirmed or discover_physicians(entity_name, city, state, on_event=emit)
                 if physicians:
-                    prow["physicians"] = collect_physician_data(
-                        physicians, pname, prow.get("city") or city, prow.get("state") or state, on_event=emit
+                    ph_results = collect_physician_data(
+                        physicians, entity_name, city, state, on_event=emit
                     )
-                    result.physician_composite_rows.extend(prow["physicians"])
+                    target_row["physicians"] = ph_results
+                    result.physician_composite_rows.extend(ph_results)
 
     # ── Save markdown ─────────────────────────────────────────────────────────
     _type = (specialty or "Practice").replace(" ", "-")

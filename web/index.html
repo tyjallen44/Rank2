@@ -3262,20 +3262,21 @@ async function openPracticeDiscovery() {
     const data = await r.json();
     _practiceRoster = (data.practices || []);
 
-    // If physician composite is checked, discover physicians for each non-hospital practice
+    // If physician composite is checked, discover physicians at the org level (single call)
     if (document.getElementById('ir-physician-composite')?.checked) {
       btn.innerHTML = '<span class="spinner"></span> Discovering physicians…';
-      const nonHospital = _practiceRoster.filter(p => (p.entity_type || 'practice') !== 'hospital');
-      if (nonHospital.length) {
-        const pr = await api('/api/physician/discover', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ practices: nonHospital }),
-        });
-        if (pr.ok) {
-          const pd = await pr.json();
-          _physicianRoster = pd.physicians || {};
-        }
+      const pr = await api('/api/physician/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entity_name: _irSelected.name,
+          city:        _irResolvedCity,
+          state:       _irResolvedState,
+        }),
+      });
+      if (pr.ok) {
+        const pd = await pr.json();
+        _physicianRoster = pd.physicians || {};
       }
     }
 
@@ -3300,6 +3301,12 @@ async function openPracticeDiscovery() {
 function _renderPracticeRoster() {
   const tbody = document.getElementById('ir-pd-tbody');
   tbody.innerHTML = '';
+  // Physicians are discovered at the org level and attached to the anchor row (or first non-hospital)
+  const orgPhysicians = _physicianRoster[_irSelected?.name] || [];
+  const anchorEntry = _practiceRoster.find(e => e.is_anchor);
+  const targetEntry = anchorEntry || _practiceRoster.find(e => (e.entity_type || 'practice') !== 'hospital');
+  const targetIdx   = _practiceRoster.indexOf(targetEntry);
+
   _practiceRoster.forEach((ent, i) => {
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid var(--border)';
@@ -3319,17 +3326,16 @@ function _renderPracticeRoster() {
     }
     tbody.appendChild(tr);
 
-    // Physician sub-rows under each non-hospital practice
-    const physicians = _physicianRoster[ent.name] || [];
-    if (physicians.length && (ent.entity_type || 'practice') !== 'hospital') {
-      physicians.forEach((ph, pi) => {
+    // Physician sub-rows appear only under the target entry (anchor or first non-hospital)
+    if (ent === targetEntry && orgPhysicians.length) {
+      orgPhysicians.forEach((ph, pi) => {
         const phTr = document.createElement('tr');
         phTr.style.borderBottom = '1px solid var(--border)';
         phTr.style.background = '#fafcfc';
         const displayName = (ph.credential === 'MD' || ph.credential === 'DO')
           ? `Dr. ${ph.name}` : ph.name;
         phTr.innerHTML = `
-          <td style="padding:6px 10px 6px 28px"><input type="checkbox" data-practice="${i}" data-ph="${pi}" checked></td>
+          <td style="padding:6px 10px 6px 28px"><input type="checkbox" data-practice="${targetIdx}" data-ph="${pi}" checked></td>
           <td style="padding:6px 10px;font-size:0.9em;color:#4a6568">${displayName}${ph.credential ? ` <span style="font-size:0.8em;color:#7a9095">${ph.credential}</span>` : ''}</td>
           <td style="padding:6px 10px;font-size:0.85em;color:#7a9095;text-transform:capitalize">${ph.specialty || '—'}</td>
           <td style="padding:6px 10px;font-size:0.85em;color:#7a9095">${ph.npi ? `NPI: ${ph.npi}` : ''}</td>`;
@@ -3351,17 +3357,17 @@ async function confirmPracticeRoster() {
   );
   if (included.length === 0) return showErr(errEl, 'Select at least one practice to include.');
 
-  // Collect confirmed physicians grouped by practice name
+  // Collect confirmed physicians (all keyed by org name — discovery is org-level)
   const confirmedPhysicians = {};
   const phCbs = document.querySelectorAll('#ir-pd-tbody input[data-ph]');
+  const orgName = _irSelected?.name;
   phCbs.forEach(cb => {
-    const pi = parseInt(cb.dataset.ph);
-    const practiceIdx = parseInt(cb.dataset.practice);
-    const practiceName = _practiceRoster[practiceIdx]?.name;
-    if (!practiceName || !cb.checked) return;
-    if (!confirmedPhysicians[practiceName]) confirmedPhysicians[practiceName] = [];
-    const roster = _physicianRoster[practiceName] || [];
-    if (roster[pi]) confirmedPhysicians[practiceName].push(roster[pi]);
+    if (!cb.checked || !orgName) return;
+    const pi     = parseInt(cb.dataset.ph);
+    const roster = _physicianRoster[orgName] || [];
+    if (!roster[pi]) return;
+    if (!confirmedPhysicians[orgName]) confirmedPhysicians[orgName] = [];
+    confirmedPhysicians[orgName].push(roster[pi]);
   });
 
   document.getElementById('ir-step-practice-discovery').classList.add('hidden');

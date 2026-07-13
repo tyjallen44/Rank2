@@ -305,34 +305,49 @@ def test_not_established_physician_renders_in_html():
 
 # ── (e) Hospital-typed rows produce no physician sub-rows ────────────────────
 
-def test_hospital_entity_type_skipped_in_physician_discovery():
-    """discover_physicians is never called for hospital-typed roster rows."""
-    from perception import physician_reputation as pr
+def test_org_level_physician_discovery_uses_entity_name():
+    """discover_physicians is called once with the org entity name, not per-clinic sub-location."""
     import perception.physician_discovery as pd_mod
+    import unittest.mock as um
 
-    called = []
+    called_with = []
 
     def fake_discover(practice_name, city, state, on_event=None):
-        called.append(practice_name)
-        return []
+        called_with.append(practice_name)
+        return [{"name": "Dr. Test", "credential": "MD", "npi": None, "specialty": None}]
 
-    # Simulate the collection logic directly
     practice_rows = [
-        {"practice_name": "Big Hospital", "entity_type": "hospital",
+        {"practice_name": "OrthoSouth - Main", "entity_type": "practice", "is_anchor": True,
          "city": "Memphis", "state": "TN"},
-        {"practice_name": "Small Clinic", "entity_type": "practice",
+        {"practice_name": "OrthoSouth - Southwind", "entity_type": "practice",
          "city": "Memphis", "state": "TN"},
+        {"practice_name": "OrthoSouth - Bartlett", "entity_type": "practice",
+         "city": "Bartlett", "state": "TN"},
     ]
-    import unittest.mock as um
-    with um.patch.object(pd_mod, "_get_client", return_value=MagicMock()):
-        with um.patch("perception.physician_discovery.discover_physicians", side_effect=fake_discover):
-            for prow in practice_rows:
-                if prow.get("entity_type") == "hospital":
-                    continue
-                fake_discover(prow["practice_name"], prow["city"], prow["state"])
+    entity_name = "OrthoSouth"
+    city, state = "Memphis", "TN"
 
-    assert "Big Hospital" not in called
-    assert "Small Clinic" in called
+    # New org-level logic: one call with entity_name, attached to anchor row
+    with um.patch("perception.physician_discovery.discover_physicians", side_effect=fake_discover):
+        target_row = (
+            next((r for r in practice_rows if r.get("is_anchor")), None)
+            or next((r for r in practice_rows if r.get("entity_type") != "hospital"), None)
+        )
+        if target_row:
+            physicians = fake_discover(entity_name, city, state)
+            if physicians:
+                target_row["physicians"] = physicians
+
+    # Must be called exactly once with the org name, never with sub-location names
+    assert called_with == [entity_name]
+    assert "OrthoSouth - Southwind" not in called_with
+    assert "OrthoSouth - Bartlett" not in called_with
+    # Physicians are attached only to the anchor row
+    anchor = next(r for r in practice_rows if r.get("is_anchor"))
+    assert "physicians" in anchor
+    other_rows = [r for r in practice_rows if not r.get("is_anchor")]
+    for r in other_rows:
+        assert "physicians" not in r
 
 
 def test_hospital_row_renders_no_physician_sub_rows():
