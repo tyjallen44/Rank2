@@ -113,10 +113,13 @@ def collect_platform_data(
     emit({"type": "text", "text": f"Collecting platform reputation for {len(practices)} practice(s)…"})
 
     # ── Google Places for each practice ──────────────────────────────────────
+    # Use address as the search term when available — it disambiguates entries
+    # that share the same practice name (e.g. multiple OrthoSouth locations).
     google_data: dict[str, tuple] = {}  # name → (rating, count, maps_url)
     for p in practices:
+        search_name = p.get("address") or p["name"]
         try:
-            read, _ = places.fetch_provider(p["name"], p.get("city") or city, p.get("state") or state)
+            read, _ = places.fetch_provider(search_name, p.get("city") or city, p.get("state") or state)
             google_data[p["name"]] = (
                 read.rating if read.verified else None,
                 read.review_count if read.verified else None,
@@ -126,17 +129,27 @@ def collect_platform_data(
             google_data[p["name"]] = (None, None, None)
 
     # ── Other platforms via Claude structured extraction ──────────────────────
+    # Include address and original_name in the list so Claude can search
+    # each specific location on Healthgrades/Vitals/etc.
     client = _get_client()
-    practice_list = "\n".join(
-        f"- {p['name']} ({p.get('city') or city}, {p.get('state') or state})"
-        for p in practices
-    )
+    def _practice_line(p: dict) -> str:
+        parts = [p.get("original_name") or p["name"]]
+        if p.get("address"):
+            parts.append(f"at {p['address']}")
+        parts.append(f"({p.get('city') or city}, {p.get('state') or state})")
+        # Include the display label so Claude can match results back to the right key
+        parts.append(f"[label: {p['name']}]")
+        return "- " + " ".join(parts)
+
+    practice_list = "\n".join(_practice_line(p) for p in practices)
     prompt = (
         f"You are a healthcare data analyst. For each practice listed below, "
         f"report what you know from your training data about their ratings and "
         f"review counts on Healthgrades, Vitals, WebMD, Yelp, and RateMDs.\n\n"
         f"These practices are associated with {hospital_name} in {city}, {state}.\n\n"
         f"Practices:\n{practice_list}\n\n"
+        f"IMPORTANT: Each entry includes a [label: ...] tag. Use that exact label "
+        f"as the 'name' field in your response so results map to the right entry.\n\n"
         f"For each platform, provide the rating (1–5 scale, to one decimal) and "
         f"the review count if you have that data. Use null for any value you cannot "
         f"confirm. Do not fabricate data — null is always acceptable.\n\n"

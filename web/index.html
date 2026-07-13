@@ -3233,9 +3233,18 @@ async function openPracticeDiscovery() {
   // For specialty practice, build the roster directly from the candidates already
   // returned by the Google Places search — no additional Claude call needed.
   // The selected entity is the anchor; all other candidates are siblings.
+  // Name each entry "City – Street" so all entries are unique and the backend
+  // can look up each specific location rather than returning the same top result.
   if (_irType === 'specialty') {
+    function _locationLabel(candidate) {
+      // "8000 Briarcrest Ave, Memphis, TN 38120" → "Memphis – 8000 Briarcrest Ave"
+      const street = candidate.address ? (candidate.address.split(',')[0] || '').trim() : '';
+      return street ? `${_irResolvedCity} – ${street}` : candidate.name;
+    }
     const anchor = {
-      name: _irSelected.name,
+      name: _locationLabel(_irSelected),
+      original_name: _irSelected.name,
+      address: _irSelected.address || null,
       city: _irResolvedCity,
       state: _irResolvedState,
       entity_type: 'practice',
@@ -3244,7 +3253,9 @@ async function openPracticeDiscovery() {
     const siblings = (_irCandidates || [])
       .filter(c => c !== _irSelected)
       .map(c => ({
-        name: c.name,
+        name: _locationLabel(c),
+        original_name: c.name,
+        address: c.address || null,
         city: _irResolvedCity,
         state: _irResolvedState,
         entity_type: 'practice',
