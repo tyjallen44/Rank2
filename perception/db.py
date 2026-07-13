@@ -297,12 +297,17 @@ def init_db() -> None:
         "SELECT column_name FROM information_schema.columns "
         "WHERE table_name='practice_reputation_practices'"
     ).fetchall()}
-    for _col in ("google_url", "healthgrades_url", "vitals_url",
-                 "webmd_url", "yelp_url", "ratemds_url", "primary_url"):
+    _pr_col_defs = {
+        "google_url": "VARCHAR", "healthgrades_url": "VARCHAR",
+        "vitals_url": "VARCHAR", "webmd_url": "VARCHAR",
+        "yelp_url": "VARCHAR", "ratemds_url": "VARCHAR", "primary_url": "VARCHAR",
+        "is_anchor": "BOOLEAN DEFAULT FALSE", "entity_type": "VARCHAR",
+    }
+    for _col, _def in _pr_col_defs.items():
         if _col not in _pr_cols:
             try:
                 con.execute(
-                    f"ALTER TABLE practice_reputation_practices ADD COLUMN {_col} VARCHAR"
+                    f"ALTER TABLE practice_reputation_practices ADD COLUMN {_col} {_def}"
                 )
             except Exception:
                 pass

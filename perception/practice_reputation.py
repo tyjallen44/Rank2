@@ -209,6 +209,8 @@ def collect_platform_data(
             "practice_name":          name,
             "city":                   p.get("city") or city,
             "state":                  p.get("state") or state,
+            "entity_type":            p.get("entity_type", "practice"),
+            "is_anchor":              bool(p.get("is_anchor", False)),
             "affiliation_verified":   bool(pd.get("affiliation_verified", True)),
             "google_rating":          g_rating,
             "google_count":           g_count,
@@ -233,14 +235,19 @@ def collect_platform_data(
             "total_reviews":          total_reviews,
             "platforms_found":        len(platforms_found),
             "platforms_list":         ", ".join(platforms_found),
-            "platform_entries":       platform_entries,  # used by PDF renderer for per-platform links
+            "platform_entries":       platform_entries,
             "not_established":        not_established,
             "collection_date":        today.isoformat(),
         })
 
-    # Sort by total_reviews descending; not-established last
-    results.sort(key=lambda r: (r["not_established"], -(r["total_reviews"] or 0)))
-    emit({"type": "text", "text": f"Practice reputation collection complete."})
+    # Anchor row(s) pinned first; remaining rows sorted by total_reviews desc,
+    # not-established last.
+    anchor_rows = [r for r in results if r.get("is_anchor")]
+    other_rows  = [r for r in results if not r.get("is_anchor")]
+    other_rows.sort(key=lambda r: (r["not_established"], -(r["total_reviews"] or 0)))
+    results = anchor_rows + other_rows
+
+    emit({"type": "text", "text": "Practice reputation collection complete."})
     return results
 
 
@@ -263,7 +270,8 @@ def save_practice_reputation(run_id: str, practices: list[dict]) -> str:
     for p in practices:
         con.execute(
             """INSERT INTO practice_reputation_practices
-               (id, rep_run_id, practice_name, city, state, affiliation_verified,
+               (id, rep_run_id, practice_name, city, state, entity_type, is_anchor,
+                affiliation_verified,
                 google_rating, google_count, google_url,
                 healthgrades_rating, healthgrades_count, healthgrades_url,
                 vitals_rating, vitals_count, vitals_url,
@@ -273,10 +281,11 @@ def save_practice_reputation(run_id: str, practices: list[dict]) -> str:
                 primary_url,
                 avg_rating, total_reviews, platforms_found, platforms_list,
                 not_established, collection_date, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             [
                 str(uuid.uuid4()), rep_run_id,
                 p["practice_name"], p.get("city"), p.get("state"),
+                p.get("entity_type", "practice"), p.get("is_anchor", False),
                 p.get("affiliation_verified", True),
                 p.get("google_rating"), p.get("google_count"), p.get("google_url"),
                 p.get("healthgrades_rating"), p.get("healthgrades_count"), p.get("healthgrades_url"),

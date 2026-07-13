@@ -264,6 +264,8 @@ def _job_run_practice(
             on_event=emit,
             brand=job.get("brand", "original"),
             skip_pdf=job.get("skip_pdf", False),
+            practice_composite=job.get("practice_composite", False),
+            practice_roster=job.get("practice_roster") or [],
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -1286,6 +1288,7 @@ class PracticeDiscoverRequest(BaseModel):
     entity_name: str
     city: str
     state: str
+    entity_type: str = "hospital"
 
 
 @app.post("/api/practice/discover")
@@ -1293,14 +1296,20 @@ async def practice_discover(
     req: PracticeDiscoverRequest,
     _: str = Depends(require_auth),
 ):
-    """Discover practices associated with a hospital/health system via Claude."""
+    """Discover practices/siblings associated with a hospital or specialty practice."""
     try:
         from perception.db import init_db
-        from perception.practice_discovery import discover_practices
+        from perception.practice_discovery import discover_practices, discover_practice_siblings
         init_db()
         city  = _normalize_input(req.city)
         state = req.state.strip().upper()
-        practices = discover_practices(req.entity_name, city, state)
+        if req.entity_type == "practice":
+            siblings = discover_practice_siblings(req.entity_name, city, state)
+            anchor = {"name": req.entity_name, "entity_type": "practice",
+                      "city": city, "state": state, "is_anchor": True}
+            practices = [anchor] + siblings
+        else:
+            practices = discover_practices(req.entity_name, city, state)
         return {"practices": practices, "count": len(practices)}
     except Exception as exc:
         raise HTTPException(500, f"Practice discovery error: {exc}")

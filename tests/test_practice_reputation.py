@@ -496,3 +496,110 @@ def test_csv_url_columns_present_in_result_dict(monkeypatch):
         assert col in row, f"URL column '{col}' missing from result dict"
     assert row["google_url"] == "https://maps.google.com/?cid=abc"
     assert row["healthgrades_url"] == "https://www.healthgrades.com/group/test"
+
+
+# ── Phase 4: Specialty Practice anchor row ────────────────────────────────────
+
+def _make_anchor_row(**kwargs):
+    defaults = {
+        "practice_name": "Anchor Clinic", "not_established": False,
+        "avg_rating": 4.5, "total_reviews": 200, "platforms_found": 2,
+        "platforms_list": "Google, Healthgrades", "affiliation_verified": True,
+        "collection_date": "2026-07-12", "primary_url": None,
+        "platform_entries": None, "is_anchor": True, "entity_type": "practice",
+    }
+    return {**defaults, **kwargs}
+
+
+def test_anchor_row_pinned_first_regardless_of_reviews():
+    """_practice_reputation_table_html pins the anchor row first even if it has fewer reviews."""
+    from perception.pdf import _practice_reputation_table_html
+    anchor = _make_anchor_row(total_reviews=10)
+    sibling = _make_row(practice_name="High Sibling", total_reviews=999)
+    # Pass anchor AFTER the high-review sibling — renderer must still pin anchor first
+    html = _practice_reputation_table_html([sibling, anchor])
+    anchor_pos = html.index("Anchor Clinic")
+    sibling_pos = html.index("High Sibling")
+    assert anchor_pos < sibling_pos
+
+
+def test_anchor_row_html_has_teal_background():
+    """Anchor row must render with the teal-tinted background colour."""
+    from perception.pdf import _practice_reputation_table_html
+    anchor = _make_anchor_row()
+    sibling = _make_row(practice_name="Sibling Clinic", total_reviews=50)
+    html = _practice_reputation_table_html([anchor, sibling])
+    assert "#edf6f7" in html
+
+
+def test_anchor_row_html_has_analyzed_badge():
+    """Anchor row must carry the '(analyzed)' badge text."""
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_anchor_row()]
+    html = _practice_reputation_table_html(rows)
+    assert "(analyzed)" in html
+
+
+def test_anchor_row_html_practice_name_bold():
+    """Anchor row practice name must be rendered with bold weight."""
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_anchor_row()]
+    html = _practice_reputation_table_html(rows)
+    # PDF uses a span with font-weight:700 (not a <strong> tag)
+    assert 'font-weight:700' in html
+    assert "Anchor Clinic" in html
+
+
+def test_no_affiliates_shows_informational_row():
+    """When anchor is sole row (no siblings), an informational 'No affiliated entities' row appears."""
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_anchor_row()]
+    html = _practice_reputation_table_html(rows)
+    assert "No affiliated entities established" in html
+
+
+def test_informational_row_absent_when_siblings_present():
+    """The 'No affiliated entities' row must NOT appear when siblings exist."""
+    from perception.pdf import _practice_reputation_table_html
+    anchor = _make_anchor_row()
+    sibling = _make_row(practice_name="Sibling Clinic")
+    html = _practice_reputation_table_html([anchor, sibling])
+    assert "No affiliated entities established" not in html
+
+
+def test_hospital_table_no_anchor_treatment():
+    """Hospital-anchored tables (no is_anchor rows) must not show anchor styling or informational row."""
+    from perception.pdf import _practice_reputation_table_html
+    rows = [
+        _make_row(practice_name="Practice A", total_reviews=200),
+        _make_row(practice_name="Practice B", total_reviews=100),
+    ]
+    html = _practice_reputation_table_html(rows)
+    assert "(analyzed)" not in html
+    assert "#edf6f7" not in html
+    assert "No affiliated entities established" not in html
+
+
+def test_non_anchor_rows_sorted_desc_below_anchor():
+    """Non-anchor rows sort by total_reviews desc, all below the anchor row."""
+    from perception.pdf import _practice_reputation_table_html
+    anchor = _make_anchor_row(total_reviews=50)
+    high = _make_row(practice_name="High Reviews", total_reviews=500)
+    low = _make_row(practice_name="Low Reviews", total_reviews=10)
+    # Pass in reverse order to ensure sort is applied
+    html = _practice_reputation_table_html([low, anchor, high])
+    anchor_pos = html.index("Anchor Clinic")
+    high_pos = html.index("High Reviews")
+    low_pos = html.index("Low Reviews")
+    assert anchor_pos < high_pos < low_pos
+
+
+def test_anchor_intro_text_differs_from_hospital():
+    """Practice-anchor tables must use different intro text than hospital-anchor tables."""
+    from perception.pdf import _practice_reputation_table_html
+    hospital_rows = [_make_row(practice_name="Some Clinic")]
+    practice_rows = [_make_anchor_row()]
+    hospital_html = _practice_reputation_table_html(hospital_rows)
+    practice_html = _practice_reputation_table_html(practice_rows)
+    # They must not be identical (different intro copy)
+    assert hospital_html != practice_html

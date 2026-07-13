@@ -519,6 +519,8 @@ def analyze_practice(
     on_event: Optional[Callable] = None,
     brand: str = "original",
     skip_pdf: bool = False,
+    practice_composite: bool = False,
+    practice_roster: list[dict] | None = None,
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -676,6 +678,23 @@ def analyze_practice(
         report_markdown=report_markdown,
     )
 
+    # ── Practice Composite reputation collection (before PDF so table is included) ──
+    if practice_composite:
+        emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
+        from .practice_reputation import collect_platform_data
+        from .practice_discovery import discover_practice_siblings
+
+        roster = list(practice_roster or [])
+        if not roster:
+            siblings = discover_practice_siblings(entity_name, city, state, on_event=emit)
+            anchor = {"name": entity_name, "entity_type": "practice",
+                      "city": city, "state": state, "is_anchor": True}
+            roster = [anchor] + siblings
+
+        result.practice_composite_rows = collect_platform_data(
+            roster, entity_name, city, state, on_event=emit
+        )
+
     # ── Save markdown ─────────────────────────────────────────────────────────
     _type = (specialty or "Practice").replace(" ", "-")
     _ts   = datetime.utcnow().strftime("%y%m%d-%H%M")
@@ -704,6 +723,9 @@ def analyze_practice(
 
     # ── Persist to DB ─────────────────────────────────────────────────────────
     _save_to_db(result)
+    if result.practice_composite_rows:
+        from .practice_reputation import save_practice_reputation
+        save_practice_reputation(result.run_id, result.practice_composite_rows)
     _save_practice_extras(
         result,
         entity_resolution_pct=entity_resolution_pct,

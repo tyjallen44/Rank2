@@ -708,11 +708,18 @@ def analyze_location(
     )
 
     # ── Practice Composite reputation collection (before PDF so table is included) ──
-    if practice_composite and individual_report and entity_name and practice_roster:
+    if practice_composite and individual_report and entity_name:
         emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
         from .practice_reputation import collect_platform_data
+
+        roster = list(practice_roster or [])
+        if not roster:
+            # Auto-discover when no roster provided (comparison path — no UI confirmation step)
+            from .practice_discovery import discover_practices
+            roster = discover_practices(entity_name, city, state, on_event=emit)
+
         result.practice_composite_rows = collect_platform_data(
-            practice_roster, entity_name, city, state, on_event=emit
+            roster, entity_name, city, state, on_event=emit
         )
 
     # Save markdown + PDF

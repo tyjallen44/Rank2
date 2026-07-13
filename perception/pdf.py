@@ -2569,18 +2569,48 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
         # Fallback for rows loaded from DB (no platform_entries): plain text
         return f"{count}: {_e(row.get('platforms_list', ''))}"
 
+    # Pin anchor rows first; sort remaining rows by total_reviews desc
+    anchor_rows_sorted = [r for r in rows if r.get("is_anchor")]
+    other_rows_sorted  = sorted(
+        [r for r in rows if not r.get("is_anchor")],
+        key=lambda r: (r.get("not_established", False), -(r.get("total_reviews") or 0)),
+    )
+    rows = anchor_rows_sorted + other_rows_sorted
+
+    has_anchor = bool(anchor_rows_sorted)
+    non_anchor_rows = other_rows_sorted
+    no_affiliates = has_anchor and len(non_anchor_rows) == 0
+
+    # Alternate-row index counts only non-anchor rows so banding stays consistent
+    alt_counter = 0
     rows_html = ""
-    for i, row in enumerate(rows):
-        bg = f'background:{ALT}' if i % 2 == 1 else ''
+    for row in rows:
+        is_anchor = row.get("is_anchor", False)
+        if is_anchor:
+            row_style = f'border-bottom:1px solid {BD};background:#edf6f7'
+        else:
+            row_style = f'border-bottom:1px solid {BD};' + (f'background:{ALT}' if alt_counter % 2 == 1 else '')
+            alt_counter += 1
         collection = row.get("collection_date", "")
-        name = _e(row.get("practice_name", ""))
+        raw_name = row.get("practice_name", "")
+        name_suffix = (
+            f' <span style="font-size:8pt;color:#7a9095;font-weight:400">(analyzed)</span>'
+            if is_anchor else ""
+        )
+        name = f'<span style="font-weight:{"700" if is_anchor else "500"}">{_e(raw_name)}</span>{name_suffix}'
         rows_html += f"""
-    <tr style="border-bottom:1px solid {BD};{bg}">
-      <td style="padding:9px 12px;font-weight:500">{name}</td>
+    <tr style="{row_style}">
+      <td style="padding:9px 12px">{name}</td>
       <td style="padding:9px 12px">{_rating_cell(row)}</td>
       <td style="padding:9px 12px;text-align:right">{row.get('total_reviews') or '&#8212;'}</td>
       <td style="padding:9px 12px">{_platforms_cell(row)}</td>
       <td style="padding:9px 12px;font-size:8pt;color:{M}">{_e(collection)}</td>
+    </tr>"""
+
+    if no_affiliates:
+        rows_html += f"""
+    <tr style="border-bottom:1px solid {BD}">
+      <td colspan="5" style="padding:9px 12px;font-style:italic;color:{M}">No affiliated entities established</td>
     </tr>"""
 
     footer = ""
@@ -2592,16 +2622,23 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
             f'Ratings may become stale after 90 days.</p>'
         )
 
+    intro = (
+        "Publicly available reputation data for this practice and affiliated entities "
+        "under the same parent organization. The highlighted row is the analyzed practice. "
+        "Avg Rating = review-count-weighted average across all platforms found. "
+        "Platforms: Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs (Zocdoc excluded)."
+    ) if has_anchor else (
+        "Publicly available reputation data for practices and facilities associated with this "
+        "health system. Avg Rating = review-count-weighted average across all platforms found. "
+        "Platforms: Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs (Zocdoc excluded)."
+    )
+
     return f"""
 <div style="margin-top:32px">
   <div style="font-size:12pt;font-weight:700;color:{T};margin-bottom:6px">
     Practice Composite &#8212; Associated Practice Reputation
   </div>
-  <p style="font-size:9pt;color:{M};margin-bottom:14px">
-    Publicly available reputation data for practices and facilities associated with this
-    health system. Avg Rating = review-count-weighted average across all platforms found.
-    Platforms: Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs (Zocdoc excluded).
-  </p>
+  <p style="font-size:9pt;color:{M};margin-bottom:14px">{_e(intro)}</p>
   <table style="width:100%;border-collapse:collapse;font-size:10pt">
     <thead>
       <tr style="background:{T};color:#fff;font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:0.06em">

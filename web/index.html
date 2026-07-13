@@ -1352,11 +1352,12 @@ html, body {
               <input type="checkbox" id="ir-agg-toggle" checked>
               <span class="agg-label">Composite analysis related hospitals only</span>
             </label>
-            <label class="aggregate-toggle" style="margin-top:10px" title="Append a practice reputation table showing public ratings for associated practices and clinics.">
-              <input type="checkbox" id="ir-practice-composite">
-              <span class="agg-label">Practice Composite</span>
-            </label>
           </div>
+          <!-- Available for both Hospital and Specialty Practice types -->
+          <label class="aggregate-toggle" id="ir-practice-composite-wrap" style="margin-top:10px" title="Append a practice reputation table showing public ratings for associated practices and clinics.">
+            <input type="checkbox" id="ir-practice-composite">
+            <span class="agg-label">Practice Composite</span>
+          </label>
           <label class="aggregate-toggle" style="margin-top:10px" title="Collect and store analysis data without generating a PDF — useful for tracking AI visibility trends over time.">
             <input type="checkbox" id="ir-skip-pdf-toggle">
             <span class="agg-label">Skip PDF — collect data only</span>
@@ -1465,11 +1466,11 @@ html, body {
             <input type="checkbox" id="cmp-a-agg" checked>
             <span class="agg-label">Composite analysis related hospitals only</span>
           </label>
-          <label class="aggregate-toggle" style="margin-top:10px">
-            <input type="checkbox" id="cmp-a-practice-composite">
-            <span class="agg-label">Practice Composite</span>
-          </label>
         </div>
+        <label class="aggregate-toggle" id="cmp-a-practice-composite-wrap" style="margin-top:10px">
+          <input type="checkbox" id="cmp-a-practice-composite">
+          <span class="agg-label">Practice Composite</span>
+        </label>
       </div>
 
       <!-- Entity B -->
@@ -1527,11 +1528,11 @@ html, body {
               <input type="checkbox" id="cmp-b-agg" checked>
               <span class="agg-label">Composite analysis related hospitals only</span>
             </label>
-            <label class="aggregate-toggle" style="margin-top:10px">
-              <input type="checkbox" id="cmp-b-practice-composite">
-              <span class="agg-label">Practice Composite</span>
-            </label>
           </div>
+          <label class="aggregate-toggle" id="cmp-b-practice-composite-wrap" style="margin-top:10px">
+            <input type="checkbox" id="cmp-b-practice-composite">
+            <span class="agg-label">Practice Composite</span>
+          </label>
         </div>
       </div>
 
@@ -2765,11 +2766,10 @@ function setIrType(t) {
   document.getElementById('ir-tg-hospital').classList.toggle('on',  t === 'hospital');
   document.getElementById('ir-tg-specialty').classList.toggle('on', t === 'specialty');
   document.getElementById('ir-specialty-wrap').classList.toggle('hidden', t !== 'specialty');
-  // hospital-only options
+  // agg toggle is hospital-only; practice composite is available for both types
   document.getElementById('ir-composite-opts').style.display = t === 'hospital' ? '' : 'none';
   if (t !== 'hospital') {
-    document.getElementById('ir-agg-toggle').checked          = false;
-    document.getElementById('ir-practice-composite').checked  = false;
+    document.getElementById('ir-agg-toggle').checked = false;
   }
 }
 
@@ -2951,11 +2951,12 @@ function setCmpType(side, type) {
     document.getElementById(`cmp-${side}-tg-${t}`).classList.toggle('on', t === type);
   });
   document.getElementById(`cmp-${side}-specialty-wrap`).classList.toggle('hidden', type !== 'specialty');
+  // agg toggle is hospital-only; practice composite is available for both types
   const hospOpts = document.getElementById(`cmp-${side}-hosp-opts`);
   if (hospOpts) hospOpts.style.display = type === 'hospital' ? '' : 'none';
   if (type !== 'hospital') {
-    const pc = document.getElementById(`cmp-${side}-practice-composite`);
-    if (pc) pc.checked = false;
+    const agg = document.getElementById(`cmp-${side}-agg`);
+    if (agg) agg.checked = false;
   }
 }
 
@@ -3105,8 +3106,8 @@ async function runComparison() {
   if (_cmp.a.type === 'specialty' && !specA) return showErr(errEl, 'Please enter a specialty for Entity A.');
   if (_cmp.b.type === 'specialty' && !specB) return showErr(errEl, 'Please enter a specialty for Entity B.');
 
-  const pcA = _cmp.a.type === 'hospital' && document.getElementById('cmp-a-practice-composite')?.checked;
-  const pcB = _cmp.b.type === 'hospital' && document.getElementById('cmp-b-practice-composite')?.checked;
+  const pcA = document.getElementById('cmp-a-practice-composite')?.checked;
+  const pcB = document.getElementById('cmp-b-practice-composite')?.checked;
   const body = {
     entity_a_name:    _cmp.a.selected.name,
     city_a:           _cmp.a.city,
@@ -3124,9 +3125,9 @@ async function runComparison() {
     practice_profile_a: _cmp.a.type === 'specialty' ? (_cmp.a.practiceProfile || 'practice_procedural') : null,
     practice_profile_b: _cmp.b.type === 'specialty' ? (_cmp.b.practiceProfile || 'practice_procedural') : null,
     practice_composite_a: !!pcA,
-    practice_roster_a:    pcA ? _practiceRoster : [],
+    practice_roster_a:    [],
     practice_composite_b: !!pcB,
-    practice_roster_b:    pcB ? _practiceRoster : [],
+    practice_roster_b:    [],
   };
 
   const btn = document.getElementById('cmp-run-btn');
@@ -3156,7 +3157,7 @@ async function runIndividual() {
   errEl.classList.add('hidden');
 
   // If Practice Composite is checked, go to practice discovery step first
-  if (_irType === 'hospital' && document.getElementById('ir-practice-composite')?.checked) {
+  if (document.getElementById('ir-practice-composite')?.checked) {
     openPracticeDiscovery();
     return;
   }
@@ -3238,14 +3239,18 @@ async function openPracticeDiscovery() {
         entity_name: _irSelected.name,
         city:        _irResolvedCity,
         state:       _irResolvedState,
+        entity_type: _irType === 'specialty' ? 'practice' : 'hospital',
       }),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Practice discovery failed'));
     const data = await r.json();
     _practiceRoster = (data.practices || []);
     _renderPracticeRoster();
-    document.getElementById('ir-pd-count').textContent =
-      `${_practiceRoster.length} practice${_practiceRoster.length !== 1 ? 's' : ''} discovered`;
+    const siblingCount = _practiceRoster.filter(e => !e.is_anchor).length;
+    const isSpecialty = _irType === 'specialty';
+    document.getElementById('ir-pd-count').textContent = isSpecialty
+      ? `${siblingCount} affiliated entit${siblingCount !== 1 ? 'ies' : 'y'} discovered`
+      : `${_practiceRoster.length} practice${_practiceRoster.length !== 1 ? 's' : ''} discovered`;
     document.getElementById('ir-step3').classList.add('hidden');
     document.getElementById('ir-step-practice-discovery').classList.remove('hidden');
     document.getElementById('ir-step-practice-discovery').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -3263,11 +3268,20 @@ function _renderPracticeRoster() {
   _practiceRoster.forEach((ent, i) => {
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid var(--border)';
-    tr.innerHTML = `
-      <td style="padding:8px 10px"><input type="checkbox" data-idx="${i}" checked></td>
-      <td style="padding:8px 10px">${ent.name}</td>
-      <td style="padding:8px 10px;text-transform:capitalize">${ent.entity_type || 'practice'}</td>
-      <td style="padding:8px 10px">${ent.city}, ${ent.state}</td>`;
+    if (ent.is_anchor) {
+      tr.style.background = '#edf6f7';
+      tr.innerHTML = `
+        <td style="padding:8px 10px"><input type="checkbox" data-idx="${i}" checked disabled style="opacity:0.5"></td>
+        <td style="padding:8px 10px"><strong>${ent.name}</strong> <span style="font-size:0.75em;color:#4a9aa5;margin-left:4px">(analyzed)</span></td>
+        <td style="padding:8px 10px;text-transform:capitalize">${ent.entity_type || 'practice'}</td>
+        <td style="padding:8px 10px">${ent.city}, ${ent.state}</td>`;
+    } else {
+      tr.innerHTML = `
+        <td style="padding:8px 10px"><input type="checkbox" data-idx="${i}" checked></td>
+        <td style="padding:8px 10px">${ent.name}</td>
+        <td style="padding:8px 10px;text-transform:capitalize">${ent.entity_type || 'practice'}</td>
+        <td style="padding:8px 10px">${ent.city}, ${ent.state}</td>`;
+    }
     tbody.appendChild(tr);
   });
 }
@@ -3277,7 +3291,10 @@ async function confirmPracticeRoster() {
   errEl.classList.add('hidden');
 
   const checkboxes = document.querySelectorAll('#ir-pd-tbody input[type=checkbox]');
-  const included = _practiceRoster.filter((_, i) => checkboxes[i] && checkboxes[i].checked);
+  // Anchor rows are always included; non-anchor rows respect their checkbox state
+  const included = _practiceRoster.filter((ent, i) =>
+    ent.is_anchor || (checkboxes[i] && checkboxes[i].checked)
+  );
   if (included.length === 0) return showErr(errEl, 'Select at least one practice to include.');
 
   document.getElementById('ir-step-practice-discovery').classList.add('hidden');
