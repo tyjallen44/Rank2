@@ -1288,7 +1288,6 @@ class PracticeDiscoverRequest(BaseModel):
     entity_name: str
     city: str
     state: str
-    entity_type: str = "hospital"
 
 
 @app.post("/api/practice/discover")
@@ -1296,20 +1295,14 @@ async def practice_discover(
     req: PracticeDiscoverRequest,
     _: str = Depends(require_auth),
 ):
-    """Discover practices/siblings associated with a hospital or specialty practice."""
+    """Discover practices associated with a hospital or specialty practice."""
     try:
         from perception.db import init_db
-        from perception.practice_discovery import discover_practices, discover_practice_siblings
+        from perception.practice_discovery import discover_practices
         init_db()
         city  = _normalize_input(req.city)
         state = req.state.strip().upper()
-        if req.entity_type == "practice":
-            siblings = discover_practice_siblings(req.entity_name, city, state)
-            anchor = {"name": req.entity_name, "entity_type": "practice",
-                      "city": city, "state": state, "is_anchor": True}
-            practices = [anchor] + siblings
-        else:
-            practices = discover_practices(req.entity_name, city, state)
+        practices = discover_practices(req.entity_name, city, state)
         return {"practices": practices, "count": len(practices)}
     except Exception as exc:
         raise HTTPException(500, f"Practice discovery error: {exc}")

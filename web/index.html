@@ -3230,50 +3230,7 @@ async function openPracticeDiscovery() {
   btn.disabled = true;
   errEl.classList.add('hidden');
 
-  // For specialty practice, build the roster directly from the candidates already
-  // returned by the Google Places search — no additional Claude call needed.
-  // The selected entity is the anchor; all other candidates are siblings.
-  // Name each entry "City – Street" so all entries are unique and the backend
-  // can look up each specific location rather than returning the same top result.
-  if (_irType === 'specialty') {
-    function _locationLabel(candidate) {
-      // "8000 Briarcrest Ave, Memphis, TN 38120" → "Memphis – 8000 Briarcrest Ave"
-      const street = candidate.address ? (candidate.address.split(',')[0] || '').trim() : '';
-      return street ? `${_irResolvedCity} – ${street}` : candidate.name;
-    }
-    const anchor = {
-      name: _locationLabel(_irSelected),
-      original_name: _irSelected.name,
-      address: _irSelected.address || null,
-      city: _irResolvedCity,
-      state: _irResolvedState,
-      entity_type: 'practice',
-      is_anchor: true,
-    };
-    const siblings = (_irCandidates || [])
-      .filter(c => c !== _irSelected)
-      .map(c => ({
-        name: _locationLabel(c),
-        original_name: c.name,
-        address: c.address || null,
-        city: _irResolvedCity,
-        state: _irResolvedState,
-        entity_type: 'practice',
-      }));
-    _practiceRoster = [anchor, ...siblings];
-    _renderPracticeRoster();
-    const siblingCount = siblings.length;
-    document.getElementById('ir-pd-count').textContent =
-      `${siblingCount} affiliated entit${siblingCount !== 1 ? 'ies' : 'y'} discovered`;
-    document.getElementById('ir-step3').classList.add('hidden');
-    document.getElementById('ir-step-practice-discovery').classList.remove('hidden');
-    document.getElementById('ir-step-practice-discovery').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    btn.disabled = false;
-    btn.innerHTML = 'Run Individual Report →';
-    return;
-  }
-
-  // For hospital type, call Claude-based discovery
+  // Same Claude-based discovery for both hospital and specialty practice types
   btn.innerHTML = '<span class="spinner"></span> Discovering practices…';
   try {
     const r = await api('/api/practice/discover', {
@@ -3283,7 +3240,6 @@ async function openPracticeDiscovery() {
         entity_name: _irSelected.name,
         city:        _irResolvedCity,
         state:       _irResolvedState,
-        entity_type: 'hospital',
       }),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Practice discovery failed'));

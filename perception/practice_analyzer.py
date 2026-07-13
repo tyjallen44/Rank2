@@ -682,14 +682,11 @@ def analyze_practice(
     if practice_composite:
         emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
         from .practice_reputation import collect_platform_data
-        from .practice_discovery import discover_practice_siblings
+        from .practice_discovery import discover_practices
 
         roster = list(practice_roster or [])
         if not roster:
-            siblings = discover_practice_siblings(entity_name, city, state, on_event=emit)
-            anchor = {"name": entity_name, "entity_type": "practice",
-                      "city": city, "state": state, "is_anchor": True}
-            roster = [anchor] + siblings
+            roster = discover_practices(entity_name, city, state, on_event=emit)
 
         result.practice_composite_rows = collect_platform_data(
             roster, entity_name, city, state, on_event=emit
