@@ -97,6 +97,14 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
             format="Letter",
             margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
             print_background=True,
+            display_header_footer=True,
+            header_template="<span></span>",
+            footer_template=(
+                '<div style="width:100%;font-family:Arial,sans-serif;'
+                'font-size:9px;color:#7a9095;text-align:center;padding:0 0 8px 0">'
+                'Page <span class="pageNumber"></span> of <span class="totalPages"></span>'
+                "</div>"
+            ),
         )
         browser.close()
 
@@ -2500,6 +2508,14 @@ def render_comparison_pdf(
             format="Letter",
             margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
             print_background=True,
+            display_header_footer=True,
+            header_template="<span></span>",
+            footer_template=(
+                '<div style="width:100%;font-family:Arial,sans-serif;'
+                'font-size:9px;color:#7a9095;text-align:center;padding:0 0 8px 0">'
+                'Page <span class="pageNumber"></span> of <span class="totalPages"></span>'
+                "</div>"
+            ),
         )
         browser.close()
 
