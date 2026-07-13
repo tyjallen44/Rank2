@@ -55,7 +55,6 @@ def discover_physicians(
         if on_event:
             on_event(e)
 
-    client = _get_client()
     prompt = (
         f"You are researching the physician roster for '{practice_name}' "
         f"based in {city}, {state}.\n\n"
