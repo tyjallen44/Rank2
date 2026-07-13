@@ -146,6 +146,8 @@ _SPECIALTY_KEYWORDS: list[tuple[str, str]] = [
     ("ear",             "Otolaryngology"),
     ("ent ",            "Otolaryngology"),
     ("otolaryngol",     "Otolaryngology"),
+    # Short prefix — must come after the longer "orthopaed"/"orthoped" entries.
+    ("ortho",           "Orthopaedic"),
 ]
 
 
@@ -183,6 +185,10 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
     """
     spaced   = re.sub(r"([a-z])([A-Z])", r"\1 \2", org_name)
     input_variants: list[str] = list(dict.fromkeys([org_name, spaced]))
+
+    # Specialty taxonomy inferred from org name — applied as a Phase 2 filter
+    # to exclude co-located non-specialty providers sharing the same building.
+    org_tax_term: str | None = _specialty_tax_term(org_name)
 
     # Phase 1: NPI-2 → org postal codes + derive name variants for validation
     org_zips: set[str]          = set()
@@ -226,11 +232,12 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
     # addresses filtered to the Google Places zip prefix reveals the group's
     # building(s) even when no NPI-2 exists.
     places_fallback = False
+    fallback_tax_term: str | None = None
     if not org_zips:
         google_postal = _places.fetch_address_postal(org_name, city, state)
         if google_postal:
             zip5 = google_postal[:5]
-            tax_term = _specialty_tax_term(org_name)
+            tax_term = org_tax_term
             if tax_term:
                 freq: Counter[str] = Counter()
                 for rec in _nppes_get({"enumeration_type": "NPI-1",
@@ -242,10 +249,20 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
                     pz = _primary_postal(rec)
                     if len(pz) >= 9 and pz.startswith(zip5):
                         freq[pz] += 1
+                # Group by 8-digit building prefix (same street number,
+                # different suite +4).  Accept all 9-digit zips that belong
+                # to a building with 5+ physicians — this captures physicians
+                # in minority suites (e.g. a single-occupant suite) that
+                # share the building with the practice's main cluster.
+                prefix_totals: Counter[str] = Counter()
                 for pz, cnt in freq.items():
-                    if cnt >= 2:
+                    prefix_totals[pz[:8]] += cnt
+                for pz in freq:
+                    if prefix_totals[pz[:8]] >= 5:
                         org_zips.add(pz)
-            if not org_zips:
+            if org_zips:
+                fallback_tax_term = tax_term
+            else:
                 # Taxonomy gave nothing — add the raw Google postal as last resort
                 org_zips.add(google_postal)
             places_fallback = True
@@ -256,11 +273,18 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
     # All search variants: input names + names found in NPI-2 records
     all_variants: list[str] = list(dict.fromkeys(input_variants + extra_variants))
 
-    # Phase 2: NPI-1 seed at each org location postal
+    # Phase 2: NPI-1 seed at each org location postal.
+    # Apply specialty taxonomy filter whenever the org name implies a specialty —
+    # this excludes co-located non-specialty providers (urologists, ENTs, etc.)
+    # sharing a building with the target practice, regardless of whether org_zips
+    # came from NPI-2 records (normal path) or Google Places fallback.
+    phase2_tax = fallback_tax_term or org_tax_term
     seed: dict[str, dict] = {}
     for postal in org_zips:
-        for rec in _nppes_get({"enumeration_type": "NPI-1",
-                               "postal_code": postal, "limit": 200}):
+        params: dict = {"enumeration_type": "NPI-1", "postal_code": postal, "limit": 200}
+        if phase2_tax:
+            params["taxonomy_description"] = phase2_tax
+        for rec in _nppes_get(params):
             npi = rec.get("number") or ""
             if npi and npi not in seed:
                 seed[npi] = rec
@@ -292,8 +316,10 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
 
     all_recs: dict[str, dict] = dict(seed)
     for postal in cascade_zips:
-        for rec in _nppes_get({"enumeration_type": "NPI-1",
-                               "postal_code": postal, "limit": 200}):
+        cparams: dict = {"enumeration_type": "NPI-1", "postal_code": postal, "limit": 200}
+        if phase2_tax:
+            cparams["taxonomy_description"] = phase2_tax
+        for rec in _nppes_get(cparams):
             npi = rec.get("number") or ""
             if npi and npi not in all_recs:
                 all_recs[npi] = rec
