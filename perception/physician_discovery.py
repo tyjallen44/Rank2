@@ -9,14 +9,21 @@ from typing import Callable, Optional
 import httpx as _httpx
 
 from .analyzer import _get_client, _MODEL, _clean
+from .data import places as _places
 
 _NPPES_API = "https://npiregistry.cms.hhs.gov/api/"
 
-# NPPES taxonomy code prefixes for physician output (MDs and DOs only).
-# PAs, NPs, CRNAs, and CNS are excluded from the report roster.
-_PHYSICIAN_TAX: tuple[str, ...] = (
-    "207",  # Allopathic physicians (all specialties)
-    "208",  # Osteopathic physicians
+# NPPES taxonomy code prefixes for physician output.
+_PHYSICIAN_TAX: tuple[str, ...] = ("207", "208")   # Allopathic / Osteopathic physicians
+
+# Taxonomy prefixes that disqualify a record even if it also has a 207/208 code.
+# Some PAs/NPs self-register a physician taxonomy alongside their actual PA/NP
+# taxonomy — these must be excluded.
+_MIDLEVEL_TAX: tuple[str, ...] = (
+    "363",  # Physician Assistants and Nurse Practitioners
+    "364",  # Clinical Nurse Specialists
+    "367",  # Advanced Practice Midwives / Anesthesiology Assistants
+    "374",  # CRNAs / DNPs
 )
 
 _PHYSICIAN_DISCOVER_TOOL = {
@@ -63,12 +70,20 @@ def _nppes_get(params: dict) -> list[dict]:
 
 
 def _is_physician(rec: dict) -> bool:
-    """Return True if the NPI-1 record is an MD or DO."""
+    """Return True if the NPI-1 record is an MD or DO.
+
+    Excluded: any record that carries a mid-level (PA/NP/CRNA/CNS) taxonomy
+    code, even when it also carries a 207/208 code — some providers
+    self-register dual taxonomies but are not physicians.
+    """
+    has_physician = False
     for t in rec.get("taxonomies") or []:
         code = t.get("code", "")
+        if any(code.startswith(p) for p in _MIDLEVEL_TAX):
+            return False
         if any(code.startswith(p) for p in _PHYSICIAN_TAX):
-            return True
-    return False
+            has_physician = True
+    return has_physician
 
 
 def _parse_npi1(rec: dict) -> dict | None:
@@ -100,6 +115,47 @@ def _primary_postal(rec: dict) -> str:
     loc = next((a for a in rec.get("addresses", [])
                 if a.get("address_purpose") == "LOCATION"), None)
     return (loc.get("postal_code") or "").strip() if loc else ""
+
+
+# Maps lowercase keywords in org names to NPPES taxonomy_description search terms.
+_SPECIALTY_KEYWORDS: list[tuple[str, str]] = [
+    ("orthopaed",       "Orthopaedic"),
+    ("orthoped",        "Orthopaedic"),
+    ("cardio",          "Cardiology"),
+    ("cardiac",         "Cardiology"),
+    ("heart",           "Cardiology"),
+    ("neurol",          "Neurology"),
+    ("dermatol",        "Dermatology"),
+    ("ophthalmol",      "Ophthalmology"),
+    ("oncol",           "Oncology"),
+    ("gastro",          "Gastroenterology"),
+    ("urol",            "Urology"),
+    ("rheumatol",       "Rheumatology"),
+    ("endocrin",        "Endocrinology"),
+    ("pulmon",          "Pulmonary"),
+    ("nephrol",         "Nephrology"),
+    ("gynecol",         "Gynecology"),
+    ("obstet",          "Obstetrics"),
+    ("pediatr",         "Pediatrics"),
+    ("psychiatr",       "Psychiatry"),
+    ("pain",            "Pain"),
+    ("spine",           "Spine"),
+    ("vascular",        "Vascular"),
+    ("plastics",        "Plastic"),
+    ("plastic",         "Plastic"),
+    ("ear",             "Otolaryngology"),
+    ("ent ",            "Otolaryngology"),
+    ("otolaryngol",     "Otolaryngology"),
+]
+
+
+def _specialty_tax_term(org_name: str) -> str | None:
+    """Return an NPPES taxonomy_description search term inferred from the org name."""
+    lower = org_name.lower()
+    for keyword, tax in _SPECIALTY_KEYWORDS:
+        if keyword in lower:
+            return tax
+    return None
 
 
 # ── Main NPPES lookup ─────────────────────────────────────────────────────────
@@ -162,6 +218,38 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
                     seen_npi2_names.add(dba.upper())
                     extra_variants.append(dba)
 
+    # Phase 1b: practice has no NPI-2 entity — use Google Places + specialty
+    # taxonomy to resolve 9-digit postal codes for the practice's building(s).
+    #
+    # Google Places gives a 5-digit zip; NPPES taxonomy+city search returns
+    # all local physicians of that type; clustering their 9-digit primary
+    # addresses filtered to the Google Places zip prefix reveals the group's
+    # building(s) even when no NPI-2 exists.
+    places_fallback = False
+    if not org_zips:
+        google_postal = _places.fetch_address_postal(org_name, city, state)
+        if google_postal:
+            zip5 = google_postal[:5]
+            tax_term = _specialty_tax_term(org_name)
+            if tax_term:
+                freq: Counter[str] = Counter()
+                for rec in _nppes_get({"enumeration_type": "NPI-1",
+                                       "taxonomy_description": tax_term,
+                                       "city": city.upper(),
+                                       "state": state, "limit": 200}):
+                    if not _is_physician(rec):
+                        continue
+                    pz = _primary_postal(rec)
+                    if len(pz) >= 9 and pz.startswith(zip5):
+                        freq[pz] += 1
+                for pz, cnt in freq.items():
+                    if cnt >= 2:
+                        org_zips.add(pz)
+            if not org_zips:
+                # Taxonomy gave nothing — add the raw Google postal as last resort
+                org_zips.add(google_postal)
+            places_fallback = True
+
     if not org_zips:
         return []
 
@@ -187,17 +275,20 @@ def _nppes_lookup(org_name: str, city: str, state: str) -> list[dict]:
         if len(pz) >= 9 and pz not in org_zips:
             physician_zip_freq[pz] += 1
 
-    # Validate each candidate: only cascade if the org appears in NPI-2 there
+    # Validate each candidate: only cascade if the org appears in NPI-2 there.
+    # Skip cascade entirely when org_zips came from the Google Places fallback
+    # (no NPI-2 records exist to validate against).
     cascade_zips: set[str] = set()
-    for pz, cnt in physician_zip_freq.items():
-        if cnt < 2:
-            continue
-        for v in all_variants:
-            if _nppes_get({"enumeration_type": "NPI-2",
-                           "organization_name": v,
-                           "postal_code": pz, "limit": 1}):
-                cascade_zips.add(pz)
-                break
+    if not places_fallback:
+        for pz, cnt in physician_zip_freq.items():
+            if cnt < 2:
+                continue
+            for v in all_variants:
+                if _nppes_get({"enumeration_type": "NPI-2",
+                               "organization_name": v,
+                               "postal_code": pz, "limit": 1}):
+                    cascade_zips.add(pz)
+                    break
 
     all_recs: dict[str, dict] = dict(seed)
     for postal in cascade_zips:

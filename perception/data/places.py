@@ -411,3 +411,59 @@ def fetch_footprint(
         rating_low=min(ratings),
         rating_high=max(ratings),
     )
+
+
+def fetch_address_postal(
+    name: str,
+    city: str | None = None,
+    state: str | None = None,
+    *,
+    api_key: str | None = None,
+    timeout: float = 20.0,
+) -> str | None:
+    """Return the 9-digit postal code for a business via Google Places.
+
+    Used as a fallback when a practice has no NPI-2 record and we cannot
+    derive a location postal code from NPPES directly.
+    Returns None on any failure or name mismatch.
+    """
+    query = " ".join(p for p in (name, city, state) if p).strip()
+    key = _api_key(api_key)
+    if not key:
+        return None
+    try:
+        resp = httpx.post(
+            _SEARCH_TEXT,
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": key,
+                "X-Goog-FieldMask": "places.displayName,places.addressComponents",
+            },
+            json={"textQuery": query, "pageSize": 1},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("places", [])
+    except (httpx.HTTPError, ValueError):
+        return None
+
+    if not results:
+        return None
+
+    top = results[0]
+    found_name = (top.get("displayName") or {}).get("text", "")
+    if _name_match(name, found_name) == "none":
+        return None
+
+    components = top.get("addressComponents") or []
+    postal = next(
+        (c["longText"] for c in components if "postal_code" in (c.get("types") or [])),
+        None,
+    )
+    suffix = next(
+        (c["longText"] for c in components if "postal_code_suffix" in (c.get("types") or [])),
+        None,
+    )
+    if not postal:
+        return None
+    return f"{postal}{suffix}" if suffix else postal
