@@ -3242,7 +3242,7 @@ async function openPracticeDiscovery() {
       is_anchor: true,
     };
     const siblings = (_irCandidates || [])
-      .filter(c => c.name !== _irSelected.name)
+      .filter(c => c !== _irSelected)
       .map(c => ({
         name: c.name,
         city: _irResolvedCity,
