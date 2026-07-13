@@ -6,7 +6,7 @@ import re
 from collections import Counter
 from typing import Callable, Optional
 
-import requests as _requests
+import httpx as _httpx
 
 from .analyzer import _get_client, _MODEL, _clean
 
@@ -55,7 +55,7 @@ _PHYSICIAN_DISCOVER_TOOL = {
 
 def _nppes_get(params: dict) -> list[dict]:
     try:
-        r = _requests.get(_NPPES_API, params={"version": "2.1", **params}, timeout=15)
+        r = _httpx.get(_NPPES_API, params={"version": "2.1", **params}, timeout=15)
         r.raise_for_status()
         return r.json().get("results") or []
     except Exception:
