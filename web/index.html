@@ -1355,8 +1355,12 @@ html, body {
           </div>
           <!-- Available for both Hospital and Specialty Practice types -->
           <label class="aggregate-toggle" id="ir-practice-composite-wrap" style="margin-top:10px" title="Append a practice reputation table showing public ratings for associated practices and clinics.">
-            <input type="checkbox" id="ir-practice-composite">
+            <input type="checkbox" id="ir-practice-composite" onchange="onPracticeCompositeChange()">
             <span class="agg-label">Practice Composite</span>
+          </label>
+          <label class="aggregate-toggle" id="ir-physician-composite-wrap" style="margin-top:6px;margin-left:20px" title="Include physician-level reputation sub-rows under each practice in the composite table.">
+            <input type="checkbox" id="ir-physician-composite" disabled>
+            <span class="agg-label">Include Physicians in Composite</span>
           </label>
           <label class="aggregate-toggle" style="margin-top:10px" title="Collect and store analysis data without generating a PDF — useful for tracking AI visibility trends over time.">
             <input type="checkbox" id="ir-skip-pdf-toggle">
@@ -3165,7 +3169,7 @@ async function runIndividual() {
   await _submitIndividual();
 }
 
-async function _submitIndividual(practiceComposite = false, practiceRoster = []) {
+async function _submitIndividual(practiceComposite = false, practiceRoster = [], physicianRoster = {}) {
   const errEl = document.getElementById('ir-run-err');
   errEl.classList.add('hidden');
 
@@ -3173,9 +3177,10 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [])
     ? (document.getElementById('ir-specialty').value.trim() || null) : null;
   if (_irType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
 
-  const aggregate     = document.getElementById('ir-agg-toggle').checked;
-  const skip_pdf      = document.getElementById('ir-skip-pdf-toggle').checked;
-  const teaser_report = document.getElementById('ir-teaser-toggle').checked;
+  const aggregate          = document.getElementById('ir-agg-toggle').checked;
+  const skip_pdf           = document.getElementById('ir-skip-pdf-toggle').checked;
+  const teaser_report      = document.getElementById('ir-teaser-toggle').checked;
+  const physician_composite = practiceComposite && document.getElementById('ir-physician-composite')?.checked;
 
   const body = {
     city: _irResolvedCity,
@@ -3189,8 +3194,10 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [])
     skip_pdf,
     entity_type: _irType === 'specialty' ? 'practice' : null,
     practice_profile: _irType === 'specialty' ? (_irPracticeProfile || 'practice_procedural') : null,
-    practice_composite: practiceComposite,
-    practice_roster:    practiceRoster,
+    practice_composite:   practiceComposite,
+    practice_roster:      practiceRoster,
+    physician_composite,
+    physician_roster:     physician_composite ? physicianRoster : {},
   };
 
   const btn = document.getElementById('ir-run-btn');
@@ -3216,7 +3223,15 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [])
 
 // ── Practice Composite Discovery ──────────────────────────────────────────
 
-let _practiceRoster = [];   // {name, entity_type, city, state}
+let _practiceRoster = [];          // {name, entity_type, city, state}
+let _physicianRoster = {};         // {practice_name: [{name, npi, specialty, credential}]}
+
+function onPracticeCompositeChange() {
+  const checked = document.getElementById('ir-practice-composite').checked;
+  const phCb    = document.getElementById('ir-physician-composite');
+  phCb.disabled = !checked;
+  if (!checked) phCb.checked = false;
+}
 
 function irBackFromPracticeDiscovery() {
   document.getElementById('ir-step-practice-discovery').classList.add('hidden');
@@ -3232,6 +3247,7 @@ async function openPracticeDiscovery() {
 
   // Same Claude-based discovery for both hospital and specialty practice types
   btn.innerHTML = '<span class="spinner"></span> Discovering practices…';
+  _physicianRoster = {};
   try {
     const r = await api('/api/practice/discover', {
       method: 'POST',
@@ -3245,9 +3261,31 @@ async function openPracticeDiscovery() {
     if (!r.ok) throw new Error(await errDetail(r, 'Practice discovery failed'));
     const data = await r.json();
     _practiceRoster = (data.practices || []);
+
+    // If physician composite is checked, discover physicians for each non-hospital practice
+    if (document.getElementById('ir-physician-composite')?.checked) {
+      btn.innerHTML = '<span class="spinner"></span> Discovering physicians…';
+      const nonHospital = _practiceRoster.filter(p => (p.entity_type || 'practice') !== 'hospital');
+      if (nonHospital.length) {
+        const pr = await api('/api/physician/discover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ practices: nonHospital }),
+        });
+        if (pr.ok) {
+          const pd = await pr.json();
+          _physicianRoster = pd.physicians || {};
+        }
+      }
+    }
+
     _renderPracticeRoster();
-    document.getElementById('ir-pd-count').textContent =
-      `${_practiceRoster.length} practice${_practiceRoster.length !== 1 ? 's' : ''} discovered`;
+    const practiceCount = _practiceRoster.length;
+    const physicianCount = Object.values(_physicianRoster).reduce((s, v) => s + v.length, 0);
+    const scopeText = physicianCount
+      ? `${practiceCount} practice${practiceCount !== 1 ? 's' : ''} · ${physicianCount} physician${physicianCount !== 1 ? 's' : ''} discovered`
+      : `${practiceCount} practice${practiceCount !== 1 ? 's' : ''} discovered`;
+    document.getElementById('ir-pd-count').textContent = scopeText;
     document.getElementById('ir-step3').classList.add('hidden');
     document.getElementById('ir-step-practice-discovery').classList.remove('hidden');
     document.getElementById('ir-step-practice-discovery').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -3280,6 +3318,24 @@ function _renderPracticeRoster() {
         <td style="padding:8px 10px">${ent.city}, ${ent.state}</td>`;
     }
     tbody.appendChild(tr);
+
+    // Physician sub-rows under each non-hospital practice
+    const physicians = _physicianRoster[ent.name] || [];
+    if (physicians.length && (ent.entity_type || 'practice') !== 'hospital') {
+      physicians.forEach((ph, pi) => {
+        const phTr = document.createElement('tr');
+        phTr.style.borderBottom = '1px solid var(--border)';
+        phTr.style.background = '#fafcfc';
+        const displayName = (ph.credential === 'MD' || ph.credential === 'DO')
+          ? `Dr. ${ph.name}` : ph.name;
+        phTr.innerHTML = `
+          <td style="padding:6px 10px 6px 28px"><input type="checkbox" data-practice="${i}" data-ph="${pi}" checked></td>
+          <td style="padding:6px 10px;font-size:0.9em;color:#4a6568">${displayName}${ph.credential ? ` <span style="font-size:0.8em;color:#7a9095">${ph.credential}</span>` : ''}</td>
+          <td style="padding:6px 10px;font-size:0.85em;color:#7a9095;text-transform:capitalize">${ph.specialty || '—'}</td>
+          <td style="padding:6px 10px;font-size:0.85em;color:#7a9095">${ph.npi ? `NPI: ${ph.npi}` : ''}</td>`;
+        tbody.appendChild(phTr);
+      });
+    }
   });
 }
 
@@ -3287,15 +3343,29 @@ async function confirmPracticeRoster() {
   const errEl = document.getElementById('ir-pd-err');
   errEl.classList.add('hidden');
 
-  const checkboxes = document.querySelectorAll('#ir-pd-tbody input[type=checkbox]');
-  // Anchor rows are always included; non-anchor rows respect their checkbox state
+  // Collect practice checkboxes (only the first checkbox in each practice row)
+  const rows = Array.from(document.querySelectorAll('#ir-pd-tbody tr'));
+  const practiceCbs = document.querySelectorAll('#ir-pd-tbody input[data-idx]');
   const included = _practiceRoster.filter((ent, i) =>
-    ent.is_anchor || (checkboxes[i] && checkboxes[i].checked)
+    ent.is_anchor || (practiceCbs[i] && practiceCbs[i].checked)
   );
   if (included.length === 0) return showErr(errEl, 'Select at least one practice to include.');
 
+  // Collect confirmed physicians grouped by practice name
+  const confirmedPhysicians = {};
+  const phCbs = document.querySelectorAll('#ir-pd-tbody input[data-ph]');
+  phCbs.forEach(cb => {
+    const pi = parseInt(cb.dataset.ph);
+    const practiceIdx = parseInt(cb.dataset.practice);
+    const practiceName = _practiceRoster[practiceIdx]?.name;
+    if (!practiceName || !cb.checked) return;
+    if (!confirmedPhysicians[practiceName]) confirmedPhysicians[practiceName] = [];
+    const roster = _physicianRoster[practiceName] || [];
+    if (roster[pi]) confirmedPhysicians[practiceName].push(roster[pi]);
+  });
+
   document.getElementById('ir-step-practice-discovery').classList.add('hidden');
-  await _submitIndividual(true, included);
+  await _submitIndividual(true, included, confirmedPhysicians);
 }
 
 // ── Manual run ────────────────────────────────────────────────────────────

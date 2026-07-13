@@ -481,6 +481,8 @@ def analyze_location(
     skip_pdf: bool = False,
     practice_composite: bool = False,
     practice_roster: list[dict] | None = None,
+    physician_composite: bool = False,
+    physician_roster: dict | None = None,
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -722,6 +724,24 @@ def analyze_location(
             roster, entity_name, city, state, on_event=emit
         )
 
+        if physician_composite and result.practice_composite_rows:
+            emit({"type": "phase", "name": "physician_reputation", "text": "Collecting physician reputation"})
+            from .physician_discovery import discover_physicians
+            from .physician_reputation import collect_physician_data
+            confirmed = physician_roster or {}
+            for prow in result.practice_composite_rows:
+                if prow.get("entity_type") == "hospital":
+                    continue
+                pname = prow["practice_name"]
+                physicians = confirmed.get(pname) or discover_physicians(
+                    pname, prow.get("city") or city, prow.get("state") or state, on_event=emit
+                )
+                if physicians:
+                    prow["physicians"] = collect_physician_data(
+                        physicians, pname, prow.get("city") or city, prow.get("state") or state, on_event=emit
+                    )
+                    result.physician_composite_rows.extend(prow["physicians"])
+
     # Save markdown + PDF
     _type = specialty.replace(" ", "-") if specialty else "Hospitals"
     _ts   = datetime.utcnow().strftime("%y%m%d-%H%M")
@@ -759,7 +779,10 @@ def analyze_location(
 
     if result.practice_composite_rows:
         from .practice_reputation import save_practice_reputation
-        save_practice_reputation(result.run_id, result.practice_composite_rows)
+        from .physician_reputation import save_physician_reputation
+        rep_run_id = save_practice_reputation(result.run_id, result.practice_composite_rows)
+        if result.physician_composite_rows and rep_run_id:
+            save_physician_reputation(rep_run_id, result.physician_composite_rows)
 
     emit({"type": "phase", "name": "done_item", "text": "Complete"})
     return result

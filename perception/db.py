@@ -292,6 +292,44 @@ def init_db() -> None:
         )
     """)
 
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS practice_reputation_physicians (
+            id                   VARCHAR PRIMARY KEY,
+            rep_run_id           VARCHAR NOT NULL,
+            parent_entity        VARCHAR,
+            physician_name       VARCHAR NOT NULL,
+            npi                  VARCHAR,
+            specialty            VARCHAR,
+            credential           VARCHAR,
+            not_established      BOOLEAN DEFAULT FALSE,
+            avg_rating           DOUBLE,
+            total_reviews        INTEGER DEFAULT 0,
+            platforms_found      INTEGER DEFAULT 0,
+            platforms_list       VARCHAR DEFAULT '',
+            collection_date      DATE,
+            google_rating        DOUBLE,
+            google_count         INTEGER,
+            google_url           VARCHAR,
+            healthgrades_rating  DOUBLE,
+            healthgrades_count   INTEGER,
+            healthgrades_url     VARCHAR,
+            vitals_rating        DOUBLE,
+            vitals_count         INTEGER,
+            vitals_url           VARCHAR,
+            webmd_rating         DOUBLE,
+            webmd_count          INTEGER,
+            webmd_url            VARCHAR,
+            yelp_rating          DOUBLE,
+            yelp_count           INTEGER,
+            yelp_url             VARCHAR,
+            ratemds_rating       DOUBLE,
+            ratemds_count        INTEGER,
+            ratemds_url          VARCHAR,
+            primary_url          VARCHAR,
+            created_at           TIMESTAMP
+        )
+    """)
+
     # Migrate practice_reputation_practices to add URL columns (added in v2)
     _pr_cols = {r[0] for r in con.execute(
         "SELECT column_name FROM information_schema.columns "

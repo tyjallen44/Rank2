@@ -219,6 +219,8 @@ def _job_run_single(
             skip_pdf=job.get("skip_pdf", False),
             practice_composite=job.get("practice_composite", False),
             practice_roster=job.get("practice_roster") or [],
+            physician_composite=job.get("physician_composite", False),
+            physician_roster=job.get("physician_roster") or {},
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -266,6 +268,8 @@ def _job_run_practice(
             skip_pdf=job.get("skip_pdf", False),
             practice_composite=job.get("practice_composite", False),
             practice_roster=job.get("practice_roster") or [],
+            physician_composite=job.get("physician_composite", False),
+            physician_roster=job.get("physician_roster") or {},
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -370,6 +374,8 @@ class AnalyzeRequest(BaseModel):
     practice_profile: Optional[str] = None  # override auto-classified profile
     practice_composite: bool = False        # append practice reputation table
     practice_roster: List[dict] = []        # confirmed practice list for reputation collection
+    physician_composite: bool = False       # include physician sub-rows in practice composite
+    physician_roster: dict = {}             # {practice_name: [{name, npi, specialty, credential}]}
 
 
 class BatchRequest(BaseModel):
@@ -429,6 +435,8 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["practice_profile"] = req.practice_profile
     _jobs[job_id]["practice_composite"] = req.practice_composite
     _jobs[job_id]["practice_roster"] = req.practice_roster
+    _jobs[job_id]["physician_composite"] = req.physician_composite
+    _jobs[job_id]["physician_roster"] = req.physician_roster
 
     if req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)
@@ -1306,6 +1314,35 @@ async def practice_discover(
         return {"practices": practices, "count": len(practices)}
     except Exception as exc:
         raise HTTPException(500, f"Practice discovery error: {exc}")
+
+
+class PhysicianDiscoverRequest(BaseModel):
+    practices: List[dict]   # [{name, entity_type, city, state}] — hospital rows are skipped
+
+
+@app.post("/api/physician/discover")
+async def physician_discover(
+    req: PhysicianDiscoverRequest,
+    _: str = Depends(require_auth),
+):
+    """Discover physicians for each non-hospital practice in the roster."""
+    try:
+        from perception.db import init_db
+        from perception.physician_discovery import discover_physicians
+        init_db()
+        result: dict[str, list] = {}
+        for p in req.practices:
+            if (p.get("entity_type") or "practice") == "hospital":
+                continue
+            name  = p.get("name", "")
+            city  = _normalize_input(p.get("city", ""))
+            state = (p.get("state") or "").strip().upper()
+            if not name:
+                continue
+            result[name] = discover_physicians(name, city, state)
+        return {"physicians": result}
+    except Exception as exc:
+        raise HTTPException(500, f"Physician discovery error: {exc}")
 
 
 # ── Frontend (catch-all — must be last) ───────────────────────────────────────

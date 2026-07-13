@@ -2623,6 +2623,23 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
       <td style="padding:9px 12px;font-size:8pt;color:{M}">{_e(collection)}</td>
     </tr>"""
 
+        # ── Physician sub-rows (sorted by total_reviews desc) ────────────────
+        physicians = sorted(
+            row.get("physicians") or [],
+            key=lambda p: (p.get("not_established", False), -(p.get("total_reviews") or 0)),
+        )
+        for ph in physicians:
+            ph_name = _e(ph.get("physician_name", ""))
+            ph_coll = ph.get("collection_date", "")
+            rows_html += f"""
+    <tr style="border-bottom:1px solid {BD};background:#fafcfc">
+      <td style="padding:6px 12px 6px 28px;font-size:9pt;color:#4a6568">{ph_name}</td>
+      <td style="padding:6px 12px;font-size:9pt">{_rating_cell(ph)}</td>
+      <td style="padding:6px 12px;text-align:right;font-size:9pt">{ph.get('total_reviews') or '&#8212;'}</td>
+      <td style="padding:6px 12px;font-size:9pt">{_platforms_cell(ph)}</td>
+      <td style="padding:6px 12px;font-size:8pt;color:{M}">{_e(ph_coll)}</td>
+    </tr>"""
+
     if no_affiliates:
         rows_html += f"""
     <tr style="border-bottom:1px solid {BD}">
