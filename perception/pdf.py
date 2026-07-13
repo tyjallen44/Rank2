@@ -2593,6 +2593,12 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
     )
     rows = anchor_rows_sorted + other_rows_sorted
 
+    # Oldest collection date across practice rows + physician sub-rows; used in disclaimer.
+    _all_dates = [r.get("collection_date", "") for r in rows]
+    for r in rows:
+        _all_dates += [ph.get("collection_date", "") for ph in (r.get("physicians") or [])]
+    _oldest_date = min((d for d in _all_dates if d), default="")
+
     has_anchor = bool(anchor_rows_sorted)
     non_anchor_rows = other_rows_sorted
     no_affiliates = has_anchor and len(non_anchor_rows) == 0
@@ -2666,12 +2672,21 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
         "Platforms: Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs (Zocdoc excluded)."
     )
 
+    _disclaimer_text = (
+        "Reputation data reflects publicly available ratings and reviews at the time of "
+        "collection and may lag current values. Results gathered via AI models may "
+        "additionally be limited by those models’ training data dates. "
+        "Ratings shown are point-in-time and are not updated in real time."
+    )
+    _date_suffix = f" (data collected as of {_e(_oldest_date)})" if _oldest_date else ""
+
     return f"""
 <div style="margin-top:32px">
   <div style="font-size:12pt;font-weight:700;color:{T};margin-bottom:6px">
     Practice Composite &#8212; Associated Practice Reputation
   </div>
   <p style="font-size:9pt;color:{M};margin-bottom:14px">{_e(intro)}</p>
+  <p style="font-size:8.5pt;color:{M};font-style:italic;margin-bottom:12px">{_disclaimer_text}{_date_suffix}</p>
   <table style="width:100%;border-collapse:collapse;font-size:10pt">
     <thead>
       <tr style="background:{T};color:#fff;font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:0.06em">

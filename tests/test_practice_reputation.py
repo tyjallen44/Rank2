@@ -603,3 +603,85 @@ def test_anchor_intro_text_differs_from_hospital():
     practice_html = _practice_reputation_table_html(practice_rows)
     # They must not be identical (different intro copy)
     assert hospital_html != practice_html
+
+
+# ── Disclaimer ────────────────────────────────────────────────────────────────
+
+_DISCLAIMER_FRAGMENT = "Ratings shown are point-in-time and are not updated in real time."
+
+
+def test_disclaimer_present_in_basic_table():
+    """Disclaimer must appear in every table regardless of anchor/hospital mode."""
+    from perception.pdf import _practice_reputation_table_html
+    for rows in (
+        [_make_row()],                  # hospital-style (no anchor)
+        [_make_anchor_row()],           # practice-style (anchor only)
+        [_make_anchor_row(), _make_row(practice_name="Sibling")],  # anchor + sibling
+    ):
+        html = _practice_reputation_table_html(rows)
+        assert _DISCLAIMER_FRAGMENT in html, "Disclaimer missing from table HTML"
+
+
+def test_disclaimer_appears_before_table_tag():
+    """Disclaimer paragraph must come before the <table> element."""
+    from perception.pdf import _practice_reputation_table_html
+    html = _practice_reputation_table_html([_make_row()])
+    disclaimer_pos = html.index(_DISCLAIMER_FRAGMENT)
+    table_pos = html.index("<table")
+    assert disclaimer_pos < table_pos
+
+
+def test_disclaimer_uses_oldest_date_with_mixed_dates():
+    """When rows have different collection dates the disclaimer shows the oldest."""
+    from perception.pdf import _practice_reputation_table_html
+    newer = _make_row(practice_name="Newer", collection_date="2026-07-13")
+    older = _make_row(practice_name="Older", collection_date="2026-06-01")
+    html = _practice_reputation_table_html([newer, older])
+    assert "2026-06-01" in html
+    assert "data collected as of" in html
+
+
+def test_disclaimer_oldest_date_includes_physician_sub_rows():
+    """Oldest date must consider physician sub-row collection dates too."""
+    from perception.pdf import _practice_reputation_table_html
+    row = _make_row(collection_date="2026-07-10", physicians=[
+        {"physician_name": "Dr. A", "not_established": False,
+         "avg_rating": 4.0, "total_reviews": 10, "platforms_found": 1,
+         "platforms_list": "Google", "platform_entries": None,
+         "collection_date": "2026-05-15"},
+    ])
+    html = _practice_reputation_table_html([row])
+    assert "2026-05-15" in html
+
+
+def test_disclaimer_no_date_suffix_when_no_dates():
+    """When no collection_date is present the disclaimer still renders, just without the suffix."""
+    from perception.pdf import _practice_reputation_table_html
+    row = _make_row(collection_date="")
+    html = _practice_reputation_table_html([row])
+    assert _DISCLAIMER_FRAGMENT in html
+    assert "data collected as of" not in html
+
+
+def test_disclaimer_and_staleness_footer_both_present():
+    """Both the disclaimer (above table) and the 90-day footer (below table) must coexist."""
+    from perception.pdf import _practice_reputation_table_html
+    html = _practice_reputation_table_html([_make_row()], run_date="2026-07-13")
+    assert _DISCLAIMER_FRAGMENT in html
+    assert "90" in html
+
+
+def test_table_content_unchanged_by_disclaimer():
+    """Regression: platform links, ratings, and review counts are unaffected."""
+    from perception.pdf import _practice_reputation_table_html
+    rows = [_make_row(
+        practice_name="Regression Clinic",
+        avg_rating=4.5, total_reviews=999,
+        platform_entries=[("google", 999, "https://maps.google.com/?cid=1")],
+        platforms_found=1,
+    )]
+    html = _practice_reputation_table_html(rows)
+    assert "Regression Clinic" in html
+    assert "4.5" in html
+    assert "999" in html
+    assert 'href="https://maps.google.com/?cid=1"' in html
