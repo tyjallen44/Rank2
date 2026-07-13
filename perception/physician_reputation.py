@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import json
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from typing import Callable, Optional
 
 from .analyzer import _get_client, _MODEL
+from .data import places as _places
 from .db import get_connection
 from .practice_reputation import _weighted_average, _strip_tracking, _PLATFORMS
 
@@ -92,6 +94,38 @@ def collect_physician_data(
 
     emit({"type": "text", "text": f"Collecting reputation for {len(physicians)} physician(s) at {practice_name}…"})
 
+    # ── Google Places lookup (real-time, one API call per physician) ──────────
+    def _google_lookup(ph: dict) -> tuple[str, float | None, int | None, str | None]:
+        """Return (name, rating, count, maps_url) via Google Places."""
+        name = ph["name"]
+        cred = (ph.get("credential") or "").upper()
+        display = f"Dr. {name}" if cred in ("MD", "DO") else name
+        last = name.split()[-1].lower()
+
+        # Try with practice name first (disambiguates common physician names)
+        for name_q, city_q in [
+            (display, f"{practice_name} {city}"),
+            (display, city),
+        ]:
+            read, _ = _places.fetch_provider(name_q, city_q, state)
+            if read.verified and read.rating is not None:
+                if last in (read.matched_name or "").lower():
+                    return name, read.rating, read.review_count, read.maps_url
+        return name, None, None, None
+
+    google_data: dict[str, tuple] = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futs = {pool.submit(_google_lookup, ph): ph["name"] for ph in physicians}
+        for fut in as_completed(futs):
+            name, rating, count, url = fut.result()
+            google_data[name] = (rating, count, url)
+
+    emit({"type": "text",
+          "text": f"Google lookups complete: "
+                  f"{sum(1 for v in google_data.values() if v[0] is not None)} "
+                  f"of {len(physicians)} physicians found on Google."})
+
+    # ── Claude for non-Google platforms (Healthgrades, Vitals, WebMD, etc.) ──
     def _physician_line(ph: dict) -> str:
         parts = [ph["name"]]
         if ph.get("credential"):
@@ -103,48 +137,48 @@ def collect_physician_data(
         parts.append(f"at {practice_name}, {city}, {state}")
         return "- " + " ".join(parts)
 
-    physician_list = "\n".join(_physician_line(ph) for ph in physicians)
-
-    prompt = (
-        f"You are a healthcare data analyst researching physician reputation profiles "
-        f"for providers at {practice_name} in {city}, {state}.\n\n"
-        f"For each physician listed below, find their individual ratings and review "
-        f"counts on Healthgrades, Vitals, WebMD, RateMDs, Yelp (physician-specific "
-        f"listings only — never a practice's Yelp page), and Google (physician-specific "
-        f"Business Profiles only).\n\n"
-        f"CRITICAL IDENTITY RULE — only attribute a profile when you can confirm "
-        f"AT LEAST 2 of these 3 factors:\n"
-        f"  1. NPI number matches the NPI in the profile or URL\n"
-        f"  2. Exact name + specialty match\n"
-        f"  3. Practice name or location matches the profile listing\n"
-        f"When fewer than 2 factors are confirmed, set all fields for that platform "
-        f"to null — never attach an uncertain or common-name-collision profile.\n\n"
-        f"Physicians:\n{physician_list}\n\n"
-        f"Use null for any rating, count, or URL you cannot confirm. "
-        f"Use the physician's name exactly as listed as the 'name' field in your response.\n\n"
-        f"Call submit_physician_reputation with your findings."
-    )
-
-    try:
-        with _get_client().messages.stream(
-            model=_MODEL,
-            max_tokens=6000,
-            tools=[_PHYSICIAN_REPUTATION_TOOL],
-            tool_choice={"type": "tool", "name": "submit_physician_reputation"},
-            messages=[{"role": "user", "content": prompt}],
-        ) as stream:
-            response = stream.get_final_message()
-
-        platform_data: dict[str, dict] = {}
-        for block in response.content:
-            if block.type == "tool_use" and block.name == "submit_physician_reputation":
-                raw = block.input if isinstance(block.input, dict) else json.loads(block.input)
-                for entry in raw.get("physicians") or []:
-                    name = entry.get("name", "")
-                    platform_data[name] = entry
-                break
-    except Exception:
-        platform_data = {}
+    platform_data: dict[str, dict] = {}
+    _BATCH = 10
+    for i in range(0, len(physicians), _BATCH):
+        batch = physicians[i:i + _BATCH]
+        physician_list = "\n".join(_physician_line(ph) for ph in batch)
+        prompt = (
+            f"You are a healthcare data analyst researching physician reputation profiles "
+            f"for providers at {practice_name} in {city}, {state}.\n\n"
+            f"For each physician listed below, find their individual ratings and review "
+            f"counts on Healthgrades, Vitals, WebMD, RateMDs, and Yelp (physician-specific "
+            f"listings only — never a practice's Yelp page). "
+            f"Do NOT include Google — Google data is already collected separately.\n\n"
+            f"CRITICAL IDENTITY RULE — only attribute a profile when you can confirm "
+            f"AT LEAST 2 of these 3 factors:\n"
+            f"  1. NPI number matches the NPI in the profile or URL\n"
+            f"  2. Exact name + specialty match\n"
+            f"  3. Practice name or location matches the profile listing\n"
+            f"When fewer than 2 factors are confirmed, set all fields for that platform "
+            f"to null — never attach an uncertain or common-name-collision profile.\n\n"
+            f"Physicians:\n{physician_list}\n\n"
+            f"Use null for any rating, count, or URL you cannot confirm. "
+            f"Use the physician's name exactly as listed as the 'name' field in your response.\n\n"
+            f"Call submit_physician_reputation with your findings."
+        )
+        try:
+            with _get_client().messages.stream(
+                model=_MODEL,
+                max_tokens=4000,
+                tools=[_PHYSICIAN_REPUTATION_TOOL],
+                tool_choice={"type": "tool", "name": "submit_physician_reputation"},
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                response = stream.get_final_message()
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "submit_physician_reputation":
+                    raw = block.input if isinstance(block.input, dict) else json.loads(block.input)
+                    for entry in raw.get("physicians") or []:
+                        pname = entry.get("name", "")
+                        platform_data[pname] = entry
+                    break
+        except Exception:
+            pass
 
     today = date.today()
     results: list[dict] = []
@@ -153,14 +187,20 @@ def collect_physician_data(
         name = ph["name"]
         pd = platform_data.get(name) or {}
 
+        # Inject Places API Google data (overrides any Claude-produced Google fields)
+        g_rating, g_count, g_url = google_data.get(name, (None, None, None))
+
         pairs: list[tuple] = []
         platforms_found: list[str] = []
         platform_entries: list[tuple[str, int, Optional[str]]] = []
 
         for platform in _PHYSICIAN_PLATFORMS:
-            r = pd.get(f"{platform}_rating")
-            c = pd.get(f"{platform}_count")
-            u = _strip_tracking(pd.get(f"{platform}_url"))
+            if platform == "google":
+                r, c, u = g_rating, g_count, g_url
+            else:
+                r = pd.get(f"{platform}_rating")
+                c = pd.get(f"{platform}_count")
+                u = _strip_tracking(pd.get(f"{platform}_url"))
             if r is not None and c:
                 pairs.append((float(r), int(c)))
                 label = "WebMD" if platform == "webmd" else platform.capitalize()
@@ -194,9 +234,9 @@ def collect_physician_data(
             "platforms_list":      ", ".join(platforms_found),
             "platform_entries":    platform_entries,
             "collection_date":     today.isoformat(),
-            "google_rating":       pd.get("google_rating"),
-            "google_count":        pd.get("google_count"),
-            "google_url":          _strip_tracking(pd.get("google_url")),
+            "google_rating":       g_rating,
+            "google_count":        g_count,
+            "google_url":          g_url,
             "healthgrades_rating": pd.get("healthgrades_rating"),
             "healthgrades_count":  pd.get("healthgrades_count"),
             "healthgrades_url":    _strip_tracking(pd.get("healthgrades_url")),

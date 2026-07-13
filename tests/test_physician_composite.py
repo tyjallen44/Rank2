@@ -8,6 +8,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from unittest.mock import MagicMock
+from perception.data.places import GoogleRead, Footprint
+
+# Stub that makes all Google Places lookups return "not found"
+_NO_GOOGLE = lambda *a, **kw: (
+    GoogleRead(query="", verified=False, reason="mocked"),
+    Footprint(query=""),
+)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -137,6 +144,7 @@ def test_identity_collision_returns_null_for_ambiguous_profile(monkeypatch):
          "google_rating": None, "google_count": None, "google_url": None},
     ]
     monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock_physician(payload))
+    monkeypatch.setattr(pr._places, "fetch_provider", _NO_GOOGLE)
 
     results = pr.collect_physician_data(
         physicians, "Test Cardiology", "Memphis", "TN"
@@ -166,6 +174,7 @@ def test_corroborated_physician_gets_profile(monkeypatch):
         "google_rating": None, "google_count": None, "google_url": None,
     }]
     monkeypatch.setattr(pr, "_get_client", lambda: _make_stream_mock_physician(payload))
+    monkeypatch.setattr(pr._places, "fetch_provider", _NO_GOOGLE)
 
     results = pr.collect_physician_data(physicians, "Test Oncology", "Memphis", "TN")
     assert len(results) == 1
