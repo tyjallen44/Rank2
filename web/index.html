@@ -3228,9 +3228,42 @@ async function openPracticeDiscovery() {
   const btn    = document.getElementById('ir-run-btn');
   const errEl  = document.getElementById('ir-run-err');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Discovering practices…';
   errEl.classList.add('hidden');
 
+  // For specialty practice, build the roster directly from the candidates already
+  // returned by the Google Places search — no additional Claude call needed.
+  // The selected entity is the anchor; all other candidates are siblings.
+  if (_irType === 'specialty') {
+    const anchor = {
+      name: _irSelected.name,
+      city: _irResolvedCity,
+      state: _irResolvedState,
+      entity_type: 'practice',
+      is_anchor: true,
+    };
+    const siblings = (_irCandidates || [])
+      .filter(c => c.name !== _irSelected.name)
+      .map(c => ({
+        name: c.name,
+        city: _irResolvedCity,
+        state: _irResolvedState,
+        entity_type: 'practice',
+      }));
+    _practiceRoster = [anchor, ...siblings];
+    _renderPracticeRoster();
+    const siblingCount = siblings.length;
+    document.getElementById('ir-pd-count').textContent =
+      `${siblingCount} affiliated entit${siblingCount !== 1 ? 'ies' : 'y'} discovered`;
+    document.getElementById('ir-step3').classList.add('hidden');
+    document.getElementById('ir-step-practice-discovery').classList.remove('hidden');
+    document.getElementById('ir-step-practice-discovery').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    btn.disabled = false;
+    btn.innerHTML = 'Run Individual Report →';
+    return;
+  }
+
+  // For hospital type, call Claude-based discovery
+  btn.innerHTML = '<span class="spinner"></span> Discovering practices…';
   try {
     const r = await api('/api/practice/discover', {
       method: 'POST',
@@ -3239,18 +3272,15 @@ async function openPracticeDiscovery() {
         entity_name: _irSelected.name,
         city:        _irResolvedCity,
         state:       _irResolvedState,
-        entity_type: _irType === 'specialty' ? 'practice' : 'hospital',
+        entity_type: 'hospital',
       }),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Practice discovery failed'));
     const data = await r.json();
     _practiceRoster = (data.practices || []);
     _renderPracticeRoster();
-    const siblingCount = _practiceRoster.filter(e => !e.is_anchor).length;
-    const isSpecialty = _irType === 'specialty';
-    document.getElementById('ir-pd-count').textContent = isSpecialty
-      ? `${siblingCount} affiliated entit${siblingCount !== 1 ? 'ies' : 'y'} discovered`
-      : `${_practiceRoster.length} practice${_practiceRoster.length !== 1 ? 's' : ''} discovered`;
+    document.getElementById('ir-pd-count').textContent =
+      `${_practiceRoster.length} practice${_practiceRoster.length !== 1 ? 's' : ''} discovered`;
     document.getElementById('ir-step3').classList.add('hidden');
     document.getElementById('ir-step-practice-discovery').classList.remove('hidden');
     document.getElementById('ir-step-practice-discovery').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
