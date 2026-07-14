@@ -352,6 +352,32 @@ def init_db() -> None:
             except Exception:
                 pass
 
+    # ── Practice entity registry ──────────────────────────────────────────────
+    # Caches the sibling roster discovered for each anchor practice so that
+    # back-to-back runs produce an identical entity list.  Keyed on a
+    # normalised "{entity_name}|{city}|{state}" anchor string.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS practice_entity_registry (
+            id            VARCHAR PRIMARY KEY,
+            anchor_key    VARCHAR NOT NULL,
+            name          VARCHAR NOT NULL,
+            entity_type   VARCHAR NOT NULL DEFAULT 'practice',
+            city          VARCHAR,
+            state         VARCHAR,
+            canonical_name VARCHAR,
+            registered_at TIMESTAMP NOT NULL,
+            expires_at    TIMESTAMP NOT NULL
+        )
+    """)
+    # Index for fast anchor-key lookup
+    try:
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_per_anchor_key "
+            "ON practice_entity_registry (anchor_key)"
+        )
+    except Exception:
+        pass
+
     con.execute("""
         CREATE TABLE IF NOT EXISTS tracked_entities (
             id           VARCHAR PRIMARY KEY,

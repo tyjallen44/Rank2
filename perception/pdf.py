@@ -102,6 +102,17 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
 
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
     html = _build_html(result, cfg)
+    # Practice-report validation: hospital-only signals must never appear in the body.
+    if result.entity_type == "practice":
+        import sys as _sys
+        _forbidden = ("Leapfrog", "CMS Overall Star", "HCAHPS")
+        for _phrase in _forbidden:
+            if _phrase in html:
+                print(
+                    f"[pdf] ASSERTION: practice report contains hospital-only signal "
+                    f"'{_phrase}' — review _outcomes_safety_weaknesses and prompt filters",
+                    file=_sys.stderr,
+                )
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -381,7 +392,12 @@ def _outcomes_data_status(p: RankedProvider) -> tuple[bool, bool]:
 
 
 def _outcomes_safety_weaknesses(p: RankedProvider) -> list[str]:
-    """When both Leapfrog and CMS data are absent, return items for Areas for Improvement."""
+    """When both Leapfrog and CMS data are absent, return items for Areas for Improvement.
+
+    Returns empty list for practice reports — hospital-only signals are not applicable.
+    """
+    if getattr(p, "report_type", "hospital") == "practice":
+        return []
     has_leapfrog, has_cms = _outcomes_data_status(p)
     if has_leapfrog or has_cms:
         return []

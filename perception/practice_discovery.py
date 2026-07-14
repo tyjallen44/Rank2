@@ -110,6 +110,7 @@ def discover_practice_siblings(
     city: str,
     state: str,
     on_event: Optional[Callable] = None,
+    force_rerun: bool = False,
 ) -> list[dict]:
     """
     Use Claude to discover sibling practices, clinics, and hospitals that share
@@ -117,10 +118,29 @@ def discover_practice_siblings(
 
     Returns sibling entities ONLY — the anchor practice itself is NOT included.
     Returns [] if no parent organization can be established (true independent).
+
+    Results are persisted in the entity registry (90-day TTL).  Subsequent calls
+    with the same anchor return the cached roster without calling the LLM.
+    Pass force_rerun=True to bypass the cache and regenerate.
     """
+    from .entity_registry import (
+        get_registry_siblings,
+        save_registry_siblings,
+        expire_registry,
+    )
+
     def emit(e: dict) -> None:
         if on_event:
             on_event(e)
+
+    if force_rerun:
+        expire_registry(entity_name, city, state)
+    else:
+        cached = get_registry_siblings(entity_name, city, state)
+        if cached is not None:
+            emit({"type": "text",
+                  "text": f"Using registry: {len(cached)} affiliated entities for {entity_name}"})
+            return cached
 
     client = _get_client()
     prompt = (
@@ -167,5 +187,6 @@ def discover_practice_siblings(
             "state": p.get("state") or state,
         })
 
+    save_registry_siblings(entity_name, city, state, siblings)
     emit({"type": "text", "text": f"Found {len(siblings)} affiliated entities."})
     return siblings

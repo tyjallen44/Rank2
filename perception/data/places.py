@@ -303,7 +303,7 @@ def fetch_provider(
 
     if rating is None or match == "none":
         reason = (
-            f"closest listing '{found_name}' is a weak match — likely a different business"
+            f"closest listing '{found_name}' is a no-match — likely a different business"
             if rating is not None else
             f"listing '{found_name}' has no Google rating"
         )

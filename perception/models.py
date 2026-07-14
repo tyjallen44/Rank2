@@ -169,6 +169,8 @@ class RankedProvider(BaseModel):
     ai_says: str = ""                              # how AI assistants currently describe this provider
     trauma_level: Optional[str] = None            # "Level I" / "Level II" / "Level III"
     teaching_status: Optional[str] = None         # "major" / "minor" / "not_teaching"
+    # "hospital" (default) or "practice" — gates hospital-only signal injection in PDF
+    report_type: str = "hospital"
     # Practice Edition derived metrics (None for hospital runs)
     entity_resolution_pct: Optional[float] = None   # % of runs resolving the correct practice
     linkage_integrity_pct: Optional[float] = None   # % of physician runs correctly linked

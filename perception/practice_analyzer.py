@@ -430,6 +430,7 @@ def _build_practice_provider(r: dict, run_profile: str) -> RankedProvider:
         ai_says=r.get("ai_says") or "",
         trauma_level=r.get("trauma_level") or None,
         teaching_status=r.get("teaching_status") or None,
+        report_type="practice",
     )
 
 
@@ -740,26 +741,29 @@ def analyze_practice(
         }
         sibling_roster = list(practice_roster or [])
         if not sibling_roster:
-            sibling_roster = discover_practice_siblings(entity_name, city, state, on_event=emit)
+            sibling_roster = discover_practice_siblings(
+                entity_name, city, state,
+                on_event=emit,
+                force_rerun=force_rerun,
+            )
 
         # Drop siblings that resolve to the anchor entity (prevents duplicate rows in
         # the composite table when Claude names a location variant of the anchor).
-        # Uses bidirectional token-overlap when the anchor name contains digits (street
-        # address embedded) — avoids over-dropping when the anchor is a plain org name.
+        # Bidirectional AND: both directions must score "strong" (≥0.6 token overlap)
+        # to drop a sibling.  This correctly catches location-suffix/label variants
+        # ("-  Desert Inn", "(Main Office)") while keeping siblings with a genuinely
+        # distinct location qualifier ("Summerlin", "West Campus").  The check is
+        # unconditional — the anchor name need not contain digits.
         from .data.places import _name_match as _nmatch
-        import re as _re
         _anchor_lc = entity_name.strip().lower()
-        _anchor_has_address = bool(_re.search(r'\d', entity_name))
 
         def _is_anchor_duplicate(sibling_name: str) -> bool:
             if sibling_name.strip().lower() == _anchor_lc:
                 return True
-            if _anchor_has_address:
-                return (
-                    _nmatch(entity_name, sibling_name) == "strong"
-                    and _nmatch(sibling_name, entity_name) == "strong"
-                )
-            return False
+            return (
+                _nmatch(entity_name, sibling_name) == "strong"
+                and _nmatch(sibling_name, entity_name) == "strong"
+            )
 
         deduped: list[dict] = []
         seen_names: set[str] = set()

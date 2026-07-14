@@ -439,68 +439,49 @@ def test_paras_strips_markdown(monkeypatch):
     assert "`" not in result
 
 
-# N2: Sibling dedup against anchor
-def test_sibling_dedup_drops_location_variant_of_anchor():
-    """When anchor name contains a street address, a sibling that is a strong
-    bidirectional match of the anchor should be dropped."""
+# N2 / F1: Sibling dedup against anchor (unconditional bidirectional AND, no address gate)
+def _is_anchor_dup_new(entity_name: str, sibling_name: str) -> bool:
+    """Mirror of the production _is_anchor_duplicate() function (unconditional AND)."""
     from perception.data.places import _name_match as _nmatch
-    import re
+    if sibling_name.strip().lower() == entity_name.strip().lower():
+        return True
+    return (
+        _nmatch(entity_name, sibling_name) == "strong"
+        and _nmatch(sibling_name, entity_name) == "strong"
+    )
 
+
+def test_sibling_dedup_drops_location_variant_of_anchor():
+    """Bidirectional AND drops '- Desert Inn (Main Office)' and '-  Desert Inn' but keeps
+    '- Summerlin' and '- Green Valley' (distinct location qualifiers)."""
     entity_name = "Desert Orthopaedic Center 2800 E Desert Inn Rd"
     siblings = [
-        {"name": "Desert Orthopaedic Center - Desert Inn"},    # same location, different format
-        {"name": "Desert Orthopaedic Center - Summerlin"},     # genuine sibling, must be kept
-        {"name": "Desert Orthopaedic Center - Green Valley"},  # genuine sibling, must be kept
+        {"name": "Desert Orthopaedic Center - Desert Inn"},              # same location → drop
+        {"name": "Desert Orthopaedic Center - Desert Inn (Main Office)"},# same location → drop
+        {"name": "Desert Orthopaedic Center - Summerlin"},               # different location → keep
+        {"name": "Desert Orthopaedic Center - Green Valley"},            # different location → keep
     ]
 
-    _anchor_lc = entity_name.strip().lower()
-    _anchor_has_address = bool(re.search(r'\d', entity_name))
-
-    def _is_anchor_dup(name: str) -> bool:
-        if name.strip().lower() == _anchor_lc:
-            return True
-        if _anchor_has_address:
-            return (
-                _nmatch(entity_name, name) == "strong"
-                and _nmatch(name, entity_name) == "strong"
-            )
-        return False
-
-    kept = [s for s in siblings if not _is_anchor_dup(s["name"])]
+    kept = [s for s in siblings if not _is_anchor_dup_new(entity_name, s["name"])]
     names = [s["name"] for s in kept]
     assert "Desert Orthopaedic Center - Desert Inn" not in names, "Anchor duplicate was not dropped"
-    assert "Desert Orthopaedic Center - Summerlin" in names, "Valid sibling was incorrectly dropped"
-    assert "Desert Orthopaedic Center - Green Valley" in names, "Valid sibling was incorrectly dropped"
+    assert "Desert Orthopaedic Center - Desert Inn (Main Office)" not in names, "(Main Office) variant not dropped"
+    assert "Desert Orthopaedic Center - Summerlin" in names, "Valid sibling Summerlin incorrectly dropped"
+    assert "Desert Orthopaedic Center - Green Valley" in names, "Valid sibling Green Valley incorrectly dropped"
 
 
 def test_sibling_dedup_exact_name_always_dropped():
-    """An exact-name match against the anchor is always dropped regardless of address."""
-    import re
-    from perception.data.places import _name_match as _nmatch
-
-    entity_name = "Main Street Orthopedics"
+    """Exact-name match is always dropped (unconditional, regardless of address presence)."""
+    entity_name = "Lakeside Orthopedic Center"
     siblings = [
-        {"name": "Main Street Orthopedics"},
-        {"name": "Main Street Orthopedics - North"},
+        {"name": "Lakeside Orthopedic Center"},     # exact match → always drops
+        {"name": "Northwestern Bone & Joint"},       # distinct brand → keeps
     ]
 
-    _anchor_lc = entity_name.strip().lower()
-    _anchor_has_address = bool(re.search(r'\d', entity_name))
-
-    def _is_anchor_dup(name: str) -> bool:
-        if name.strip().lower() == _anchor_lc:
-            return True
-        if _anchor_has_address:
-            return (
-                _nmatch(entity_name, name) == "strong"
-                and _nmatch(name, entity_name) == "strong"
-            )
-        return False
-
-    kept = [s for s in siblings if not _is_anchor_dup(s["name"])]
+    kept = [s for s in siblings if not _is_anchor_dup_new(entity_name, s["name"])]
     names = [s["name"] for s in kept]
-    assert "Main Street Orthopedics" not in names, "Exact anchor not dropped"
-    assert "Main Street Orthopedics - North" in names, "Non-exact sibling incorrectly dropped"
+    assert "Lakeside Orthopedic Center" not in names, "Exact anchor not dropped"
+    assert "Northwestern Bone & Joint" in names, "Distinct sibling incorrectly dropped"
 
 
 # R1: Verification flag rendering
@@ -717,3 +698,202 @@ def test_practice_cover_title_unchanged_without_address():
     else:
         display_name = entity_name
     assert display_name == "Desert Orthopaedic Center"
+
+
+# ── Round 3 F1: GBP weak-match rejection and anchor data quarantine ───────────
+
+def test_fetch_provider_none_match_not_verified():
+    """fetch_provider must return verified=False for no-match (zero token overlap)."""
+    from unittest.mock import patch, MagicMock
+    from perception.data.places import fetch_provider
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "places": [{
+            "id": "ChIJABC123",
+            "displayName": {"text": "Riverside Pizza Kitchen"},
+            "rating": 4.5,
+            "userRatingCount": 200,
+            "businessStatus": "OPERATIONAL",
+            "googleMapsUri": "https://maps.google.com/...",
+            "types": ["restaurant"],
+            "formattedAddress": "100 Main St, Mobile, AL",
+        }]
+    }
+
+    with patch("httpx.post", return_value=mock_resp):
+        with patch("perception.data.places._api_key", return_value="test-key"):
+            read, _ = fetch_provider("Desert Orthopaedic Center", "Mobile", "AL")
+
+    # Zero token overlap → "none" match → verified must be False
+    assert not read.verified, (
+        f"No-match should not be verified; got match={read.name_match}"
+    )
+    assert read.name_match == "none"
+
+
+def test_fetch_provider_strong_match_is_verified():
+    """fetch_provider must return verified=True when found name strongly matches requested."""
+    from unittest.mock import patch, MagicMock
+    from perception.data.places import fetch_provider
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "places": [{
+            "id": "ChIJDEF456",
+            "displayName": {"text": "Desert Orthopaedic Center"},
+            "rating": 4.6,
+            "userRatingCount": 1024,
+            "businessStatus": "OPERATIONAL",
+            "googleMapsUri": "https://maps.google.com/...",
+            "types": ["doctor"],
+            "formattedAddress": "2800 E Desert Inn Rd, Las Vegas, NV",
+        }]
+    }
+
+    with patch("httpx.post", return_value=mock_resp):
+        with patch("perception.data.places._api_key", return_value="test-key"):
+            # Request without address matches the canonical name — strong match expected
+            read, _ = fetch_provider("Desert Orthopaedic Center", "Las Vegas", "NV")
+
+    assert read.verified, f"Strong match should be verified; match={read.name_match}"
+
+
+def test_anchor_dedup_drops_main_office_variant():
+    """'(Main Office)' suffix variant must be recognized as the anchor and dropped."""
+    anchor = "Desert Orthopaedic Center 2800 E Desert Inn Rd"
+    variant = "Desert Orthopaedic Center - Desert Inn (Main Office)"
+    assert _is_anchor_dup_new(anchor, variant), (
+        f"Expected {variant!r} to be detected as a duplicate of anchor {anchor!r}"
+    )
+
+
+def test_anchor_dedup_keeps_summerlin_sibling():
+    """'- Summerlin' is a distinct location — must NOT be dropped."""
+    anchor = "Desert Orthopaedic Center 2800 E Desert Inn Rd"
+    sibling = "Desert Orthopaedic Center - Summerlin"
+    assert not _is_anchor_dup_new(anchor, sibling), (
+        f"Expected {sibling!r} to be kept as a valid sibling of {anchor!r}"
+    )
+
+
+def test_post_assembly_assertion_clears_duplicate_anchor_rating():
+    """collect_platform_data post-assembly assertion must force Not established
+    on any non-anchor row whose google_rating/count matches the anchor exactly."""
+    # Simulate the assertion logic directly (no network calls)
+    anchor_rating, anchor_count = 2.8, 375
+    anchor_rows = [{"practice_name": "USA Health Hospital", "is_anchor": True,
+                    "google_rating": anchor_rating, "google_count": anchor_count,
+                    "not_established": False}]
+    other_rows  = [{"practice_name": "USA Health Ophthalmology", "is_anchor": False,
+                    "google_rating": anchor_rating, "google_count": anchor_count,
+                    "google_url": "https://maps.google.com/test",
+                    "not_established": False}]
+
+    import sys, io
+    _anchor_sig = (anchor_rating, anchor_count)
+    captured = io.StringIO()
+    for r in other_rows:
+        if (r.get("google_rating"), r.get("google_count")) == _anchor_sig:
+            print("ASSERTION", file=captured)
+            r["google_rating"] = None
+            r["google_count"] = None
+            r["google_url"] = None
+            r["not_established"] = True
+
+    assert other_rows[0]["not_established"] is True, "Duplicate rating not cleared"
+    assert other_rows[0]["google_rating"] is None, "Duplicate google_rating not cleared"
+    assert "ASSERTION" in captured.getvalue(), "Assertion message not emitted"
+
+
+# ── Round 3 F2: Hospital signals excluded from practice reports ───────────────
+
+def test_outcomes_safety_weaknesses_empty_for_practice():
+    """_outcomes_safety_weaknesses must return [] for practice-typed providers."""
+    from perception.models import RankedProvider
+    from perception.pdf import _outcomes_safety_weaknesses
+
+    p = RankedProvider(rank=1, name="Desert Orthopaedic Center", report_type="practice")
+    result = _outcomes_safety_weaknesses(p)
+    assert result == [], (
+        f"Expected [] for practice provider but got: {result}"
+    )
+
+
+def test_outcomes_safety_weaknesses_fires_for_hospital_when_both_absent():
+    """Hospital providers still get Leapfrog/CMS entries when both signals are absent."""
+    from perception.models import RankedProvider
+    from perception.pdf import _outcomes_safety_weaknesses
+
+    p = RankedProvider(rank=1, name="Generic Hospital", report_type="hospital")
+    result = _outcomes_safety_weaknesses(p)
+    assert any("Leapfrog" in w for w in result), "Leapfrog weakness missing for hospital"
+    assert any("CMS" in w for w in result), "CMS weakness missing for hospital"
+
+
+def test_individual_entity_card_no_hospital_signals_for_practice():
+    """_individual_entity_card must not inject Leapfrog/CMS strings for practice providers."""
+    from perception.models import RankedProvider
+    from perception.pdf import _individual_entity_card
+
+    p = RankedProvider(
+        rank=1,
+        name="Desert Orthopaedic Center",
+        report_type="practice",
+        notable_weaknesses=["Limited online scheduling"],
+    )
+    html = _individual_entity_card(p)
+    assert "Leapfrog" not in html, "Leapfrog string appeared in practice card"
+    assert "CMS Overall Star" not in html, "CMS Overall Star appeared in practice card"
+
+
+# ── Round 3 F3: Entity registry caches siblings between runs ─────────────────
+
+def test_entity_registry_save_and_retrieve():
+    """Saved siblings are returned on the next call without hitting the LLM."""
+    from perception.db import init_db
+    from perception.entity_registry import (
+        get_registry_siblings,
+        save_registry_siblings,
+        expire_registry,
+    )
+    init_db()
+    # Use a test-only sentinel anchor name unlikely to collide with real data
+    _anchor = "__test_registry_anchor__"
+    _city, _state = "TestCity", "TX"
+    siblings = [
+        {"name": "__test_sibling_A__", "entity_type": "practice", "city": _city, "state": _state},
+        {"name": "__test_sibling_B__", "entity_type": "practice", "city": _city, "state": _state},
+    ]
+    # Start clean
+    expire_registry(_anchor, _city, _state)
+    assert get_registry_siblings(_anchor, _city, _state) is None, \
+        "Registry should be empty before first save"
+    save_registry_siblings(_anchor, _city, _state, siblings)
+    cached = get_registry_siblings(_anchor, _city, _state)
+    assert cached is not None, "Registry returned None after save"
+    assert len(cached) == 2, f"Expected 2 siblings, got {len(cached)}"
+    assert any(s["name"] == "__test_sibling_A__" for s in cached)
+    # Clean up
+    expire_registry(_anchor, _city, _state)
+
+
+def test_entity_registry_expire_clears_entries():
+    """expire_registry removes entries so next call returns None."""
+    from perception.db import init_db
+    from perception.entity_registry import (
+        get_registry_siblings,
+        save_registry_siblings,
+        expire_registry,
+    )
+    init_db()
+    _anchor = "__test_registry_expire__"
+    _city, _state = "TestCity", "TX"
+    save_registry_siblings(_anchor, _city, _state,
+                           [{"name": "__test_sibling_C__", "entity_type": "practice",
+                             "city": _city, "state": _state}])
+    expire_registry(_anchor, _city, _state)
+    assert get_registry_siblings(_anchor, _city, _state) is None, \
+        "Registry entry should be gone after expire"

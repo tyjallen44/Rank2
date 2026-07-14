@@ -143,6 +143,23 @@ def collect_platform_data(
     google_data: dict[str, tuple] = {}  # entity name → (rating, count, maps_url, place_id)
     _assigned_place_ids: dict[str, tuple[str, str]] = {}  # place_id → (entity_name, match_strength)
 
+    # Pre-quarantine the anchor's place_id so no sibling can inherit it, even when
+    # the anchor's own main-loop fetch returns verified=False (wrong top result, API
+    # hiccup, etc.).  The pre-registration call is a best-effort: if it fails, the
+    # main-loop fetch for the anchor will still register when it succeeds.
+    _anchor_pre = next((p for p in practices if p.get("is_anchor")), None)
+    if _anchor_pre:
+        try:
+            _ar, _ = places.fetch_provider(
+                _anchor_pre["name"],
+                _anchor_pre.get("city") or city,
+                _anchor_pre.get("state") or state,
+            )
+            if _ar.place_id:
+                _assigned_place_ids[_ar.place_id] = (_anchor_pre["name"], "anchor-quarantine")
+        except Exception:
+            pass
+
     for p in practices:
         entity_name_key = p["name"]
         p_city  = p.get("city") or city
@@ -169,8 +186,8 @@ def collect_platform_data(
         pid = read.place_id
         if pid and pid in _assigned_place_ids:
             prior_entity, prior_strength = _assigned_place_ids[pid]
-            curr_strength = read.name_match  # "strong" | "weak"
-            # Both passed verified=True so both are "strong", but log the collision
+            curr_strength = read.name_match  # always "strong" (weak no longer passes verified)
+            # Both passed verified=True, both are "strong"; log the collision
             import sys
             print(
                 f"[practice_reputation] Place ID collision: {pid} claimed by "
@@ -183,6 +200,15 @@ def collect_platform_data(
 
         if pid:
             _assigned_place_ids[pid] = (entity_name_key, read.name_match)
+
+        # Update registry canonical name from confirmed GBP listing (non-anchor only).
+        if not p.get("is_anchor") and read.matched_name:
+            try:
+                from .entity_registry import update_canonical_name
+                update_canonical_name(hospital_name, city, state,
+                                      entity_name_key, read.matched_name)
+            except Exception:
+                pass
 
         google_data[entity_name_key] = (
             read.rating,
@@ -327,6 +353,30 @@ def collect_platform_data(
     other_rows  = [r for r in results if not r.get("is_anchor")]
     other_rows.sort(key=lambda r: (r["not_established"], -(r["total_reviews"] or 0)))
     results = anchor_rows + other_rows
+
+    # Post-assembly assertion: no non-anchor row may carry the anchor's exact
+    # (google_rating, google_count) pair — that would mean the anchor's listing data
+    # was silently re-matched to a sibling.
+    import sys as _sys
+    _anchor_sig = next(
+        ((r["google_rating"], r["google_count"])
+         for r in anchor_rows
+         if r.get("google_rating") is not None),
+        None,
+    )
+    if _anchor_sig:
+        for r in other_rows:
+            if (r.get("google_rating"), r.get("google_count")) == _anchor_sig:
+                print(
+                    f"[practice_reputation] ASSERTION: '{r['practice_name']}' carries "
+                    f"anchor GBP data ({_anchor_sig[0]}★/{_anchor_sig[1]}) — "
+                    "forcing Not established",
+                    file=_sys.stderr,
+                )
+                r["google_rating"] = None
+                r["google_count"] = None
+                r["google_url"] = None
+                r["not_established"] = True
 
     emit({"type": "text", "text": "Practice reputation collection complete."})
     return results
