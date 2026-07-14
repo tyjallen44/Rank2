@@ -445,6 +445,18 @@ def _outcomes_safety_block(p: RankedProvider) -> str:
     </div>"""
 
 
+def _mips_flag(text: str) -> str:
+    """Infer ✓/◐/✗ flag for a MIPS/QPP quality-highlights line from its text content."""
+    t = text.lower()
+    if any(p in t for p in ("not found", "not available", "no published", "not reported",
+                             "not applicable", "no mips", "no qpp", "unable to confirm")):
+        return _vflag("not_established")
+    if any(p in t for p in ("score:", "performance:", "participated", "final score",
+                             "reporting", "submitted")):
+        return _vflag("verified")
+    return _vflag("partial")
+
+
 def _quality_signals_block(p: RankedProvider) -> str:
     # CMS stars and Leapfrog grade are surfaced in _outcomes_safety_block above each card section
     usnews_html = ""
@@ -471,7 +483,8 @@ def _quality_signals_block(p: RankedProvider) -> str:
         if has_badges else ""
     )
     quality_html = (
-        f'<div class="qs-quality">{_e(p.cms_quality_highlights)}</div>'
+        f'<div class="qs-quality">{_e(p.cms_quality_highlights)}'
+        f'{_mips_flag(p.cms_quality_highlights)}</div>'
         if has_quality else ""
     )
     return f"""

@@ -12,6 +12,7 @@ import anthropic
 from .strings import (
     AIVS_DISCLAIMER as _AIVS_DISCLAIMER_TEXT,
     AIVS_DISCLAIMER_CHECK as _AIVS_DISCLAIMER_CHECK,
+    FULL_DISCLAIMER as _FULL_DISCLAIMER,
     FILE_INDIVIDUAL, FILE_INDIVIDUAL_SUM, FILE_PATIENT, FILE_COMPARISON_PFX,
 )
 
@@ -728,9 +729,7 @@ def analyze_location(
     )
     console.print(f"[green]✓[/green] Scored {len(rankings)} providers ({systems_done} system aggregates){capped_note}")
 
-    disclaimer = _clean(structured_data.get("disclaimer", ""))
-    if _AIVS_DISCLAIMER_CHECK not in disclaimer:
-        disclaimer = _AIVS_DISCLAIMER
+    disclaimer = _FULL_DISCLAIMER   # always hardcoded; LLM-generated disclaimer field ignored
 
     # Post-extraction validation: warn on grade/snake-case inconsistencies
     _verdict = _clean(structured_data.get("ai_visibility_verdict", ""))

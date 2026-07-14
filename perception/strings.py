@@ -71,8 +71,10 @@ MARKET_ADVICE_CTA = (
 DEEP_DIVE_HEADER_TPL = "Pulse Diagnostic — {name}"
 
 # ── AI Visibility disclaimer ─────────────────────────────────────────────────────
-# The one sentence the brand spec explicitly renamed; the rest of the sentence is
-# identical to the old wording.
+# AIVS_DISCLAIMER: the closing Pulse Score definition sentence (one sentence, unchanged).
+# DATA_LIMITATIONS_BLOCK: the full context block that precedes it — hardcoded so it
+#   is never dependent on LLM generation and never silently discarded by the guard.
+# FULL_DISCLAIMER: the complete client-facing disclaimer used in every report.
 AIVS_DISCLAIMER = (
     "The Pulse Score (0–100) is an AI-visibility measure reflecting how "
     "favorably this provider surfaces to today’s leading AI assistants — "
@@ -80,7 +82,27 @@ AIVS_DISCLAIMER = (
     "recommending providers, blended by each assistant’s usage. It is a "
     "market-perception measure, not a clinical-quality verdict."
 )
-AIVS_DISCLAIMER_CHECK = "Pulse Score"   # guard: append disclaimer if this token absent
+AIVS_DISCLAIMER_CHECK = "Pulse Score"   # retained for backward-compat; no longer used as guard
+
+DATA_LIMITATIONS_BLOCK = (
+    "Data Limitations & Disclaimer\n\n"
+    "Scores and rankings are derived from publicly available signals collected at "
+    "the time of this report. Ratings, review counts, accreditation statuses, and "
+    "quality designations change over time; verify current standings directly with "
+    "the primary sources: Leapfrog Group (leapfroggroup.org), CMS Care Compare "
+    "(medicare.gov/care-compare), U.S. News & World Report Health, and each "
+    "provider’s own website and credentialing body.\n\n"
+    "No quotes, patient statements, or clinical outcomes in this report have been "
+    "fabricated. All quoted or paraphrased language is attributed to publicly "
+    "available sources. Any unverifiable signal is rendered as "
+    "✗ Not established rather than estimated.\n\n"
+    "This report is not a substitute for the judgment of an insurer, benefits "
+    "administrator, or treating physician. Before making coverage, referral, or "
+    "treatment decisions, confirm provider credentials, network participation, and "
+    "current quality ratings with the relevant insurer and treating clinician."
+)
+
+FULL_DISCLAIMER = DATA_LIMITATIONS_BLOCK + "\n\n" + AIVS_DISCLAIMER
 
 # ── Weighting-profile display names (for client-facing prose — no snake_case) ────
 PROFILE_DISPLAY_HOSPITAL: dict[str, str] = {

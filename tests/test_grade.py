@@ -560,19 +560,16 @@ def test_normalize_input_uses_smart_title():
 
 # D2: Disclaimer replace not append
 def test_disclaimer_replace_not_append():
-    """When LLM disclaimer lacks 'Pulse Score', the old sentence must be replaced, not appended."""
-    from perception.strings import AIVS_DISCLAIMER, AIVS_DISCLAIMER_CHECK
-    old_disclaimer = "The AI Visibility Score (0–100) reflects public data at time of collection."
-    assert AIVS_DISCLAIMER_CHECK not in old_disclaimer
-    # Simulate the fixed logic
-    if AIVS_DISCLAIMER_CHECK not in old_disclaimer:
-        result = AIVS_DISCLAIMER
-    else:
-        result = old_disclaimer
-    assert "AI Visibility Score (0–100) reflects" not in result, "Old disclaimer sentence still present"
-    assert "Pulse Score" in result, "New disclaimer not applied"
-    # Confirm no double sentence
-    assert result.count("Pulse Score") == 1
+    """FULL_DISCLAIMER is always used regardless of LLM output — no conditional logic."""
+    from perception.strings import FULL_DISCLAIMER
+    # Simulate LLM returning old "AI Visibility Score" phrasing (pre-rebrand)
+    llm_disclaimer = "The AI Visibility Score (0–100) reflects public data at time of collection."
+    # Production code now ignores LLM-generated disclaimer and always uses FULL_DISCLAIMER
+    result = FULL_DISCLAIMER
+    assert "AI Visibility Score (0–100) reflects" not in result, \
+        "Old 'AI Visibility Score' phrasing should not appear in FULL_DISCLAIMER"
+    assert "Pulse Score" in result, "Pulse Score sentence missing from FULL_DISCLAIMER"
+    assert result.count("Pulse Score") == 1, "Pulse Score sentence appears more than once"
 
 
 # D3: Single SECTION_ASSESSMENT header
@@ -897,3 +894,78 @@ def test_entity_registry_expire_clears_entries():
     expire_registry(_anchor, _city, _state)
     assert get_registry_siblings(_anchor, _city, _state) is None, \
         "Registry entry should be gone after expire"
+
+
+# ── Round 3 F4: Hardcoded disclaimer — Data Limitations block always present ──
+
+def test_disclaimer_contains_data_limitations_block():
+    """FULL_DISCLAIMER must include the Data Limitations & Disclaimer header."""
+    from perception.strings import FULL_DISCLAIMER
+    assert "Data Limitations" in FULL_DISCLAIMER, \
+        "FULL_DISCLAIMER missing Data Limitations block"
+
+
+def test_disclaimer_contains_pulse_score_sentence():
+    """FULL_DISCLAIMER must contain the Pulse Score definition sentence."""
+    from perception.strings import FULL_DISCLAIMER
+    assert "Pulse Score" in FULL_DISCLAIMER, \
+        "FULL_DISCLAIMER missing Pulse Score sentence"
+
+
+def test_disclaimer_exactly_one_pulse_score_sentence():
+    """FULL_DISCLAIMER must contain 'Pulse Score' exactly once (no duplication)."""
+    from perception.strings import FULL_DISCLAIMER
+    count = FULL_DISCLAIMER.count("Pulse Score")
+    assert count == 1, f"Expected 1 'Pulse Score' occurrence, got {count}"
+
+
+def test_disclaimer_contains_no_fabricated_quotes_language():
+    """FULL_DISCLAIMER must explicitly disclaim fabricated quotes."""
+    from perception.strings import FULL_DISCLAIMER
+    assert "fabricated" in FULL_DISCLAIMER.lower(), \
+        "FULL_DISCLAIMER missing no-fabricated-quotes language"
+
+
+def test_disclaimer_contains_insurer_physician_confirmation():
+    """FULL_DISCLAIMER must include insurer/physician confirmation guidance."""
+    from perception.strings import FULL_DISCLAIMER
+    assert "insurer" in FULL_DISCLAIMER.lower() and "physician" in FULL_DISCLAIMER.lower(), \
+        "FULL_DISCLAIMER missing insurer/physician confirmation guidance"
+
+
+# ── Round 3 F5: MIPS/QPP signal flag coverage ────────────────────────────────
+
+def test_mips_flag_not_established_for_not_found():
+    """'not found in public sources' → ✗ Not established flag."""
+    from perception.pdf import _mips_flag
+    html = _mips_flag("MIPS/QPP not found in public sources")
+    assert "✗" in html and "Not established" in html, \
+        f"Expected ✗ Not established flag; got: {html}"
+
+
+def test_mips_flag_verified_for_score():
+    """'Final Score: 87' → ✓ Verified flag."""
+    from perception.pdf import _mips_flag
+    html = _mips_flag("MIPS Final score: 87.2 (Exceptional Performance)")
+    assert "✓" in html and "Verified" in html, \
+        f"Expected ✓ Verified flag; got: {html}"
+
+
+def test_mips_flag_partial_for_ambiguous():
+    """Ambiguous text (no clear status) → ◐ Partial flag."""
+    from perception.pdf import _mips_flag
+    html = _mips_flag("MIPS/QPP participation status unclear")
+    assert "◐" in html and "Partial" in html, \
+        f"Expected ◐ Partial flag; got: {html}"
+
+
+def test_quality_signals_block_cms_quality_has_flag():
+    """_quality_signals_block must append a _vflag to any cms_quality_highlights text."""
+    from perception.models import RankedProvider
+    from perception.pdf import _quality_signals_block
+    p = RankedProvider(
+        rank=1, name="Test Practice",
+        cms_quality_highlights="MIPS/QPP not found in public sources",
+    )
+    html = _quality_signals_block(p)
+    assert "✗" in html, "cms_quality_highlights block missing ✗ Not established flag"
