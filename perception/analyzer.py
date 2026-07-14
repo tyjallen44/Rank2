@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Callable
 
 import anthropic
+from .strings import (
+    AIVS_DISCLAIMER as _AIVS_DISCLAIMER_TEXT,
+    AIVS_DISCLAIMER_CHECK as _AIVS_DISCLAIMER_CHECK,
+    FILE_INDIVIDUAL, FILE_INDIVIDUAL_SUM, FILE_PATIENT, FILE_COMPARISON_PFX,
+)
 
 from . import scoring
 from .config import settings
@@ -39,14 +44,8 @@ _MODEL = "claude-opus-4-8"
 # multi-location systems (each enumerates up to system_reputation_max_locations).
 _SYSTEM_REP_CAP = 15
 
-# The AI Visibility disclaimer note that must appear in every client report.
-_AIVS_DISCLAIMER = (
-    "The AI Visibility Score (0–100) reflects how favorably this provider "
-    "surfaces to today's leading AI assistants — scored on the public sources "
-    "those assistants state they weight when recommending providers, blended by "
-    "each assistant's usage. It is a market-perception measure, not a "
-    "clinical-quality verdict."
-)
+# The Pulse Score disclaimer note that must appear in every client report.
+_AIVS_DISCLAIMER = _AIVS_DISCLAIMER_TEXT
 
 # Web search is restricted to authoritative healthcare sources so the currency
 # layer (recognitions, rankings, recent events) never pulls a stray review number.
@@ -674,7 +673,7 @@ def analyze_location(
     console.print(f"[green]✓[/green] Scored {len(rankings)} providers ({systems_done} system aggregates){capped_note}")
 
     disclaimer = _clean(structured_data.get("disclaimer", ""))
-    if "AI Visibility Score" not in disclaimer:
+    if _AIVS_DISCLAIMER_CHECK not in disclaimer:
         disclaimer = (disclaimer + " " + _AIVS_DISCLAIMER).strip()
 
     result = AnalysisResult(
@@ -753,13 +752,13 @@ def analyze_location(
     if individual_report and entity_name:
         _entity_slug = _slug(entity_name)[:40]
         if teaser_report:
-            _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_Individual-Summary-{_ts}"
+            _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_{FILE_INDIVIDUAL_SUM}-{_ts}"
         else:
-            _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_Individual-{_ts}"
+            _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_{FILE_INDIVIDUAL}-{_ts}"
     elif teaser_report:
         _stem = f"{city.replace(' ', '-')}_{state}_{_type}_Summary-Report-{_ts}"
     elif patient_perspective:
-        _stem = f"{city.replace(' ', '-')}_{state}_{_type}_Patient-Perspective{_zip_part}-{_ts}"
+        _stem = f"{city.replace(' ', '-')}_{state}_{_type}_{FILE_PATIENT}{_zip_part}-{_ts}"
     else:
         _stem = f"{city.replace(' ', '-')}_{state}_{_type}{_zip_part}-{_ts}"
     report_path = output_dir / f"{_stem}.md"
@@ -1078,7 +1077,7 @@ def compare_locations(
     emit({"type": "phase", "name": "pdf", "text": "Generating Comparison Report PDF"})
     safe_a = re.sub(r"[^\w\-]", "_", entity_a_name)[:30]
     safe_b = re.sub(r"[^\w\-]", "_", entity_b_name)[:30]
-    pdf_name = f"comparison_{safe_a}_vs_{safe_b}_{result_a.run_id[:8]}.pdf"
+    pdf_name = f"{FILE_COMPARISON_PFX}_{safe_a}_vs_{safe_b}_{result_a.run_id[:8]}.pdf"
     pdf_path = output_dir / pdf_name
     render_comparison_pdf(result_a, result_b, comparison, pdf_path, brand=brand, teaser=teaser_report)
 

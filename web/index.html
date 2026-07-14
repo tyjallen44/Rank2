@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rank2</title>
+<title>Pulse</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700&family=Barlow+Condensed:wght@700&family=Inter:wght@300;400;500;600;700&family=Work+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -738,8 +738,8 @@ html, body {
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">
-      <div class="wordmark">Rank<span>2</span></div>
-      <div class="sub">Market Intelligence</div>
+      <div class="wordmark">PULSE</div>
+      <div class="sub">AI Visibility Intelligence</div>
       <div class="accent-line"></div>
     </div>
     <div id="login-err" class="err hidden mt12"></div>
@@ -873,23 +873,23 @@ html, body {
 <div id="app">
   <nav id="sidebar">
     <div class="sb-logo">
-      <div class="wordmark">Rank<span>2</span></div>
-      <div class="sub">Market Intelligence</div>
+      <div class="wordmark">PULSE</div>
+      <div class="sub">AI Visibility Intelligence</div>
       <div class="accent-line"></div>
     </div>
     <div class="sb-nav">
       <div class="nav-section-label">Report Creation</div>
       <button class="nav-btn active" id="nav-new" onclick="navigate('new')" title="Analysis Tools for Internal RLDatix Teams">
-        <span class="ni">✦</span><span class="nb-lbl">Market Research</span>
+        <span class="ni">✦</span><span class="nb-lbl">Market Pulse</span>
       </button>
       <button class="nav-btn" id="nav-patient" onclick="navigate('patient')" title="Report Creation for Prospects and Customers">
-        <span class="ni">⊙</span><span class="nb-lbl">Patient Perspective</span>
+        <span class="ni">⊙</span><span class="nb-lbl">Patient Pulse</span>
       </button>
-      <button class="nav-btn" id="nav-individual" onclick="navigate('individual')" title="Generate a focused AI Visibility report for a single hospital or practice">
-        <span class="ni">◎</span><span class="nb-lbl">Individual Report</span>
+      <button class="nav-btn" id="nav-individual" onclick="navigate('individual')" title="Run a focused Pulse Diagnostic for a single hospital or practice">
+        <span class="ni">◎</span><span class="nb-lbl">Pulse Diagnostic</span>
       </button>
-      <button class="nav-btn" id="nav-compare" onclick="navigate('compare')" title="Compare two organizations head-to-head on AI Visibility">
-        <span class="ni">⇄</span><span class="nb-lbl">Comparison Report</span>
+      <button class="nav-btn" id="nav-compare" onclick="navigate('compare')" title="Compare two organizations head-to-head on Pulse Score">
+        <span class="ni">⇄</span><span class="nb-lbl">Pulse Comparison</span>
       </button>
 
       <div class="nav-divider"></div>
@@ -897,7 +897,7 @@ html, body {
       <button class="nav-btn" id="nav-history" onclick="navigate('history')" title="Access to Previous Reports">
         <span class="ni">◷</span><span class="nb-lbl">History</span>
       </button>
-      <button class="nav-btn" id="nav-track" onclick="navigate('track')" title="Track AI Visibility trends over time for specific entities">
+      <button class="nav-btn" id="nav-track" onclick="navigate('track')" title="Track Pulse Score trends over time for specific entities">
         <span class="ni">↗</span><span class="nb-lbl">Trends</span>
       </button>
 
@@ -920,10 +920,10 @@ html, body {
       <button class="nav-btn sb-logout" onclick="doLogout()">
         <span class="ni">⎋</span><span class="nb-lbl">Sign Out</span>
       </button>
-      <button class="nav-btn" id="nav-release" onclick="navigate('release')" title="What's new in Rank2">
+      <button class="nav-btn" id="nav-release" onclick="navigate('release')" title="What's new in Pulse">
         <span class="ni">◈</span><span class="nb-lbl">Release Notes</span>
       </button>
-      <div class="sb-build" id="sb-version">Rank2 Version 1.4</div>
+      <div class="sb-build" id="sb-version">Pulse Version 1.4</div>
       <div class="sb-build" id="sb-build"></div>
     </div>
   </nav>
@@ -932,8 +932,8 @@ html, body {
 
     <!-- ── New Analysis ─────────────────────────────────────────────────── -->
     <div id="page-new" class="page active">
-      <div class="page-title">Market Research</div>
-      <div class="page-sub">Generate branded market intelligence reports for locations, by hospital or practice type.</div>
+      <div class="page-title">Market Pulse</div>
+      <div class="page-sub">Generate branded market intelligence reports for any location, by hospital or practice type.</div>
 
       <div class="oc-grid">
         <div class="oc on" id="oc-manual" onclick="setMode('manual')">
@@ -1040,7 +1040,7 @@ html, body {
         <div id="manual-err" class="err hidden mt16"></div>
         <div class="mt20">
           <button class="btn btn-primary" id="run-manual-btn" onclick="runManual()">
-            Run Analysis →
+            Run Diagnostic →
           </button>
         </div>
       </div>
@@ -1084,8 +1084,8 @@ html, body {
 
     <!-- ── Patient Perspective ───────────────────────────────────────────── -->
     <div id="page-patient" class="page">
-      <div class="page-title">Patient Perspective</div>
-      <div class="page-sub">Generate a report ranked as a patient would encounter providers when asking an AI assistant — no grouping by size or affiliation type, just ranked by AI Visibility Score.</div>
+      <div class="page-title">Patient Pulse</div>
+      <div class="page-sub">See your market the way a patient's AI assistant sees it — providers ranked purely by Pulse Score, exactly as they surface when patients ask.</div>
 
       <div class="oc-grid">
         <div class="oc on" id="pp-oc-manual" onclick="setPpMode('manual')">
@@ -1195,7 +1195,7 @@ html, body {
         <div id="pp-err" class="err hidden mt16"></div>
         <div class="mt20">
           <button class="btn btn-primary" id="pp-run-btn" onclick="runPatient()">
-            Run Patient Perspective →
+            Run Patient Pulse →
           </button>
         </div>
       </div>
@@ -1239,8 +1239,8 @@ html, body {
 
     <!-- ── Individual Report ────────────────────────────────────────────── -->
     <div id="page-individual" class="page">
-      <div class="page-title">Individual Report</div>
-      <div class="page-sub">Generate a focused AI Visibility report for a single hospital or practice. Search by name and location, confirm the entity, then run the analysis.</div>
+      <div class="page-title">Pulse Diagnostic</div>
+      <div class="page-sub">Run a focused diagnostic on a single hospital or practice: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
 
       <!-- Step 1: Search form -->
       <div id="ir-step1" class="card">
@@ -1375,7 +1375,7 @@ html, body {
         <div id="ir-run-err" class="err hidden mt16"></div>
         <div class="mt20 row-actions">
           <button class="btn btn-primary" id="ir-run-btn" onclick="runIndividual()">
-            Run Individual Report →
+            Run Diagnostic →
           </button>
           <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
         </div>
@@ -1413,8 +1413,8 @@ html, body {
 
     <!-- ── Comparison Report ─────────────────────────────────────────────── -->
     <div id="page-compare" class="page">
-      <div class="page-title">Comparison Report</div>
-      <div class="page-sub">Select two organizations to compare head-to-head on AI Visibility. Each will be analyzed with the same depth as an Individual Report.</div>
+      <div class="page-title">Pulse Comparison</div>
+      <div class="page-sub">Compare two organizations head-to-head on Pulse Score, with the same depth as a full diagnostic for each.</div>
 
       <!-- Entity A -->
       <div style="margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal)">Entity A</div>
@@ -1549,7 +1549,7 @@ html, body {
           </label>
           <div id="cmp-run-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
-            <button class="btn btn-primary" id="cmp-run-btn" onclick="runComparison()">Run Comparison Report →</button>
+            <button class="btn btn-primary" id="cmp-run-btn" onclick="runComparison()">Run Pulse Comparison →</button>
             <button class="btn btn-ghost btn-sm" onclick="resetComparison()">← Start Over</button>
           </div>
         </div>
@@ -1818,7 +1818,7 @@ html, body {
           <div id="trend-delta-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px"></div>
 
           <div class="card" style="margin-bottom:16px;padding:20px 24px">
-            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">AI Visibility Score</div>
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Pulse Score (AI Visibility)</div>
             <div style="position:relative;height:200px"><canvas id="chart-score"></canvas></div>
           </div>
 
@@ -1849,7 +1849,7 @@ html, body {
     <!-- ── Release Notes ─────────────────────────────────────────────────── -->
     <div id="page-release" class="page">
       <div class="page-title">Release Notes</div>
-      <div class="page-sub">What's new in Rank2.</div>
+      <div class="page-sub">What's new in Pulse.</div>
 
       <div class="card" style="max-width:820px">
 
@@ -1920,7 +1920,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">Google SSO &amp; RLDatix Native Accounts</div>
-            <div class="rn-body">CareClimb now supports two authentication tracks. Any user can request access and sign in with their Google account via OAuth — once an admin approves the request, the user receives an email and can sign in immediately. Users with an <em>@rldatix.com</em> email address can alternatively create a native account with email and password; an admin invitation triggers a set-password link sent to their inbox. Both tracks flow through a unified login screen.</div>
+            <div class="rn-body">Pulse now supports two authentication tracks. Any user can request access and sign in with their Google account via OAuth — once an admin approves the request, the user receives an email and can sign in immediately. Users with an <em>@rldatix.com</em> email address can alternatively create a native account with email and password; an admin invitation triggers a set-password link sent to their inbox. Both tracks flow through a unified login screen.</div>
           </div>
 
           <div class="rn-item">
@@ -1940,12 +1940,12 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">AI Visibility Methodology Appendix</div>
-            <div class="rn-body">Every generated report now includes a full methodology appendix covering the Prompt Battery (31 standardized queries across 8 categories) and the Scoring Rubric (four-pillar architecture with per-signal point tables, cross-cutting modifiers, letter grade bands, and verification status conventions). The appendix gives curious readers a complete, auditable account of how AI Visibility Scores are derived.</div>
+            <div class="rn-body">Every generated report now includes a full methodology appendix covering the Prompt Battery (31 standardized queries across 8 categories) and the Scoring Rubric (four-pillar architecture with per-signal point tables, cross-cutting modifiers, letter grade bands, and verification status conventions). The appendix gives curious readers a complete, auditable account of how Pulse Scores are derived.</div>
           </div>
 
           <div class="rn-item">
-            <div class="rn-title">Individual Report</div>
-            <div class="rn-body">A new report type that generates a deep-dive AI Visibility analysis for a single named provider — hospital, practice, or physician group. Individual reports include a full Organization Overview, AI Visibility Assessment, Key Takeaways, and Data Limitations section, plus the full scored card with tier bars, quality badges, and location detail. Available on the Market Research page via the <em>Individual Report</em> toggle.</div>
+            <div class="rn-title">Pulse Diagnostic</div>
+            <div class="rn-body">A new report type that generates a deep-dive Pulse Diagnostic for a single named provider — hospital, practice, or physician group. Pulse Diagnostics include a full Organization Overview, Diagnostic Assessment &amp; Roadmap, Key Takeaways, and Data Limitations section, plus the full scored card with tier bars, quality badges, and location detail. Available on the Market Pulse page via the <em>Pulse Diagnostic</em> toggle.</div>
           </div>
 
           <div class="rn-item">
@@ -1955,12 +1955,12 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">Score Band Label</div>
-            <div class="rn-body">The AI Visibility Score on each provider card now includes a plain-language band label — <em>Strong</em> (80+), <em>Good</em> (65–79), <em>Fair</em> (50–64), <em>Limited</em> (35–49), or <em>Weak</em> (&lt;35) — displayed inline with the numeric score for at-a-glance readability.</div>
+            <div class="rn-body">The Pulse Score on each provider card now includes a plain-language band label — <em>Strong</em> (80+), <em>Good</em> (65–79), <em>Fair</em> (50–64), <em>Limited</em> (35–49), or <em>Weak</em> (&lt;35) — displayed inline with the numeric score for at-a-glance readability.</div>
           </div>
 
           <div class="rn-item">
             <div class="rn-title">Weighting Profile Chip</div>
-            <div class="rn-body">Each card now shows a <em>Procedural</em> or <em>Relationship</em> chip below the AI Visibility Score, indicating which weighting profile was applied. Procedural profiles weight Outcomes &amp; Safety most heavily; Relationship profiles weight Experience &amp; Reviews and Access &amp; Fit.</div>
+            <div class="rn-body">Each card now shows a <em>Procedural</em> or <em>Relationship</em> chip below the Pulse Score, indicating which weighting profile was applied. Procedural profiles weight Outcomes &amp; Safety most heavily; Relationship profiles weight Experience &amp; Reviews and Access &amp; Fit.</div>
           </div>
 
           <div class="rn-item">
@@ -1984,8 +1984,8 @@ html, body {
           </div>
 
           <div class="rn-item">
-            <div class="rn-title">AI Visibility Improvement Roadmap (Teaser)</div>
-            <div class="rn-body">The Teaser Report now includes a blurred <em>AI Visibility Improvement Roadmap</em> section after the provider cards, showing prospects that a prioritized action plan is part of the full report. The roadmap content is intentionally obscured to drive consultation requests.</div>
+            <div class="rn-title">Pulse Improvement Roadmap (Teaser)</div>
+            <div class="rn-body">The Teaser Report now includes a blurred <em>Pulse Improvement Roadmap</em> section after the provider cards, showing prospects that a prioritized action plan is part of the full report. The roadmap content is intentionally obscured to drive consultation requests.</div>
           </div>
 
           <div class="rn-item">
@@ -1995,7 +1995,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">AI Visibility Trends</div>
-            <div class="rn-body">A new <em>Trends</em> section (available to all signed-in users) tracks AI Visibility scores over time for any named organization. Add an entity using the same guided search flow as Individual Reports — choose the organization, city/state, whether to aggregate related facilities, and a collection schedule (weekly, monthly, or manual). An initial analysis run fires automatically the moment you add the entity so the first data point is captured right away. Subsequent runs occur on the chosen schedule via Cloud Scheduler, or on demand using <em>Run Now</em>. The trend view displays interactive charts for AI Visibility Score, tier score breakdown (Outcomes, Credentials, Experience, Access), Google rating, and Google review count over time. The entity list shows last run date, next scheduled run date, and a running count of snapshots collected.</div>
+            <div class="rn-body">A new <em>Trends</em> section (available to all signed-in users) tracks Pulse Scores over time for any named organization. Add an entity using the same guided search flow as Pulse Diagnostics — choose the organization, city/state, whether to aggregate related facilities, and a collection schedule (weekly, monthly, or manual). An initial analysis run fires automatically the moment you add the entity so the first data point is captured right away. Subsequent runs occur on the chosen schedule via Cloud Scheduler, or on demand using <em>Run Now</em>. The trend view displays interactive charts for Pulse Score (AI Visibility), tier score breakdown (Outcomes, Credentials, Experience, Access), Google rating, and Google review count over time. The entity list shows last run date, next scheduled run date, and a running count of snapshots collected.</div>
           </div>
 
         </div>
@@ -2005,7 +2005,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">Sidebar Navigation Reorganized</div>
-            <div class="rn-body">The left navigation is now organized into three labeled sections separated by inset divider lines: <em>Report Creation</em> (Market Research, Patient Perspective, Individual Report), <em>Reporting</em> (History, Trends), and <em>Administrative</em> (Feedback, Admin). Section labels and dividers collapse automatically on tablet and mobile layouts. The Admin entry remains visible only to admin-role users.</div>
+            <div class="rn-body">The left navigation is now organized into three labeled sections separated by inset divider lines: <em>Report Creation</em> (Market Pulse, Patient Pulse, Pulse Diagnostic), <em>Reporting</em> (History, Trends), and <em>Administrative</em> (Feedback, Admin). Section labels and dividers collapse automatically on tablet and mobile layouts. The Admin entry remains visible only to admin-role users.</div>
           </div>
 
           <div class="rn-item">
@@ -2019,18 +2019,18 @@ html, body {
           </div>
 
           <div class="rn-item">
-            <div class="rn-title">AI Visibility Assessment &amp; Improvement Opportunities</div>
-            <div class="rn-body">The closing section of each report has been renamed from <em>Practical Advice for Patients</em> / <em>Key Takeaways</em> to <em>AI Visibility Assessment &amp; Improvement Opportunities</em>. The section is now action-oriented and uncapped — every material gap is listed with (1) the current state, (2) the concrete action to take, and (3) which channel it primarily affects (training-data presence vs. retrieval-time signals). Individual reports now regularly surface 10–14 specific improvement items.</div>
+            <div class="rn-title">Diagnostic Assessment &amp; Roadmap</div>
+            <div class="rn-body">The closing section of each report has been renamed from <em>Practical Advice for Patients</em> / <em>Key Takeaways</em> to <em>Diagnostic Assessment &amp; Roadmap</em>. The section is now action-oriented and uncapped — every material gap is listed with (1) the current state, (2) the concrete action to take, and (3) which channel it primarily affects (training-data presence vs. retrieval-time signals). Pulse Diagnostics now regularly surface 10–14 specific improvement items.</div>
           </div>
 
           <div class="rn-item">
             <div class="rn-title">Improvement Opportunities Grouped by Category</div>
-            <div class="rn-body">The AI Visibility Assessment &amp; Improvement Opportunities section now organizes action items into labeled groups rather than a single flat numbered list. The three standard categories are <em>Your Website (Technical &amp; Content Fixes)</em>, <em>Third-Party Listings &amp; Profiles</em>, and <em>Reputation, Press &amp; Community (Long-Term Training Data)</em> — each with a one-line description of its scope. When Claude identifies material gaps that don't fit those three buckets it creates additional sections dynamically. Item numbers remain globally sequential across all sections for easy cross-reference.</div>
+            <div class="rn-body">The Diagnostic Assessment &amp; Roadmap section now organizes action items into labeled groups rather than a single flat numbered list. The three standard categories are <em>Your Website (Technical &amp; Content Fixes)</em>, <em>Third-Party Listings &amp; Profiles</em>, and <em>Reputation, Press &amp; Community (Long-Term Training Data)</em> — each with a one-line description of its scope. When Claude identifies material gaps that don't fit those three buckets it creates additional sections dynamically. Item numbers remain globally sequential across all sections for easy cross-reference.</div>
           </div>
 
           <div class="rn-item">
             <div class="rn-title">Teaser Reports — "What AI Assistants Currently See" Now Visible</div>
-            <div class="rn-body">In teaser-mode reports the <em>What AI Assistants Currently See</em> section is now shown in full alongside the AI Visibility Score and tier bars. The blurred region now begins at Public &amp; Social Ratings. This gives prospects a meaningful sample of the analysis quality before requesting the full report.</div>
+            <div class="rn-body">In teaser-mode reports the <em>What AI Assistants Currently See</em> section is now shown in full alongside the Pulse Score and tier bars. The blurred region now begins at Public &amp; Social Ratings. This gives prospects a meaningful sample of the analysis quality before requesting the full report.</div>
           </div>
 
           <div class="rn-item">
@@ -2075,7 +2075,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">Teaser Report Blur Refinements</div>
-            <div class="rn-body">Blur levels on the Teaser Report have been calibrated: provider detail cards use a 2px blur to obscure specifics while keeping the card structure readable, and the AI Visibility Improvement Roadmap uses a slightly stronger 2.1px blur to emphasize that the full roadmap content requires a consultation.</div>
+            <div class="rn-body">Blur levels on the Teaser Report have been calibrated: provider detail cards use a 2px blur to obscure specifics while keeping the card structure readable, and the Pulse Improvement Roadmap uses a slightly stronger 2.1px blur to emphasize that the full roadmap content requires a consultation.</div>
           </div>
 
           <div class="rn-item">
@@ -2089,8 +2089,8 @@ html, body {
           <div class="rn-heading fixed">Bug Fixes</div>
           <ul class="rn-fixes">
             <li><strong>Physician count pill overflow</strong> — Long descriptive phrases returned for physician count (full sentences instead of compact values) were truncating mid-word in the card header. Pill now renders only when the value is 60 characters or fewer.</li>
-            <li><strong>AI Visibility Assessment showing entity name</strong> — In Individual Reports, the assessment section was displaying the provider's name as a sub-heading instead of the analysis content. Corrected by updating the extraction prompt to explicitly map assessment paragraphs and exclude entity name labels.</li>
-            <li><strong>Outcomes &amp; Safety null in Individual Reports</strong> — The Outcomes &amp; Safety tier score was returning null for individual reports because the evidence block for that mode contains only Google Places data. Fixed by expanding the scoring rubric to use narrative content (trauma designation, accreditations, program depth) as authoritative evidence when structured quality data is unavailable.</li>
+            <li><strong>Diagnostic Assessment showing entity name</strong> — In Pulse Diagnostics, the assessment section was displaying the provider's name as a sub-heading instead of the analysis content. Corrected by updating the extraction prompt to explicitly map assessment paragraphs and exclude entity name labels.</li>
+            <li><strong>Outcomes &amp; Safety null in Pulse Diagnostics</strong> — The Outcomes &amp; Safety tier score was returning null for Pulse Diagnostics because the evidence block for that mode contains only Google Places data. Fixed by expanding the scoring rubric to use narrative content (trauma designation, accreditations, program depth) as authoritative evidence when structured quality data is unavailable.</li>
             <li><strong>Duplicate locations in Includes Locations</strong> — Hospitals listed as sub-locations of a parent system were sometimes also appearing as standalone ranked entries. A post-processing deduplication step now removes any consolidated location whose name matches a separate top-level ranked provider.</li>
             <li><strong>Blank reports for large markets</strong> — Structured extraction was hitting the token limit on markets with 14+ providers, producing zero scored providers. Raised max tokens from 16K to 32K and switched to streaming transport to avoid the 10-minute request timeout.</li>
             <li><strong>Teaser CTA phone number</strong> — Updated the contact number displayed on Teaser Report cards and the cover to 866.338.8270.</li>
@@ -2112,8 +2112,8 @@ html, body {
           <div class="rn-heading new">New Features</div>
 
           <div class="rn-item">
-            <div class="rn-title">Comparison Report</div>
-            <div class="rn-body">A new report type that runs a deep-dive AI Visibility analysis on two organizations simultaneously and produces a single combined PDF. Select each entity using the same guided search flow as Individual Reports — including aggregate and specialty options — then click Run Comparison. The report opens with both organizations' overviews and AI Visibility Verdicts, followed by a structured Comparison Summary (a headline, a side-by-side similarities panel, a key differences panel, and a 2–3 paragraph analyst narrative). The full Individual-style deep-dive for each entity — card, AI Visibility Assessment, and Improvement Opportunities — follows in sequence. Comparison Report is available to all signed-in users under Report Creation in the sidebar.</div>
+            <div class="rn-title">Pulse Comparison</div>
+            <div class="rn-body">A new report type that runs a full Pulse Diagnostic on two organizations simultaneously and produces a single combined PDF. Select each entity using the same guided search flow as Pulse Diagnostics — including aggregate and specialty options — then click Run Pulse Comparison. The report opens with both organizations' overviews and Pulse Verdicts, followed by a structured Comparison Summary (a headline, a side-by-side similarities panel, a key differences panel, and a 2–3 paragraph analyst narrative). The full Pulse Diagnostic deep-dive for each entity — card, Diagnostic Assessment &amp; Roadmap, and Improvement Opportunities — follows in sequence. Pulse Comparison is available to all signed-in users under Report Creation in the sidebar.</div>
           </div>
 
         </div>
@@ -2127,8 +2127,8 @@ html, body {
           </div>
 
           <div class="rn-item">
-            <div class="rn-title">Market &amp; Patient Perspective Reports — Improvement Section Replaced with CTA</div>
-            <div class="rn-body">The <em>AI Visibility Assessment &amp; Improvement Opportunities</em> section in Market Research and Patient Perspective reports no longer includes action items — those recommendations are specific to a single organization and are misleading in a multi-provider report. The section is now titled <em>Improve Your AI Visibility</em> and contains a concise paragraph directing the reader to contact RLDatix for an Individual Deep-Dive Report. Individual Reports retain the full grouped improvement section unchanged.</div>
+            <div class="rn-title">Market Pulse &amp; Patient Pulse — Improvement Section Replaced with CTA</div>
+            <div class="rn-body">The <em>Diagnostic Assessment &amp; Roadmap</em> section in Market Pulse and Patient Pulse reports no longer includes action items — those recommendations are specific to a single organization and are misleading in a multi-provider report. The section is now titled <em>Improve Your AI Visibility</em> and contains a concise paragraph directing the reader to request a Pulse Diagnostic. Pulse Diagnostics retain the full grouped improvement section unchanged.</div>
           </div>
 
           <div class="rn-item">
@@ -2147,7 +2147,7 @@ html, body {
           <div class="rn-heading fixed">Bug Fixes</div>
           <ul class="rn-fixes">
             <li><strong>Trends API calls failing silently</strong> — All tracking functions (add entity, load trends, run now, toggle active) were calling an undefined <code>_fetch()</code> function instead of the authenticated <code>api()</code> wrapper, causing every action to fail with "Failed to add entity — try again." Fixed by replacing all occurrences with <code>api()</code>.</li>
-            <li><strong>Comparison Report PDF download returning 404</strong> — The comparison PDF is not stored in the analysis history database (both sub-runs intentionally skip individual PDFs), so the standard <code>/api/reports/{run_id}/pdf</code> endpoint returned 404. A dedicated <code>/api/compare/{job_id}/pdf</code> endpoint now serves the file directly from the completed job.</li>
+            <li><strong>Pulse Comparison PDF download returning 404</strong> — The comparison PDF is not stored in the analysis history database (both sub-runs intentionally skip individual PDFs), so the standard <code>/api/reports/{run_id}/pdf</code> endpoint returned 404. A dedicated <code>/api/compare/{job_id}/pdf</code> endpoint now serves the file directly from the completed job.</li>
             <li><strong>Python 3.9 incompatibility in server model</strong> — The <code>FeedbackEditRequest</code> model used <code>str | None</code> union syntax introduced in Python 3.10, causing the server to fail on startup. Fixed by replacing with <code>Optional[str]</code>.</li>
           </ul>
         </div>
@@ -2165,18 +2165,18 @@ html, body {
           <div class="rn-heading new">New Features</div>
 
           <div class="rn-item">
-            <div class="rn-title">Patient Perspective Report</div>
-            <div class="rn-body">A new analysis mode accessible from the left navigation. Unlike Market Research reports (which group results by hospital size or practice affiliation), the Patient Perspective report ranks all providers in a single list ordered purely by AI Visibility Score — reflecting the order a real patient would encounter them when asking an AI assistant for guidance. Supports both city/state and ZIP + radius searches, and includes full spreadsheet upload for batch runs.</div>
+            <div class="rn-title">Patient Pulse</div>
+            <div class="rn-body">A new analysis mode accessible from the left navigation. Unlike Market Pulse reports (which group results by hospital size or practice affiliation), the Patient Pulse report ranks all providers in a single list ordered purely by Pulse Score — reflecting the order a real patient would encounter them when asking an AI assistant for guidance. Supports both city/state and ZIP + radius searches, and includes full spreadsheet upload for batch runs.</div>
           </div>
 
           <div class="rn-item">
             <div class="rn-title">Teaser Report</div>
-            <div class="rn-body">A prospect-ready summary report available on the Patient Perspective page. Each provider entry shows only the name, physician count, overall grade, AI Visibility Score, and four tier bar charts. A call-to-action prompts the recipient to contact RLDatix at 801.998.2830 or book a demo. The cover is branded as a <em>Patient Perspective Report Summary</em> with a direct link to the RLDatix demo booking page.</div>
+            <div class="rn-body">A prospect-ready summary report available on the Patient Pulse page. Each provider entry shows only the name, physician count, overall grade, Pulse Score, and four tier bar charts. A call-to-action prompts the recipient to contact RLDatix at 801.998.2830 or book a demo. The cover is branded as a <em>Patient Pulse Summary</em> with a direct link to the RLDatix demo booking page.</div>
           </div>
 
           <div class="rn-item">
             <div class="rn-title">ZIP Code + Radius Search</div>
-            <div class="rn-body">Both Market Research and Patient Perspective now support location search by ZIP code and radius (1–25 miles). The system resolves the ZIP to the nearest city/state for the analysis, and the PDF cover displays both the resolved city and the original ZIP + radius used.</div>
+            <div class="rn-body">Both Market Pulse and Patient Pulse now support location search by ZIP code and radius (1–25 miles). The system resolves the ZIP to the nearest city/state for the analysis, and the PDF cover displays both the resolved city and the original ZIP + radius used.</div>
           </div>
 
           <div class="rn-item">
@@ -2215,17 +2215,17 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">Navigation Renamed &amp; Tooltips Added</div>
-            <div class="rn-body"><em>New Analysis</em> has been renamed to <em>Market Research</em>. Hover tooltips have been added to all three navigation items describing their intended audience.</div>
+            <div class="rn-body"><em>New Analysis</em> has been renamed to <em>Market Pulse</em>. Hover tooltips have been added to all three navigation items describing their intended audience.</div>
           </div>
 
           <div class="rn-item">
             <div class="rn-title">Structured PDF Filenames</div>
-            <div class="rn-body">Reports are now named with a consistent, readable convention: <code>City_State_Type-YYMMDD-HHMM.pdf</code>. ZIP searches include the ZIP code; Teaser reports are labeled <em>Summary-Report</em>; Patient Perspective reports are labeled accordingly.</div>
+            <div class="rn-body">Reports are now named with a consistent, readable convention: <code>City_State_Type-YYMMDD-HHMM.pdf</code>. ZIP searches include the ZIP code; Teaser reports are labeled <em>Summary-Report</em>; Patient Pulse reports are labeled accordingly.</div>
           </div>
 
           <div class="rn-item">
             <div class="rn-title">Version Label in Sidebar</div>
-            <div class="rn-body">The sidebar footer now shows <em>Rank2 Version 1.1</em> above the build ID and deploy timestamp.</div>
+            <div class="rn-body">The sidebar footer now shows <em>Pulse Version 1.1</em> above the build ID and deploy timestamp.</div>
           </div>
 
           <div class="rn-item">
@@ -2234,8 +2234,8 @@ html, body {
           </div>
 
           <div class="rn-item">
-            <div class="rn-title">Deterministic AI Visibility Scores</div>
-            <div class="rn-body">AI Visibility tier scores are now computed from verified evidence data (CMS star ratings, Google reads) using the explicit anchor rubric, rather than being read from the narrative text generated in the analysis phase. Running the same market twice now produces the same scores every time.</div>
+            <div class="rn-title">Deterministic Pulse Scores</div>
+            <div class="rn-body">Pulse tier scores are now computed from verified evidence data (CMS star ratings, Google reads) using the explicit anchor rubric, rather than being read from the narrative text generated in the analysis phase. Running the same market twice now produces the same scores every time.</div>
           </div>
 
           <div class="rn-item">
@@ -2351,9 +2351,9 @@ function _storeSession(token, displayName, role, brand) {
 }
 
 const _BRAND_WORDMARKS = {
-  original:   {wordmark: 'Rank<span>2</span>',             sub: 'Market Intelligence'},
-  extension1: {wordmark: 'Montecito<span> Medical</span>', sub: 'Market Intelligence'},
-  extension2: {wordmark: 'Ashleigh<span> Jane</span>',     sub: 'Market Intelligence'},
+  original:   {wordmark: 'PULSE',                          sub: 'AI Visibility Intelligence'},
+  extension1: {wordmark: 'Montecito<span> Medical</span>', sub: 'AI Visibility Intelligence'},
+  extension2: {wordmark: 'Ashleigh<span> Jane</span>',     sub: 'AI Visibility Intelligence'},
 };
 
 // Ashleigh Jane wordmark SVGs as URL-encoded data URIs
@@ -2924,7 +2924,7 @@ async function runPatient() {
     _lastPage = 'patient';
     startProgress(job_id, label, false);
   } catch(e) { showErr(errEl, e.message); }
-  finally { btn.disabled = false; btn.innerHTML = 'Run Patient Perspective →'; }
+  finally { btn.disabled = false; btn.innerHTML = 'Run Patient Pulse →'; }
 }
 
 // ── Individual Report ─────────────────────────────────────────────────────
@@ -3330,7 +3330,7 @@ async function runComparison() {
     showErr(errEl, e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Run Comparison Report →';
+    btn.innerHTML = 'Run Pulse Comparison →';
   }
 }
 
@@ -3396,7 +3396,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     showErr(errEl, e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Run Individual Report →';
+    btn.innerHTML = 'Run Diagnostic →';
   }
 }
 
@@ -3473,7 +3473,7 @@ async function openPracticeDiscovery() {
     showErr(errEl, e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Run Individual Report →';
+    btn.innerHTML = 'Run Diagnostic →';
   }
 }
 
@@ -3593,7 +3593,7 @@ async function runManual() {
     _lastPage = 'new';
     startProgress(job_id, label, false);
   } catch(e) { showErr(errEl, e.message); }
-  finally { btn.disabled = false; btn.innerHTML = 'Run Analysis →'; }
+  finally { btn.disabled = false; btn.innerHTML = 'Run Diagnostic →'; }
 }
 
 // ── CSV upload ────────────────────────────────────────────────────────────
@@ -3681,7 +3681,7 @@ function setPhase(name, state) {
 function startProgress(jobId, title, isBatch) {
   if (_es) _es.close();
   document.getElementById('prog-title').textContent = title;
-  document.getElementById('prog-sub').textContent   = 'Analysis in progress…';
+  document.getElementById('prog-sub').textContent   = 'Diagnostic in progress...';
   document.getElementById('stream-box').textContent  = '';
   document.getElementById('prog-done').classList.add('hidden');
   document.getElementById('prog-err').classList.add('hidden');
@@ -3762,10 +3762,10 @@ function showSingleDone(r) {
   document.getElementById('done-sub').textContent = subText;
   document.getElementById('done-body').innerHTML = bodyHtml;
 
-  const backLabel = _lastPage === 'patient'   ? 'New Patient Perspective'
-    : _lastPage === 'individual' ? 'New Individual Report'
-    : _lastPage === 'compare'   ? 'New Comparison'
-    : 'New Market Research';
+  const backLabel = _lastPage === 'patient'   ? 'New Patient Pulse'
+    : _lastPage === 'individual' ? 'New Pulse Diagnostic'
+    : _lastPage === 'compare'   ? 'New Pulse Comparison'
+    : 'New Market Pulse';
 
   const dlUrl = isComparison
     ? `/api/compare/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
@@ -4924,7 +4924,7 @@ function renderTrendCharts(dataPoints) {
 
   // Delta summary cards
   const deltaMetrics = [
-    { label: 'AI Visibility Score', first: first.ai_visibility_score, last: last.ai_visibility_score, suffix: '/100' },
+    { label: 'Pulse Score (AI Visibility)', first: first.ai_visibility_score, last: last.ai_visibility_score, suffix: '/100' },
     { label: 'Outcomes & Safety',   first: first.tier_outcomes,        last: last.tier_outcomes,        suffix: '' },
     { label: 'Google Rating',       first: first.google_rating,        last: last.google_rating,        suffix: '★', decimals: 1 },
     { label: 'Reviews',             first: first.google_count,         last: last.google_count,         suffix: '' },

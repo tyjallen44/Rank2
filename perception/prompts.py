@@ -312,10 +312,10 @@ Maintain globally sequential item numbers (#1, #2, #3...) across all sections. C
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits; verify with insurer and treating \
-physician. MUST include this AI Visibility note verbatim: "The AI Visibility \
-Score (0–100) reflects how favorably this provider surfaces to today's leading AI \
-assistants — scored on the public sources those assistants state they weight when \
-recommending providers, blended by each assistant's usage. It is a \
+physician. MUST include this note verbatim: "The Pulse Score (0–100) is an \
+AI-visibility measure reflecting how favorably this provider surfaces to today's \
+leading AI assistants — scored on the public sources those assistants state they \
+weight when recommending providers, blended by each assistant's usage. It is a \
 market-perception measure, not a clinical-quality verdict."]
 
 Prioritize completeness — better to include more hospitals with less detail than \
@@ -455,10 +455,10 @@ Maintain globally sequential item numbers (#1, #2, #3...) across all sections. C
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits; verify with insurer and treating \
-physician. MUST include this AI Visibility note verbatim: "The AI Visibility \
-Score (0–100) reflects how favorably this provider surfaces to today's leading AI \
-assistants — scored on the public sources those assistants state they weight when \
-recommending providers, blended by each assistant's usage. It is a \
+physician. MUST include this note verbatim: "The Pulse Score (0–100) is an \
+AI-visibility measure reflecting how favorably this provider surfaces to today's \
+leading AI assistants — scored on the public sources those assistants state they \
+weight when recommending providers, blended by each assistant's usage. It is a \
 market-perception measure, not a clinical-quality verdict."]
 
 Prioritize completeness — better to include more practices with less detail than \

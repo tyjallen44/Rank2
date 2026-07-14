@@ -322,13 +322,14 @@ total — include every actionable item found.]
 
 ### Data Limitations & Disclaimer
 [Data currency and methodology limits. Verify with insurer and treating physician. \
-MUST include verbatim: "The AI Visibility Score (0–100) reflects how favorably \
-this provider surfaces to today's leading AI assistants — scored on the public \
-sources those assistants state they weight when recommending providers, blended by \
-each assistant's usage. It is a market-perception measure, not a clinical-quality \
-verdict. Practice Edition scores are computed on a four-pillar rubric (practice-rubric.md \
-v1.0) distinct from the hospital rubric; scores from both rubrics may be presented \
-side-by-side when the profile classification is displayed."]
+MUST include verbatim: "The Pulse Score (0–100) is an AI-visibility measure \
+reflecting how favorably this provider surfaces to today's leading AI assistants — \
+scored on the public sources those assistants state they weight when recommending \
+providers, blended by each assistant's usage. It is a market-perception measure, \
+not a clinical-quality verdict. Practice Edition scores are computed on a \
+four-pillar rubric (practice-rubric.md v1.0) distinct from the hospital rubric; \
+scores from both rubrics may be presented side-by-side when the profile \
+classification is displayed."]
 """
 
 

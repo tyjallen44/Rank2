@@ -40,6 +40,7 @@ from .practice_prompts import build_practice_prompt
 from . import practice_scoring
 
 # Import shared helpers from the hospital analyzer
+from .strings import AIVS_DISCLAIMER_CHECK as _AIVS_DISCLAIMER_CHECK
 from .analyzer import (
     _get_client,
     _MODEL,
@@ -644,7 +645,7 @@ def analyze_practice(
     console.print(f"[green]✓[/green] Scored practice ({run_profile} / {profile_label})")
 
     disclaimer = _clean(structured_data.get("disclaimer", ""))
-    if "AI Visibility Score" not in disclaimer:
+    if _AIVS_DISCLAIMER_CHECK not in disclaimer:
         disclaimer = (disclaimer + " " + _AIVS_DISCLAIMER).strip()
 
     result = AnalysisResult(

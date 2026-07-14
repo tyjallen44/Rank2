@@ -9,7 +9,7 @@ from typing import Optional
 ADMIN_EMAIL: str = os.environ.get("ADMIN_NOTIFICATION_EMAIL", "ty.allen@rldatix.com")
 APP_URL: str = os.environ.get("APP_URL", "https://careclimb.com")
 
-_BRAND = "CareClimb"
+from .strings import EMAIL_BRAND as _BRAND
 _CARD_CSS = (
     "font-family:'Inter',-apple-system,sans-serif;"
     "color:#0F4146;max-width:480px;margin:0 auto;padding:32px 24px;"

@@ -48,7 +48,7 @@ def _normalize_input(text: str | None) -> str | None:
         return text
     return text.strip().title()
 
-app = FastAPI(title="Rank2", docs_url=None, redoc_url=None)
+app = FastAPI(title="Pulse", docs_url=None, redoc_url=None)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _raw_pw = os.environ.get("ACCESS_PASSWORD", "")
@@ -1348,7 +1348,7 @@ async def frontend(full_path: str):
     try:
         return HTMLResponse(html_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return HTMLResponse("<h1>Rank2</h1><p>Frontend not built — web/index.html missing.</p>")
+        return HTMLResponse("<h1>Pulse</h1><p>Frontend not built — web/index.html missing.</p>")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

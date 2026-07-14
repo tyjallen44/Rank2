@@ -6,6 +6,19 @@ from pathlib import Path
 
 from .models import AffiliationType, AnalysisResult, RankedProvider, SizeCategory
 from .scoring import TIER_LABELS, PRACTICE_TIER_LABELS, PRACTICE_PROFILE_DISPLAY
+from .strings import (
+    COVER_MARKET, COVER_PATIENT, COVER_PATIENT_TEASER,
+    COVER_INDIVIDUAL, COVER_INDIVIDUAL_TEASER,
+    COVER_COMPARISON, COVER_REPORT_SUB,
+    SCORE_LABEL, SCORE_DESCRIPTOR,
+    SECTION_VERDICT, SECTION_ASSESSMENT,
+    SECTION_COMPARISON_OVERVIEWS,
+    SECTION_COMPARISON_SCORE_LABEL, SECTION_COMPARISON_VERDICT_LABEL,
+    ROADMAP_TITLE,
+    BLUR_CTA_INDIVIDUAL, BLUR_CTA_COMPARISON,
+    RANKED_TEASER_SUBTITLE, RANKED_PATIENT_SUBTITLE,
+    MARKET_ADVICE_CTA, DEEP_DIVE_HEADER_TPL,
+)
 
 
 def _tier_labels(profile: str | None) -> dict[str, str]:
@@ -213,7 +226,8 @@ def _aivs_block(p: RankedProvider) -> str:
     return f"""
     <div class="aivs">
       <div>
-        <div class="aivs-label">AI Visibility</div>
+        <div class="aivs-label">{SCORE_LABEL}</div>
+        <div class="aivs-sublabel">{SCORE_DESCRIPTOR}</div>
         <div class="aivs-score">{score_txt}<span class="out">/100</span>{band_html}</div>
         <div class="profile-chip">{profile_label}</div>
         {f'<div class="ceiling-note">⚠ Score capped at 74 ({_e(p.score_ceiling_reason)})</div>' if p.score_ceiling_applied else ""}
@@ -554,7 +568,7 @@ def _individual_teaser_card(p: RankedProvider) -> str:
           <div class="teaser-blur-overlay">
             <div class="blur-lock">&#128274;</div>
             <div class="blur-cta-heading">Full analysis available upon request</div>
-            <div class="blur-cta-sub">Access the complete AI Visibility analysis, detailed signal breakdown, and your personalized AI Visibility Improvement Roadmap.</div>
+            <div class="blur-cta-sub">{BLUR_CTA_INDIVIDUAL}</div>
             <div class="blur-cta-actions">
               <span class="blur-phone">{_TEASER_PHONE}</span>
               &nbsp;&nbsp;&middot;&nbsp;&nbsp;
@@ -643,7 +657,7 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
           <div class="teaser-blur-overlay">
             <div class="blur-lock">&#128274;</div>
             <div class="blur-cta-heading">Full analysis available upon request</div>
-            <div class="blur-cta-sub">Access the complete competitive analysis, detailed signal breakdown, and your personalized AI Visibility Improvement Roadmap.</div>
+            <div class="blur-cta-sub">{BLUR_CTA_COMPARISON}</div>
             <div class="blur-cta-actions">
               <span class="blur-phone">{_TEASER_PHONE}</span>
               &nbsp;&nbsp;&middot;&nbsp;&nbsp;
@@ -682,7 +696,7 @@ def _teaser_roadmap_section() -> str:
     return f"""
   <div class="roadmap-section">
     <div class="roadmap-header">
-      <div class="roadmap-title">&#128274;&nbsp; AI Visibility Improvement Roadmap</div>
+      <div class="roadmap-title">&#128274;&nbsp; {ROADMAP_TITLE}</div>
       <div class="roadmap-subtitle">Your personalized action plan by tier &mdash; unlock the full report to see exactly where to focus and what moves the needle.</div>
     </div>
     <div class="roadmap-items">{items}</div>
@@ -1381,7 +1395,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         section_title = f"{result.specialty} Providers" if result.specialty else "Hospitals & Health Systems"
         rankings_html = _teaser_rankings_section(
             all_ranked, section_title,
-            "Ranked by AI Visibility Score — contact RLDatix for the full report"
+            RANKED_TEASER_SUBTITLE
         )
     elif result.patient_perspective:
         # Patient perspective: single flat list ordered purely by rank
@@ -1389,7 +1403,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         section_title = f"{result.specialty} Providers" if result.specialty else "Hospitals & Health Systems"
         rankings_html = _rankings_section(
             all_ranked, section_title,
-            "Ranked by AI Visibility Score — the order a patient is likely to encounter these providers when asking an AI assistant for guidance"
+            RANKED_PATIENT_SUBTITLE
         )
     elif result.specialty:
         # Specialty analysis: split by affiliation type
@@ -1412,17 +1426,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
             + _rankings_section(unclassified, "Additional Hospitals", "Size not classified")
         )
 
-    _MARKET_ADVICE_CTA = (
-        "The recommendations in this section are most valuable when focused on a "
-        "single organization. This report covers multiple providers across a market — "
-        "to receive a personalized AI Visibility Improvement Plan for your organization, "
-        "contact the RLDatix team for an Individual Deep-Dive Report. An individual "
-        "report delivers a prioritized, action-ready roadmap specific to your digital "
-        "footprint, naming exactly what to fix, where to fix it, and which AI visibility "
-        "channel each action improves. Call us at 801.998.2830 or "
-        "<a href='https://www.rldatix.com/en-nam/book-a-demo/' style='color:#2aa198'>"
-        "Get Your Report</a>."
-    )
+    _MARKET_ADVICE_CTA = MARKET_ADVICE_CTA
 
     def _advice_html() -> str:
         if not result.individual_report:
@@ -1454,23 +1458,25 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     else:
         logo_tag = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
 
-    # Cover eyebrow
+    # Cover eyebrow and optional report-type sub-label
+    cover_report_sub = ""
     if result.individual_report and result.teaser_report:
         cover_eyebrow = (
-            f'Individual AI Visibility Report Summary &mdash; Request Full Report '
+            f'{COVER_INDIVIDUAL_TEASER} '
             f'<a href="{_TEASER_DEMO_URL}" style="color:{_SEAFOAM};text-decoration:underline;">Here</a>'
         )
     elif result.individual_report:
-        cover_eyebrow = "Individual AI Visibility Report"
+        cover_eyebrow  = COVER_INDIVIDUAL
+        cover_report_sub = f'<div class="cover-report-sub">{COVER_REPORT_SUB}</div>'
     elif result.teaser_report:
         cover_eyebrow = (
-            f'Patient Perspective Report Summary &mdash; Request Full Report '
+            f'{COVER_PATIENT_TEASER} '
             f'<a href="{_TEASER_DEMO_URL}" style="color:{_SEAFOAM};text-decoration:underline;">Here</a>'
         )
     elif result.patient_perspective:
-        cover_eyebrow = "Patient Perspective Report"
+        cover_eyebrow = COVER_PATIENT
     else:
-        cover_eyebrow = "Market Intelligence Report"
+        cover_eyebrow = COVER_MARKET
 
     # Cover location/specialty/sub differ for individual reports
     if result.individual_report:
@@ -1486,10 +1492,10 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         )
 
     # Section title overrides for individual reports
-    overview_title      = "Organization Overview"      if result.individual_report else "Market Overview"
-    recommendation_title = "AI Visibility Assessment"   if result.individual_report else "Top Recommendation"
-    advice_title        = (
-        "AI Visibility Assessment & Improvement Opportunities"
+    overview_title       = "Organization Overview" if result.individual_report else "Market Overview"
+    recommendation_title = SECTION_ASSESSMENT      if result.individual_report else "Top Recommendation"
+    advice_title         = (
+        SECTION_ASSESSMENT
         if result.individual_report
         else "Improve Your AI Visibility"
     )
@@ -1506,7 +1512,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     verdict_html = ""
     if result.ai_visibility_verdict:
         verdict_html = (
-            '<div class="verdict"><div class="section-title" style="margin-bottom:8px;">AI Visibility Verdict</div>'
+            f'<div class="verdict"><div class="section-title" style="margin-bottom:8px;">{SECTION_VERDICT}</div>'
             + _paras(result.ai_visibility_verdict) + "</div>"
         )
 
@@ -1569,6 +1575,14 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
       letter-spacing: 0.2em;
       text-transform: uppercase;
       color: {_SEAFOAM};
+      margin-bottom: 4px;
+    }}
+    .cover-report-sub {{
+      font-size: 6.5pt;
+      font-weight: 400;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(128,248,228,0.6);
       margin-bottom: 10px;
     }}
     .cover-location {{
@@ -1950,7 +1964,11 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     .aivs-score .out {{ font-size: 9pt; font-weight: 600; color: #7a9095; }}
     .aivs-label {{
       font-size: 6.5pt; font-weight: 700; letter-spacing: 0.1em;
-      text-transform: uppercase; color: #177B6E; margin-bottom: 4px;
+      text-transform: uppercase; color: #177B6E; margin-bottom: 1px;
+    }}
+    .aivs-sublabel {{
+      font-size: 5.5pt; font-weight: 600; letter-spacing: 0.09em;
+      text-transform: uppercase; color: #5a8090; margin-bottom: 4px;
     }}
     .tier-bars {{ flex: 1; }}
     .tier-row {{ display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }}
@@ -2206,6 +2224,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 <div class="cover">
   {logo_tag}
   <div class="cover-eyebrow">{cover_eyebrow}</div>
+  {cover_report_sub}
   <div class="cover-location">{cover_loc}</div>
   <div class="cover-specialty">{cover_spec}</div>
   {cover_sub}
@@ -2306,12 +2325,12 @@ def _comparison_overview_block(result: AnalysisResult, label: str) -> str:
     <div style="font-size:15pt;font-weight:700;color:{_TEAL};margin-bottom:10px">{name}</div>
     <div style="display:grid;grid-template-columns:160px 1fr;gap:20px">
       <div>
-        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#999;margin-bottom:8px">AI Visibility Score</div>
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#999;margin-bottom:8px">{SECTION_COMPARISON_SCORE_LABEL}</div>
         <div style="margin-bottom:14px">{score_html}</div>
         {tier_html}
       </div>
       <div>
-        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#999;margin-bottom:8px">AI Visibility Verdict</div>
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#999;margin-bottom:8px">{SECTION_COMPARISON_VERDICT_LABEL}</div>
         <div style="font-size:9pt;line-height:1.65;color:#333">{verdict}</div>
       </div>
     </div>
@@ -2357,7 +2376,7 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
     assessment = _e(result.top_recommendation or "")
     assessment_html = f"""
   <div class="recommendation" style="margin-top:20px">
-    <div class="section-title" style="margin-bottom:10px">AI Visibility Assessment</div>
+    <div class="section-title" style="margin-bottom:10px">{SECTION_ASSESSMENT}</div>
     <p>{assessment}</p>
   </div>"""
 
@@ -2382,7 +2401,7 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
 
     improvement_html = f"""
   <div class="advice" style="margin-top:20px">
-    <div class="section-title">AI Visibility Assessment &amp; Improvement Opportunities</div>
+    <div class="section-title">{SECTION_ASSESSMENT}</div>
     {improvement_body}
   </div>"""
 
@@ -2395,7 +2414,7 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
     return f"""
   <div style="page-break-before:always">
     <div class="section-title" style="font-size:13pt;margin-bottom:16px">
-      Deep-Dive Report — {name}
+      {DEEP_DIVE_HEADER_TPL.format(name=name)}
     </div>
     {card_html}
     {assessment_html}
@@ -2437,7 +2456,8 @@ def _build_comparison_html(
     body_content = f"""
 <div class="cover">
   {logo_tag}
-  <div class="cover-eyebrow">AI Visibility Comparison Report</div>
+  <div class="cover-eyebrow">{COVER_COMPARISON}</div>
+  <div class="cover-report-sub">{COVER_REPORT_SUB}</div>
   <div class="cover-location">{name_a}</div>
   <div class="cover-specialty" style="font-size:13pt">vs.</div>
   <div class="cover-location" style="font-size:18pt">{name_b}</div>
@@ -2451,7 +2471,7 @@ def _build_comparison_html(
 
 <div class="content">
 
-  <div class="section-title" style="font-size:13pt;margin-bottom:20px">Organization Overviews &amp; AI Visibility Verdicts</div>
+  <div class="section-title" style="font-size:13pt;margin-bottom:20px">{SECTION_COMPARISON_OVERVIEWS}</div>
 
   {_comparison_overview_block(result_a, "Entity A")}
   {_comparison_overview_block(result_b, "Entity B")}
