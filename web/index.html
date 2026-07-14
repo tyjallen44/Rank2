@@ -2323,6 +2323,7 @@ let _type        = 'hospital';
 let _groups      = [];       // parsed CSV groups
 let _es          = null;     // EventSource
 let _lastPage    = 'new';    // page that launched the current analysis
+const _completedPages = new Set(); // pages that have finished a run and need reset on return
 
 const PHASES = ['starting', 'generating', 'structured', 'pdf'];
 const PHASE_MAP = {
@@ -2623,6 +2624,10 @@ async function errDetail(r, fallback) {
 
 // ── Navigation ────────────────────────────────────────────────────────────
 function navigate(p) {
+  if (_completedPages.has(p)) {
+    resetPage(p);
+    _completedPages.delete(p);
+  }
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('page-' + p).classList.add('active');
@@ -2633,6 +2638,123 @@ function navigate(p) {
   if (p === 'admin') loadAdminPage();
   if (p === 'feedback') loadFeedback();
   if (p === 'track') loadTrackPage();
+}
+
+function resetPage(p) {
+  if (p === 'new') {
+    _mode = 'manual';
+    _type = 'hospital';
+    _locMode = 'city';
+    _groups = [];
+    document.getElementById('f-city').value = '';
+    document.getElementById('f-state').value = '';
+    document.getElementById('f-specialty').value = '';
+    document.getElementById('f-zip').value = '';
+    const radEl = document.getElementById('f-radius');
+    if (radEl) radEl.value = '25';
+    const aggEl = document.getElementById('agg-toggle');
+    if (aggEl) aggEl.checked = true; // default is checked
+    document.getElementById('manual-err').classList.add('hidden');
+    setMode('manual');
+    setType('hospital');
+    setLocMode('city');
+    // Reset CSV dropzone
+    document.getElementById('csv-preview').classList.add('hidden');
+    document.getElementById('csv-err').classList.add('hidden');
+    document.getElementById('dz').innerHTML = `
+      <input id="csv-file" type="file" accept=".csv,.xlsx,.xls"
+        style="display:none" onchange="onFileSelect(this.files[0])">
+      <div class="dz-icon">📂</div>
+      <div class="dz-text">Drop your spreadsheet here, or
+        <span class="dz-hl" onclick="document.getElementById('csv-file').click()">browse</span>
+      </div>
+      <div class="dz-text mt8" style="font-size:12px">CSV · XLSX · XLS</div>`;
+
+  } else if (p === 'patient') {
+    _ppMode = 'manual';
+    _ppType = 'hospital';
+    _ppLocMode = 'city';
+    _ppGroups = [];
+    const ppCityEl = document.getElementById('pp-city');
+    if (ppCityEl) ppCityEl.value = '';
+    const ppStateEl = document.getElementById('pp-state');
+    if (ppStateEl) ppStateEl.value = '';
+    const ppSpecEl = document.getElementById('pp-specialty');
+    if (ppSpecEl) ppSpecEl.value = '';
+    const ppZipEl = document.getElementById('pp-zip');
+    if (ppZipEl) ppZipEl.value = '';
+    const ppErrEl = document.getElementById('pp-err');
+    if (ppErrEl) ppErrEl.classList.add('hidden');
+    setPpMode('manual');
+    setPpType('hospital');
+    setPpLocMode('city');
+    clearPpCsv();
+
+  } else if (p === 'individual') {
+    _irLocMode = 'city';
+    _irType = 'hospital';
+    _irCandidates = [];
+    _irSelected = null;
+    _irResolvedCity = null;
+    _irResolvedState = null;
+    _irPracticeProfile = null;
+    document.getElementById('ir-name').value = '';
+    document.getElementById('ir-city').value = '';
+    document.getElementById('ir-state').value = '';
+    document.getElementById('ir-zip').value = '';
+    const irSpecEl = document.getElementById('ir-specialty');
+    if (irSpecEl) irSpecEl.value = '';
+    ['ir-step2','ir-step2b','ir-step3','ir-step-practice-discovery'].forEach(id => {
+      document.getElementById(id).classList.add('hidden');
+    });
+    const irSearchErr = document.getElementById('ir-search-err');
+    if (irSearchErr) irSearchErr.classList.add('hidden');
+    const irRunErr = document.getElementById('ir-run-err');
+    if (irRunErr) irRunErr.classList.add('hidden');
+    const irPcEl = document.getElementById('ir-practice-composite');
+    if (irPcEl) irPcEl.checked = false;
+    const irPhyEl = document.getElementById('ir-physician-composite');
+    if (irPhyEl) { irPhyEl.checked = false; irPhyEl.disabled = true; }
+    const irAggEl = document.getElementById('ir-agg-toggle');
+    if (irAggEl) irAggEl.checked = true; // default is checked
+    const irSkipEl = document.getElementById('ir-skip-pdf-toggle');
+    if (irSkipEl) irSkipEl.checked = false;
+    const irTeaserEl = document.getElementById('ir-teaser-toggle');
+    if (irTeaserEl) irTeaserEl.checked = false;
+    setIrLocMode('city');
+    setIrType('hospital');
+
+  } else if (p === 'compare') {
+    ['a','b'].forEach(side => {
+      _cmp[side].type = 'hospital';
+      _cmp[side].candidates = [];
+      _cmp[side].selected = null;
+      _cmp[side].city = null;
+      _cmp[side].state = null;
+      _cmp[side].practiceProfile = null;
+      document.getElementById(`cmp-${side}-name`).value = '';
+      document.getElementById(`cmp-${side}-city`).value = '';
+      document.getElementById(`cmp-${side}-state`).value = '';
+      const specEl = document.getElementById(`cmp-${side}-specialty`);
+      if (specEl) specEl.value = '';
+      const errEl = document.getElementById(`cmp-${side}-err`);
+      if (errEl) errEl.classList.add('hidden');
+      document.getElementById(`cmp-${side}-step1`).classList.remove('hidden');
+      document.getElementById(`cmp-${side}-step2`).classList.add('hidden');
+      document.getElementById(`cmp-${side}-step3`).classList.add('hidden');
+      setCmpType(side, 'hospital');
+    });
+    document.getElementById('cmp-b-section').classList.add('hidden');
+    document.getElementById('cmp-run-section').classList.add('hidden');
+    const cmpAggA = document.getElementById('cmp-a-agg');
+    if (cmpAggA) cmpAggA.checked = true; // default is checked
+    const cmpAggB = document.getElementById('cmp-b-agg');
+    if (cmpAggB) cmpAggB.checked = true; // default is checked
+    const cmpTeaserEl = document.getElementById('cmp-teaser');
+    if (cmpTeaserEl) cmpTeaserEl.checked = false;
+    const cmpErrEl = document.getElementById('cmp-run-err');
+    if (cmpErrEl) cmpErrEl.classList.add('hidden');
+  }
 }
 
 // ── New Analysis — mode & type ─────────────────────────────────────────────
@@ -3626,6 +3748,7 @@ function onSSE(ev) {
 }
 
 function showSingleDone(r) {
+  _completedPages.add(_lastPage);
   const isComparison = !!r.comparison;
 
   let subText, bodyHtml;
@@ -3656,6 +3779,7 @@ function showSingleDone(r) {
 }
 
 function showBatchDone(results) {
+  _completedPages.add(_lastPage);
   document.getElementById('prog-title').textContent = 'All analyses complete';
   document.getElementById('done-sub').textContent = `${results.length} report${results.length !== 1 ? 's' : ''} ready`;
   document.getElementById('done-body').innerHTML = `
