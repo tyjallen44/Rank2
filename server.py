@@ -221,6 +221,7 @@ def _job_run_single(
             practice_roster=job.get("practice_roster") or [],
             physician_composite=job.get("physician_composite", False),
             physician_roster=job.get("physician_roster") or {},
+            force_rerun=job.get("force_rerun", False),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -270,6 +271,7 @@ def _job_run_practice(
             practice_roster=job.get("practice_roster") or [],
             physician_composite=job.get("physician_composite", False),
             physician_roster=job.get("physician_roster") or {},
+            force_rerun=job.get("force_rerun", False),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -376,6 +378,7 @@ class AnalyzeRequest(BaseModel):
     practice_roster: List[dict] = []        # confirmed practice list for reputation collection
     physician_composite: bool = False       # include physician sub-rows in practice composite
     physician_roster: dict = {}             # {practice_name: [{name, npi, specialty, credential}]}
+    force_rerun: bool = False               # bypass 90-day score cache
 
 
 class BatchRequest(BaseModel):
@@ -439,6 +442,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["practice_roster"] = req.practice_roster
     _jobs[job_id]["physician_composite"] = req.physician_composite
     _jobs[job_id]["physician_roster"] = req.physician_roster
+    _jobs[job_id]["force_rerun"] = req.force_rerun
 
     if req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)

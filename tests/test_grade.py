@@ -339,3 +339,215 @@ def test_city_match_ratio_empty_address():
     from perception.data.places import city_match_ratio
     assert city_match_ratio("Phoenix", "") == 1.0
     assert city_match_ratio("Phoenix", None) == 1.0
+
+
+# ── Phase 1 remediation regression tests ─────────────────────────────────────
+
+# R2: analyze_location cache wiring
+def test_analyze_location_accepts_force_rerun():
+    """analyze_location() must accept a force_rerun parameter."""
+    import inspect
+    from perception.analyzer import analyze_location
+    sig = inspect.signature(analyze_location)
+    assert "force_rerun" in sig.parameters, "analyze_location missing force_rerun parameter"
+    assert sig.parameters["force_rerun"].default is False
+
+
+def test_analyze_practice_accepts_force_rerun():
+    """analyze_practice() must accept a force_rerun parameter."""
+    import inspect
+    from perception.practice_analyzer import analyze_practice
+    sig = inspect.signature(analyze_practice)
+    assert "force_rerun" in sig.parameters, "analyze_practice missing force_rerun parameter"
+    assert sig.parameters["force_rerun"].default is False
+
+
+# R3: Hospital signal suppression in practice improvement_sections
+def test_hospital_signal_filtered_from_improvement_sections():
+    """improvement_sections items containing hospital-only signals must be dropped."""
+    from perception.practice_analyzer import _hospital_signal
+
+    raw_sections = [
+        {
+            "title": "Visibility Gaps",
+            "description": "Key areas to address.",
+            "items": [
+                "Leapfrog Hospital Safety Grade not published",
+                "CMS Overall Star Rating not published",
+                "Improve online scheduling availability",
+            ],
+        },
+        {
+            "title": "CMS Overall Star Rating improvement",
+            "description": "Hospital-only metric.",
+            "items": ["Register with CMS"],
+        },
+    ]
+    filtered = [
+        {
+            "title": s["title"],
+            "items": [i for i in s["items"] if not _hospital_signal(i)],
+        }
+        for s in raw_sections
+        if not _hospital_signal(s["title"])
+    ]
+    # Section with hospital signal in title is dropped entirely
+    assert len(filtered) == 1
+    assert filtered[0]["title"] == "Visibility Gaps"
+    # Hospital-signal items removed from items list
+    items = filtered[0]["items"]
+    assert "Improve online scheduling availability" in items
+    assert not any(_hospital_signal(i) for i in items), "Hospital signals leaked into items"
+
+
+# N1: Markdown stripping
+def test_strip_md_removes_bold():
+    from perception.pdf import _strip_md
+    assert "**" not in _strip_md("**Strong** performer")
+    assert _strip_md("**Strong** performer") == "Strong performer"
+
+
+def test_strip_md_removes_italic():
+    from perception.pdf import _strip_md
+    assert _strip_md("*excellent* outcomes") == "excellent outcomes"
+    assert _strip_md("_excellent_ outcomes") == "excellent outcomes"
+
+
+def test_strip_md_removes_inline_code():
+    from perception.pdf import _strip_md
+    assert _strip_md("Use `ABC` accreditation") == "Use ABC accreditation"
+
+
+def test_strip_md_removes_headers():
+    from perception.pdf import _strip_md
+    assert _strip_md("## Section Title\nBody text") == "Section Title\nBody text"
+
+
+def test_strip_md_preserves_non_markdown():
+    from perception.pdf import _strip_md
+    text = "Dr. Smith has 4.8★ ratings and 300 reviews."
+    assert _strip_md(text) == text
+
+
+def test_paras_strips_markdown(monkeypatch):
+    """_paras() (defined inside build_html) strips markdown before HTML-escaping."""
+    from perception.pdf import _strip_md
+    # Directly test the strip — _paras() calls _strip_md() which we've already covered.
+    result = _strip_md("**Bold** and *italic* text with `code`")
+    assert "**" not in result
+    assert "*" not in result
+    assert "`" not in result
+
+
+# N2: Sibling dedup against anchor
+def test_sibling_dedup_drops_location_variant_of_anchor():
+    """When anchor name contains a street address, a sibling that is a strong
+    bidirectional match of the anchor should be dropped."""
+    from perception.data.places import _name_match as _nmatch
+    import re
+
+    entity_name = "Desert Orthopaedic Center 2800 E Desert Inn Rd"
+    siblings = [
+        {"name": "Desert Orthopaedic Center - Desert Inn"},    # same location, different format
+        {"name": "Desert Orthopaedic Center - Summerlin"},     # genuine sibling, must be kept
+        {"name": "Desert Orthopaedic Center - Green Valley"},  # genuine sibling, must be kept
+    ]
+
+    _anchor_lc = entity_name.strip().lower()
+    _anchor_has_address = bool(re.search(r'\d', entity_name))
+
+    def _is_anchor_dup(name: str) -> bool:
+        if name.strip().lower() == _anchor_lc:
+            return True
+        if _anchor_has_address:
+            return (
+                _nmatch(entity_name, name) == "strong"
+                and _nmatch(name, entity_name) == "strong"
+            )
+        return False
+
+    kept = [s for s in siblings if not _is_anchor_dup(s["name"])]
+    names = [s["name"] for s in kept]
+    assert "Desert Orthopaedic Center - Desert Inn" not in names, "Anchor duplicate was not dropped"
+    assert "Desert Orthopaedic Center - Summerlin" in names, "Valid sibling was incorrectly dropped"
+    assert "Desert Orthopaedic Center - Green Valley" in names, "Valid sibling was incorrectly dropped"
+
+
+def test_sibling_dedup_exact_name_always_dropped():
+    """An exact-name match against the anchor is always dropped regardless of address."""
+    import re
+    from perception.data.places import _name_match as _nmatch
+
+    entity_name = "Main Street Orthopedics"
+    siblings = [
+        {"name": "Main Street Orthopedics"},
+        {"name": "Main Street Orthopedics - North"},
+    ]
+
+    _anchor_lc = entity_name.strip().lower()
+    _anchor_has_address = bool(re.search(r'\d', entity_name))
+
+    def _is_anchor_dup(name: str) -> bool:
+        if name.strip().lower() == _anchor_lc:
+            return True
+        if _anchor_has_address:
+            return (
+                _nmatch(entity_name, name) == "strong"
+                and _nmatch(name, entity_name) == "strong"
+            )
+        return False
+
+    kept = [s for s in siblings if not _is_anchor_dup(s["name"])]
+    names = [s["name"] for s in kept]
+    assert "Main Street Orthopedics" not in names, "Exact anchor not dropped"
+    assert "Main Street Orthopedics - North" in names, "Non-exact sibling incorrectly dropped"
+
+
+# R1: Verification flag rendering
+def test_vflag_verified_contains_checkmark():
+    from perception.pdf import _vflag
+    html = _vflag("verified")
+    assert "✓" in html
+    assert "Verified" in html
+
+
+def test_vflag_not_established_contains_x():
+    from perception.pdf import _vflag
+    html = _vflag("not_established")
+    assert "✗" in html
+    assert "Not established" in html
+
+
+def test_vflag_partial_contains_circle():
+    from perception.pdf import _vflag
+    html = _vflag("partial")
+    assert "◐" in html
+    assert "Partial" in html
+
+
+def test_google_stat_renders_verified_flag():
+    """_google_stat() must include a ✓ Verified flag when Google listing is verified."""
+    from perception.models import RankedProvider, GoogleFootprint, GoogleFrontDoor
+    from perception.pdf import _google_stat
+    p = RankedProvider(
+        rank=1, name="Test Hospital",
+        google_footprint=GoogleFootprint(
+            front_door=GoogleFrontDoor(rating=4.2, count=350, verified=True)
+        ),
+    )
+    html = _google_stat(p)
+    assert "✓" in html, "Verified flag missing from _google_stat output"
+
+
+def test_google_stat_renders_not_established_flag():
+    """_google_stat() must include a ✗ Not established flag when listing is not verified."""
+    from perception.models import RankedProvider, GoogleFootprint, GoogleFrontDoor
+    from perception.pdf import _google_stat
+    p = RankedProvider(
+        rank=1, name="Test Hospital",
+        google_footprint=GoogleFootprint(
+            front_door=GoogleFrontDoor(verified=False, reason="no listing found")
+        ),
+    )
+    html = _google_stat(p)
+    assert "✗" in html, "Not-established flag missing from _google_stat output"

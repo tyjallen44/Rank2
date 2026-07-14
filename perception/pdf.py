@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import html as _html_lib
+import re
 from pathlib import Path
 
 from .models import AffiliationType, AnalysisResult, RankedProvider, SizeCategory
@@ -126,6 +127,41 @@ def _e(text: str | None) -> str:
     return _html_lib.escape(str(text or ""))
 
 
+_MD_BOLD   = re.compile(r'\*\*(.+?)\*\*', re.DOTALL)
+_MD_ITALIC = re.compile(r'\*(.+?)\*|_(.+?)_', re.DOTALL)
+_MD_HEADER = re.compile(r'^#{1,6}\s+', re.MULTILINE)
+_MD_CODE   = re.compile(r'`(.+?)`', re.DOTALL)
+_MD_HR     = re.compile(r'^---+\s*$', re.MULTILINE)
+
+
+def _strip_md(text: str | None) -> str:
+    """Remove markdown control characters from LLM-generated prose before HTML rendering."""
+    if not text:
+        return text or ""
+    t = _MD_HEADER.sub("", text)
+    t = _MD_BOLD.sub(r'\1', t)
+    t = _MD_ITALIC.sub(lambda m: m.group(1) or m.group(2), t)
+    t = _MD_CODE.sub(r'\1', t)
+    t = _MD_HR.sub("", t)
+    return t
+
+
+_VFLAG_STYLES: dict[str, tuple[str, str]] = {
+    "verified":        ("#2a8a5a", "✓ Verified"),
+    "partial":         ("#c87000", "◐ Partial"),
+    "not_established": ("#b03030", "✗ Not established"),
+}
+
+
+def _vflag(status: str) -> str:
+    """Render a ✓/◐/✗ verification flag badge for a scored signal."""
+    color, label = _VFLAG_STYLES.get(status, ("#888888", "? Unknown"))
+    return (
+        f'<span style="font-size:6.5pt;font-weight:700;color:{color};'
+        f'white-space:nowrap;margin-left:5px">{label}</span>'
+    )
+
+
 def _rank_text_color(rank: int) -> str:
     # Blue and green badges are light — use dark teal text for contrast
     return _TEAL if rank in (2, 3) else "#ffffff"
@@ -188,7 +224,7 @@ def _ai_says_block(p: RankedProvider) -> str:
         <span style="font-size:6pt;font-weight:400;color:#7a9095;font-style:italic;margin-left:6px">
           &mdash; from training memory &amp; live retrieval &middot; Claude, ChatGPT, Gemini</span>
       </div>
-      <div class="ai-says-text">{_e(p.ai_says)}</div>
+      <div class="ai-says-text">{_e(_strip_md(p.ai_says))}</div>
     </div>"""
 
 
@@ -268,9 +304,14 @@ def _google_stat(p: RankedProvider) -> str:
             f'<strong>{fd.rating:.1f}&#9733;</strong>'
             f' <span style="font-size:7pt;color:#7a9095">{stars_filled}{stars_empty}</span>'
             f' &nbsp;·&nbsp; <strong>{fd.count or 0:,} reviews</strong>{recency}'
+            f'{_vflag("verified")}'
         )
     else:
-        front = f'<strong>Not verified</strong> <span class="google-gap">— {_e(fd.reason or "no rated listing found")}</span>'
+        front = (
+            f'<strong>Not verified</strong>'
+            f' <span class="google-gap">— {_e(fd.reason or "no rated listing found")}</span>'
+            f'{_vflag("not_established")}'
+        )
 
     # ── System-wide aggregate ─────────────────────────────────────────────
     system_line = ""
@@ -324,7 +365,7 @@ def _patient_voice_block(p: RankedProvider) -> str:
     return f"""
     <div class="patient-voice">
       <div class="pv-label">Patient Voice</div>
-      <div class="pv-text">{_e(p.patient_voice_summary)}</div>
+      <div class="pv-text">{_e(_strip_md(p.patient_voice_summary))}</div>
     </div>"""
 
 
@@ -358,18 +399,18 @@ def _outcomes_safety_block(p: RankedProvider) -> str:
     first = grade[0].upper() if grade else ""
     if first and first in "ABCDF":
         css_cls = f"qs-badge qs-leapfrog-{first}"
-        leapfrog_cell = f'<span class="{css_cls}">{first}</span>'
+        leapfrog_cell = f'<span class="{css_cls}">{first}</span>{_vflag("verified")}'
     elif grade.lower() in ("not rated", "not_rated"):
-        leapfrog_cell = '<span class="os-absent">Not rated in current survey cycle</span>'
+        leapfrog_cell = f'<span class="os-absent">Not rated in current survey cycle</span>{_vflag("partial")}'
     else:
-        leapfrog_cell = '<span class="os-absent">Not currently participating in Leapfrog survey</span>'
+        leapfrog_cell = f'<span class="os-absent">Not currently participating in Leapfrog survey</span>{_vflag("not_established")}'
 
     if has_cms:
         _star_css = {5: "qs-cms-5", 4: "qs-cms-4", 3: "qs-cms-3", 2: "qs-cms-2", 1: "qs-cms-1"}
         stars = "★" * p.cms_star_rating + "☆" * (5 - p.cms_star_rating)
-        cms_cell = f'<span class="qs-badge {_star_css[p.cms_star_rating]}">{stars} ({p.cms_star_rating} of 5)</span>'
+        cms_cell = f'<span class="qs-badge {_star_css[p.cms_star_rating]}">{stars} ({p.cms_star_rating} of 5)</span>{_vflag("verified")}'
     else:
-        cms_cell = '<span class="os-absent">No CMS Overall Star Rating published</span>'
+        cms_cell = f'<span class="os-absent">No CMS Overall Star Rating published</span>{_vflag("not_established")}'
 
     return f"""
     <div class="outcomes-safety">
@@ -391,14 +432,14 @@ def _quality_signals_block(p: RankedProvider) -> str:
     usnews_html = ""
     for u in p.us_news_rankings:
         if u.recognition_type == "nationally_ranked" and u.rank:
-            usnews_html += f'<span class="qs-badge qs-usnews-ranked">#{u.rank} {_e(u.category)}</span>'
+            usnews_html += f'<span class="qs-badge qs-usnews-ranked">#{u.rank} {_e(u.category)}</span>{_vflag("verified")}'
         elif u.recognition_type == "nationally_ranked":
-            usnews_html += f'<span class="qs-badge qs-usnews-ranked">Natl. Ranked · {_e(u.category)}</span>'
+            usnews_html += f'<span class="qs-badge qs-usnews-ranked">Natl. Ranked · {_e(u.category)}</span>{_vflag("verified")}'
         else:
-            usnews_html += f'<span class="qs-badge qs-usnews-hp">High-Perf. · {_e(u.category)}</span>'
+            usnews_html += f'<span class="qs-badge qs-usnews-hp">High-Perf. · {_e(u.category)}</span>{_vflag("verified")}'
 
     accred_html = "".join(
-        f'<span class="qs-badge qs-accred">{_e(a)}</span>'
+        f'<span class="qs-badge qs-accred">{_e(a)}</span>{_vflag("verified")}'
         for a in p.accreditations
     )
 
@@ -426,9 +467,9 @@ def _quality_signals_block(p: RankedProvider) -> str:
 def _provider_card(p: RankedProvider, display_rank: int) -> str:
     bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
     text_color = _rank_text_color(display_rank)
-    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
-        f"<li>{_e(w)}</li>"
+        f"<li>{_e(_strip_md(w))}</li>"
         for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
     )
     disq_html = (
@@ -479,9 +520,9 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
 
 def _individual_entity_card(p: RankedProvider) -> str:
     """Full-width card for individual entity reports — no rank badge."""
-    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
-        f"<li>{_e(w)}</li>"
+        f"<li>{_e(_strip_md(w))}</li>"
         for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
     )
     disq_html = (
@@ -536,9 +577,9 @@ def _individual_teaser_card(p: RankedProvider) -> str:
         f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
         if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
     )
-    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
-        f"<li>{_e(w)}</li>"
+        f"<li>{_e(_strip_md(w))}</li>"
         for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
     )
     return f"""
@@ -620,9 +661,9 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
         f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
         if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
     )
-    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
-        f"<li>{_e(w)}</li>"
+        f"<li>{_e(_strip_md(w))}</li>"
         for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
     )
     return f"""
@@ -1438,16 +1479,16 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         if result.improvement_sections:
             parts = []
             for i, sec in enumerate(result.improvement_sections, 1):
-                items_li = "\n".join(f"<li>{_e(item)}</li>" for item in sec.items)
+                items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
                 parts.append(
                     f'<div class="advice-group">'
-                    f'<div class="advice-group-title">{i}. {_e(sec.title)}</div>'
-                    f'<div class="advice-group-desc">{_e(sec.description)}</div>'
+                    f'<div class="advice-group-title">{i}. {_e(_strip_md(sec.title))}</div>'
+                    f'<div class="advice-group-desc">{_e(_strip_md(sec.description))}</div>'
                     f'<ol>{items_li}</ol>'
                     f'</div>'
                 )
             return "\n".join(parts)
-        flat = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
+        flat = "\n".join(f"<li>{_e(_strip_md(a))}</li>" for a in result.practical_advice)
         return f"<ol>{flat}</ol>"
     if brand_cfg.get("logo_html"):
         logo_tag = brand_cfg["logo_html"]
@@ -1505,7 +1546,11 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     )
 
     def _paras(text: str) -> str:
-        return "".join(f"<p>{_e(para.strip())}</p>" for para in (text or "").split("\n") if para.strip())
+        return "".join(
+            f"<p>{_e(para.strip())}</p>"
+            for para in _strip_md(text or "").split("\n")
+            if para.strip()
+        )
 
     overview_html = ""
     if result.market_overview:
@@ -2248,7 +2293,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
   <div class="recommendation">
     <div class="section-title" style="margin-bottom:10px;">{recommendation_title}</div>
-    <p>{_e(result.top_recommendation)}</p>
+    <p>{_e(_strip_md(result.top_recommendation))}</p>
   </div>
 
   <div class="advice">
@@ -2387,7 +2432,7 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
     card_html = _individual_entity_card(p) if p else ""
 
     # AI Visibility Assessment
-    assessment = _e(result.top_recommendation or "")
+    assessment = _e(_strip_md(result.top_recommendation or ""))
     assessment_html = f"""
   <div class="recommendation" style="margin-top:20px">
     <div class="section-title" style="margin-bottom:10px">{SECTION_ASSESSMENT}</div>
@@ -2398,17 +2443,17 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
     if result.improvement_sections:
         parts = []
         for i, sec in enumerate(result.improvement_sections, 1):
-            items_li = "\n".join(f"<li>{_e(item)}</li>" for item in sec.items)
+            items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
             parts.append(
                 f'<div class="advice-group">'
-                f'<div class="advice-group-title">{i}. {_e(sec.title)}</div>'
-                f'<div class="advice-group-desc">{_e(sec.description)}</div>'
+                f'<div class="advice-group-title">{i}. {_e(_strip_md(sec.title))}</div>'
+                f'<div class="advice-group-desc">{_e(_strip_md(sec.description))}</div>'
                 f'<ol>{items_li}</ol>'
                 f'</div>'
             )
         improvement_body = "\n".join(parts)
     elif result.practical_advice:
-        flat = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
+        flat = "\n".join(f"<li>{_e(_strip_md(a))}</li>" for a in result.practical_advice)
         improvement_body = f"<ol>{flat}</ol>"
     else:
         improvement_body = ""

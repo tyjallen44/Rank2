@@ -538,6 +538,7 @@ def analyze_practice(
     practice_roster: list[dict] | None = None,
     physician_composite: bool = False,
     physician_roster: dict | None = None,
+    force_rerun: bool = False,
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -557,6 +558,15 @@ def analyze_practice(
 
     emit({"type": "phase", "name": "starting", "text": "Starting practice analysis"})
     init_db()
+
+    # 90-day score reuse: return cached result when available
+    if not force_rerun:
+        from .db import get_recent_run
+        _loc_key = f"{city}, {state}"
+        _cached = get_recent_run(entity_name, _loc_key)
+        if _cached:
+            emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
+            return AnalysisResult.model_validate_json(_cached["result_json"])
     client = _get_client()
     run_id = str(uuid.uuid4())
 
@@ -699,10 +709,13 @@ def analyze_practice(
             ImprovementSection(
                 title=_clean(s.get("title", "")),
                 description=_clean(s.get("description", "")),
-                items=[_clean(i) for i in s.get("items", []) if isinstance(i, str)],
+                items=[
+                    _clean(i) for i in s.get("items", [])
+                    if isinstance(i, str) and not _hospital_signal(i)
+                ],
             )
             for s in structured_data.get("improvement_sections", [])
-            if isinstance(s, dict) and s.get("title")
+            if isinstance(s, dict) and s.get("title") and not _hospital_signal(s.get("title", ""))
         ],
         disclaimer=disclaimer,
         rankings=rankings,
@@ -728,6 +741,37 @@ def analyze_practice(
         sibling_roster = list(practice_roster or [])
         if not sibling_roster:
             sibling_roster = discover_practice_siblings(entity_name, city, state, on_event=emit)
+
+        # Drop siblings that resolve to the anchor entity (prevents duplicate rows in
+        # the composite table when Claude names a location variant of the anchor).
+        # Uses bidirectional token-overlap when the anchor name contains digits (street
+        # address embedded) — avoids over-dropping when the anchor is a plain org name.
+        from .data.places import _name_match as _nmatch
+        import re as _re
+        _anchor_lc = entity_name.strip().lower()
+        _anchor_has_address = bool(_re.search(r'\d', entity_name))
+
+        def _is_anchor_duplicate(sibling_name: str) -> bool:
+            if sibling_name.strip().lower() == _anchor_lc:
+                return True
+            if _anchor_has_address:
+                return (
+                    _nmatch(entity_name, sibling_name) == "strong"
+                    and _nmatch(sibling_name, entity_name) == "strong"
+                )
+            return False
+
+        deduped: list[dict] = []
+        seen_names: set[str] = set()
+        for s in sibling_roster:
+            sn = s.get("name", "")
+            if _is_anchor_duplicate(sn):
+                continue
+            k = sn.strip().lower()
+            if k not in seen_names:
+                seen_names.add(k)
+                deduped.append(s)
+        sibling_roster = deduped
 
         roster = [anchor_entry] + sibling_roster
 

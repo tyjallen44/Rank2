@@ -520,6 +520,7 @@ def analyze_location(
     practice_roster: list[dict] | None = None,
     physician_composite: bool = False,
     physician_roster: dict | None = None,
+    force_rerun: bool = False,
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -540,6 +541,16 @@ def analyze_location(
 
     emit({"type": "phase", "name": "starting", "text": "Starting analysis"})
     init_db()
+
+    # 90-day score reuse: return cached result for individual reports
+    if individual_report and entity_name and not force_rerun:
+        from .db import get_recent_run
+        _loc_key = f"{city}, {state}"
+        _cached = get_recent_run(entity_name, _loc_key)
+        if _cached:
+            emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
+            return AnalysisResult.model_validate_json(_cached["result_json"])
+
     client = _get_client()
     run_id = str(uuid.uuid4())
 

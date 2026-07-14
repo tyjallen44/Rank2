@@ -174,6 +174,18 @@ confirmation must be scored as unverifiable per the rubric.
 # ─────────────────────────────────────────────────────────────────────────────
 # System prompt
 # ─────────────────────────────────────────────────────────────────────────────
+_PRACTICE_SIGNAL_EXCLUSIONS = """\
+**Practice-edition signal catalog — hospital-only signals excluded.**
+The following signals are ONLY applicable to hospital reports and must NEVER appear \
+in any section of a practice report — not in improvement_sections, key_strengths, \
+notable_weaknesses, or prose:
+- CMS Overall Hospital Quality Star Rating (practices are not rated by CMS Overall Stars)
+- Leapfrog Hospital Safety Grade (practices do not participate in Leapfrog surveys)
+- HCAHPS patient satisfaction survey scores (hospital-inpatient instrument only)
+If any of these are absent for this practice, that is expected and normal — do NOT \
+list them as missing or as areas for improvement.
+"""
+
 PRACTICE_SYSTEM_PROMPT = f"""\
 You are an expert healthcare research analyst specializing in physician practice \
 quality, reputation intelligence, and specialty-care AI visibility. You produce \
@@ -189,6 +201,8 @@ profile of ONE named practice — its physicians, credentials, online reputation
 identity integrity, patient access signals, and AI visibility posture.
 
 {_PRACTICE_AIVS_METHODOLOGY}
+
+{_PRACTICE_SIGNAL_EXCLUSIONS}
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
