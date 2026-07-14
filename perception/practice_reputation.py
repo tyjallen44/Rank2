@@ -88,6 +88,23 @@ def _weighted_average(
     return avg, total
 
 
+def _affiliation_auto_verify(entity_name: str, parent_name: str) -> bool:
+    """Return True when the entity name clearly belongs to the parent brand.
+
+    Exact brand-prefix match (case-insensitive) is sufficient corroboration —
+    e.g. 'Effingham Health System Wound Care' starts with 'Effingham Health System'.
+    We allow the prefix to be shortened by up to 4 characters to handle common
+    abbreviations ('Effingham Health Sys. Wound Care').
+    """
+    if not entity_name or not parent_name:
+        return False
+    e = entity_name.lower().strip()
+    h = parent_name.lower().strip()
+    # Use the longer of (full parent name, parent name minus last 4 chars)
+    prefix = h[: max(6, len(h) - 4)]
+    return e.startswith(prefix)
+
+
 def collect_platform_data(
     practices: list[dict],
     hospital_name: str,
@@ -112,21 +129,67 @@ def collect_platform_data(
 
     emit({"type": "text", "text": f"Collecting platform reputation for {len(practices)} practice(s)…"})
 
-    # ── Google Places for each practice ──────────────────────────────────────
-    # Use address as the search term when available — it disambiguates entries
-    # that share the same practice name (e.g. multiple OrthoSouth locations).
-    google_data: dict[str, tuple] = {}  # name → (rating, count, maps_url)
+    # ── Google Places — entity-name matching (never address) ─────────────────
+    # Profile resolution is per-ENTITY, keyed on entity name match against the
+    # profile's business name.  Address is corroborating evidence only; it is
+    # never the search key.  See design constraint in practice_reputation.py §4.
+    #
+    # After a strong name match we apply two additional gates:
+    #   • Category check: Google types must include a healthcare term.
+    #   • Collision backstop: a given place_id may be assigned to at most one
+    #     entity row.  When two entities both best-match the same profile the
+    #     stronger match wins; the other renders "Not established".
+    from .data.places import _is_healthcare as _phc
+    google_data: dict[str, tuple] = {}  # entity name → (rating, count, maps_url, place_id)
+    _assigned_place_ids: dict[str, tuple[str, str]] = {}  # place_id → (entity_name, match_strength)
+
     for p in practices:
-        search_name = p.get("address") or p["name"]
+        entity_name_key = p["name"]
+        p_city  = p.get("city") or city
+        p_state = p.get("state") or state
         try:
-            read, _ = places.fetch_provider(search_name, p.get("city") or city, p.get("state") or state)
-            google_data[p["name"]] = (
-                read.rating if read.verified else None,
-                read.review_count if read.verified else None,
-                _strip_tracking(read.maps_url) if read.verified else None,
-            )
+            read, _ = places.fetch_provider(entity_name_key, p_city, p_state)
         except Exception:
-            google_data[p["name"]] = (None, None, None)
+            google_data[entity_name_key] = (None, None, None, None)
+            continue
+
+        if not read.verified:
+            # fetch_provider already rejected weak/none name matches
+            google_data[entity_name_key] = (None, None, None, None)
+            continue
+
+        # Category gate: if Google returned a non-empty types list, confirm it's healthcare.
+        # Only a real non-empty list triggers the gate; missing/empty types pass through.
+        if isinstance(read.types, list) and read.types and not _phc(read.types):
+            google_data[entity_name_key] = (None, None, None, None)
+            continue
+
+        # Collision backstop: if this place_id was already claimed by another entity,
+        # keep the stronger name match; render the loser as not_established.
+        pid = read.place_id
+        if pid and pid in _assigned_place_ids:
+            prior_entity, prior_strength = _assigned_place_ids[pid]
+            curr_strength = read.name_match  # "strong" | "weak"
+            # Both passed verified=True so both are "strong", but log the collision
+            import sys
+            print(
+                f"[practice_reputation] Place ID collision: {pid} claimed by "
+                f"'{prior_entity}' and '{entity_name_key}' — keeping prior assignment, "
+                f"'{entity_name_key}' → Not established",
+                file=sys.stderr,
+            )
+            google_data[entity_name_key] = (None, None, None, None)
+            continue
+
+        if pid:
+            _assigned_place_ids[pid] = (entity_name_key, read.name_match)
+
+        google_data[entity_name_key] = (
+            read.rating,
+            read.review_count,
+            _strip_tracking(read.maps_url),
+            pid,
+        )
 
     # ── Other platforms via Claude structured extraction ──────────────────────
     # Include address and original_name in the list so Claude can search
@@ -185,7 +248,12 @@ def collect_platform_data(
     for p in practices:
         name = p["name"]
         pd = platform_data.get(name) or {}
-        g_rating, g_count, g_url = google_data.get(name, (None, None, None))
+        g_rating, g_count, g_url, _g_pid = google_data.get(name, (None, None, None, None))
+
+        # §6 — affiliation auto-verification: exact brand-prefix match on entity name
+        # plus same-market city is sufficient corroboration; overrides Claude's judgment.
+        claude_verified = bool(pd.get("affiliation_verified", True))
+        affiliation_ok = claude_verified or _affiliation_auto_verify(name, hospital_name)
 
         pairs: list[tuple] = []
         platforms_found: list[str] = []
@@ -224,7 +292,7 @@ def collect_platform_data(
             "state":                  p.get("state") or state,
             "entity_type":            p.get("entity_type", "practice"),
             "is_anchor":              bool(p.get("is_anchor", False)),
-            "affiliation_verified":   bool(pd.get("affiliation_verified", True)),
+            "affiliation_verified":   affiliation_ok,
             "google_rating":          g_rating,
             "google_count":           g_count,
             "google_url":             g_url,

@@ -1,5 +1,22 @@
 from __future__ import annotations
 
+from .scoring import TIER_LABELS, PRACTICE_TIER_LABELS, PRACTICE_PROFILE_DISPLAY
+from .strings import PROFILE_DISPLAY_HOSPITAL
+
+
+def _tier_labels_for_profile(profile: str | None) -> dict[str, str]:
+    if profile and profile.startswith("practice_"):
+        return PRACTICE_TIER_LABELS.get(profile, PRACTICE_TIER_LABELS["practice_procedural"])
+    return TIER_LABELS.get(profile or "procedural", TIER_LABELS["procedural"])
+
+
+def _profile_display_name(profile: str | None) -> str:
+    if not profile:
+        return "Procedural"
+    if profile.startswith("practice_"):
+        return PRACTICE_PROFILE_DISPLAY.get(profile, "Procedural")
+    return PROFILE_DISPLAY_HOSPITAL.get(profile, profile.capitalize())
+
 # ─────────────────────────────────────────────────────────────────────────────
 # AI Visibility Score methodology (INTL-SALES-119), shared by both frameworks.
 # The report's spine: when a patient asks an AI assistant to recommend a
@@ -752,6 +769,10 @@ Each bullet in similarities/differences must be specific and evidence-grounded
 Lead each differences bullet with the entity that has the advantage, e.g.
 "[Entity A] scores 12 points higher on Credentials & Recognition (78 vs 66)…"
 
+When referencing letter grades, use the computed grade supplied in the entity
+summary VERBATIM — do not convert, round, or re-derive the grade from the score.
+Do not include internal identifiers such as "practice_procedural" in any output.
+
 Produce ONLY the JSON object — no markdown fences, no preamble.
 """
 
@@ -766,16 +787,17 @@ def build_comparison_prompt(result_a: object, result_b: object) -> tuple[str, st
             return f"Name: {r.entity_name or r.location}\nNo structured data available."
         ts = p.tier_scores
         fd = p.google_footprint.front_door
+        tl = _tier_labels_for_profile(p.weighting_profile)
         lines = [
             f"Name: {p.name}",
             f"Location: {r.location}",
             f"AI Visibility Score: {p.ai_visibility_score}",
             f"Overall grade: {p.overall_rating}",
-            f"Weighting profile: {p.weighting_profile}",
-            f"Tier – Outcomes & Safety: {ts.clinical_outcomes_safety}",
-            f"Tier – Credentials & Recognition: {ts.credentials_recognition}",
-            f"Tier – Patient Experience & Reviews: {ts.patient_experience_reviews}",
-            f"Tier – Access & Fit: {ts.access_fit}",
+            f"Weighting profile: {_profile_display_name(p.weighting_profile)}",
+            f"Tier – {tl['clinical_outcomes_safety']}: {ts.clinical_outcomes_safety}",
+            f"Tier – {tl['credentials_recognition']}: {ts.credentials_recognition}",
+            f"Tier – {tl['patient_experience_reviews']}: {ts.patient_experience_reviews}",
+            f"Tier – {tl['access_fit']}: {ts.access_fit}",
             f"Google rating: {fd.rating} ({fd.count} reviews)",
             f"Leapfrog grade: {p.leapfrog_grade or 'N/A'}",
             f"CMS star rating: {p.cms_star_rating or 'N/A'}",

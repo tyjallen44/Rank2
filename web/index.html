@@ -1547,6 +1547,10 @@ html, body {
             <input type="checkbox" id="cmp-teaser">
             <span class="agg-label">Create Teaser version</span>
           </label>
+          <label class="aggregate-toggle mt10">
+            <input type="checkbox" id="cmp-force-rerun">
+            <span class="agg-label">Re-run analysis (ignore cached results within 90 days)</span>
+          </label>
           <div id="cmp-run-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
             <button class="btn btn-primary" id="cmp-run-btn" onclick="runComparison()">Run Pulse Comparison →</button>
@@ -3311,6 +3315,8 @@ async function runComparison() {
     practice_roster_a:    [],
     practice_composite_b: !!pcB,
     practice_roster_b:    [],
+    force_rerun_a: document.getElementById('cmp-force-rerun').checked,
+    force_rerun_b: document.getElementById('cmp-force-rerun').checked,
   };
 
   const btn = document.getElementById('cmp-run-btn');

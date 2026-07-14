@@ -16,6 +16,7 @@ with a clear reason rather than raising.
 """
 from __future__ import annotations
 
+import difflib
 import os
 import re
 from dataclasses import dataclass, field
@@ -38,6 +39,32 @@ _STOPWORDS = {
 }
 
 
+def _city_from_address(address: str) -> str | None:
+    """Extract city from a formatted address like '123 Main St, Phoenix, AZ 85001, USA'."""
+    parts = [p.strip() for p in address.split(",")]
+    # Drop trailing country and zip+state segments, city is typically the penultimate non-state part.
+    # US format: Street, City, State ZIP, Country — so index -3 is city when Country is last.
+    # We skip any segment that looks like "State ZIP" (2-char alpha + digits) or known country.
+    _state_zip = re.compile(r"^[A-Z]{2}\s+\d{5}")
+    _country = re.compile(r"^(USA|US|United States)$", re.I)
+    filtered = [p for p in parts if not _state_zip.match(p) and not _country.match(p)]
+    # After filtering, city should be the last segment that isn't a street number segment.
+    return filtered[-1] if filtered else None
+
+
+def city_match_ratio(input_city: str, address: str) -> float:
+    """Return similarity ratio (0–1) between input_city and the city parsed from address.
+
+    Returns 1.0 if address is None/empty (no data = no mismatch to flag).
+    """
+    if not address:
+        return 1.0
+    found_city = _city_from_address(address)
+    if not found_city:
+        return 1.0
+    return difflib.SequenceMatcher(None, input_city.lower(), found_city.lower()).ratio()
+
+
 @dataclass
 class GoogleRead:
     """A single resolved Google Business Profile read."""
@@ -51,6 +78,9 @@ class GoogleRead:
     business_status: Optional[str] = None
     reason: Optional[str] = None      # populated when verified is False
     maps_url: Optional[str] = None    # googleMapsUri from Places API; None if unverified
+    place_id: Optional[str] = None    # canonical Places ID for collision detection
+    types: list = field(default_factory=list)  # Google Places primary/secondary types
+    formatted_address: Optional[str] = None    # for city canonicalization check
 
     def as_line(self) -> str:
         """One-line human/LLM-readable summary for the evidence block."""
@@ -82,6 +112,31 @@ class Footprint:
             f"~{self.listings_sampled} listings sampled{rng} "
             f"(sampled, not a census)"
         )
+
+
+# Google Places types that confirm a healthcare/medical listing.
+# Used to prevent a restaurant or gym at the same address from matching.
+_HEALTHCARE_TYPES: frozenset[str] = frozenset({
+    "hospital", "doctor", "health", "clinic", "medical_clinic",
+    "dentist", "pharmacy", "physical_therapist", "physiotherapist",
+    "medical_center", "emergency_room", "urgent_care_facility",
+    "nursing_home", "assisted_living_facility", "dental_clinic",
+    "dental_office", "chiropractor", "optician", "optometrist",
+    "rehabilitation_center", "blood_bank", "drug_store",
+    "eye_care_center", "mental_health", "pediatrician",
+    "surgery_center", "dialysis_center", "wound_care",
+    # catch-all terms that appear in type lists
+    "health_care", "healthcare", "medical_office",
+})
+
+
+def _is_healthcare(types: list[str]) -> bool:
+    """Return True if any returned Google Places type indicates a healthcare business."""
+    for t in types:
+        tl = t.lower().replace(" ", "_")
+        if tl in _HEALTHCARE_TYPES or "health" in tl or "medical" in tl or "clinic" in tl:
+            return True
+    return False
 
 
 def _api_key(explicit: str | None = None) -> str | None:
@@ -208,9 +263,10 @@ def fetch_provider(
                 "Content-Type": "application/json",
                 "X-Goog-Api-Key": key,
                 "X-Goog-FieldMask": (
-                    "places.displayName,places.rating,"
+                    "places.id,places.displayName,places.rating,"
                     "places.userRatingCount,places.businessStatus,"
-                    "places.googleMapsUri"
+                    "places.googleMapsUri,places.types,"
+                    "places.formattedAddress"
                 ),
             },
             json={"textQuery": query, "pageSize": max_results},
@@ -241,6 +297,9 @@ def fetch_provider(
     rating = top.get("rating")
     count = top.get("userRatingCount")
     match = _name_match(name, found_name)
+    top_types = top.get("types") or []
+    top_place_id = top.get("id") or None
+    top_address = top.get("formattedAddress") or None
 
     if rating is None or match == "none":
         reason = (
@@ -249,7 +308,9 @@ def fetch_provider(
             f"listing '{found_name}' has no Google rating"
         )
         read = GoogleRead(query=query, verified=False, matched_name=found_name,
-                          name_match=match, reason=reason)
+                          name_match=match, reason=reason,
+                          place_id=top_place_id, types=top_types,
+                          formatted_address=top_address)
     else:
         read = GoogleRead(
             query=query, verified=True, rating=float(rating),
@@ -257,6 +318,9 @@ def fetch_provider(
             matched_name=found_name, name_match=match,
             business_status=top.get("businessStatus"),
             maps_url=top.get("googleMapsUri") or None,
+            place_id=top_place_id,
+            types=top_types,
+            formatted_address=top_address,
         )
 
     ratings = [p["rating"] for p in places if p.get("rating") is not None]

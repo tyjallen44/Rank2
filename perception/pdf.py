@@ -5,7 +5,7 @@ import html as _html_lib
 from pathlib import Path
 
 from .models import AffiliationType, AnalysisResult, RankedProvider, SizeCategory
-from .scoring import TIER_LABELS, PRACTICE_TIER_LABELS, PRACTICE_PROFILE_DISPLAY
+from .scoring import TIER_LABELS, PRACTICE_TIER_LABELS, PRACTICE_PROFILE_DISPLAY, grade_from_score
 from .strings import (
     COVER_MARKET, COVER_PATIENT, COVER_PATIENT_TEASER,
     COVER_INDIVIDUAL, COVER_INDIVIDUAL_TEASER,
@@ -203,14 +203,17 @@ def _tier_row(label: str, value: int | None) -> str:
 
 
 def _aivs_block(p: RankedProvider) -> str:
-    """AI Visibility score + band + weighting profile + the four tier bars."""
+    """AI Visibility score + computed letter grade + weighting profile + the four tier bars."""
     profile = p.weighting_profile or "procedural"
     labels = _tier_labels(profile)
     ts = p.tier_scores
     score = p.ai_visibility_score
     score_txt = str(score) if score is not None else "—"
-    band, band_cls = _score_band(score)
-    band_html = f'<span class="score-band {band_cls}">{band}</span>' if band else ""
+    # Grade is always computed from score — never from LLM-generated overall_rating.
+    letter_grade, band_label = grade_from_score(score)
+    _, band_cls = _score_band(score)  # keep CSS class for coloring
+    grade_html = f'<span class="score-band {band_cls}">{_e(letter_grade)}</span>' if score is not None else ""
+    band_sub_html = f'<div class="score-band-label">{_e(band_label)}</div>' if band_label and band_label != "Unscored" else ""
     if profile.startswith("practice_"):
         profile_label = PRACTICE_PROFILE_DISPLAY.get(profile, "Procedural")
     elif profile == "relationship":
@@ -228,7 +231,8 @@ def _aivs_block(p: RankedProvider) -> str:
       <div>
         <div class="aivs-label">{SCORE_LABEL}</div>
         <div class="aivs-sublabel">{SCORE_DESCRIPTOR}</div>
-        <div class="aivs-score">{score_txt}<span class="out">/100</span>{band_html}</div>
+        <div class="aivs-score">{score_txt}<span class="out">/100</span>{grade_html}</div>
+        {band_sub_html}
         <div class="profile-chip">{profile_label}</div>
         {f'<div class="ceiling-note">⚠ Score capped at 74 ({_e(p.score_ceiling_reason)})</div>' if p.score_ceiling_applied else ""}
       </div>
@@ -2282,28 +2286,32 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
 # ── Comparison PDF ────────────────────────────────────────────────────────────
 
-def _comparison_overview_block(result: AnalysisResult, label: str) -> str:
-    """Organization overview + AI Visibility verdict for one entity in the comparison."""
+def _comparison_overview_block(result: AnalysisResult, label: str, mixed_rubric_note: bool = False) -> str:
+    """Organization overview + AI Visibility verdict for one entity in the comparison.
+
+    Pillar labels are driven by each entity's own weighting profile so that
+    practice-rubric entities show practice pillar names and hospital-rubric entities
+    show hospital pillar names — never a hardcoded set.
+    """
+    from .scoring import TIER_KEYS
     p = result.rankings[0] if result.rankings else None
     name = _e(result.entity_name or result.location)
     score_html = ""
     if p and p.ai_visibility_score is not None:
-        band_label, band_cls = _score_band(p.ai_visibility_score)
+        letter_grade, band_label = grade_from_score(p.ai_visibility_score)
         score_html = (
             f'<span style="font-size:24pt;font-weight:800;color:{_TEAL}">{p.ai_visibility_score}</span>'
-            f'<span style="font-size:11pt;color:{_TEAL};margin-left:6px">{band_label}</span>'
+            f'<span style="font-size:11pt;color:{_TEAL};margin-left:6px">{_e(letter_grade)}</span>'
         )
     tier_html = ""
     if p:
         ts = p.tier_scores
-        tiers = [
-            ("Outcomes & Safety",        ts.clinical_outcomes_safety),
-            ("Credentials & Recognition", ts.credentials_recognition),
-            ("Patient Experience",        ts.patient_experience_reviews),
-            ("Access & Fit",              ts.access_fit),
-        ]
+        # Use profile-correct pillar labels — single source of truth.
+        tier_labels = _tier_labels(p.weighting_profile)
         bars = []
-        for tier_name, val in tiers:
+        for key in TIER_KEYS:
+            tier_name = tier_labels.get(key, key)
+            val = getattr(ts, key, None)
             if val is None:
                 continue
             pct = max(0, min(100, val))
@@ -2319,6 +2327,11 @@ def _comparison_overview_block(result: AnalysisResult, label: str) -> str:
         tier_html = "".join(bars)
 
     verdict = _e(result.ai_visibility_verdict or result.market_overview or "")
+    mixed_note_html = (
+        '<div style="font-size:7.5pt;color:#7a9095;font-style:italic;margin-top:8px">'
+        'Note: the two entities are scored on different rubrics (hospital and practice editions) '
+        '— pillar names and weights differ; scores are not directly comparable.</div>'
+    ) if mixed_rubric_note else ""
     return f"""
   <div style="margin-bottom:24px;padding:20px;border:2px solid {_TEAL};border-radius:8px;page-break-inside:avoid">
     <div style="font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:6px">{_e(label)}</div>
@@ -2334,6 +2347,7 @@ def _comparison_overview_block(result: AnalysisResult, label: str) -> str:
         <div style="font-size:9pt;line-height:1.65;color:#333">{verdict}</div>
       </div>
     </div>
+    {mixed_note_html}
   </div>"""
 
 
@@ -2473,8 +2487,8 @@ def _build_comparison_html(
 
   <div class="section-title" style="font-size:13pt;margin-bottom:20px">{SECTION_COMPARISON_OVERVIEWS}</div>
 
-  {_comparison_overview_block(result_a, "Entity A")}
-  {_comparison_overview_block(result_b, "Entity B")}
+  {_comparison_overview_block(result_a, "Entity A", mixed_rubric_note=(result_a.entity_type != result_b.entity_type))}
+  {_comparison_overview_block(result_b, "Entity B", mixed_rubric_note=(result_a.entity_type != result_b.entity_type))}
 
   {_comparison_summary_block(comparison)}
 

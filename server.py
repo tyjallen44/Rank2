@@ -402,6 +402,8 @@ class CompareRequest(BaseModel):
     practice_composite_b: bool = False
     practice_roster_a: List[dict] = []
     practice_roster_b: List[dict] = []
+    force_rerun_a: bool = False
+    force_rerun_b: bool = False
 
 
 @app.post("/api/analyze")
@@ -486,6 +488,8 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
             practice_composite_b=req_dict.get("practice_composite_b", False),
             practice_roster_a=req_dict.get("practice_roster_a") or [],
             practice_roster_b=req_dict.get("practice_roster_b") or [],
+            force_rerun_a=req_dict.get("force_rerun_a", False),
+            force_rerun_b=req_dict.get("force_rerun_b", False),
         )
         job["status"] = "done"
         job["result"] = {
