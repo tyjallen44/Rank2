@@ -1058,9 +1058,13 @@ def compare_locations(
     ).content[0].text.strip()
 
     try:
-        comp_data = json.loads(raw)
+        # Strip markdown fences that the model sometimes adds despite being told not to
+        cleaned = raw
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned.rstrip())
+        comp_data = json.loads(cleaned)
     except Exception:
-        # Fallback if JSON parse fails
         comp_data = {"headline": "", "similarities": [], "differences": [], "verdict": raw}
 
     comparison = ComparisonSummary(
