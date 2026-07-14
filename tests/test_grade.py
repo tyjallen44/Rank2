@@ -167,25 +167,21 @@ def test_practice_anchor_row_is_first():
 
 
 def test_hospital_anchor_excluded_from_roster():
-    """In a hospital analysis, the anchor hospital should not appear as a row in the market table."""
+    """Only the exact anchor hospital name is excluded; affiliated brand siblings are kept."""
     entity_name = "Intermountain Medical Center"
     candidates = [
-        {"name": "Intermountain Medical Center"},   # anchor — must be excluded
+        {"name": "Intermountain Medical Center"},   # exact anchor — must be excluded
+        {"name": "Intermountain Cardiology"},        # affiliated brand — must NOT be excluded
+        {"name": "Intermountain Orthopedics"},       # affiliated brand — must NOT be excluded
         {"name": "St. Mark's Hospital"},
-        {"name": "Mountain Point Medical Center"},
     ]
 
-    def _nmatch(a: str, b: str) -> str:
-        a_tok = set(a.lower().split())
-        b_tok = set(b.lower().split())
-        if not a_tok or not b_tok:
-            return "weak"
-        overlap = len(a_tok & b_tok) / len(a_tok)
-        return "strong" if overlap >= 0.6 else ("weak" if overlap >= 0.3 else "none")
-
-    filtered = [r for r in candidates if _nmatch(entity_name, r.get("name", "")) != "strong"]
+    _anchor_lc = entity_name.strip().lower()
+    filtered = [r for r in candidates if r.get("name", "").strip().lower() != _anchor_lc]
     names = [r["name"] for r in filtered]
-    assert entity_name not in names
+    assert entity_name not in names, "Exact anchor should be excluded"
+    assert "Intermountain Cardiology" in names, "Affiliated brand clinic must not be filtered"
+    assert "Intermountain Orthopedics" in names, "Affiliated brand clinic must not be filtered"
     assert "St. Mark's Hospital" in names
 
 

@@ -767,7 +767,6 @@ def analyze_location(
     if practice_composite and individual_report and entity_name:
         emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
         from .practice_reputation import collect_platform_data
-        from .data.places import _name_match as _nmatch
 
         roster = list(practice_roster or [])
         if not roster:
@@ -776,11 +775,14 @@ def analyze_location(
             roster = discover_practices(entity_name, city, state, on_event=emit)
 
         # Hospital-anchored table: the anchor hospital itself must NOT appear as a
-        # row.  Filter out any discovered entry that name-matches the anchor so it
-        # cannot inherit data from its own primary listing and create a duplicate row.
+        # row.  Exact-name guard: remove only the entry whose name is the hospital's
+        # own name.  Token-overlap (_nmatch) is too broad — every affiliated clinic
+        # with the brand token (e.g. "Intermountain Cardiology") would be incorrectly
+        # filtered, leaving an empty roster.
+        _anchor_lc = entity_name.strip().lower()
         roster = [
             r for r in roster
-            if _nmatch(entity_name, r.get("name", "")) != "strong"
+            if r.get("name", "").strip().lower() != _anchor_lc
         ]
 
         result.practice_composite_rows = collect_platform_data(
