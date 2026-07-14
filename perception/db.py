@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import duckdb
+from datetime import date, timedelta
 from pathlib import Path
 
 from .config import settings
@@ -90,6 +91,7 @@ def init_db() -> None:
         ("entity_type", "VARCHAR DEFAULT 'hospital'"),
         ("rubric_version", "VARCHAR"),
         ("practice_profile", "VARCHAR"),
+        ("result_json", "VARCHAR"),
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -617,3 +619,28 @@ def get_entity_trend(entity_name: str) -> list[dict]:
         d["generated_at"]      = str(d["generated_at"])
         results.append(d)
     return results
+
+
+def get_recent_run(entity_name: str, location: str, days: int = 90) -> dict | None:
+    """Return the most recent individual analysis within `days` days for this entity/location.
+
+    Matching is case-insensitive on both entity_name and location. Returns a dict with
+    keys run_id, generated_at, result_json, or None if no qualifying run exists.
+    """
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    con = get_connection()
+    row = con.execute(
+        """SELECT run_id, generated_at, result_json
+           FROM analysis_runs
+           WHERE LOWER(entity_name) = LOWER(?)
+             AND LOWER(location) = LOWER(?)
+             AND generated_at >= ?
+             AND result_json IS NOT NULL
+           ORDER BY generated_at DESC, run_id DESC
+           LIMIT 1""",
+        [entity_name, location, cutoff],
+    ).fetchone()
+    con.close()
+    if not row:
+        return None
+    return {"run_id": str(row[0]), "generated_at": str(row[1]), "result_json": row[2]}

@@ -40,6 +40,39 @@ from .prompts import build_hospital_prompt, build_specialty_prompt, build_indivi
 
 _MODEL = "claude-opus-4-8"
 
+# All recognizable letter-grade tokens that could appear in prose.
+_GRADE_TOKENS = re.compile(r"\b([A-F][+−\-]?)\b")
+# Snake_case tokens that must not appear in client-facing prose.
+_SNAKE_CASE = re.compile(r"\b[a-z]{2,}_[a-z]{2,}\b")
+
+
+def _warn_grade_mismatch(text: str, computed_grade: str, context: str = "") -> None:
+    """Log a warning if prose contains a letter grade inconsistent with computed_grade."""
+    if not text or not computed_grade or computed_grade == "—":
+        return
+    for m in _GRADE_TOKENS.finditer(text):
+        token = m.group(1).replace("−", "-")
+        if token != computed_grade and token not in ("A", "B", "C", "D", "F"):
+            # Only flag modified grades (A−, B+, etc.) that differ from computed
+            if any(c in token for c in ("+", "-", "−")):
+                print(
+                    f"[grade-validator] {context}: prose grade '{token}' ≠ computed '{computed_grade}'",
+                    file=sys.stderr,
+                )
+                return
+
+
+def _warn_snake_case(text: str, context: str = "") -> None:
+    """Log a warning if snake_case internal tokens appear in client-facing prose."""
+    if not text:
+        return
+    m = _SNAKE_CASE.search(text)
+    if m:
+        print(
+            f"[snake-case-validator] {context}: internal token '{m.group()}' in prose",
+            file=sys.stderr,
+        )
+
 # Bound per-report cost: aggregate system-wide reputation for at most this many
 # multi-location systems (each enumerates up to system_reputation_max_locations).
 _SYSTEM_REP_CAP = 15
@@ -391,15 +424,20 @@ def _resolve_metro_counties(client: anthropic.Anthropic, city: str, state: str) 
         return None
 
 
-def _gather_individual_evidence(entity_name: str, city: str, state: str) -> str:
-    """Targeted Google Places evidence block for a single named entity."""
+def _gather_individual_evidence(entity_name: str, city: str, state: str):
+    """Targeted Google Places evidence block for a single named entity.
+
+    Returns (evidence_text, google_read) — callers can inspect the read for
+    city canonicalization without a second Places API call.
+    """
     read, footprint = places.fetch_provider(entity_name, city, state)
-    return (
+    text = (
         f"=== Verified Google Evidence: {entity_name} ===\n"
         f"Location searched: {city}, {state}\n\n"
         f"Front-door rating: {read.as_line()}\n"
         f"Footprint sample:  {footprint.as_line()}\n"
     )
+    return text, read
 
 
 def _gather_evidence(
@@ -482,6 +520,7 @@ def analyze_location(
     practice_roster: list[dict] | None = None,
     physician_composite: bool = False,
     physician_roster: dict | None = None,
+    force_rerun: bool = False,
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -502,6 +541,16 @@ def analyze_location(
 
     emit({"type": "phase", "name": "starting", "text": "Starting analysis"})
     init_db()
+
+    # 90-day score reuse: return cached result for individual reports
+    if individual_report and entity_name and not force_rerun:
+        from .db import get_recent_run
+        _loc_key = f"{city}, {state}"
+        _cached = get_recent_run(entity_name, _loc_key)
+        if _cached:
+            emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
+            return AnalysisResult.model_validate_json(_cached["result_json"])
+
     client = _get_client()
     run_id = str(uuid.uuid4())
 
@@ -510,7 +559,14 @@ def analyze_location(
     if individual_report and entity_name:
         with console.status("[bold dark_sea_green4]Fetching entity Google data…[/bold dark_sea_green4]"):
             try:
-                evidence_text = _gather_individual_evidence(entity_name, city, state)
+                evidence_text, _indiv_read = _gather_individual_evidence(entity_name, city, state)
+                if _indiv_read.formatted_address:
+                    _ratio = places.city_match_ratio(city, _indiv_read.formatted_address)
+                    if _ratio < 0.85:
+                        _found_city = places._city_from_address(_indiv_read.formatted_address)
+                        if _found_city:
+                            emit({"type": "confirm_city", "input_city": city,
+                                  "suggested_city": _found_city, "ratio": round(_ratio, 3)})
             except Exception as exc:
                 console.print(f"[yellow]⚠[/yellow] Google fetch failed ({exc}); proceeding model-only.")
                 evidence_text = f"=== Evidence for {entity_name}, {city}, {state} ===\nGoogle data unavailable this run."
@@ -674,7 +730,17 @@ def analyze_location(
 
     disclaimer = _clean(structured_data.get("disclaimer", ""))
     if _AIVS_DISCLAIMER_CHECK not in disclaimer:
-        disclaimer = (disclaimer + " " + _AIVS_DISCLAIMER).strip()
+        disclaimer = _AIVS_DISCLAIMER
+
+    # Post-extraction validation: warn on grade/snake-case inconsistencies
+    _verdict = _clean(structured_data.get("ai_visibility_verdict", ""))
+    _top_rec = _clean(structured_data.get("top_recommendation", ""))
+    for _p in rankings:
+        _computed_grade, _ = scoring.grade_from_score(_p.ai_visibility_score)
+        _warn_grade_mismatch(_verdict, _computed_grade, context=f"verdict/{_p.name}")
+        _warn_grade_mismatch(_top_rec, _computed_grade, context=f"recommendation/{_p.name}")
+    _warn_snake_case(_verdict, context="ai_visibility_verdict")
+    _warn_snake_case(_top_rec, context="top_recommendation")
 
     result = AnalysisResult(
         run_id=run_id,
@@ -718,6 +784,17 @@ def analyze_location(
             # Auto-discover when no roster provided (comparison path — no UI confirmation step)
             from .practice_discovery import discover_practices
             roster = discover_practices(entity_name, city, state, on_event=emit)
+
+        # Hospital-anchored table: the anchor hospital itself must NOT appear as a
+        # row.  Exact-name guard: remove only the entry whose name is the hospital's
+        # own name.  Token-overlap (_nmatch) is too broad — every affiliated clinic
+        # with the brand token (e.g. "Intermountain Cardiology") would be incorrectly
+        # filtered, leaving an empty roster.
+        _anchor_lc = entity_name.strip().lower()
+        roster = [
+            r for r in roster
+            if r.get("name", "").strip().lower() != _anchor_lc
+        ]
 
         result.practice_composite_rows = collect_platform_data(
             roster, entity_name, city, state, on_event=emit
@@ -927,6 +1004,8 @@ def _ground_and_score(
 
     profile = prov.weighting_profile or "procedural"
     prov.ai_visibility_score = scoring.composite_score(prov.tier_scores.as_dict(), profile)
+    # Grade is always computed — never left to the LLM.
+    prov.overall_rating, _ = scoring.grade_from_score(prov.ai_visibility_score)
 
 
 def analyze_entities(
@@ -990,13 +1069,19 @@ def compare_locations(
     practice_composite_b: bool = False,
     practice_roster_a: list[dict] | None = None,
     practice_roster_b: list[dict] | None = None,
+    force_rerun_a: bool = False,
+    force_rerun_b: bool = False,
 ) -> tuple[AnalysisResult, AnalysisResult, object]:
     """Run two individual-report analyses then synthesize a structured comparison.
 
+    If a run for either entity exists within the last 90 days and the corresponding
+    force_rerun flag is False, the cached result is reused instead of re-scoring.
+
     Returns (result_a, result_b, comparison_summary).
     """
-    from .models import ComparisonSummary
+    from .models import ComparisonSummary, AnalysisResult as _AR
     from .pdf import render_comparison_pdf
+    from .db import get_recent_run
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1005,45 +1090,62 @@ def compare_locations(
         if on_event:
             on_event(ev)
 
+    def _load_cached(entity_name: str, city: str, state: str) -> _AR | None:
+        location = f"{city}, {state}"
+        cached = get_recent_run(entity_name, location)
+        if cached:
+            return _AR.model_validate_json(cached["result_json"])
+        return None
+
     # ── Phase 1: Entity A ────────────────────────────────────────────────────
-    emit({"type": "phase", "name": "entity_a", "text": f"Analyzing {entity_a_name}"})
-    if entity_type_a == "practice":
-        from .practice_analyzer import analyze_practice
-        result_a = analyze_practice(
-            entity_name=entity_a_name, city=city_a, state=state_a,
-            specialty=specialty_a, aggregate=aggregate_a,
-            practice_profile=practice_profile_a, skip_pdf=True,
-            output_dir=output_dir, on_event=on_event, brand=brand,
-        )
+    cached_a = None if force_rerun_a else _load_cached(entity_a_name, city_a, state_a)
+    if cached_a:
+        emit({"type": "phase", "name": "entity_a", "text": f"Using cached result for {entity_a_name}"})
+        result_a = cached_a
     else:
-        result_a = analyze_location(
-            city=city_a, state=state_a, specialty=specialty_a,
-            aggregate=aggregate_a, entity_name=entity_a_name,
-            individual_report=True, skip_pdf=True,
-            output_dir=output_dir, on_event=on_event, brand=brand,
-            practice_composite=practice_composite_a,
-            practice_roster=practice_roster_a,
-        )
+        emit({"type": "phase", "name": "entity_a", "text": f"Analyzing {entity_a_name}"})
+        if entity_type_a == "practice":
+            from .practice_analyzer import analyze_practice
+            result_a = analyze_practice(
+                entity_name=entity_a_name, city=city_a, state=state_a,
+                specialty=specialty_a, aggregate=aggregate_a,
+                practice_profile=practice_profile_a, skip_pdf=True,
+                output_dir=output_dir, on_event=on_event, brand=brand,
+            )
+        else:
+            result_a = analyze_location(
+                city=city_a, state=state_a, specialty=specialty_a,
+                aggregate=aggregate_a, entity_name=entity_a_name,
+                individual_report=True, skip_pdf=True,
+                output_dir=output_dir, on_event=on_event, brand=brand,
+                practice_composite=practice_composite_a,
+                practice_roster=practice_roster_a,
+            )
 
     # ── Phase 2: Entity B ────────────────────────────────────────────────────
-    emit({"type": "phase", "name": "entity_b", "text": f"Analyzing {entity_b_name}"})
-    if entity_type_b == "practice":
-        from .practice_analyzer import analyze_practice
-        result_b = analyze_practice(
-            entity_name=entity_b_name, city=city_b, state=state_b,
-            specialty=specialty_b, aggregate=aggregate_b,
-            practice_profile=practice_profile_b, skip_pdf=True,
-            output_dir=output_dir, on_event=on_event, brand=brand,
-        )
+    cached_b = None if force_rerun_b else _load_cached(entity_b_name, city_b, state_b)
+    if cached_b:
+        emit({"type": "phase", "name": "entity_b", "text": f"Using cached result for {entity_b_name}"})
+        result_b = cached_b
     else:
-        result_b = analyze_location(
-            city=city_b, state=state_b, specialty=specialty_b,
-            aggregate=aggregate_b, entity_name=entity_b_name,
-            individual_report=True, skip_pdf=True,
-            output_dir=output_dir, on_event=on_event, brand=brand,
-            practice_composite=practice_composite_b,
-            practice_roster=practice_roster_b,
-        )
+        emit({"type": "phase", "name": "entity_b", "text": f"Analyzing {entity_b_name}"})
+        if entity_type_b == "practice":
+            from .practice_analyzer import analyze_practice
+            result_b = analyze_practice(
+                entity_name=entity_b_name, city=city_b, state=state_b,
+                specialty=specialty_b, aggregate=aggregate_b,
+                practice_profile=practice_profile_b, skip_pdf=True,
+                output_dir=output_dir, on_event=on_event, brand=brand,
+            )
+        else:
+            result_b = analyze_location(
+                city=city_b, state=state_b, specialty=specialty_b,
+                aggregate=aggregate_b, entity_name=entity_b_name,
+                individual_report=True, skip_pdf=True,
+                output_dir=output_dir, on_event=on_event, brand=brand,
+                practice_composite=practice_composite_b,
+                practice_roster=practice_roster_b,
+            )
 
     # ── Phase 3: Comparison synthesis ───────────────────────────────────────
     emit({"type": "phase", "name": "comparison", "text": "Synthesizing comparison"})
@@ -1093,8 +1195,8 @@ def _save_to_db(result: AnalysisResult) -> None:
             (run_id, location, specialty, aggregate, generated_at,
              weighting_profile, market_overview, ai_visibility_verdict, coverage_note,
              top_recommendation, practical_advice, disclaimer, report_markdown,
-             pdf_path, md_path, entity_name, individual_report)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             pdf_path, md_path, entity_name, individual_report, result_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             result.run_id, result.location, result.specialty, result.aggregate,
@@ -1103,6 +1205,7 @@ def _save_to_db(result: AnalysisResult) -> None:
             result.top_recommendation, json.dumps(result.practical_advice),
             result.disclaimer, result.report_markdown, result.pdf_path, result.md_path,
             result.entity_name, result.individual_report,
+            result.model_dump_json(),
         ],
     )
 

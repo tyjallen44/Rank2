@@ -50,9 +50,19 @@ from .analyzer import (
     _stream_narrative,
     _save_to_db,
     _AIVS_DISCLAIMER,
+    _warn_grade_mismatch,
+    _warn_snake_case,
 )
 
 _RUBRIC_VERSION = "practice-v1.0"
+
+_HOSPITAL_SIGNAL_TOKENS = frozenset({"leapfrog", "cms overall star", "hcahps"})
+
+
+def _hospital_signal(text: str) -> bool:
+    """Return True if text references a hospital-only signal that should not appear in practice reports."""
+    tl = text.lower()
+    return any(tok in tl for tok in _HOSPITAL_SIGNAL_TOKENS)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Practice-edition structured extraction tool
@@ -386,8 +396,10 @@ def _build_practice_provider(r: dict, run_profile: str) -> RankedProvider:
             note=tpa.get("note") or "",
         ),
         disqualifiers=[d for d in r.get("disqualifiers", []) if isinstance(d, str)],
-        key_strengths=[s for s in r.get("key_strengths", []) if isinstance(s, str)],
-        notable_weaknesses=[w for w in r.get("notable_weaknesses", []) if isinstance(w, str)],
+        key_strengths=[s for s in r.get("key_strengths", [])
+                       if isinstance(s, str) and not _hospital_signal(s)],
+        notable_weaknesses=[w for w in r.get("notable_weaknesses", [])
+                            if isinstance(w, str) and not _hospital_signal(w)],
         best_suited_for=r.get("best_suited_for") or "",
         recommendation_summary=r.get("recommendation_summary") or "",
         consolidated_locations=[
@@ -461,6 +473,8 @@ def _ground_and_score_practice(
         board_cert_unverifiable=board_cert_unverifiable,
     )
     prov.ai_visibility_score = score
+    # Grade is always computed — never left to the LLM.
+    prov.overall_rating, _ = scoring.grade_from_score(prov.ai_visibility_score)
 
     # Stash ceiling metadata on the provider for DB persistence
     prov._score_ceiling_applied = ceiling_applied   # type: ignore[attr-defined]
@@ -524,6 +538,7 @@ def analyze_practice(
     practice_roster: list[dict] | None = None,
     physician_composite: bool = False,
     physician_roster: dict | None = None,
+    force_rerun: bool = False,
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -543,6 +558,15 @@ def analyze_practice(
 
     emit({"type": "phase", "name": "starting", "text": "Starting practice analysis"})
     init_db()
+
+    # 90-day score reuse: return cached result when available
+    if not force_rerun:
+        from .db import get_recent_run
+        _loc_key = f"{city}, {state}"
+        _cached = get_recent_run(entity_name, _loc_key)
+        if _cached:
+            emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
+            return AnalysisResult.model_validate_json(_cached["result_json"])
     client = _get_client()
     run_id = str(uuid.uuid4())
 
@@ -555,7 +579,14 @@ def analyze_practice(
     emit({"type": "phase", "name": "evidence", "text": "Gathering practice evidence"})
     with console.status("[bold dark_sea_green4]Fetching entity Google data…[/bold dark_sea_green4]"):
         try:
-            evidence_text = _gather_individual_evidence(entity_name, city, state)
+            evidence_text, _indiv_read = _gather_individual_evidence(entity_name, city, state)
+            if _indiv_read.formatted_address:
+                _ratio = places.city_match_ratio(city, _indiv_read.formatted_address)
+                if _ratio < 0.85:
+                    _found_city = places._city_from_address(_indiv_read.formatted_address)
+                    if _found_city:
+                        emit({"type": "confirm_city", "input_city": city,
+                              "suggested_city": _found_city, "ratio": round(_ratio, 3)})
         except Exception as exc:
             console.print(f"[yellow]⚠[/yellow] Google fetch failed ({exc}); proceeding model-only.")
             evidence_text = (
@@ -646,7 +677,14 @@ def analyze_practice(
 
     disclaimer = _clean(structured_data.get("disclaimer", ""))
     if _AIVS_DISCLAIMER_CHECK not in disclaimer:
-        disclaimer = (disclaimer + " " + _AIVS_DISCLAIMER).strip()
+        disclaimer = _AIVS_DISCLAIMER
+
+    # Post-extraction validation
+    _verdict = _clean(structured_data.get("ai_visibility_verdict", ""))
+    _warn_snake_case(_verdict, context="practice/ai_visibility_verdict")
+    for _p in rankings:
+        _computed_grade, _ = scoring.grade_from_score(_p.ai_visibility_score)
+        _warn_grade_mismatch(_verdict, _computed_grade, context=f"practice/verdict/{_p.name}")
 
     result = AnalysisResult(
         run_id=run_id,
@@ -671,10 +709,13 @@ def analyze_practice(
             ImprovementSection(
                 title=_clean(s.get("title", "")),
                 description=_clean(s.get("description", "")),
-                items=[_clean(i) for i in s.get("items", []) if isinstance(i, str)],
+                items=[
+                    _clean(i) for i in s.get("items", [])
+                    if isinstance(i, str) and not _hospital_signal(i)
+                ],
             )
             for s in structured_data.get("improvement_sections", [])
-            if isinstance(s, dict) and s.get("title")
+            if isinstance(s, dict) and s.get("title") and not _hospital_signal(s.get("title", ""))
         ],
         disclaimer=disclaimer,
         rankings=rankings,
@@ -685,11 +726,54 @@ def analyze_practice(
     if practice_composite:
         emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
         from .practice_reputation import collect_platform_data
-        from .practice_discovery import discover_practices
+        from .practice_discovery import discover_practice_siblings
 
-        roster = list(practice_roster or [])
-        if not roster:
-            roster = discover_practices(entity_name, city, state, on_event=emit)
+        # Practice-anchored table: the analyzed practice is the anchor row (pinned
+        # first, visually distinguished).  Siblings are discovered separately so the
+        # anchor entity never appears in the discovery list.
+        anchor_entry = {
+            "name": entity_name,
+            "entity_type": "practice",
+            "is_anchor": True,
+            "city": city,
+            "state": state,
+        }
+        sibling_roster = list(practice_roster or [])
+        if not sibling_roster:
+            sibling_roster = discover_practice_siblings(entity_name, city, state, on_event=emit)
+
+        # Drop siblings that resolve to the anchor entity (prevents duplicate rows in
+        # the composite table when Claude names a location variant of the anchor).
+        # Uses bidirectional token-overlap when the anchor name contains digits (street
+        # address embedded) — avoids over-dropping when the anchor is a plain org name.
+        from .data.places import _name_match as _nmatch
+        import re as _re
+        _anchor_lc = entity_name.strip().lower()
+        _anchor_has_address = bool(_re.search(r'\d', entity_name))
+
+        def _is_anchor_duplicate(sibling_name: str) -> bool:
+            if sibling_name.strip().lower() == _anchor_lc:
+                return True
+            if _anchor_has_address:
+                return (
+                    _nmatch(entity_name, sibling_name) == "strong"
+                    and _nmatch(sibling_name, entity_name) == "strong"
+                )
+            return False
+
+        deduped: list[dict] = []
+        seen_names: set[str] = set()
+        for s in sibling_roster:
+            sn = s.get("name", "")
+            if _is_anchor_duplicate(sn):
+                continue
+            k = sn.strip().lower()
+            if k not in seen_names:
+                seen_names.add(k)
+                deduped.append(s)
+        sibling_roster = deduped
+
+        roster = [anchor_entry] + sibling_roster
 
         result.practice_composite_rows = collect_platform_data(
             roster, entity_name, city, state, on_event=emit

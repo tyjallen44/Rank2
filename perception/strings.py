@@ -82,6 +82,17 @@ AIVS_DISCLAIMER = (
 )
 AIVS_DISCLAIMER_CHECK = "Pulse Score"   # guard: append disclaimer if this token absent
 
+# ── Weighting-profile display names (for client-facing prose — no snake_case) ────
+PROFILE_DISPLAY_HOSPITAL: dict[str, str] = {
+    "procedural":   "Procedural",
+    "relationship": "Relationship",
+}
+# Practice-edition display names imported from practice_models.PROFILE_DISPLAY;
+# re-exported here so callers have one import location.
+def _practice_profile_display() -> dict[str, str]:
+    from .practice_models import PROFILE_DISPLAY
+    return PROFILE_DISPLAY
+
 # ── Email brand name ─────────────────────────────────────────────────────────────
 EMAIL_BRAND = "Pulse"
 

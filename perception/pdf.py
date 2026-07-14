@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import base64
 import html as _html_lib
+import re
 from pathlib import Path
 
 from .models import AffiliationType, AnalysisResult, RankedProvider, SizeCategory
-from .scoring import TIER_LABELS, PRACTICE_TIER_LABELS, PRACTICE_PROFILE_DISPLAY
+from .scoring import TIER_LABELS, PRACTICE_TIER_LABELS, PRACTICE_PROFILE_DISPLAY, grade_from_score
 from .strings import (
     COVER_MARKET, COVER_PATIENT, COVER_PATIENT_TEASER,
     COVER_INDIVIDUAL, COVER_INDIVIDUAL_TEASER,
@@ -126,6 +127,41 @@ def _e(text: str | None) -> str:
     return _html_lib.escape(str(text or ""))
 
 
+_MD_BOLD   = re.compile(r'\*\*(.+?)\*\*', re.DOTALL)
+_MD_ITALIC = re.compile(r'\*(.+?)\*|_(.+?)_', re.DOTALL)
+_MD_HEADER = re.compile(r'^#{1,6}\s+', re.MULTILINE)
+_MD_CODE   = re.compile(r'`(.+?)`', re.DOTALL)
+_MD_HR     = re.compile(r'^---+\s*$', re.MULTILINE)
+
+
+def _strip_md(text: str | None) -> str:
+    """Remove markdown control characters from LLM-generated prose before HTML rendering."""
+    if not text:
+        return text or ""
+    t = _MD_HEADER.sub("", text)
+    t = _MD_BOLD.sub(r'\1', t)
+    t = _MD_ITALIC.sub(lambda m: m.group(1) or m.group(2), t)
+    t = _MD_CODE.sub(r'\1', t)
+    t = _MD_HR.sub("", t)
+    return t
+
+
+_VFLAG_STYLES: dict[str, tuple[str, str]] = {
+    "verified":        ("#2a8a5a", "✓ Verified"),
+    "partial":         ("#c87000", "◐ Partial"),
+    "not_established": ("#b03030", "✗ Not established"),
+}
+
+
+def _vflag(status: str) -> str:
+    """Render a ✓/◐/✗ verification flag badge for a scored signal."""
+    color, label = _VFLAG_STYLES.get(status, ("#888888", "? Unknown"))
+    return (
+        f'<span style="font-size:6.5pt;font-weight:700;color:{color};'
+        f'white-space:nowrap;margin-left:5px">{label}</span>'
+    )
+
+
 def _rank_text_color(rank: int) -> str:
     # Blue and green badges are light — use dark teal text for contrast
     return _TEAL if rank in (2, 3) else "#ffffff"
@@ -165,9 +201,11 @@ def _locations_block(p: RankedProvider) -> str:
         return ""
     parts = []
     for loc in p.consolidated_locations:
+        # Suppress the text overall_rating when structured Google data is present
+        # to avoid rendering the same rating twice side-by-side.
         rating_span = (
             f'&thinsp;—&thinsp;<span class="loc-rating">{_e(loc.overall_rating)}</span>'
-            if loc.overall_rating else ""
+            if loc.overall_rating and loc.google_rating is None else ""
         )
         google_span = ""
         if loc.google_rating is not None:
@@ -188,7 +226,7 @@ def _ai_says_block(p: RankedProvider) -> str:
         <span style="font-size:6pt;font-weight:400;color:#7a9095;font-style:italic;margin-left:6px">
           &mdash; from training memory &amp; live retrieval &middot; Claude, ChatGPT, Gemini</span>
       </div>
-      <div class="ai-says-text">{_e(p.ai_says)}</div>
+      <div class="ai-says-text">{_e(_strip_md(p.ai_says))}</div>
     </div>"""
 
 
@@ -203,14 +241,17 @@ def _tier_row(label: str, value: int | None) -> str:
 
 
 def _aivs_block(p: RankedProvider) -> str:
-    """AI Visibility score + band + weighting profile + the four tier bars."""
+    """AI Visibility score + computed letter grade + weighting profile + the four tier bars."""
     profile = p.weighting_profile or "procedural"
     labels = _tier_labels(profile)
     ts = p.tier_scores
     score = p.ai_visibility_score
     score_txt = str(score) if score is not None else "—"
-    band, band_cls = _score_band(score)
-    band_html = f'<span class="score-band {band_cls}">{band}</span>' if band else ""
+    # Grade is always computed from score — never from LLM-generated overall_rating.
+    letter_grade, band_label = grade_from_score(score)
+    _, band_cls = _score_band(score)  # keep CSS class for coloring
+    grade_html = f'<span class="score-band {band_cls}">{_e(letter_grade)}</span>' if score is not None else ""
+    band_sub_html = f'<div class="score-band-label">{_e(band_label)}</div>' if band_label and band_label != "Unscored" else ""
     if profile.startswith("practice_"):
         profile_label = PRACTICE_PROFILE_DISPLAY.get(profile, "Procedural")
     elif profile == "relationship":
@@ -228,7 +269,8 @@ def _aivs_block(p: RankedProvider) -> str:
       <div>
         <div class="aivs-label">{SCORE_LABEL}</div>
         <div class="aivs-sublabel">{SCORE_DESCRIPTOR}</div>
-        <div class="aivs-score">{score_txt}<span class="out">/100</span>{band_html}</div>
+        <div class="aivs-score">{score_txt}<span class="out">/100</span>{grade_html}</div>
+        {band_sub_html}
         <div class="profile-chip">{profile_label}</div>
         {f'<div class="ceiling-note">⚠ Score capped at 74 ({_e(p.score_ceiling_reason)})</div>' if p.score_ceiling_applied else ""}
       </div>
@@ -264,9 +306,14 @@ def _google_stat(p: RankedProvider) -> str:
             f'<strong>{fd.rating:.1f}&#9733;</strong>'
             f' <span style="font-size:7pt;color:#7a9095">{stars_filled}{stars_empty}</span>'
             f' &nbsp;·&nbsp; <strong>{fd.count or 0:,} reviews</strong>{recency}'
+            f'{_vflag("verified")}'
         )
     else:
-        front = f'<strong>Not verified</strong> <span class="google-gap">— {_e(fd.reason or "no rated listing found")}</span>'
+        front = (
+            f'<strong>Not verified</strong>'
+            f' <span class="google-gap">— {_e(fd.reason or "no rated listing found")}</span>'
+            f'{_vflag("not_established")}'
+        )
 
     # ── System-wide aggregate ─────────────────────────────────────────────
     system_line = ""
@@ -283,7 +330,7 @@ def _google_stat(p: RankedProvider) -> str:
             f'<div style="margin-top:4px;font-size:7pt;color:#3a5a60">'
             f'<strong>System-wide (all locations):</strong> '
             f'<strong>{sa.rating:.1f}&#9733; · {sa.total_reviews:,} total reviews '
-            f'across {loc} locations</strong>{pct_diff} '
+            f'across {loc} location{"s" if sa.location_count != 1 else ""}</strong>{pct_diff} '
             f'<span style="color:#7a9095;font-style:italic">(review-count-weighted, {conf})</span>'
             f'</div>'
         )
@@ -320,7 +367,7 @@ def _patient_voice_block(p: RankedProvider) -> str:
     return f"""
     <div class="patient-voice">
       <div class="pv-label">Patient Voice</div>
-      <div class="pv-text">{_e(p.patient_voice_summary)}</div>
+      <div class="pv-text">{_e(_strip_md(p.patient_voice_summary))}</div>
     </div>"""
 
 
@@ -354,18 +401,18 @@ def _outcomes_safety_block(p: RankedProvider) -> str:
     first = grade[0].upper() if grade else ""
     if first and first in "ABCDF":
         css_cls = f"qs-badge qs-leapfrog-{first}"
-        leapfrog_cell = f'<span class="{css_cls}">{first}</span>'
+        leapfrog_cell = f'<span class="{css_cls}">{first}</span>{_vflag("verified")}'
     elif grade.lower() in ("not rated", "not_rated"):
-        leapfrog_cell = '<span class="os-absent">Not rated in current survey cycle</span>'
+        leapfrog_cell = f'<span class="os-absent">Not rated in current survey cycle</span>{_vflag("partial")}'
     else:
-        leapfrog_cell = '<span class="os-absent">Not currently participating in Leapfrog survey</span>'
+        leapfrog_cell = f'<span class="os-absent">Not currently participating in Leapfrog survey</span>{_vflag("not_established")}'
 
     if has_cms:
         _star_css = {5: "qs-cms-5", 4: "qs-cms-4", 3: "qs-cms-3", 2: "qs-cms-2", 1: "qs-cms-1"}
         stars = "★" * p.cms_star_rating + "☆" * (5 - p.cms_star_rating)
-        cms_cell = f'<span class="qs-badge {_star_css[p.cms_star_rating]}">{stars} ({p.cms_star_rating} of 5)</span>'
+        cms_cell = f'<span class="qs-badge {_star_css[p.cms_star_rating]}">{stars} ({p.cms_star_rating} of 5)</span>{_vflag("verified")}'
     else:
-        cms_cell = '<span class="os-absent">No CMS Overall Star Rating published</span>'
+        cms_cell = f'<span class="os-absent">No CMS Overall Star Rating published</span>{_vflag("not_established")}'
 
     return f"""
     <div class="outcomes-safety">
@@ -387,14 +434,14 @@ def _quality_signals_block(p: RankedProvider) -> str:
     usnews_html = ""
     for u in p.us_news_rankings:
         if u.recognition_type == "nationally_ranked" and u.rank:
-            usnews_html += f'<span class="qs-badge qs-usnews-ranked">#{u.rank} {_e(u.category)}</span>'
+            usnews_html += f'<span class="qs-badge qs-usnews-ranked">#{u.rank} {_e(u.category)}</span>{_vflag("verified")}'
         elif u.recognition_type == "nationally_ranked":
-            usnews_html += f'<span class="qs-badge qs-usnews-ranked">Natl. Ranked · {_e(u.category)}</span>'
+            usnews_html += f'<span class="qs-badge qs-usnews-ranked">Natl. Ranked · {_e(u.category)}</span>{_vflag("verified")}'
         else:
-            usnews_html += f'<span class="qs-badge qs-usnews-hp">High-Perf. · {_e(u.category)}</span>'
+            usnews_html += f'<span class="qs-badge qs-usnews-hp">High-Perf. · {_e(u.category)}</span>{_vflag("verified")}'
 
     accred_html = "".join(
-        f'<span class="qs-badge qs-accred">{_e(a)}</span>'
+        f'<span class="qs-badge qs-accred">{_e(a)}</span>{_vflag("verified")}'
         for a in p.accreditations
     )
 
@@ -422,9 +469,9 @@ def _quality_signals_block(p: RankedProvider) -> str:
 def _provider_card(p: RankedProvider, display_rank: int) -> str:
     bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
     text_color = _rank_text_color(display_rank)
-    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
-        f"<li>{_e(w)}</li>"
+        f"<li>{_e(_strip_md(w))}</li>"
         for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
     )
     disq_html = (
@@ -468,16 +515,15 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
           </div>
         </div>
         <div class="best-for"><strong>Best for:</strong> {_e(p.best_suited_for)}</div>
-        <div class="summary">{_e(p.recommendation_summary)}</div>
       </div>
     </div>"""
 
 
 def _individual_entity_card(p: RankedProvider) -> str:
     """Full-width card for individual entity reports — no rank badge."""
-    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
-        f"<li>{_e(w)}</li>"
+        f"<li>{_e(_strip_md(w))}</li>"
         for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
     )
     disq_html = (
@@ -520,7 +566,6 @@ def _individual_entity_card(p: RankedProvider) -> str:
           </div>
         </div>
         <div class="best-for"><strong>Best for:</strong> {_e(p.best_suited_for)}</div>
-        <div class="summary">{_e(p.recommendation_summary)}</div>
       </div>
     </div>"""
 
@@ -532,9 +577,9 @@ def _individual_teaser_card(p: RankedProvider) -> str:
         f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
         if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
     )
-    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
-        f"<li>{_e(w)}</li>"
+        f"<li>{_e(_strip_md(w))}</li>"
         for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
     )
     return f"""
@@ -616,9 +661,9 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
         f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
         if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
     )
-    strengths_html = "".join(f"<li>{_e(s)}</li>" for s in p.key_strengths)
+    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
-        f"<li>{_e(w)}</li>"
+        f"<li>{_e(_strip_md(w))}</li>"
         for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
     )
     return f"""
@@ -1434,16 +1479,16 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         if result.improvement_sections:
             parts = []
             for i, sec in enumerate(result.improvement_sections, 1):
-                items_li = "\n".join(f"<li>{_e(item)}</li>" for item in sec.items)
+                items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
                 parts.append(
                     f'<div class="advice-group">'
-                    f'<div class="advice-group-title">{i}. {_e(sec.title)}</div>'
-                    f'<div class="advice-group-desc">{_e(sec.description)}</div>'
+                    f'<div class="advice-group-title">{i}. {_e(_strip_md(sec.title))}</div>'
+                    f'<div class="advice-group-desc">{_e(_strip_md(sec.description))}</div>'
                     f'<ol>{items_li}</ol>'
                     f'</div>'
                 )
             return "\n".join(parts)
-        flat = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
+        flat = "\n".join(f"<li>{_e(_strip_md(a))}</li>" for a in result.practical_advice)
         return f"<ol>{flat}</ol>"
     if brand_cfg.get("logo_html"):
         logo_tag = brand_cfg["logo_html"]
@@ -1480,9 +1525,25 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
     # Cover location/specialty/sub differ for individual reports
     if result.individual_report:
-        cover_loc  = _e(result.entity_name or result.location)
-        cover_spec = _e(result.specialty or "Hospital / Health System")
-        cover_sub  = f'<div class="cover-zip-scope">{location}</div>'
+        _raw_entity = result.entity_name or result.location
+        # D8: For practice reports whose entity_name embeds a street address
+        # (e.g., "Desert Orthopaedic Center 2800 E Desert Inn Rd, Las Vegas, NV 89121"),
+        # split at the first street-number to show only the practice name as the cover title.
+        _addr_match = re.search(r'\s+\d+\s', _raw_entity or "")
+        if result.entity_type == "practice" and _addr_match:
+            _display_name = _raw_entity[:_addr_match.start()].strip()
+            _addr_part    = _raw_entity[_addr_match.start():].strip()
+            cover_loc  = _e(_display_name)
+            cover_sub  = (
+                f'<div class="cover-zip-scope">{_e(_addr_part)}</div>'
+                f'<div class="cover-zip-scope">{location}</div>'
+            )
+        else:
+            cover_loc  = _e(_raw_entity)
+            cover_sub  = f'<div class="cover-zip-scope">{location}</div>'
+        cover_spec = _e(result.specialty or (
+            "Specialty Practice" if result.entity_type == "practice" else "Hospital / Health System"
+        ))
     else:
         cover_loc  = location
         cover_spec = specialty_label
@@ -1494,14 +1555,20 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     # Section title overrides for individual reports
     overview_title       = "Organization Overview" if result.individual_report else "Market Overview"
     recommendation_title = SECTION_ASSESSMENT      if result.individual_report else "Top Recommendation"
+    # Individual reports: assessment+roadmap are one section; advice_title is empty to avoid
+    # a duplicate SECTION_ASSESSMENT header after recommendation_title already rendered it.
     advice_title         = (
-        SECTION_ASSESSMENT
+        ""
         if result.individual_report
         else "Improve Your AI Visibility"
     )
 
     def _paras(text: str) -> str:
-        return "".join(f"<p>{_e(para.strip())}</p>" for para in (text or "").split("\n") if para.strip())
+        return "".join(
+            f"<p>{_e(para.strip())}</p>"
+            for para in _strip_md(text or "").split("\n")
+            if para.strip()
+        )
 
     overview_html = ""
     if result.market_overview:
@@ -2244,7 +2311,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
   <div class="recommendation">
     <div class="section-title" style="margin-bottom:10px;">{recommendation_title}</div>
-    <p>{_e(result.top_recommendation)}</p>
+    <p>{_e(_strip_md(result.top_recommendation))}</p>
   </div>
 
   <div class="advice">
@@ -2282,28 +2349,32 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
 # ── Comparison PDF ────────────────────────────────────────────────────────────
 
-def _comparison_overview_block(result: AnalysisResult, label: str) -> str:
-    """Organization overview + AI Visibility verdict for one entity in the comparison."""
+def _comparison_overview_block(result: AnalysisResult, label: str, mixed_rubric_note: bool = False) -> str:
+    """Organization overview + AI Visibility verdict for one entity in the comparison.
+
+    Pillar labels are driven by each entity's own weighting profile so that
+    practice-rubric entities show practice pillar names and hospital-rubric entities
+    show hospital pillar names — never a hardcoded set.
+    """
+    from .scoring import TIER_KEYS
     p = result.rankings[0] if result.rankings else None
     name = _e(result.entity_name or result.location)
     score_html = ""
     if p and p.ai_visibility_score is not None:
-        band_label, band_cls = _score_band(p.ai_visibility_score)
+        letter_grade, band_label = grade_from_score(p.ai_visibility_score)
         score_html = (
             f'<span style="font-size:24pt;font-weight:800;color:{_TEAL}">{p.ai_visibility_score}</span>'
-            f'<span style="font-size:11pt;color:{_TEAL};margin-left:6px">{band_label}</span>'
+            f'<span style="font-size:11pt;color:{_TEAL};margin-left:6px">{_e(letter_grade)}</span>'
         )
     tier_html = ""
     if p:
         ts = p.tier_scores
-        tiers = [
-            ("Outcomes & Safety",        ts.clinical_outcomes_safety),
-            ("Credentials & Recognition", ts.credentials_recognition),
-            ("Patient Experience",        ts.patient_experience_reviews),
-            ("Access & Fit",              ts.access_fit),
-        ]
+        # Use profile-correct pillar labels — single source of truth.
+        tier_labels = _tier_labels(p.weighting_profile)
         bars = []
-        for tier_name, val in tiers:
+        for key in TIER_KEYS:
+            tier_name = tier_labels.get(key, key)
+            val = getattr(ts, key, None)
             if val is None:
                 continue
             pct = max(0, min(100, val))
@@ -2319,6 +2390,11 @@ def _comparison_overview_block(result: AnalysisResult, label: str) -> str:
         tier_html = "".join(bars)
 
     verdict = _e(result.ai_visibility_verdict or result.market_overview or "")
+    mixed_note_html = (
+        '<div style="font-size:7.5pt;color:#7a9095;font-style:italic;margin-top:8px">'
+        'Note: the two entities are scored on different rubrics (hospital and practice editions) '
+        '— pillar names and weights differ; scores are not directly comparable.</div>'
+    ) if mixed_rubric_note else ""
     return f"""
   <div style="margin-bottom:24px;padding:20px;border:2px solid {_TEAL};border-radius:8px;page-break-inside:avoid">
     <div style="font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:6px">{_e(label)}</div>
@@ -2334,6 +2410,7 @@ def _comparison_overview_block(result: AnalysisResult, label: str) -> str:
         <div style="font-size:9pt;line-height:1.65;color:#333">{verdict}</div>
       </div>
     </div>
+    {mixed_note_html}
   </div>"""
 
 
@@ -2373,7 +2450,7 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
     card_html = _individual_entity_card(p) if p else ""
 
     # AI Visibility Assessment
-    assessment = _e(result.top_recommendation or "")
+    assessment = _e(_strip_md(result.top_recommendation or ""))
     assessment_html = f"""
   <div class="recommendation" style="margin-top:20px">
     <div class="section-title" style="margin-bottom:10px">{SECTION_ASSESSMENT}</div>
@@ -2384,24 +2461,24 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
     if result.improvement_sections:
         parts = []
         for i, sec in enumerate(result.improvement_sections, 1):
-            items_li = "\n".join(f"<li>{_e(item)}</li>" for item in sec.items)
+            items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
             parts.append(
                 f'<div class="advice-group">'
-                f'<div class="advice-group-title">{i}. {_e(sec.title)}</div>'
-                f'<div class="advice-group-desc">{_e(sec.description)}</div>'
+                f'<div class="advice-group-title">{i}. {_e(_strip_md(sec.title))}</div>'
+                f'<div class="advice-group-desc">{_e(_strip_md(sec.description))}</div>'
                 f'<ol>{items_li}</ol>'
                 f'</div>'
             )
         improvement_body = "\n".join(parts)
     elif result.practical_advice:
-        flat = "\n".join(f"<li>{_e(a)}</li>" for a in result.practical_advice)
+        flat = "\n".join(f"<li>{_e(_strip_md(a))}</li>" for a in result.practical_advice)
         improvement_body = f"<ol>{flat}</ol>"
     else:
         improvement_body = ""
 
     improvement_html = f"""
   <div class="advice" style="margin-top:20px">
-    <div class="section-title">{SECTION_ASSESSMENT}</div>
+    <div class="section-title">AI Visibility Improvement Roadmap</div>
     {improvement_body}
   </div>"""
 
@@ -2473,8 +2550,8 @@ def _build_comparison_html(
 
   <div class="section-title" style="font-size:13pt;margin-bottom:20px">{SECTION_COMPARISON_OVERVIEWS}</div>
 
-  {_comparison_overview_block(result_a, "Entity A")}
-  {_comparison_overview_block(result_b, "Entity B")}
+  {_comparison_overview_block(result_a, "Entity A", mixed_rubric_note=(result_a.entity_type != result_b.entity_type))}
+  {_comparison_overview_block(result_b, "Entity B", mixed_rubric_note=(result_a.entity_type != result_b.entity_type))}
 
   {_comparison_summary_block(comparison)}
 
@@ -2655,7 +2732,11 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
             key=lambda p: (p.get("not_established", False), -(p.get("total_reviews") or 0)),
         )
         for ph in physicians:
-            ph_name = _e(ph.get("physician_name", ""))
+            _raw_ph = ph.get("physician_name", "")
+            _ph_lower = _raw_ph.lower()
+            if not any(_ph_lower.startswith(t) for t in ("dr.", "pa-", "np ", "rn ", "do ", "md ")):
+                _raw_ph = "Dr. " + _raw_ph
+            ph_name = _e(_raw_ph)
             ph_coll = ph.get("collection_date", "")
             rows_html += f"""
     <tr style="border-bottom:1px solid {BD};background:#fafcfc">

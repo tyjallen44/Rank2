@@ -1370,6 +1370,10 @@ html, body {
             <input type="checkbox" id="ir-teaser-toggle">
             <span class="agg-label">Create Teaser Report</span>
           </label>
+          <label class="aggregate-toggle" style="margin-top:10px" title="Bypass the 90-day score cache and run a fresh analysis.">
+            <input type="checkbox" id="ir-force-rerun">
+            <span class="agg-label">Re-run analysis (ignore cached results)</span>
+          </label>
         </div>
 
         <div id="ir-run-err" class="err hidden mt16"></div>
@@ -1546,6 +1550,10 @@ html, body {
           <label class="aggregate-toggle">
             <input type="checkbox" id="cmp-teaser">
             <span class="agg-label">Create Teaser version</span>
+          </label>
+          <label class="aggregate-toggle mt10">
+            <input type="checkbox" id="cmp-force-rerun">
+            <span class="agg-label">Re-run analysis (ignore cached results within 90 days)</span>
           </label>
           <div id="cmp-run-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
@@ -3311,6 +3319,8 @@ async function runComparison() {
     practice_roster_a:    [],
     practice_composite_b: !!pcB,
     practice_roster_b:    [],
+    force_rerun_a: document.getElementById('cmp-force-rerun').checked,
+    force_rerun_b: document.getElementById('cmp-force-rerun').checked,
   };
 
   const btn = document.getElementById('cmp-run-btn');
@@ -3359,6 +3369,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
   const aggregate          = document.getElementById('ir-agg-toggle').checked;
   const skip_pdf           = document.getElementById('ir-skip-pdf-toggle').checked;
   const teaser_report      = document.getElementById('ir-teaser-toggle').checked;
+  const force_rerun        = document.getElementById('ir-force-rerun')?.checked || false;
   const physician_composite = practiceComposite && document.getElementById('ir-physician-composite')?.checked;
 
   const body = {
@@ -3377,6 +3388,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     practice_roster:      practiceRoster,
     physician_composite,
     physician_roster:     physician_composite ? physicianRoster : {},
+    force_rerun,
   };
 
   const btn = document.getElementById('ir-run-btn');

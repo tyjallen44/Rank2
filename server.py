@@ -42,11 +42,35 @@ except ImportError:
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
+_PRESERVE_UPPERCASE: frozenset[str] = frozenset({
+    # US state abbreviations
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+    "DC",
+    # Common healthcare / general acronyms
+    "USA", "US", "MRI", "CT", "ER", "ICU", "OR", "PT", "OT", "RT",
+    "ENT", "OB", "GYN", "OBGYN", "ACL", "MCL", "ACL", "NPI",
+    "HIPAA", "NCQA", "AAAHC", "AAAASF", "MIPS", "QPP", "CMS",
+    "ASC", "PCMH", "DNV", "TJC",
+})
+
+
+def _smart_title(text: str) -> str:
+    """Title-case text while preserving known all-caps acronyms and state codes."""
+    return " ".join(
+        w.upper() if w.upper() in _PRESERVE_UPPERCASE else w.capitalize()
+        for w in text.title().split()
+    )
+
+
 def _normalize_input(text: str | None) -> str | None:
     """Title-case a free-text field received in ALL CAPS from the UI."""
     if not text:
         return text
-    return text.strip().title()
+    return _smart_title(text.strip())
 
 app = FastAPI(title="Pulse", docs_url=None, redoc_url=None)
 
@@ -221,6 +245,7 @@ def _job_run_single(
             practice_roster=job.get("practice_roster") or [],
             physician_composite=job.get("physician_composite", False),
             physician_roster=job.get("physician_roster") or {},
+            force_rerun=job.get("force_rerun", False),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -270,6 +295,7 @@ def _job_run_practice(
             practice_roster=job.get("practice_roster") or [],
             physician_composite=job.get("physician_composite", False),
             physician_roster=job.get("physician_roster") or {},
+            force_rerun=job.get("force_rerun", False),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -376,6 +402,7 @@ class AnalyzeRequest(BaseModel):
     practice_roster: List[dict] = []        # confirmed practice list for reputation collection
     physician_composite: bool = False       # include physician sub-rows in practice composite
     physician_roster: dict = {}             # {practice_name: [{name, npi, specialty, credential}]}
+    force_rerun: bool = False               # bypass 90-day score cache
 
 
 class BatchRequest(BaseModel):
@@ -402,6 +429,8 @@ class CompareRequest(BaseModel):
     practice_composite_b: bool = False
     practice_roster_a: List[dict] = []
     practice_roster_b: List[dict] = []
+    force_rerun_a: bool = False
+    force_rerun_b: bool = False
 
 
 @app.post("/api/analyze")
@@ -437,6 +466,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["practice_roster"] = req.practice_roster
     _jobs[job_id]["physician_composite"] = req.physician_composite
     _jobs[job_id]["physician_roster"] = req.physician_roster
+    _jobs[job_id]["force_rerun"] = req.force_rerun
 
     if req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)
@@ -486,6 +516,8 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
             practice_composite_b=req_dict.get("practice_composite_b", False),
             practice_roster_a=req_dict.get("practice_roster_a") or [],
             practice_roster_b=req_dict.get("practice_roster_b") or [],
+            force_rerun_a=req_dict.get("force_rerun_a", False),
+            force_rerun_b=req_dict.get("force_rerun_b", False),
         )
         job["status"] = "done"
         job["result"] = {

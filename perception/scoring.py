@@ -142,6 +142,36 @@ PRACTICE_PROFILE_DISPLAY: dict[str, str] = {
 }
 
 
+def grade_from_score(score: int | None) -> tuple[str, str]:
+    """Return (letter_grade, band_label) for a 0–100 AI Visibility Score.
+
+    Band table (INTL-SALES-119 §3). Within each band the upper half of score
+    values receives the higher of the two grades:
+      93–100 → A   / Excellent    85–92 → A−  / Excellent
+      80–84  → B+  / Strong       75–79 → B   / Strong
+      70–74  → B   / Good         65–69 → B−  / Good
+      60–64  → C+  / Fair         55–59 → C   / Fair
+      47–54  → C−  / Below Avg    40–46 → D   / Below Avg
+      20–39  → D   / Weak         0–19  → F   / Weak
+      None   → —   / Unscored
+    """
+    if score is None:
+        return "—", "Unscored"
+    s = max(0, min(100, score))
+    if s >= 93: return "A",  "Excellent"
+    if s >= 85: return "A−", "Excellent"
+    if s >= 80: return "B+", "Strong"
+    if s >= 75: return "B",  "Strong"
+    if s >= 70: return "B",  "Good"
+    if s >= 65: return "B−", "Good"
+    if s >= 60: return "C+", "Fair"
+    if s >= 55: return "C",  "Fair"
+    if s >= 47: return "C−", "Below Average"
+    if s >= 40: return "D",  "Below Average"
+    if s >= 20: return "D",  "Weak"
+    return "F", "Weak"
+
+
 def experience_band(
     rating: Optional[float],
     review_count: Optional[int],
