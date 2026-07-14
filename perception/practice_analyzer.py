@@ -677,7 +677,7 @@ def analyze_practice(
 
     disclaimer = _clean(structured_data.get("disclaimer", ""))
     if _AIVS_DISCLAIMER_CHECK not in disclaimer:
-        disclaimer = (disclaimer + " " + _AIVS_DISCLAIMER).strip()
+        disclaimer = _AIVS_DISCLAIMER
 
     # Post-extraction validation
     _verdict = _clean(structured_data.get("ai_visibility_verdict", ""))

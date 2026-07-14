@@ -201,9 +201,11 @@ def _locations_block(p: RankedProvider) -> str:
         return ""
     parts = []
     for loc in p.consolidated_locations:
+        # Suppress the text overall_rating when structured Google data is present
+        # to avoid rendering the same rating twice side-by-side.
         rating_span = (
             f'&thinsp;—&thinsp;<span class="loc-rating">{_e(loc.overall_rating)}</span>'
-            if loc.overall_rating else ""
+            if loc.overall_rating and loc.google_rating is None else ""
         )
         google_span = ""
         if loc.google_rating is not None:
@@ -328,7 +330,7 @@ def _google_stat(p: RankedProvider) -> str:
             f'<div style="margin-top:4px;font-size:7pt;color:#3a5a60">'
             f'<strong>System-wide (all locations):</strong> '
             f'<strong>{sa.rating:.1f}&#9733; · {sa.total_reviews:,} total reviews '
-            f'across {loc} locations</strong>{pct_diff} '
+            f'across {loc} location{"s" if sa.location_count != 1 else ""}</strong>{pct_diff} '
             f'<span style="color:#7a9095;font-style:italic">(review-count-weighted, {conf})</span>'
             f'</div>'
         )
@@ -513,7 +515,6 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
           </div>
         </div>
         <div class="best-for"><strong>Best for:</strong> {_e(p.best_suited_for)}</div>
-        <div class="summary">{_e(p.recommendation_summary)}</div>
       </div>
     </div>"""
 
@@ -565,7 +566,6 @@ def _individual_entity_card(p: RankedProvider) -> str:
           </div>
         </div>
         <div class="best-for"><strong>Best for:</strong> {_e(p.best_suited_for)}</div>
-        <div class="summary">{_e(p.recommendation_summary)}</div>
       </div>
     </div>"""
 
@@ -1525,9 +1525,25 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
     # Cover location/specialty/sub differ for individual reports
     if result.individual_report:
-        cover_loc  = _e(result.entity_name or result.location)
-        cover_spec = _e(result.specialty or "Hospital / Health System")
-        cover_sub  = f'<div class="cover-zip-scope">{location}</div>'
+        _raw_entity = result.entity_name or result.location
+        # D8: For practice reports whose entity_name embeds a street address
+        # (e.g., "Desert Orthopaedic Center 2800 E Desert Inn Rd, Las Vegas, NV 89121"),
+        # split at the first street-number to show only the practice name as the cover title.
+        _addr_match = re.search(r'\s+\d+\s', _raw_entity or "")
+        if result.entity_type == "practice" and _addr_match:
+            _display_name = _raw_entity[:_addr_match.start()].strip()
+            _addr_part    = _raw_entity[_addr_match.start():].strip()
+            cover_loc  = _e(_display_name)
+            cover_sub  = (
+                f'<div class="cover-zip-scope">{_e(_addr_part)}</div>'
+                f'<div class="cover-zip-scope">{location}</div>'
+            )
+        else:
+            cover_loc  = _e(_raw_entity)
+            cover_sub  = f'<div class="cover-zip-scope">{location}</div>'
+        cover_spec = _e(result.specialty or (
+            "Specialty Practice" if result.entity_type == "practice" else "Hospital / Health System"
+        ))
     else:
         cover_loc  = location
         cover_spec = specialty_label
@@ -1539,8 +1555,10 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     # Section title overrides for individual reports
     overview_title       = "Organization Overview" if result.individual_report else "Market Overview"
     recommendation_title = SECTION_ASSESSMENT      if result.individual_report else "Top Recommendation"
+    # Individual reports: assessment+roadmap are one section; advice_title is empty to avoid
+    # a duplicate SECTION_ASSESSMENT header after recommendation_title already rendered it.
     advice_title         = (
-        SECTION_ASSESSMENT
+        ""
         if result.individual_report
         else "Improve Your AI Visibility"
     )
@@ -2460,7 +2478,7 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
 
     improvement_html = f"""
   <div class="advice" style="margin-top:20px">
-    <div class="section-title">{SECTION_ASSESSMENT}</div>
+    <div class="section-title">AI Visibility Improvement Roadmap</div>
     {improvement_body}
   </div>"""
 
@@ -2714,7 +2732,11 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
             key=lambda p: (p.get("not_established", False), -(p.get("total_reviews") or 0)),
         )
         for ph in physicians:
-            ph_name = _e(ph.get("physician_name", ""))
+            _raw_ph = ph.get("physician_name", "")
+            _ph_lower = _raw_ph.lower()
+            if not any(_ph_lower.startswith(t) for t in ("dr.", "pa-", "np ", "rn ", "do ", "md ")):
+                _raw_ph = "Dr. " + _raw_ph
+            ph_name = _e(_raw_ph)
             ph_coll = ph.get("collection_date", "")
             rows_html += f"""
     <tr style="border-bottom:1px solid {BD};background:#fafcfc">

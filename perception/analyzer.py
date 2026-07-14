@@ -730,7 +730,7 @@ def analyze_location(
 
     disclaimer = _clean(structured_data.get("disclaimer", ""))
     if _AIVS_DISCLAIMER_CHECK not in disclaimer:
-        disclaimer = (disclaimer + " " + _AIVS_DISCLAIMER).strip()
+        disclaimer = _AIVS_DISCLAIMER
 
     # Post-extraction validation: warn on grade/snake-case inconsistencies
     _verdict = _clean(structured_data.get("ai_visibility_verdict", ""))

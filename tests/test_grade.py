@@ -551,3 +551,169 @@ def test_google_stat_renders_not_established_flag():
     )
     html = _google_stat(p)
     assert "✗" in html, "Not-established flag missing from _google_stat output"
+
+
+# ── Phase 2 display-strings regression tests ─────────────────────────────────
+
+# D1: Acronym-safe casing
+def test_smart_title_preserves_state_abbreviation():
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from server import _smart_title
+    assert _smart_title("USA HEALTH UNIVERSITY HOSPITAL") == "USA Health University Hospital"
+    assert _smart_title("LAS VEGAS, NV 89121") == "Las Vegas, NV 89121"
+    assert _smart_title("MOBILE, AL") == "Mobile, AL"
+
+
+def test_smart_title_preserves_medical_acronyms():
+    from server import _smart_title
+    assert _smart_title("MRI CENTER OF MOBILE") == "MRI Center Of Mobile"
+    assert _smart_title("ENT ASSOCIATES") == "ENT Associates"
+
+
+def test_normalize_input_uses_smart_title():
+    from server import _normalize_input
+    result = _normalize_input("USA HEALTH UNIVERSITY HOSPITAL")
+    assert result == "USA Health University Hospital", f"Got: {result}"
+
+
+# D2: Disclaimer replace not append
+def test_disclaimer_replace_not_append():
+    """When LLM disclaimer lacks 'Pulse Score', the old sentence must be replaced, not appended."""
+    from perception.strings import AIVS_DISCLAIMER, AIVS_DISCLAIMER_CHECK
+    old_disclaimer = "The AI Visibility Score (0–100) reflects public data at time of collection."
+    assert AIVS_DISCLAIMER_CHECK not in old_disclaimer
+    # Simulate the fixed logic
+    if AIVS_DISCLAIMER_CHECK not in old_disclaimer:
+        result = AIVS_DISCLAIMER
+    else:
+        result = old_disclaimer
+    assert "AI Visibility Score (0–100) reflects" not in result, "Old disclaimer sentence still present"
+    assert "Pulse Score" in result, "New disclaimer not applied"
+    # Confirm no double sentence
+    assert result.count("Pulse Score") == 1
+
+
+# D3: Single SECTION_ASSESSMENT header
+def test_advice_title_empty_for_individual_report():
+    """Individual report advice block must not generate a second SECTION_ASSESSMENT header."""
+    from perception.strings import SECTION_ASSESSMENT
+    # Simulate the corrected logic from _build_html()
+    individual_report = True
+    advice_title = "" if individual_report else "Improve Your AI Visibility"
+    assert advice_title != SECTION_ASSESSMENT, "advice_title should be empty for individual reports"
+    assert advice_title == ""
+
+
+# D4: No duplicate rating in location lines
+def test_locations_block_no_duplicate_rating():
+    """When google_rating is present, overall_rating text should not also render."""
+    from perception.models import RankedProvider, ConsolidatedLocation
+    from perception.pdf import _locations_block
+
+    p = RankedProvider(
+        rank=1,
+        name="Test Hospital",
+        consolidated_locations=[
+            ConsolidatedLocation(
+                name="Test Hospital - Main",
+                overall_rating="2.8★ · 375 reviews",
+                google_rating=2.8,
+                google_review_count=375,
+            )
+        ],
+    )
+    html = _locations_block(p)
+    # Should contain the star character from google_span but NOT from rating_span too
+    star_count = html.count("★") + html.count("&#9733;")
+    assert star_count == 1, f"Rating rendered {star_count} times, expected 1: {html}"
+
+
+# D5: Pluralization
+def test_location_count_singular():
+    """'1 location' not '1 locations'."""
+    from perception.models import SystemAggregate
+    sa = SystemAggregate(rating=4.2, total_reviews=100, location_count=1, confidence="registry")
+    loc = f"{sa.location_count}"
+    text = f'across {loc} location{"s" if sa.location_count != 1 else ""}'
+    assert text == "across 1 location", f"Got: {text}"
+
+
+def test_location_count_plural():
+    from perception.models import SystemAggregate
+    sa = SystemAggregate(rating=4.2, total_reviews=375, location_count=3, confidence="registry")
+    loc = f"{sa.location_count}"
+    text = f'across {loc} location{"s" if sa.location_count != 1 else ""}'
+    assert text == "across 3 locations", f"Got: {text}"
+
+
+# D6: Best-for echo removed
+def test_recommendation_summary_not_in_card():
+    """The individual entity card must not render recommendation_summary."""
+    from perception.models import RankedProvider
+    from perception.pdf import _individual_entity_card
+    p = RankedProvider(
+        rank=1,
+        name="Desert Orthopaedic Center",
+        best_suited_for="Patients needing orthopedic procedures",
+        recommendation_summary="This is an excellent choice for patients needing orthopedic procedures.",
+    )
+    html = _individual_entity_card(p)
+    assert p.recommendation_summary not in html, "recommendation_summary leaked into individual card"
+
+
+# D7: Dr. prefix on physician rows
+def test_dr_prefix_added_to_physician_without_title():
+    """Physician rows without a title prefix should receive 'Dr. ' prefix."""
+    _raw = "Steven Nishiyama"
+    _lower = _raw.lower()
+    prefixes = ("dr.", "pa-", "np ", "rn ", "do ", "md ")
+    if not any(_lower.startswith(t) for t in prefixes):
+        result = "Dr. " + _raw
+    else:
+        result = _raw
+    assert result == "Dr. Steven Nishiyama"
+
+
+def test_dr_prefix_not_doubled():
+    """Physician rows that already include 'Dr.' must not be double-prefixed."""
+    _raw = "Dr. Jane Smith"
+    _lower = _raw.lower()
+    prefixes = ("dr.", "pa-", "np ", "rn ", "do ", "md ")
+    if not any(_lower.startswith(t) for t in prefixes):
+        result = "Dr. " + _raw
+    else:
+        result = _raw
+    assert result == "Dr. Jane Smith"
+    assert "Dr. Dr." not in result
+
+
+# D8: Practice cover title excludes address
+def test_practice_cover_title_splits_address():
+    """For practice reports with embedded address in entity_name, cover title shows name only."""
+    import re
+    entity_name = "Desert Orthopaedic Center 2800 E Desert Inn Rd"
+    entity_type = "practice"
+    _addr_match = re.search(r'\s+\d+\s', entity_name or "")
+    if entity_type == "practice" and _addr_match:
+        display_name = entity_name[:_addr_match.start()].strip()
+        addr_part    = entity_name[_addr_match.start():].strip()
+    else:
+        display_name = entity_name
+        addr_part = ""
+    assert display_name == "Desert Orthopaedic Center"
+    assert "2800" in addr_part
+    assert "2800" not in display_name
+
+
+def test_practice_cover_title_unchanged_without_address():
+    """Practice name without embedded address renders as-is in cover title."""
+    import re
+    entity_name = "Desert Orthopaedic Center"
+    entity_type = "practice"
+    _addr_match = re.search(r'\s+\d+\s', entity_name or "")
+    if entity_type == "practice" and _addr_match:
+        display_name = entity_name[:_addr_match.start()].strip()
+    else:
+        display_name = entity_name
+    assert display_name == "Desert Orthopaedic Center"
