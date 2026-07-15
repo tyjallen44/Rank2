@@ -56,6 +56,41 @@ from .analyzer import (
 
 _RUBRIC_VERSION = "practice-v1.0"
 
+# ── Address normalization for composite dedup ─────────────────────────────────
+_DIRECTIONAL_ABBR: dict[str, str] = {
+    r"\bne\b": "northeast", r"\bnw\b": "northwest",
+    r"\bse\b": "southeast", r"\bsw\b": "southwest",
+    r"\be\b": "east",  r"\bw\b": "west",
+    r"\bn\b": "north", r"\bs\b": "south",
+}
+_STREET_TYPE_ABBR: dict[str, str] = {
+    r"\brd\b": "road",    r"\bst\b": "street",  r"\bave\b": "avenue",
+    r"\bblvd\b": "boulevard", r"\bdr\b": "drive", r"\bln\b": "lane",
+    r"\bct\b": "court",  r"\bpl\b": "place",   r"\bpkwy\b": "parkway",
+    r"\bhwy\b": "highway",
+}
+
+
+def _normalize_street(s: str) -> str:
+    """Normalize a street string for identity comparison.
+
+    Expands common directional and street-type abbreviations, strips suite
+    suffixes and leading street numbers, removes punctuation, and lowercases.
+    Used only for composite dedup — not in scoring or data collection.
+    """
+    if not s:
+        return ""
+    s = s.lower()
+    for pat, rep in _DIRECTIONAL_ABBR.items():
+        s = re.sub(pat, rep, s)
+    for pat, rep in _STREET_TYPE_ABBR.items():
+        s = re.sub(pat, rep, s)
+    s = re.sub(r'\b(suite|ste|apt|unit|#)\s*[\w-]+', '', s)
+    s = re.sub(r'^\d+\s*', '', s)
+    s = re.sub(r'[^a-z0-9\s]', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
 _HOSPITAL_SIGNAL_TOKENS = frozenset({"leapfrog", "cms overall star", "hcahps"})
 
 
@@ -594,7 +629,15 @@ def analyze_practice(
                 f"=== Evidence for {entity_name}, {city}, {state} ===\n"
                 "Google data unavailable this run."
             )
+            _indiv_read = None
     console.print(f"[green]✓[/green] Practice evidence: {entity_name}")
+
+    # Capture anchor's normalized street address for address-based composite dedup (D2).
+    # Uses only the street line (before the first comma) to avoid city/state noise.
+    _anchor_addr_norm = ""
+    if _indiv_read and getattr(_indiv_read, "formatted_address", None):
+        _street_line = _indiv_read.formatted_address.split(",")[0]
+        _anchor_addr_norm = _normalize_street(_street_line)
 
     system_prompt, user_prompt = build_practice_prompt(
         entity_name=entity_name,
@@ -755,19 +798,34 @@ def analyze_practice(
         from .data.places import _name_match as _nmatch
         _anchor_lc = entity_name.strip().lower()
 
-        def _is_anchor_duplicate(sibling_name: str) -> bool:
+        def _is_anchor_duplicate(sibling_name: str, sibling_address: str = "") -> bool:
             if sibling_name.strip().lower() == _anchor_lc:
                 return True
-            return (
+            # Bidirectional name-token AND (catches location-label variants like "(Main Office)")
+            if (
                 _nmatch(entity_name, sibling_name) == "strong"
                 and _nmatch(sibling_name, entity_name) == "strong"
-            )
+            ):
+                return True
+            # Address-based: sibling at same normalized street as anchor is a duplicate
+            # regardless of how the street is abbreviated or formatted.
+            if _anchor_addr_norm:
+                if sibling_address and _normalize_street(sibling_address) == _anchor_addr_norm:
+                    return True
+                # Address embedded in sibling name: strip anchor base prefix, treat remainder
+                sn_lower = sibling_name.lower()
+                if sn_lower.startswith(_anchor_lc):
+                    remainder = re.sub(r'^[\s\-,]+', '', sn_lower[len(_anchor_lc):])
+                    if remainder and _normalize_street(remainder) == _anchor_addr_norm:
+                        return True
+            return False
 
         deduped: list[dict] = []
         seen_names: set[str] = set()
         for s in sibling_roster:
             sn = s.get("name", "")
-            if _is_anchor_duplicate(sn):
+            sa = s.get("address", "")
+            if _is_anchor_duplicate(sn, sa):
                 continue
             k = sn.strip().lower()
             if k not in seen_names:

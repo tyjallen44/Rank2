@@ -183,20 +183,25 @@ def collect_platform_data(
 
         # Collision backstop: if this place_id was already claimed by another entity,
         # keep the stronger name match; render the loser as not_established.
+        # Exception: the anchor entity reclaims its own pre-quarantined place_id —
+        # allow it through and upgrade the registration from "anchor-quarantine" to
+        # the real match strength.
         pid = read.place_id
         if pid and pid in _assigned_place_ids:
             prior_entity, prior_strength = _assigned_place_ids[pid]
-            curr_strength = read.name_match  # always "strong" (weak no longer passes verified)
-            # Both passed verified=True, both are "strong"; log the collision
-            import sys
-            print(
-                f"[practice_reputation] Place ID collision: {pid} claimed by "
-                f"'{prior_entity}' and '{entity_name_key}' — keeping prior assignment, "
-                f"'{entity_name_key}' → Not established",
-                file=sys.stderr,
-            )
-            google_data[entity_name_key] = (None, None, None, None)
-            continue
+            if prior_strength == "anchor-quarantine" and prior_entity == entity_name_key:
+                # Anchor reclaiming its own pre-registered slot — proceed normally.
+                _assigned_place_ids[pid] = (entity_name_key, read.name_match)
+            else:
+                import sys
+                print(
+                    f"[practice_reputation] Place ID collision: {pid} claimed by "
+                    f"'{prior_entity}' and '{entity_name_key}' — keeping prior assignment, "
+                    f"'{entity_name_key}' → Not established",
+                    file=sys.stderr,
+                )
+                google_data[entity_name_key] = (None, None, None, None)
+                continue
 
         if pid:
             _assigned_place_ids[pid] = (entity_name_key, read.name_match)

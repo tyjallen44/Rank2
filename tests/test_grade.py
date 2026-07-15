@@ -969,3 +969,247 @@ def test_quality_signals_block_cms_quality_has_flag():
     )
     html = _quality_signals_block(p)
     assert "✗" in html, "cms_quality_highlights block missing ✗ Not established flag"
+
+
+# ── Round 4 D1: Anchor-row collision-bypass regression ───────────────────────
+
+def test_anchor_collision_bypass_condition():
+    """D1: when prior_strength is 'anchor-quarantine' and prior_entity matches the
+    current entity, the bypass fires — the anchor reclaims its own place_id."""
+    pid = "ChIJtestbypass"
+    entity_name = "Valley Orthopedic Center"
+    assigned = {pid: (entity_name, "anchor-quarantine")}
+
+    prior_entity, prior_strength = assigned[pid]
+    bypass_fires = (prior_strength == "anchor-quarantine" and prior_entity == entity_name)
+    assert bypass_fires, "Bypass condition must fire for anchor reclaiming its own place_id"
+
+    # After bypass: registration is upgraded to the real match strength
+    assigned[pid] = (entity_name, "strong")
+    assert assigned[pid] == (entity_name, "strong"), \
+        "Registration must be upgraded from anchor-quarantine to real match strength"
+
+
+def test_anchor_collision_bypass_does_not_fire_for_sibling():
+    """D1: bypass must NOT fire when a sibling claims the anchor's pre-quarantined place_id."""
+    pid = "ChIJtestconflict"
+    anchor_name = "Valley Orthopedic Center"
+    sibling_name = "Valley Orthopedic Center - West Campus"
+    assigned = {pid: (anchor_name, "anchor-quarantine")}
+
+    prior_entity, prior_strength = assigned[pid]
+    bypass_fires = (prior_strength == "anchor-quarantine" and prior_entity == sibling_name)
+    assert not bypass_fires, "Bypass must not fire when sibling attempts to claim anchor place_id"
+
+
+def test_anchor_row_not_nulled_by_pre_quarantine():
+    """D1 regression: anchor row must carry its GBP rating, not be marked not_established,
+    even though the pre-quarantine step registered the anchor's place_id first."""
+    from unittest.mock import patch, MagicMock
+    from perception.data.places import GoogleRead
+
+    mock_read = GoogleRead(
+        query="Valley Orthopedic Center",
+        verified=True,
+        rating=4.5,
+        review_count=800,
+        place_id="ChIJvalley",
+        name_match="strong",
+        matched_name="Valley Orthopedic Center",
+        types=["health"],
+        formatted_address="500 E Valley Rd, Reno, NV 89502",
+    )
+
+    # Claude platform API mock: returns no platform data (no network needed)
+    mock_msg = MagicMock()
+    mock_msg.content = []
+    mock_stream = MagicMock()
+    mock_stream.__enter__ = MagicMock(
+        return_value=MagicMock(get_final_message=MagicMock(return_value=mock_msg))
+    )
+    mock_stream.__exit__ = MagicMock(return_value=False)
+    mock_client = MagicMock()
+    mock_client.messages.stream.return_value = mock_stream
+
+    practices = [
+        {"name": "Valley Orthopedic Center", "entity_type": "practice", "is_anchor": True,
+         "city": "Reno", "state": "NV"},
+    ]
+
+    with patch("perception.practice_reputation.places.fetch_provider",
+               return_value=(mock_read, None)), \
+         patch("perception.practice_reputation._get_client", return_value=mock_client):
+        from perception.practice_reputation import collect_platform_data
+        results = collect_platform_data(practices, "Valley Orthopedic Center", "Reno", "NV")
+
+    anchor = next((r for r in results if r.get("is_anchor")), None)
+    assert anchor is not None, "Anchor row must be present in results"
+    assert not anchor["not_established"], \
+        "Anchor must NOT be marked not_established — D1 regression check"
+    assert anchor["google_rating"] == 4.5, \
+        "Anchor must carry its GBP rating (4.5) after collision-bypass fix"
+    assert anchor["google_count"] == 800, \
+        "Anchor must carry its GBP review count (800) after collision-bypass fix"
+
+
+def test_scorecard_and_composite_anchor_values_match():
+    """AC-1.3: if the composite anchor row has a google_rating, it must match the
+    scorecard front_door.rating on the same result object."""
+    from perception.models import RankedProvider, AnalysisResult, GoogleFootprint, GoogleFrontDoor
+    from datetime import date
+
+    # Simulate a practice result where both sources read the same GBP record
+    anchor_rating = 4.5
+    provider = RankedProvider(
+        rank=1, name="Valley Orthopedic Center",
+        google_footprint=GoogleFootprint(
+            front_door=GoogleFrontDoor(rating=anchor_rating, count=800, verified=True),
+        ),
+    )
+    result = AnalysisResult(
+        run_id="test-run",
+        location="Reno, NV",
+        entity_type="practice",
+        generated_at=date.today(),
+        rankings=[provider],
+        practice_composite_rows=[
+            {"practice_name": "Valley Orthopedic Center", "is_anchor": True,
+             "google_rating": anchor_rating, "google_count": 800, "not_established": False},
+        ],
+    )
+
+    scorecard_rating = result.rankings[0].google_footprint.front_door.rating
+    composite_anchor = next(r for r in result.practice_composite_rows if r.get("is_anchor"))
+    composite_rating = composite_anchor["google_rating"]
+
+    assert scorecard_rating == composite_rating, (
+        f"Scorecard front_door.rating ({scorecard_rating}) must match "
+        f"composite anchor google_rating ({composite_rating})"
+    )
+
+
+# ── Round 4 D2: Street address normalizer and address-based dedup ─────────────
+
+def test_normalize_street_rd_to_road():
+    from perception.practice_analyzer import _normalize_street
+    assert _normalize_street("Desert Inn Rd") == "desert inn road"
+
+
+def test_normalize_street_e_to_east():
+    from perception.practice_analyzer import _normalize_street
+    assert _normalize_street("E Desert Inn Road") == "east desert inn road"
+
+
+def test_normalize_street_st_to_street():
+    from perception.practice_analyzer import _normalize_street
+    assert _normalize_street("Main St") == "main street"
+
+
+def test_normalize_street_ave_to_avenue():
+    from perception.practice_analyzer import _normalize_street
+    assert _normalize_street("Park Ave") == "park avenue"
+
+
+def test_normalize_street_strips_suite():
+    from perception.practice_analyzer import _normalize_street
+    result = _normalize_street("Desert Inn Rd Suite 200")
+    assert "suite" not in result, f"Suite suffix not stripped: {result!r}"
+    assert "200" not in result, f"Suite number not stripped: {result!r}"
+    assert "desert" in result and "inn" in result and "road" in result
+
+
+def test_normalize_street_strips_leading_number():
+    from perception.practice_analyzer import _normalize_street
+    result = _normalize_street("2800 E Desert Inn Rd")
+    assert result == "east desert inn road", f"Got: {result!r}"
+
+
+def test_address_dedup_suppresses_embedded_address():
+    """D2 AC-2.1: sibling whose name = anchor_name + ' - <anchor street>' is suppressed.
+    Mirrors the DOC 'East Desert Inn Road' duplicate case."""
+    from perception.practice_analyzer import _normalize_street
+    import re
+
+    anchor_name = "Desert Orthopaedic Center"
+    anchor_addr_raw = "2800 E Desert Inn Rd"
+    anchor_addr_norm = _normalize_street(anchor_addr_raw)
+
+    sibling_name = "Desert Orthopaedic Center - East Desert Inn Road"
+
+    def _dup(sn: str) -> bool:
+        if sn.strip().lower() == anchor_name.strip().lower():
+            return True
+        sn_lower = sn.lower()
+        anchor_lc = anchor_name.lower()
+        if sn_lower.startswith(anchor_lc):
+            remainder = re.sub(r'^[\s\-,]+', '', sn_lower[len(anchor_lc):])
+            if remainder and _normalize_street(remainder) == anchor_addr_norm:
+                return True
+        return False
+
+    assert _dup(sibling_name), \
+        f"{sibling_name!r} should be detected as a duplicate of anchor at {anchor_addr_raw!r}"
+
+
+def test_address_dedup_suppresses_explicit_address_field():
+    """D2: sibling with an explicit address field matching the anchor's normalized address
+    is suppressed, even when the name differs from the anchor's."""
+    from perception.practice_analyzer import _normalize_street
+
+    anchor_addr_norm = _normalize_street("2800 E Desert Inn Rd")
+    sibling_address = "2800 East Desert Inn Road"
+
+    assert _normalize_street(sibling_address) == anchor_addr_norm, \
+        "Sibling with explicit address field matching anchor's address must normalize to same value"
+
+
+def test_address_dedup_keeps_different_location_name():
+    """D2: sibling with a location qualifier (not an address) is NOT suppressed."""
+    from perception.practice_analyzer import _normalize_street
+    import re
+
+    anchor_name = "Desert Orthopaedic Center"
+    anchor_addr_norm = _normalize_street("2800 E Desert Inn Rd")
+
+    sibling_name = "Desert Orthopaedic Center - Summerlin"
+
+    def _address_branch_fires(sn: str) -> bool:
+        sn_lower = sn.lower()
+        anchor_lc = anchor_name.lower()
+        if sn_lower.startswith(anchor_lc):
+            remainder = re.sub(r'^[\s\-,]+', '', sn_lower[len(anchor_lc):])
+            if remainder and _normalize_street(remainder) == anchor_addr_norm:
+                return True
+        return False
+
+    assert not _address_branch_fires(sibling_name), \
+        f"{sibling_name!r} must NOT be suppressed — 'Summerlin' is not the anchor's street address"
+
+
+def test_address_dedup_true_negative_different_address():
+    """D2 AC-2.2 case 1: same base name, genuinely different street → not suppressed."""
+    from perception.practice_analyzer import _normalize_street
+
+    anchor_addr_norm = _normalize_street("100 E Lake Shore Dr")
+    sibling_addr = "500 W Waterfront Blvd"
+
+    assert _normalize_street(sibling_addr) != anchor_addr_norm, \
+        "Different streets must NOT normalize to the same value"
+
+
+def test_address_dedup_true_negative_unrelated_entity():
+    """D2 AC-2.2 case 2: completely unrelated entity name → address branch never fires."""
+    import re
+    from perception.practice_analyzer import _normalize_street
+
+    anchor_name = "Desert Orthopaedic Center"
+    anchor_addr_norm = _normalize_street("2800 E Desert Inn Rd")
+
+    sibling_name = "Mountain Spine & Joint Institute"  # no common prefix with anchor
+
+    anchor_lc = anchor_name.lower()
+    sn_lower = sibling_name.lower()
+    address_branch_fires = sn_lower.startswith(anchor_lc)
+
+    assert not address_branch_fires, \
+        "Address-based branch must not fire when sibling name has no anchor prefix"
