@@ -283,6 +283,20 @@ def _actionability(tier_key: str, improvement_sections: list, cfg: dict) -> int:
     return 0 if not improvement_sections else 1
 
 
+def _edition_labels_weights(result: "AnalysisResult", profile: str) -> tuple[dict, dict]:
+    """Return (labels, weights) keyed by this entity's edition."""
+    if result.entity_type == "practice":
+        from .scoring import PRACTICE_TIER_LABELS
+        from .practice_scoring import WEIGHTS as PW
+        labels  = PRACTICE_TIER_LABELS.get(profile, PRACTICE_TIER_LABELS["practice_procedural"])
+        weights = PW.get(profile, PW["practice_procedural"])
+    else:
+        from .scoring import TIER_LABELS, WEIGHTS
+        labels  = TIER_LABELS.get(profile, TIER_LABELS["procedural"])
+        weights = WEIGHTS.get(profile, WEIGHTS["procedural"])
+    return labels, weights
+
+
 def _compute_variant_scores(cand: _Candidate, cfg: dict) -> None:
     weights_sales = cfg["variant_weights"]["sales"]
     weights_cs = cfg["variant_weights"]["cs"]
@@ -304,12 +318,13 @@ def _build_candidate_pool(
     p: "RankedProvider",
     cfg: dict,
 ) -> list[_Candidate]:
-    from .scoring import WEIGHTS, TIER_KEYS, TIER_LABELS
+    from .scoring import TIER_KEYS
 
     candidates: list[_Candidate] = []
     profile = p.weighting_profile or "procedural"
-    weights = WEIGHTS.get(profile, WEIGHTS["procedural"])
-    labels = TIER_LABELS.get(profile, TIER_LABELS["procedural"])
+    labels, weights = _edition_labels_weights(result, profile)
+    top_tier_key   = max(weights, key=lambda k: weights[k])
+    top_tier_label = labels.get(top_tier_key, top_tier_key)
     has_held = _has_held_physician(result)
     bat = result.battery_results
 
@@ -349,6 +364,8 @@ def _build_candidate_pool(
             "entity_name":          entity_name,
             "tier_label":           label,
             "tier_score":           ts_val,
+            "top_tier_label":       top_tier_label,
+            "is_top_tier":          (tk == top_tier_key),
             "anchor_rating":        f"{anchor_row['avg_rating']:.1f}" if anchor_row and anchor_row.get("avg_rating") is not None else "—",
             "anchor_review_count":  anchor_row.get("total_reviews", "—") if anchor_row else "—",
             "n_platforms":          anchor_row.get("platforms_found", "—") if anchor_row else "—",

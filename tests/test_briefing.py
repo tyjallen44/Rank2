@@ -246,7 +246,6 @@ def test_hospital_entity_type_accepted():
     """Hospital entity_type with hospital composite rows should pass validation."""
     anchor = _make_anchor_row()
     result = _make_result(entity_type="hospital", anchor=anchor)
-    # Hospital edition still requires practice_composite_rows (hospital composite)
     errors = validate_briefing_inputs(result)
     assert errors == [], f"Hospital edition validation errors: {errors}"
 
@@ -258,6 +257,121 @@ def test_invalid_variant_raises():
         assert False, "Expected ValueError for invalid variant"
     except ValueError:
         pass
+
+
+# ── T4a: Edition label/weight binding (AC-1.2) ────────────────────────────────
+
+def test_practice_edition_uses_practice_labels():
+    """Practice run: credentials_recognition must render as 'Reviews & Reputation'."""
+    p = _make_provider(
+        weighting_profile="practice_procedural",
+        tier_scores=TierScores(
+            clinical_outcomes_safety=60,
+            credentials_recognition=92,
+            patient_experience_reviews=70,
+            access_fit=65,
+        ),
+    )
+    result = _make_result(provider=p, entity_type="practice")
+    cfg = _cfg()
+    candidates = _build_candidate_pool(result, p, cfg)
+    cred_cand = next((c for c in candidates if c.tier_key == "credentials_recognition"), None)
+    assert cred_cand is not None
+    assert cred_cand.context["tier_label"] == "Reviews & Reputation", (
+        f"Practice run got hospital label '{cred_cand.context['tier_label']}' "
+        "instead of 'Reviews & Reputation'"
+    )
+
+
+def test_hospital_edition_uses_hospital_labels():
+    """Hospital run: credentials_recognition must render as 'Credentials & Recognition'."""
+    p = _make_provider(
+        weighting_profile="procedural",
+        tier_scores=TierScores(
+            clinical_outcomes_safety=60,
+            credentials_recognition=92,
+            patient_experience_reviews=70,
+            access_fit=65,
+        ),
+    )
+    result = _make_result(provider=p, entity_type=None)
+    cfg = _cfg()
+    candidates = _build_candidate_pool(result, p, cfg)
+    cred_cand = next((c for c in candidates if c.tier_key == "credentials_recognition"), None)
+    assert cred_cand is not None
+    assert cred_cand.context["tier_label"] == "Credentials & Recognition", (
+        f"Hospital run got wrong label '{cred_cand.context['tier_label']}'"
+    )
+
+
+def test_positional_binding_canary():
+    """Same score on credentials_recognition must produce different labels in different editions."""
+    scores = TierScores(
+        clinical_outcomes_safety=60,
+        credentials_recognition=92,
+        patient_experience_reviews=70,
+        access_fit=65,
+    )
+    p_practice = _make_provider(weighting_profile="practice_procedural", tier_scores=scores)
+    p_hospital = _make_provider(weighting_profile="procedural", tier_scores=scores)
+    r_practice = _make_result(provider=p_practice, entity_type="practice")
+    r_hospital = _make_result(provider=p_hospital, entity_type=None)
+    cfg = _cfg()
+    pool_practice = _build_candidate_pool(r_practice, p_practice, cfg)
+    pool_hospital = _build_candidate_pool(r_hospital, p_hospital, cfg)
+    label_p = next(c for c in pool_practice if c.tier_key == "credentials_recognition").context["tier_label"]
+    label_h = next(c for c in pool_hospital if c.tier_key == "credentials_recognition").context["tier_label"]
+    assert label_p != label_h, (
+        f"Positional binding: both editions returned same label '{label_p}' "
+        "for credentials_recognition — edition lookup is not keyed correctly"
+    )
+
+
+def test_top_tier_label_is_computed_from_weight_table():
+    """top_tier_label in candidate context must reflect actual highest-weight pillar."""
+    # practice_relationship: credentials_recognition has weight 0.35 (highest)
+    p = _make_provider(
+        weighting_profile="practice_relationship",
+        tier_scores=TierScores(
+            clinical_outcomes_safety=80,
+            credentials_recognition=75,
+            patient_experience_reviews=70,
+            access_fit=65,
+        ),
+    )
+    result = _make_result(provider=p, entity_type="practice")
+    cfg = _cfg()
+    candidates = _build_candidate_pool(result, p, cfg)
+    top_labels = {c.context["top_tier_label"] for c in candidates if c.tier_key in
+                  ("clinical_outcomes_safety", "credentials_recognition")}
+    assert top_labels == {"Reviews & Reputation"}, (
+        f"Expected top_tier_label='Reviews & Reputation' for practice_relationship; got {top_labels}"
+    )
+
+
+def test_no_hardcoded_pillar_names_in_templates():
+    """AC-1.3: No finding template may contain a hardcoded pillar label string."""
+    cfg = _cfg()
+    hardcoded = [
+        "Outcomes & Safety",
+        "Credentials & Recognition",
+        "Experience & Reviews",
+        "Practitioner Credentials & Clinical Quality",
+        "Reviews & Reputation",
+        "Identity & Machine-Readability",
+    ]
+    violations = []
+    for tkey, tpl in cfg["finding_templates"].items():
+        for field in ("what", "why", "say"):
+            text = tpl.get(field, "")
+            for name in hardcoded:
+                if name in text:
+                    violations.append(f"finding_templates[{tkey}][{field}]: '{name}'")
+    for tkey, tpl in cfg["hook_templates"].items():
+        for name in hardcoded:
+            if name in tpl:
+                violations.append(f"hook_templates[{tkey}]: '{name}'")
+    assert not violations, "Hardcoded pillar names found in templates:\n" + "\n".join(violations)
 
 
 # ── T5: Selection constraints ──────────────────────────────────────────────────

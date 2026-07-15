@@ -82,13 +82,13 @@
       "say":  "Your credentials exist but aren’t visible where it counts. We fix the indexing gap so AI tools can verify what you’ve already earned."
     },
     "tier:clinical_outcomes_safety:strength": {
-      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — the highest-weight pillar is trending positive.",
-      "why":  "{tier_label} carries the highest pillar weight in this scoring profile, making it the primary driver of AI recommendation capture.",
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label}.",
+      "why":  "{top_tier_label} carries the highest pillar weight in this scoring profile — a strength here directly protects the composite.",
       "say":  "Your strongest pillar is also the one AI tools weight most heavily — that’s a real competitive advantage."
     },
     "tier:clinical_outcomes_safety:gap": {
-      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — the highest-weight pillar with the most room to move.",
-      "why":  "{tier_label} carries the highest pillar weight; a low score here suppresses the composite more than any other signal set.",
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — the pillar with the most room to improve.",
+      "why":  "{top_tier_label} carries the highest pillar weight; a low score here suppresses the composite more than any other signal set.",
       "say":  "The signals AI tools weight most heavily are the ones where {entity_name} has the most room to improve. That’s where we start."
     },
     "tier:access_fit:strength": {
