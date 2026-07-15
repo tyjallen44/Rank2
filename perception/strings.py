@@ -85,7 +85,6 @@ AIVS_DISCLAIMER = (
 AIVS_DISCLAIMER_CHECK = "Pulse Score"   # retained for backward-compat; no longer used as guard
 
 DATA_LIMITATIONS_BLOCK = (
-    "Data Limitations & Disclaimer\n\n"
     "Scores and rankings are derived from publicly available signals collected at "
     "the time of this report. Ratings, review counts, accreditation statuses, and "
     "quality designations change over time; verify current standings directly with "

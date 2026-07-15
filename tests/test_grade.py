@@ -899,10 +899,15 @@ def test_entity_registry_expire_clears_entries():
 # ── Round 3 F4: Hardcoded disclaimer — Data Limitations block always present ──
 
 def test_disclaimer_contains_data_limitations_block():
-    """FULL_DISCLAIMER must include the Data Limitations & Disclaimer header."""
-    from perception.strings import FULL_DISCLAIMER
-    assert "Data Limitations" in FULL_DISCLAIMER, \
-        "FULL_DISCLAIMER missing Data Limitations block"
+    """DATA_LIMITATIONS_BLOCK body text must be present in FULL_DISCLAIMER.
+    The section heading 'Data Limitations & Disclaimer' is supplied by the HTML
+    template (<strong> tag in pdf.py), NOT by the body string — so FULL_DISCLAIMER
+    must NOT contain the header as part of the body text (D3 fix)."""
+    from perception.strings import DATA_LIMITATIONS_BLOCK, FULL_DISCLAIMER
+    assert "Scores and rankings are derived" in FULL_DISCLAIMER, \
+        "FULL_DISCLAIMER missing Data Limitations body text"
+    assert not DATA_LIMITATIONS_BLOCK.startswith("Data Limitations"), \
+        "DATA_LIMITATIONS_BLOCK must not start with the header string (D3: header is in HTML template)"
 
 
 def test_disclaimer_contains_pulse_score_sentence():
@@ -1213,3 +1218,24 @@ def test_address_dedup_true_negative_unrelated_entity():
 
     assert not address_branch_fires, \
         "Address-based branch must not fire when sibling name has no anchor prefix"
+
+
+# ── Round 4 D3: Disclaimer header not duplicated in body text ────────────────
+
+def test_disclaimer_body_does_not_start_with_header_string():
+    """D3 AC-3.1: DATA_LIMITATIONS_BLOCK must NOT begin with 'Data Limitations'.
+    The HTML template supplies that heading; the body starts directly with body copy."""
+    from perception.strings import DATA_LIMITATIONS_BLOCK
+    assert not DATA_LIMITATIONS_BLOCK.startswith("Data Limitations"), (
+        "DATA_LIMITATIONS_BLOCK starts with the header string — this causes the duplicate "
+        "heading bug. The header is in the HTML <strong> tag; remove it from the body string."
+    )
+
+
+def test_disclaimer_body_starts_with_scores_sentence():
+    """D3 AC-3.1: Body text must open with 'Scores and rankings are derived' immediately."""
+    from perception.strings import DATA_LIMITATIONS_BLOCK
+    assert DATA_LIMITATIONS_BLOCK.startswith("Scores and rankings are derived"), (
+        f"DATA_LIMITATIONS_BLOCK must start with body copy, not a heading. "
+        f"Current start: {DATA_LIMITATIONS_BLOCK[:60]!r}"
+    )
