@@ -334,8 +334,9 @@ def _build_candidate_pool(
         None,
     )
     entity_name = result.entity_name or ""
-    # display_name: prefer anchor practice_name (clean, no address) over full entity_name
-    display_name = (anchor_row or {}).get("practice_name") or entity_name
+    display_name = _strip_address(
+        (anchor_row or {}).get("practice_name") or entity_name
+    )
     city = result.location.split(",")[0].strip() if result.location else ""
     specialty = result.specialty or "this specialty"
 
@@ -360,7 +361,7 @@ def _build_candidate_pool(
         act = _actionability(tk, result.improvement_sections, cfg)
 
         ctx: dict = {
-            "entity_name":          entity_name,
+            "entity_name":          display_name,
             "display_name":         display_name,
             "tier_label":           label,
             "tier_score":           ts_val,
@@ -422,7 +423,7 @@ def _build_candidate_pool(
         act = _actionability(related_tier, result.improvement_sections, cfg)
 
         ctx = {
-            "entity_name":           entity_name,
+            "entity_name":           display_name,
             f"{mk}_pct":             pct_str,
             "n_physicians":          n_phy,
             "n_captured":            n_cap,
@@ -451,7 +452,7 @@ def _build_candidate_pool(
         ceiling_value = 74  # the standard cap value
         reason_plain = p.score_ceiling_reason  # already human-readable from scorer
         ctx = {
-            "entity_name":              entity_name,
+            "entity_name":              display_name,
             "ceiling_value":            ceiling_value,
             "score_ceiling_reason":     p.score_ceiling_reason,
             "score_ceiling_reason_plain": reason_plain,
@@ -593,7 +594,12 @@ def _build_hook(
     score = p.ai_visibility_score or 0
     grade, _ = grade_from_score(score)
     band = cfg["band_descriptors"].get(grade, "moderate AI visibility")
-    entity_name = result.entity_name or ""
+    anchor_row = next(
+        (r for r in (result.practice_composite_rows or []) if r.get("is_anchor")), None
+    )
+    entity_name = _strip_address(
+        (anchor_row or {}).get("practice_name") or (result.entity_name or "")
+    )
     has_strength = any(f.candidate_type in ("strength", "relative_strength") for f in findings)
     has_gap = any(f.candidate_type == "gap" for f in findings)
 
@@ -733,6 +739,17 @@ def _get_prior(result: "AnalysisResult") -> dict:
         return {"score": prior_score, "generated_at": prior_row[1]}
     except Exception:
         return {}
+
+
+def _strip_address(name: str) -> str:
+    """Strip street-address suffix from an entity name.
+
+    "Desert Orthopaedic Center 2800 E Desert Inn Rd..." → "Desert Orthopaedic Center"
+    Safe for names that start with digits ("3 Brothers Orthopedics").
+    """
+    import re as _re
+    m = _re.search(r'(?<=[A-Za-z])\s+\d{2,}\s+', name)
+    return name[:m.start()].strip() if m else name
 
 
 def _roadmap_title_clean(raw_title: str) -> str:
