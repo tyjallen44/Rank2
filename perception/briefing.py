@@ -60,6 +60,7 @@ class BriefingResult:
     hook: str
     findings: list          # list[BriefingFinding], exactly 3
     demo: object            # BriefingDemoPrompt | None
+    gap_conversation_prompt: Optional[str]   # shown when demo is None
     objections: list        # list[dict], exactly 2 (or fewer if library sparse)
     ask: str
     prior_score: Optional[int]
@@ -788,6 +789,38 @@ def _build_hook(
         return hook
 
 
+def _build_gap_conversation_prompt(
+    findings_raw: list["_Candidate"],
+    result: "AnalysisResult",
+    cfg: dict,
+) -> Optional[str]:
+    """Return a gap-based conversation starter when no battery demo is available.
+
+    Priority: reputation gap first (composite:anchor_reputation, then
+    patient_experience_reviews), then the first other gap, then first finding.
+    """
+    prompts = cfg.get("gap_conversation_prompts", {})
+    if not prompts:
+        return None
+
+    _rep_types = {"composite:anchor_reputation:gap", "tier:patient_experience_reviews:gap"}
+    gaps = [c for c in findings_raw if c.candidate_type == "gap"]
+    lead = next((c for c in gaps if c.finding_type in _rep_types), None)
+    if lead is None:
+        lead = gaps[0] if gaps else (findings_raw[0] if findings_raw else None)
+    if lead is None:
+        return None
+
+    tpl = prompts.get(lead.finding_type) or prompts.get("default", "")
+    if not tpl:
+        return None
+
+    ctx = dict(lead.context)
+    ctx.setdefault("entity_name", result.entity_name or "")
+    ctx.setdefault("city", result.location or "")
+    return _fill(tpl, ctx)
+
+
 def _select_demo(result: "AnalysisResult", cfg: dict) -> Optional[BriefingDemoPrompt]:
     bat = result.battery_results
     if not bat:
@@ -1052,6 +1085,7 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
     findings_rendered = [_render_finding(f, cfg) for f in findings_raw]
     hook = _build_hook(findings_raw, result, p, cfg, strong_posture)
     demo = _select_demo(result, cfg)
+    gap_conv = _build_gap_conversation_prompt(findings_raw, result, cfg) if demo is None else None
     objections = _select_objections(findings_raw, variant, cfg, obj_ctx)
     ask, prior_score, prior_date = _build_ask(findings_raw, result, p, variant, cfg)
 
@@ -1066,6 +1100,7 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
         hook=hook,
         findings=findings_rendered,
         demo=demo,
+        gap_conversation_prompt=gap_conv,
         objections=objections,
         ask=ask,
         prior_score=prior_score,

@@ -294,7 +294,7 @@ def render_briefing_html(br: "BriefingResult") -> str:
     <div class="findings-grid">{"".join(finding_cards)}</div>
     """
 
-    # ── Demo (always renders — fallback when battery not yet run) ──────────
+    # ── Demo ────────────────────────────────────────────────────────────────
     if br.demo:
         pct_label = f"{round(br.demo.dominant_pct * 100)}%"
         demo_html = f"""
@@ -306,13 +306,15 @@ def render_briefing_html(br: "BriefingResult") -> str:
           </div>
         </div>
         """
-    else:
-        demo_html = """
-        <h2>Live Demo Prompt</h2>
-        <div class="demo-fallback">
-          Live demo not available for this run.
+    elif br.gap_conversation_prompt:
+        demo_html = f"""
+        <h2>Conversation Starter</h2>
+        <div class="demo-block">
+          <span class="demo-prompt">{_e(br.gap_conversation_prompt)}</span>
         </div>
         """
+    else:
+        demo_html = ""
 
     # ── Objections (always renders — falls back to generic library) ──────────
     obj_cards = []

@@ -202,6 +202,17 @@
     }
   },
 
+  "gap_conversation_prompts": {
+    "composite:anchor_reputation:gap": "Ask: \"When a patient asks an AI assistant to recommend a hospital in {city}, what do you think comes up first?\" Then pull up {entity_name}'s Google listing live — show them {anchor_rating}★ and {anchor_review_count} reviews and let the number do the talking.",
+    "tier:patient_experience_reviews:gap": "Ask: \"How is {entity_name} currently managing its review profile across Google, Healthgrades, and Yelp?\" Walk through the current listing gaps together and show what AI tools surface when patients search for providers in {city}.",
+    "tier:access_fit:gap": "Ask: \"If a patient looked up {entity_name} across two different directories right now, would they find the same name, address, and phone number?\" Pull up two listings side by side and walk through the inconsistencies.",
+    "tier:clinical_outcomes_safety:gap": "Ask: \"Where does {entity_name} appear when an AI tool is asked to recommend a hospital for a specific procedure in {city}?\" Run that query live and show them the gap.",
+    "tier:credentials_recognition:gap": "Ask: \"How easily can an AI tool find and verify {entity_name}'s credentials and affiliations?\" Walk through the entity resolution gaps together.",
+    "metric:linkage_integrity_pct:gap": "Ask: \"How consistent is {entity_name}'s information across the directories AI tools pull from?\" Show them a live example of a conflicting listing and explain how it suppresses recommendations.",
+    "metric:entity_resolution_pct:gap": "Ask: \"When an AI tool looks up {entity_name}, how confident is it that it found the right entity — and not a similarly named practice?\" Run the query live.",
+    "default": "Ask: \"What does {entity_name} look like to an AI tool trying to recommend a provider in {city}?\" Run a live AI search together and walk through what comes back."
+  },
+
   "demo_outcome_descriptions": {
     "recommended":        "The AI tool explicitly names and recommends {entity_name}.",
     "mentioned":          "The AI tool mentions {entity_name} without a direct recommendation.",

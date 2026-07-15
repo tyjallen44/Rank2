@@ -506,18 +506,41 @@ def test_objections_always_two():
         )
 
 
-def test_demo_fallback_present_in_html_when_demo_absent():
-    """Demo section renders a fallback note whenever demo=None (battery absent or below threshold)."""
+def test_gap_conversation_prompt_when_demo_absent():
+    """When demo=None, a gap conversation prompt is generated and rendered instead."""
     from perception.briefing_pdf import render_briefing_html
     for bat in (None, _make_battery(dominant_pct=0.60)):
         result = _make_result(battery_results=bat)
         br = extract(result, "sales")
         assert br.demo is None
-        html_out = render_briefing_html(br)
-        assert "not available" in html_out or "not recommended" in html_out, (
-            f"Demo section must render fallback when demo=None (battery={bat})"
+        assert br.gap_conversation_prompt is not None, (
+            f"gap_conversation_prompt must be set when demo=None (battery={bat})"
         )
-        assert "Live Demo Prompt" in html_out
+        html_out = render_briefing_html(br)
+        assert "Conversation Starter" in html_out, (
+            f"Conversation Starter section must render when demo=None (battery={bat})"
+        )
+        # No error fallback text
+        assert "not available" not in html_out
+        assert "not yet executed" not in html_out
+
+
+def test_gap_conversation_prompt_absent_when_demo_present():
+    """When a real battery demo is selected, gap_conversation_prompt is None."""
+    bat = {
+        "prompt-001": BatteryPromptResult(
+            prompt_id="prompt-001",
+            prompt_text="What is the best orthopedic practice in Las Vegas?",
+            run_count=6,
+            outcomes=["recommended"] * 5 + ["mentioned"],
+            dominant_outcome="recommended",
+            dominant_pct=0.833,
+        )
+    }
+    result = _make_result(battery_results=bat)
+    br = extract(result, "sales")
+    assert br.demo is not None
+    assert br.gap_conversation_prompt is None
 
 
 def test_objections_key_off_actual_findings():
