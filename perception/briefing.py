@@ -668,6 +668,10 @@ def _select_objections(
     cfg: dict,
     context: dict,
 ) -> list[dict]:
+    """Select exactly 2 objections keyed to the chosen findings' types.
+
+    Falls back to generic_objections from config when the library is sparse.
+    """
     finding_types = {f.finding_type for f in findings}
     scored: list[tuple] = []
     for obj in cfg["objections"]:
@@ -679,15 +683,21 @@ def _select_objections(
             scored.append((overlap, obj["id"], obj))
     scored.sort(key=lambda x: (-x[0], x[1]))
     result_objs = []
-    for _, _, obj in scored:
+    used_ids: set[str] = set()
+    for _, oid, obj in scored:
         if len(result_objs) >= 2:
             break
+        if oid in used_ids:
+            continue
         filled_rebuttal = _fill(obj["rebuttal"], context)
-        result_objs.append({
-            "id":        obj["id"],
-            "objection": obj["objection"],
-            "rebuttal":  filled_rebuttal,
-        })
+        result_objs.append({"id": oid, "objection": obj["objection"], "rebuttal": filled_rebuttal})
+        used_ids.add(oid)
+    # Fill any remaining slots with generic objections
+    for gen in cfg.get("generic_objections", []):
+        if len(result_objs) >= 2:
+            break
+        filled_rebuttal = _fill(gen["rebuttal"], context)
+        result_objs.append({"id": "generic", "objection": gen["objection"], "rebuttal": filled_rebuttal})
     return result_objs
 
 

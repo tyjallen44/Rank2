@@ -67,13 +67,13 @@
   "hook_templates": {
     "contrast":       "{entity_name}'s {strength_label} is one of its strongest signals — but {gap_label} is actively suppressing its AI recommendation capture.",
     "problem_lead":   "With a {band_descriptor} (score: {score}/100), {entity_name}'s biggest exposure is in {top_gap_label}.",
-    "strength_lead":  "{entity_name} scores {grade} ({score}/100) — a {band_descriptor} that puts it ahead of most peers on AI recommendation capture."
+    "strength_lead":  "{entity_name} scores {grade} ({score}/100) — a {band_descriptor}."
   },
 
   "finding_templates": {
     "tier:patient_experience_reviews:strength": {
       "what": "{entity_name} averages {anchor_rating}★ across {anchor_review_count} reviews on {n_platforms} platform(s).",
-      "why":  "Review depth and rating are the highest-weighted single signals AI tools use when generating provider recommendations.",
+      "why":  "Review depth and rating are key signals AI tools use when generating provider recommendations.",
       "say":  "You have {anchor_review_count} reviews at {anchor_rating} stars — that’s the social proof AI tools look for when recommending providers."
     },
     "tier:patient_experience_reviews:gap": {
@@ -154,7 +154,7 @@
 
     "composite:anchor_reputation:strength": {
       "what": "{entity_name}’s main listing averages {anchor_rating}★ on Google with {anchor_review_count} reviews across {n_platforms} platform(s).",
-      "why":  "Google reputation is the highest-weight single input to AI provider recommendation engines.",
+      "why":  "Google reputation is a primary input to AI provider recommendation engines — rating and review volume directly influence whether AI tools surface this provider.",
       "say":  "{anchor_rating} stars and {anchor_review_count} reviews — that’s a strong front door. The work now is making sure AI tools can find it reliably."
     },
     "composite:anchor_reputation:gap": {
@@ -227,6 +227,45 @@
       "objection": "What’s the ROI timeline?",
       "rebuttal":  "The ceiling resolves once {score_ceiling_reason_plain}. Physician capture improvements typically appear within 60 days of profile setup. Both are re-measured at the 90-day rerun — you’ll see an exact score delta.",
       "variants": ["sales", "cs"]
+    },
+    {
+      "id": "obj-009",
+      "triggers": ["tier:credentials_recognition:strength", "composite:anchor_reputation:strength"],
+      "objection": "Your ratings and reputation look strong already — why do you need this?",
+      "rebuttal":  "Strong ratings and review counts are table stakes. What separates top AI-recommended providers isn’t just reviews — it’s whether AI tools reliably resolve the entity, link physicians, and attribute the reputation to the right location. Those signals operate below the surface of what looks correct to you.",
+      "variants": ["sales", "cs"]
+    },
+    {
+      "id": "obj-010",
+      "triggers": ["tier:access_fit:strength", "metric:linkage_integrity_pct:strength"],
+      "objection": "Our directory listings look fine — what are you actually fixing?",
+      "rebuttal":  "Listings appearing correct from your side and AI tools confidently attributing reviews and queries to you are different things. Clean-looking directories can still produce ambiguous entity resolution in AI models — the structured data layer works differently from what’s visible to a human reviewer.",
+      "variants": ["sales", "cs"]
+    },
+    {
+      "id": "obj-011",
+      "triggers": ["tier:clinical_outcomes_safety:gap", "tier:clinical_outcomes_safety:relative_strength"],
+      "objection": "We don’t control what AI tools say about us — how is this even fixable?",
+      "rebuttal":  "AI tools generate responses based on indexed structured data, review signals, and entity resolution — all of which are directly addressable. This isn’t about influencing AI opinions; it’s about ensuring the right signals are indexed so AI tools can accurately represent you.",
+      "variants": ["sales", "cs"]
+    },
+    {
+      "id": "obj-012",
+      "triggers": ["tier:patient_experience_reviews:gap", "composite:anchor_reputation:gap"],
+      "objection": "We’re already happy with our Google presence — what else is there?",
+      "rebuttal":  "Google search rank and AI recommendation capture are separate systems. AI tools query structured indexes and entity resolution data, not your Google ranking. A practice can rank well on Google and still be underrepresented when patients ask an AI tool for a recommendation.",
+      "variants": ["sales", "cs"]
+    }
+  ],
+
+  "generic_objections": [
+    {
+      "objection": "How is this different from traditional SEO or digital marketing?",
+      "rebuttal":  "Traditional SEO targets search engine rankings. AI tools — ChatGPT, Gemini, Perplexity — pull from structured data, entity resolution indexes, and reputation signals that don’t map to Google ranking factors. AI recommendation is a separate channel with separate signals to optimize."
+    },
+    {
+      "objection": "What does the measurement actually look like?",
+      "rebuttal":  "We run standardized query batteries against the AI tools your patients actually use, capturing whether {entity_name} appears, how it’s described, and whether competitors are named instead. The Pulse Score is the composite of those results — re-measured every 90 days so you can see the exact delta."
     }
   ],
 

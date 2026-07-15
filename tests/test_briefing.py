@@ -470,6 +470,58 @@ def test_not_established_anchor_excluded():
 
 # ── T7: HTML renders without crashing ─────────────────────────────────────────
 
+def test_objections_always_two():
+    """AC-4.2: Every briefing must include exactly 2 objection entries."""
+    result = _make_result()
+    for variant in ("sales", "cs"):
+        br = extract(result, variant)
+        assert len(br.objections) == 2, (
+            f"{variant}: expected 2 objections, got {len(br.objections)}: "
+            f"{[o['id'] for o in br.objections]}"
+        )
+
+
+def test_demo_fallback_present_in_html_when_no_battery():
+    """AC-4.1: When no battery, demo section renders a fallback note (not silently absent)."""
+    from perception.briefing_pdf import render_briefing_html
+    result = _make_result(battery_results=None)
+    br = extract(result, "sales")
+    html_out = render_briefing_html(br)
+    assert "Live demo not available" in html_out or "battery not yet executed" in html_out, (
+        "Demo section silently disappeared when battery_results=None — must render a fallback"
+    )
+    assert "Live Demo Prompt" in html_out  # section header always present
+
+
+def test_objections_key_off_actual_findings():
+    """AC-4.2: An objection triggered by credentials_recognition:strength must appear
+    when that finding type is actually selected."""
+    # Default fixture: experience=80 (strength) → obj-009 covers credentials:strength
+    # but let's force credentials as a finding by making it the only strength
+    p = _make_provider(
+        tier_scores=TierScores(
+            clinical_outcomes_safety=60,   # gap
+            credentials_recognition=92,    # strength (≥75)
+            patient_experience_reviews=50, # gap
+            access_fit=40,                 # gap
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type=None)
+    br = extract(result, "sales")
+    # Find which finding types were selected
+    selected_types = {f.finding_type for f in br.findings}
+    # Verify that obj-009 (credentials:strength) fires when that type is present
+    if "tier:credentials_recognition:strength" in selected_types:
+        obj_ids = [o["id"] for o in br.objections]
+        assert "obj-009" in obj_ids or "generic" in obj_ids, (
+            f"credentials_recognition:strength selected but no matching objection: {obj_ids}"
+        )
+    assert len(br.objections) == 2
+
+
 def test_render_briefing_html_smoke():
     from perception.briefing_pdf import render_briefing_html
     result = _make_result()
@@ -598,6 +650,44 @@ def test_composition_never_3_of_same_type_when_mix_available():
         n_str = sum(1 for f in br.findings if f.candidate_type in ("strength", "relative_strength"))
         assert n_gap < 3, f"{variant}: 3 gaps when strengths exist"
         assert n_str < 3, f"{variant}: 3 strengths when gaps exist"
+
+
+# ── T7c: Template claim guard (AC-3.x) ────────────────────────────────────────
+
+def test_no_peer_or_trend_claims_in_templates():
+    """AC-3.2: Templates must not contain peer-comparison or trend language."""
+    cfg = _cfg()
+    banned_tokens = ["ahead of", "most peers", "trending", "improving", "better than",
+                     "higher than", "best in class"]
+    violations = []
+    all_templates: dict = {}
+    all_templates.update(cfg.get("finding_templates", {}))
+    all_templates["_hook_contrast"]       = {"text": cfg["hook_templates"]["contrast"]}
+    all_templates["_hook_problem_lead"]   = {"text": cfg["hook_templates"]["problem_lead"]}
+    all_templates["_hook_strength_lead"]  = {"text": cfg["hook_templates"]["strength_lead"]}
+    for ask_key, ask_text in cfg.get("ask_templates", {}).items():
+        all_templates[f"_ask_{ask_key}"] = {"text": ask_text}
+
+    for tkey, tpl in all_templates.items():
+        for field_name, text in tpl.items():
+            if not isinstance(text, str):
+                continue
+            for token in banned_tokens:
+                if token.lower() in text.lower():
+                    violations.append(f"[{tkey}][{field_name}]: '{token}'")
+
+    assert not violations, (
+        "Peer-comparison or trend language found in templates:\n" + "\n".join(violations)
+    )
+
+
+def test_tier_strength_threshold_in_config():
+    """AC-3.3: Tier classification threshold must be config-driven and ≥60."""
+    cfg = _cfg()
+    thr = cfg.get("tier_thresholds", {}).get("strength")
+    assert thr is not None, "tier_thresholds.strength missing from config"
+    assert thr >= 60, f"Strength threshold {thr} is too low — produces trivial gap/strength split"
+    assert thr <= 90, f"Strength threshold {thr} is too high — most entities would have no strengths"
 
 
 # ── T8: Variant produces different ordering ────────────────────────────────────

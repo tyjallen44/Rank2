@@ -110,7 +110,7 @@ def _css() -> str:
         border-radius: 4px;
         padding: 8px 10px;
     }
-    .finding-card.strength {
+    .finding-card.strength, .finding-card.relative_strength {
         border-left: 4px solid #2d8b92;
     }
     .finding-card.gap {
@@ -123,8 +123,18 @@ def _css() -> str:
         letter-spacing: 0.5px;
         margin-bottom: 5px;
     }
-    .finding-type-badge.strength { color: #2d8b92; }
-    .finding-type-badge.gap      { color: #c07a30; }
+    .finding-type-badge.strength,
+    .finding-type-badge.relative_strength { color: #2d8b92; }
+    .finding-type-badge.gap               { color: #c07a30; }
+    .demo-fallback {
+        background: #f7f7f7;
+        border: 1px solid #d0d5d6;
+        border-radius: 4px;
+        padding: 8px 12px;
+        font-size: 8pt;
+        color: #888;
+        font-style: italic;
+    }
     .finding-label {
         font-size: 7pt;
         text-transform: uppercase;
@@ -257,8 +267,14 @@ def render_briefing_html(br: "BriefingResult") -> str:
     # ── Findings ─────────────────────────────────────────────────────────────
     finding_cards = []
     for f in br.findings:
-        badge_cls = "strength" if f.candidate_type == "strength" else "gap"
-        badge_label = "&#10003; Strength" if f.candidate_type == "strength" else "&#9650; Gap"
+        is_strength_type = f.candidate_type in ("strength", "relative_strength")
+        badge_cls   = f.candidate_type if f.candidate_type in ("strength", "relative_strength", "gap") else "gap"
+        if f.candidate_type == "strength":
+            badge_label = "&#10003; Strength"
+        elif f.candidate_type == "relative_strength":
+            badge_label = "&#10003; Relative Strength"
+        else:
+            badge_label = "&#9650; Gap"
         card = f"""
         <div class="finding-card {badge_cls}">
           <div class="finding-type-badge {badge_cls}">{badge_label}</div>
@@ -278,8 +294,7 @@ def render_briefing_html(br: "BriefingResult") -> str:
     <div class="findings-grid">{"".join(finding_cards)}</div>
     """
 
-    # ── Demo ────────────────────────────────────────────────────────────────
-    demo_html = ""
+    # ── Demo (always renders — fallback when battery not yet run) ──────────
     if br.demo:
         pct_label = f"{round(br.demo.dominant_pct * 100)}%"
         demo_html = f"""
@@ -291,8 +306,15 @@ def render_briefing_html(br: "BriefingResult") -> str:
           </div>
         </div>
         """
+    else:
+        demo_html = """
+        <h2>Live Demo Prompt</h2>
+        <div class="demo-fallback">
+          Live demo not available for this run — battery not yet executed for this entity.
+        </div>
+        """
 
-    # ── Objections ───────────────────────────────────────────────────────────
+    # ── Objections (always renders — falls back to generic library) ──────────
     obj_cards = []
     for obj in br.objections:
         card = f"""
@@ -303,12 +325,10 @@ def render_briefing_html(br: "BriefingResult") -> str:
         """
         obj_cards.append(card)
 
-    objections_html = ""
-    if obj_cards:
-        objections_html = f"""
-        <h2>Objection Handling</h2>
-        <div class="objections-grid">{"".join(obj_cards)}</div>
-        """
+    objections_html = f"""
+    <h2>Objection Handling</h2>
+    <div class="objections-grid">{"".join(obj_cards)}</div>
+    """
 
     # ── Ask ──────────────────────────────────────────────────────────────────
     ask_html = f"""
