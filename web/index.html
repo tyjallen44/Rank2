@@ -3818,7 +3818,9 @@ function showSingleDone(r) {
 
   const briefingBtn = (!isComparison && r.briefing_pdf_path)
     ? `<button class="btn btn-ghost" onclick="window.location.href='/api/reports/${r.run_id}/briefing-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Briefing</button>`
-    : '';
+    : (!isComparison && r.briefing_skipped_reason)
+      ? `<div style="font-size:12px;color:#c07a30;margin-top:4px">Briefing skipped: ${r.briefing_skipped_reason}</div>`
+      : '';
 
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>

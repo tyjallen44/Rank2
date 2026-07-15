@@ -237,4 +237,5 @@ class AnalysisResult(BaseModel):
     md_path: Optional[str] = None
     briefing_variant: Optional[str] = None          # "sales" | "cs" | None
     briefing_pdf_path: Optional[str] = None         # path to companion briefing PDF
+    briefing_skipped_reason: Optional[str] = None   # set when briefing was requested but failed
     battery_results: Optional[dict[str, BatteryPromptResult]] = None  # prompt_id → result

@@ -257,6 +257,7 @@ def _job_run_single(
             "provider_count": len(result.rankings),
             "pdf_path": result.pdf_path,
             "briefing_pdf_path": result.briefing_pdf_path,
+            "briefing_skipped_reason": result.briefing_skipped_reason,
         }
     except Exception as exc:
         job["status"] = "error"
@@ -309,6 +310,7 @@ def _job_run_practice(
             "provider_count": len(result.rankings),
             "pdf_path": result.pdf_path,
             "briefing_pdf_path": result.briefing_pdf_path,
+            "briefing_skipped_reason": result.briefing_skipped_reason,
         }
     except Exception as exc:
         job["status"] = "error"

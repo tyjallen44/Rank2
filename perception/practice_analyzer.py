@@ -943,10 +943,15 @@ def analyze_practice(
             console.print(f"[green]✓[/green] Briefing PDF  → [dim]{_briefing_path}[/dim]")
             emit({"type": "briefing_ready", "path": str(_briefing_path)})
         except BriefingValidationError as exc:
-            console.print(f"[yellow]⚠[/yellow] Briefing skipped — missing inputs: {exc.missing}")
-            emit({"type": "briefing_skipped", "missing": exc.missing})
+            reason = f"Missing inputs: {', '.join(exc.missing)}"
+            result.briefing_skipped_reason = reason
+            console.print(f"[yellow]⚠[/yellow] Briefing skipped — {reason}")
+            emit({"type": "briefing_skipped", "reason": reason})
         except Exception as exc:
-            console.print(f"[yellow]⚠[/yellow] Briefing generation failed: {exc}")
+            reason = str(exc)
+            result.briefing_skipped_reason = reason
+            console.print(f"[yellow]⚠[/yellow] Briefing generation failed: {reason}")
+            emit({"type": "briefing_skipped", "reason": reason})
 
     emit({"type": "phase", "name": "done_item", "text": "Complete"})
     return result

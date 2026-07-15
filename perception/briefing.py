@@ -96,11 +96,8 @@ def validate_briefing_inputs(result: "AnalysisResult") -> list[str]:
     missing: list[str] = []
     p = result.rankings[0] if result.rankings else None
 
-    # Common required fields
     if not result.entity_name:
         missing.append("entity_name")
-    if not result.entity_type:
-        missing.append("entity_type (must be pinned: 'practice' or 'hospital')")
     if not result.run_id:
         missing.append("run_id")
     if not result.generated_at:
@@ -120,7 +117,7 @@ def validate_briefing_inputs(result: "AnalysisResult") -> list[str]:
         if getattr(ts, tk, None) is None:
             missing.append(f"rankings[0].tier_scores.{tk}")
 
-    # Edition-specific
+    # Practice edition: anchor composite row required for full candidate pool
     if result.entity_type == "practice":
         if not result.practice_composite_rows:
             missing.append("practice_composite_rows (non-empty)")
@@ -133,10 +130,7 @@ def validate_briefing_inputs(result: "AnalysisResult") -> list[str]:
                     missing.append("practice_composite_rows anchor: avg_rating")
                 if anchor.get("total_reviews") is None:
                     missing.append("practice_composite_rows anchor: total_reviews")
-    else:
-        # Hospital edition uses same composite rows
-        if not result.practice_composite_rows:
-            missing.append("practice_composite_rows (hospital composite, non-empty)")
+    # Hospital edition (entity_type=None or "hospital"): composite rows optional
 
     return missing
 
