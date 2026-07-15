@@ -16,6 +16,16 @@
     }
   },
 
+  "tier_thresholds": {
+    "strength": 75
+  },
+
+  "composition": {
+    "sales": {"required_strengths": 1, "required_gaps": 2},
+    "cs":    {"required_strengths": 1, "required_gaps": 2},
+    "strong_posture_note": "Signal profile is broadly positive — the work is protecting this position and extending reach to adjacent query types."
+  },
+
   "derived_metric_thresholds": {
     "physician_capture_rate": {"strength": 0.75, "gap": 0.45},
     "linkage_integrity_pct":  {"strength": 0.85, "gap": 0.60},
@@ -136,6 +146,12 @@
       "why":  "The ceiling blocks all composite improvement regardless of other signal strengths. No other work moves the number until this is resolved.",
       "say":  "There’s a hard cap on your score right now. Nothing else we do moves the number above {ceiling_value} until one specific issue is resolved — which is exactly what we’d tackle first."
     },
+    "tier:_relative_strength": {
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — the relative high point across all measured pillars.",
+      "why":  "Even where overall signals are developing, this pillar offers the strongest foundation for AI visibility improvements.",
+      "say":  "This is where you're furthest along — and it's the anchor for how we talk about your AI visibility profile."
+    },
+
     "composite:anchor_reputation:strength": {
       "what": "{entity_name}’s main listing averages {anchor_rating}★ on Google with {anchor_review_count} reviews across {n_platforms} platform(s).",
       "why":  "Google reputation is the highest-weight single input to AI provider recommendation engines.",

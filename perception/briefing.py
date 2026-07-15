@@ -64,6 +64,7 @@ class BriefingResult:
     ask: str
     prior_score: Optional[int]
     prior_date: Optional[str]
+    strong_posture: bool = False   # True when all findings are strengths (degradation path)
 
 
 @dataclass
@@ -343,12 +344,8 @@ def _build_candidate_pool(
             continue
         w = weights.get(tk, 0.0)
         label = labels.get(tk, tk)
-        ratio = ts_val / 100.0
-        # Use 55 as the midpoint — no neutral exclusion zone.
-        # All four tiers are always candidates so hospital runs (no derived
-        # metrics) always have enough distinct signals to fill 3 findings.
-        # The rubric scoring naturally deprioritizes borderline tiers.
-        ctype = "strength" if ratio >= 0.55 else "gap"
+        strength_thr = cfg.get("tier_thresholds", {}).get("strength", 75)
+        ctype = "strength" if ts_val >= strength_thr else "gap"
 
         # Verification strength
         vstren = _anchor_verification(anchor_row) if tk == "patient_experience_reviews" else 3
@@ -521,39 +518,62 @@ def _build_candidate_pool(
 
 # ── Selection ──────────────────────────────────────────────────────────────────
 
-def _select_findings(candidates: list[_Candidate], variant: str) -> list[_Candidate]:
-    """Select exactly 3 findings: ≥1 strength, no two from same tier_key."""
+def _select_findings(
+    candidates: list[_Candidate], variant: str, cfg: dict
+) -> tuple[list[_Candidate], bool]:
+    """Select exactly 3 findings: 1-2 strengths, 1-2 gaps (composition constraint).
+
+    Returns (selected, strong_posture).
+    strong_posture=True when fewer gaps than required are available (degradation path).
+    """
     score_attr = "score_sales" if variant == "sales" else "score_cs"
-    # Stable deterministic sort: score desc, then id asc
-    ordered = sorted(candidates, key=lambda c: (-getattr(c, score_attr), c.id))
+    comp = cfg.get("composition", {}).get(variant, {"required_strengths": 1, "required_gaps": 2})
+    n_s_req = comp["required_strengths"]
+    n_g_req = comp["required_gaps"]
 
-    selected: list[_Candidate] = []
-    used_tiers: set[str] = set()
+    def _sort(pool: list) -> list:
+        return sorted(pool, key=lambda c: (-getattr(c, score_attr), c.id))
 
-    for cand in ordered:
-        if len(selected) == 3:
-            break
-        if cand.tier_key not in used_tiers:
-            selected.append(cand)
-            used_tiers.add(cand.tier_key)
-
-    # Ensure at least one strength
-    if len(selected) == 3 and not any(c.candidate_type == "strength" for c in selected):
-        strengths = [c for c in ordered if c.candidate_type == "strength"]
-        for s in strengths:
-            if s in selected:
-                continue
-            other_tiers = {c.tier_key for c in selected if c is not selected[-1]}
-            if s.tier_key not in other_tiers:
-                selected[-1] = s  # replace the lowest-scored gap (last in sorted order)
+    def _pick(pool: list, n: int, used: set) -> list[_Candidate]:
+        result: list[_Candidate] = []
+        for c in _sort(pool):
+            if len(result) >= n:
                 break
+            if c.tier_key not in used:
+                result.append(c)
+                used.add(c.tier_key)
+        return result
+
+    strength_pool = [c for c in candidates if c.candidate_type == "strength"]
+    gap_pool      = [c for c in candidates if c.candidate_type == "gap"]
+
+    used_tiers: set[str] = set()
+    selected_g = _pick(gap_pool, n_g_req, used_tiers)
+    selected_s = _pick(strength_pool, n_s_req, used_tiers)
+    selected   = selected_g + selected_s
+
+    # Fill any remaining slot (up to 3) from whichever pool has candidates left
+    if len(selected) < 3:
+        remaining = [c for c in candidates if c not in selected]
+        selected += _pick(remaining, 3 - len(selected), used_tiers)
+
+    # Degradation: if no strength candidates exist at all, re-classify the
+    # highest-scoring gap as a relative strength so the hook contrast still works
+    if selected and not any(c.candidate_type in ("strength", "relative_strength") for c in selected):
+        import copy
+        best = _sort(selected)[0]
+        promoted = copy.copy(best)
+        promoted.candidate_type = "relative_strength"
+        promoted.finding_type   = promoted.finding_type.replace(":gap", ":relative_strength")
+        selected[selected.index(best)] = promoted
+
+    actual_gaps = sum(1 for c in selected if c.candidate_type == "gap")
+    strong_posture = actual_gaps < n_g_req
 
     if len(selected) < 3:
         raise BriefingValidationError(["insufficient_distinct_findings"])
-    if not any(c.candidate_type == "strength" for c in selected):
-        raise BriefingValidationError(["no_strength_candidate_available"])
 
-    return selected
+    return selected, strong_posture
 
 
 # ── Auto-selected elements ─────────────────────────────────────────────────────
@@ -563,20 +583,21 @@ def _build_hook(
     result: "AnalysisResult",
     p: "RankedProvider",
     cfg: dict,
+    strong_posture: bool = False,
 ) -> str:
     from .scoring import grade_from_score
     score = p.ai_visibility_score or 0
     grade, _ = grade_from_score(score)
     band = cfg["band_descriptors"].get(grade, "moderate AI visibility")
     entity_name = result.entity_name or ""
-    has_strength = any(f.candidate_type == "strength" for f in findings)
+    has_strength = any(f.candidate_type in ("strength", "relative_strength") for f in findings)
     has_gap = any(f.candidate_type == "gap" for f in findings)
 
     def _label(c: _Candidate) -> str:
         return c.source_ref.split(": ", 1)[-1]
 
     if has_strength and has_gap:
-        s = next(f for f in findings if f.candidate_type == "strength")
+        s = next(f for f in findings if f.candidate_type in ("strength", "relative_strength"))
         g = next(f for f in findings if f.candidate_type == "gap")
         tpl = cfg["hook_templates"]["contrast"]
         return _fill(tpl, {
@@ -599,12 +620,17 @@ def _build_hook(
         })
     else:
         tpl = cfg["hook_templates"]["strength_lead"]
-        return _fill(tpl, {
+        hook = _fill(tpl, {
             "entity_name": entity_name,
             "score": score,
             "grade": grade,
             "band_descriptor": band,
         })
+        if strong_posture:
+            note = cfg.get("composition", {}).get("strong_posture_note", "")
+            if note:
+                hook = hook + " " + note
+        return hook
 
 
 def _select_demo(result: "AnalysisResult", cfg: dict) -> Optional[BriefingDemoPrompt]:
@@ -741,6 +767,8 @@ def _build_ask(
 
 def _render_finding(cand: _Candidate, cfg: dict) -> BriefingFinding:
     tpl = cfg["finding_templates"].get(cand.finding_type)
+    if tpl is None and cand.candidate_type == "relative_strength":
+        tpl = cfg["finding_templates"].get("tier:_relative_strength")
     if tpl:
         what = _fill(tpl["what"], cand.context)
         why  = _fill(tpl["why"],  cand.context)
@@ -789,14 +817,17 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
     band = cfg["band_descriptors"].get(grade, "moderate AI visibility")
 
     candidates = _build_candidate_pool(result, p, cfg)
-    findings_raw = _select_findings(candidates, variant)
+    findings_raw, strong_posture = _select_findings(candidates, variant, cfg)
 
     # Build shared context for objections
     anchor_row = next(
         (r for r in (result.practice_composite_rows or []) if r.get("is_anchor")),
         None,
     )
-    gap_finding = next((f for f in findings_raw if f.candidate_type == "gap"), findings_raw[0])
+    gap_finding = next(
+        (f for f in findings_raw if f.candidate_type == "gap"),
+        findings_raw[0],
+    )
     obj_ctx = {
         "entity_name":              result.entity_name or "",
         "gap_label":                gap_finding.source_ref.split(": ", 1)[-1],
@@ -805,7 +836,7 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
     }
 
     findings_rendered = [_render_finding(f, cfg) for f in findings_raw]
-    hook = _build_hook(findings_raw, result, p, cfg)
+    hook = _build_hook(findings_raw, result, p, cfg, strong_posture)
     demo = _select_demo(result, cfg)
     objections = _select_objections(findings_raw, variant, cfg, obj_ctx)
     ask, prior_score, prior_date = _build_ask(findings_raw, result, p, variant, cfg)
@@ -825,4 +856,5 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
         ask=ask,
         prior_score=prior_score,
         prior_date=prior_date,
+        strong_posture=strong_posture,
     )

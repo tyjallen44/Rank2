@@ -386,8 +386,8 @@ def test_at_least_one_strength():
     result = _make_result()
     for variant in ("sales", "cs"):
         br = extract(result, variant)
-        strengths = [f for f in br.findings if f.candidate_type == "strength"]
-        assert len(strengths) >= 1, f"{variant}: no strength finding in selection"
+        strengths = [f for f in br.findings if f.candidate_type in ("strength", "relative_strength")]
+        assert len(strengths) >= 1, f"{variant}: no strength or relative_strength in selection"
 
 
 def test_no_two_from_same_tier():
@@ -491,6 +491,113 @@ def test_render_briefing_html_escapes_entity_name():
     html_out = render_briefing_html(br_result)
     assert "&amp;" in html_out or "Foo" in html_out  # XSS check
     assert "<Practice>" not in html_out
+
+
+# ── T7b: Composition constraints (AC-2.x) ─────────────────────────────────────
+
+def test_never_all_strengths_without_note():
+    """When all findings are strengths (degradation), strong_posture must be True."""
+    # All tiers ≥75, no derived metrics → no gap candidates → degradation
+    p = _make_provider(
+        tier_scores=TierScores(
+            clinical_outcomes_safety=80,
+            credentials_recognition=90,
+            patient_experience_reviews=85,
+            access_fit=78,
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type=None)  # hospital, no anchor needed for tiers
+    br = extract(result, "sales")
+    # All tiers are strengths → must trigger strong_posture
+    all_strong = all(f.candidate_type in ("strength", "relative_strength") for f in br.findings)
+    if all_strong:
+        assert br.strong_posture is True, "All-strength selection must set strong_posture=True"
+    assert len(br.findings) == 3
+
+
+def test_composition_produces_at_least_one_gap_when_gaps_exist():
+    """AC-2.1: When gap candidates are available, selection must include ≥1 gap."""
+    # Default fixture: clinical=55 (<75=gap), credentials=72 (gap), experience=80 (≥75=strength), access=40 (gap)
+    result = _make_result()
+    for variant in ("sales", "cs"):
+        br = extract(result, variant)
+        gaps = [f for f in br.findings if f.candidate_type == "gap"]
+        assert len(gaps) >= 1, f"{variant}: no gap finding when gap candidates clearly exist"
+
+
+def test_doc_scores_produce_gap_finding():
+    """AC-2.1: DOC-like scores (70/92/72/75) must produce at least one gap finding.
+
+    DOC's 70 on Practitioner Credentials is the obvious gap cited by the remediation.
+    Under practice_procedural weights, 70 < 75 → gap candidate.
+    """
+    p = _make_provider(
+        weighting_profile="practice_procedural",
+        tier_scores=TierScores(
+            clinical_outcomes_safety=70,    # gap (<75)
+            credentials_recognition=92,     # strength
+            patient_experience_reviews=72,  # gap (<75)
+            access_fit=75,                  # strength (≥75)
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=0.50,         # gap metric (< 0.60)
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type="practice")
+    for variant in ("sales", "cs"):
+        br = extract(result, variant)
+        gaps = [f for f in br.findings if f.candidate_type == "gap"]
+        assert len(gaps) >= 1, (
+            f"{variant}: DOC-like scores produced no gap findings — "
+            f"findings: {[f.candidate_type for f in br.findings]}"
+        )
+
+
+def test_all_gaps_pool_forces_relative_strength():
+    """AC-2.2: All-gaps pool must produce ≥1 relative_strength finding."""
+    p = _make_provider(
+        tier_scores=TierScores(
+            clinical_outcomes_safety=62,
+            credentials_recognition=58,
+            patient_experience_reviews=67,
+            access_fit=55,
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type=None)  # hospital, all tiers < 75
+    br = extract(result, "sales")
+    strength_types = [f.candidate_type for f in br.findings
+                      if f.candidate_type in ("strength", "relative_strength")]
+    assert len(strength_types) >= 1, (
+        f"All-gaps pool produced no strength/relative_strength: {[f.candidate_type for f in br.findings]}"
+    )
+
+
+def test_composition_never_3_of_same_type_when_mix_available():
+    """AC-2.2: Never 3 strengths or 3 gaps when the pool has both types."""
+    p = _make_provider(
+        tier_scores=TierScores(
+            clinical_outcomes_safety=55,   # gap
+            credentials_recognition=80,    # strength
+            patient_experience_reviews=85, # strength
+            access_fit=40,                 # gap
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type=None)
+    for variant in ("sales", "cs"):
+        br = extract(result, variant)
+        n_gap = sum(1 for f in br.findings if f.candidate_type == "gap")
+        n_str = sum(1 for f in br.findings if f.candidate_type in ("strength", "relative_strength"))
+        assert n_gap < 3, f"{variant}: 3 gaps when strengths exist"
+        assert n_str < 3, f"{variant}: 3 strengths when gaps exist"
 
 
 # ── T8: Variant produces different ordering ────────────────────────────────────
