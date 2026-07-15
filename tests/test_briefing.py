@@ -450,7 +450,11 @@ def test_demo_absent_when_below_threshold():
 # ── T6: Score ceiling exclusion from verification_strength=0 ─────────────────
 
 def test_not_established_anchor_excluded():
-    """An anchor marked not_established has vstren=0 and no patient_experience tier candidate."""
+    """A not_established anchor excludes composite:anchor_reputation but keeps the tier candidate.
+
+    Tier scores are computed values (always vstren=3). The _anchor_verification gate applies
+    only to composite:anchor_reputation (factual rating/count claims), not to tier scores.
+    """
     anchor = _make_anchor_row(not_established=True)
     p = _make_provider(
         tier_scores=TierScores(
@@ -463,9 +467,15 @@ def test_not_established_anchor_excluded():
     result = _make_result(provider=p, anchor=anchor)
     cfg = _cfg()
     candidates = _build_candidate_pool(result, p, cfg)
-    per_ids = [c.id for c in candidates]
-    # patient_experience tier candidate requires vstren>0; should be absent
-    assert "tier:patient_experience_reviews" not in per_ids
+    cand_ids = [c.id for c in candidates]
+    # composite:anchor_reputation is excluded (factual claim, not_established=True → vstren=0)
+    assert "composite:anchor_reputation" not in cand_ids, (
+        "composite:anchor_reputation must be excluded when anchor is not_established"
+    )
+    # tier:patient_experience_reviews IS present (computed pillar score, always vstren=3)
+    assert "tier:patient_experience_reviews" in cand_ids, (
+        "tier:patient_experience_reviews must be in pool even when anchor is not_established"
+    )
 
 
 # ── T7: HTML renders without crashing ─────────────────────────────────────────
@@ -768,6 +778,158 @@ def test_roadmap_title_clean_strips_parentheticals():
     assert _roadmap_title_clean("Your Website (Technical & Content Fixes)") == "your website"
     assert _roadmap_title_clean("Patient Experience & Reviews") == "patient experience & reviews"
     assert _roadmap_title_clean("GBP Optimization (Q1 Priority)") == "gbp optimization"
+
+
+# ── T9b: Phase 2 rubric redesign (AC-2.x) ────────────────────────────────────
+
+def test_service_aligned_low_weight_gap_outranks_unaligned():
+    """AC-2.2: A catastrophic gap in a high-service-alignment pillar must outrank a mild
+    gap in a lower-service-alignment pillar, even when the latter has higher pillar weight.
+
+    patient_experience_reviews (svc=3) at 35/100 vs clinical_outcomes_safety (svc=1) at 64/100.
+    clinical has 4× the pillar weight (0.46 vs 0.10 in procedural) but lower service alignment.
+    With service_alignment weight=2.5 in sales, E&R should rank above clinical.
+    """
+    p = _make_provider(
+        weighting_profile="procedural",
+        tier_scores=TierScores(
+            clinical_outcomes_safety=64,     # gap, w=0.46
+            credentials_recognition=76,      # strength
+            patient_experience_reviews=35,   # gap, w=0.10 — catastrophic, svc=3
+            access_fit=72,                   # gap, w=0.09
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type=None)  # hospital
+    cfg = _cfg()
+    candidates = _build_candidate_pool(result, p, cfg)
+    er = next(c for c in candidates if c.tier_key == "patient_experience_reviews")
+    clinical = next(c for c in candidates if c.tier_key == "clinical_outcomes_safety")
+    assert er.score_sales > clinical.score_sales, (
+        f"E&R (svc=3, score={er.score_sales:.2f}) must outrank clinical "
+        f"(svc=1, score={clinical.score_sales:.2f}) in sales despite lower pillar weight"
+    )
+
+
+def test_lowest_pillar_guarantee_fires_when_scoring_omits_it():
+    """AC-2.2: Lowest pillar below threshold must appear in findings even if rubric score
+    alone would not select it.
+
+    Set up: 3 gap pillars where the lowest (access_fit at 30) would normally lose to higher-
+    scoring gaps. Force it by making the other two gaps score much higher. The guarantee must
+    inject access_fit and displace the lowest-ranked selected gap.
+    """
+    # access_fit (svc=3) at 30, but give it no roadmap match → act=minimum=2, but low dem
+    # Make clinical and credentials both score higher
+    p = _make_provider(
+        weighting_profile="procedural",
+        tier_scores=TierScores(
+            clinical_outcomes_safety=64,
+            credentials_recognition=60,      # gap
+            patient_experience_reviews=80,   # strength (≥75) → no gap pool entry
+            access_fit=30,                   # lowest, gap
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    # improvement_sections that match clinical and credentials but NOT access_fit
+    result = _make_result(
+        provider=p,
+        entity_type=None,
+        improvement_sections=[
+            ImprovementSection(
+                title="Clinical Outcomes Transparency",
+                description="Quality data.",
+                items=["Publish outcomes data"],
+            ),
+            ImprovementSection(
+                title="Physician Credentials & Recognition",
+                description="Credentials visibility.",
+                items=["Update board cert listings"],
+            ),
+        ],
+    )
+    br = extract(result, "sales")
+    finding_tiers = [f.finding_type.split(":")[1] for f in br.findings]
+    assert "access_fit" in finding_tiers, (
+        f"Lowest pillar (access_fit=30) must appear via guarantee even if scoring omits it. "
+        f"Got: {finding_tiers}"
+    )
+
+
+def test_practice_lowest_pillar_surfaces_same_way():
+    """AC-2.3: Practice edition with Reviews & Reputation as lowest pillar must surface it."""
+    p = _make_provider(
+        weighting_profile="practice_procedural",
+        tier_scores=TierScores(
+            clinical_outcomes_safety=80,
+            credentials_recognition=55,   # practice: Reviews & Reputation — lowest, gap
+            patient_experience_reviews=85,
+            access_fit=78,
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type="practice")
+    br = extract(result, "sales")
+    tiers_in = [f.finding_type.split(":")[1] for f in br.findings]
+    assert "credentials_recognition" in tiers_in, (
+        f"Practice lowest pillar (credentials_recognition=55 = Reviews & Reputation) "
+        f"must surface. Got: {tiers_in}"
+    )
+    # And it should render as practice-edition label
+    cred_finding = next(f for f in br.findings if "credentials_recognition" in f.finding_type)
+    assert "Reviews & Reputation" in (cred_finding.what + cred_finding.why + cred_finding.say), (
+        "Finding for credentials_recognition in practice edition must use practice-edition label"
+    )
+
+
+def test_service_alignment_in_candidate_pool():
+    """Service alignment dimension must be non-zero and vary by tier."""
+    p = _make_provider(
+        weighting_profile="procedural",
+        tier_scores=TierScores(
+            clinical_outcomes_safety=60,
+            credentials_recognition=60,
+            patient_experience_reviews=60,
+            access_fit=60,
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type=None)
+    cfg = _cfg()
+    candidates = _build_candidate_pool(result, p, cfg)
+    by_tier = {c.tier_key: c.service_alignment for c in candidates}
+    assert by_tier["patient_experience_reviews"] == 3, "E&R must have svc=3"
+    assert by_tier["access_fit"] == 3, "access_fit must have svc=3"
+    assert by_tier["credentials_recognition"] == 2, "credentials must have svc=2"
+    assert by_tier["clinical_outcomes_safety"] == 1, "clinical must have svc=1"
+
+
+def test_strength_materiality_is_threshold_relative():
+    """Strength materiality is (score - threshold) × weight, not absolute score × weight.
+
+    A barely-above-threshold strength (score=76, threshold=75) must have lower materiality
+    than a clearly-above-threshold strength at the same weight.
+    """
+    from perception.briefing import _materiality
+    cfg = _cfg()
+    # Barely above threshold
+    mat_barely = _materiality(76, 0.35, "strength", cfg)
+    # Clearly above threshold
+    mat_clearly = _materiality(92, 0.35, "strength", cfg)
+    assert mat_barely < mat_clearly, (
+        f"Barely-above-threshold strength (mat={mat_barely}) must have lower materiality "
+        f"than clearly-above-threshold strength (mat={mat_clearly})"
+    )
+    # A barely-above-threshold strength should get mat=0 (pts=(76-75)×0.35=0.35 < score_1=1.0)
+    assert mat_barely == 0, f"Expected mat=0 for barely-above-threshold strength, got {mat_barely}"
 
 
 # ── T9: Full round-6 regression guard ─────────────────────────────────────────

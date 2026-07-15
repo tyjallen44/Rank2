@@ -1,18 +1,20 @@
 {
   "variant_weights": {
     "sales": {
-      "materiality":         1.0,
-      "demonstrability":     2.5,
-      "emotional_salience":  2.0,
-      "actionability":       1.0,
-      "verification_strength": 1.5
+      "materiality":           1.0,
+      "demonstrability":       2.0,
+      "emotional_salience":    1.5,
+      "actionability":         1.0,
+      "verification_strength": 1.0,
+      "service_alignment":     2.5
     },
     "cs": {
-      "materiality":         2.0,
-      "demonstrability":     1.0,
-      "emotional_salience":  0.5,
-      "actionability":       2.5,
-      "verification_strength": 1.5
+      "materiality":           2.0,
+      "demonstrability":       0.5,
+      "emotional_salience":    0.5,
+      "actionability":         2.0,
+      "verification_strength": 1.0,
+      "service_alignment":     2.0
     }
   },
 
@@ -38,6 +40,38 @@
     "score_1": 3.0
   },
 
+  "strength_materiality_thresholds": {
+    "score_3": 8.0,
+    "score_2": 4.0,
+    "score_1": 1.0
+  },
+
+  "service_catalog": {
+    "patient_experience_reviews":   3,
+    "composite:anchor_reputation":  3,
+    "access_fit":                   3,
+    "metric:linkage_integrity_pct": 3,
+    "credentials_recognition":      2,
+    "metric:physician_capture_rate":2,
+    "clinical_outcomes_safety":     1,
+    "metric:entity_resolution_pct": 1,
+    "modifier:score_ceiling":       0
+  },
+
+  "minimum_actionability": {
+    "patient_experience_reviews":   2,
+    "composite:anchor_reputation":  2,
+    "access_fit":                   2,
+    "metric:linkage_integrity_pct": 2,
+    "credentials_recognition":      1,
+    "metric:physician_capture_rate":1,
+    "clinical_outcomes_safety":     1,
+    "metric:entity_resolution_pct": 1,
+    "modifier:score_ceiling":       3
+  },
+
+  "hook_deficit_threshold": 0.35,
+
   "demo": {
     "min_run_count": 5,
     "min_dominant_pct": 0.80,
@@ -58,10 +92,14 @@
   },
 
   "roadmap_tier_keywords": {
-    "clinical_outcomes_safety": ["outcome", "safety", "quality", "clinical", "credential", "resolution", "entity"],
-    "credentials_recognition":  ["credential", "board", "recogni", "certif", "ranking", "award", "physician"],
-    "patient_experience_reviews": ["review", "experience", "rating", "reputation", "google", "star", "platform"],
-    "access_fit":               ["access", "location", "hours", "fit", "directory", "listing", "nap", "address", "linkage"]
+    "clinical_outcomes_safety":   ["outcome", "safety", "quality", "clinical", "credential", "resolution", "entity",
+                                   "wikipedia", "leapfrog", "transparency"],
+    "credentials_recognition":    ["credential", "board", "recogni", "certif", "ranking", "award", "physician",
+                                   "website", "schema", "structured"],
+    "patient_experience_reviews": ["review", "experience", "rating", "reputation", "google", "star", "platform",
+                                   "third-party", "listing", "profile", "yelp", "healthgrades", "vitals"],
+    "access_fit":                 ["access", "location", "hours", "fit", "directory", "listing", "nap", "address",
+                                   "linkage", "third-party", "profile"]
   },
 
   "hook_templates": {
@@ -77,9 +115,9 @@
       "say":  "You have {anchor_review_count} reviews at {anchor_rating} stars — that’s the social proof AI tools look for when recommending providers."
     },
     "tier:patient_experience_reviews:gap": {
-      "what": "{entity_name}’s online review footprint is below the threshold AI recommendation engines weight reliably.",
-      "why":  "Low review volume across platforms reduces the confidence score AI tools assign to provider recommendations.",
-      "say":  "AI tools need a track record to recommend you confidently. Right now that footprint is working against {entity_name}."
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — below the floor AI recommendation engines weight reliably.",
+      "why":  "This pillar captures the reputation and identity signals AI tools prioritize when generating provider recommendations; a low score here suppresses recommendation confidence directly.",
+      "say":  "Your {tier_label} signals are limiting your AI recommendation capture. That’s the gap we close first."
     },
     "tier:credentials_recognition:strength": {
       "what": "{entity_name} scores {tier_score}/100 on {tier_label} — credentials and recognition signals are indexed in AI-accessible sources.",
@@ -158,9 +196,9 @@
       "say":  "{anchor_rating} stars and {anchor_review_count} reviews — that’s a strong front door. The work now is making sure AI tools can find it reliably."
     },
     "composite:anchor_reputation:gap": {
-      "what": "{display_name}’s primary listing has a thin or inconsistent reputation footprint across platforms.",
-      "why":  "A weak primary listing reduces the confidence AI tools assign when surfacing this provider for patient queries.",
-      "say":  "The front door needs work. AI tools lead with reputation signals — a thin footprint here costs recommendations."
+      "what": "{display_name}’s primary listing shows {anchor_rating}★ across {anchor_review_count} reviews — a reputation score that works against AI recommendation capture.",
+      "why":  "AI provider recommendation engines weight primary listing rating and review volume heavily; a weak front door suppresses confidence and reduces recommendation frequency.",
+      "say":  "{anchor_rating} stars and {anchor_review_count} reviews — that’s a front door that’s working against {display_name}. AI tools lead with this signal for patient-facing queries."
     }
   },
 

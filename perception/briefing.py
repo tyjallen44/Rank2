@@ -77,6 +77,7 @@ class _Candidate:
     emotional_salience: int
     actionability: int
     verification_strength: int
+    service_alignment: int
     source_ref: str
     finding_type: str
     context: dict = field(default_factory=dict)
@@ -182,12 +183,15 @@ def _anchor_verification(anchor_row: Optional[dict]) -> int:
 # ── Dimension scorers ─────────────────────────────────────────────────────────
 
 def _materiality(value_0_100: int, weight: float, ctype: str, cfg: dict) -> int:
-    """Points at stake for a gap; points protected for a strength."""
-    t = cfg["materiality_thresholds"]
+    """Composite-point deficit for gaps; surplus above threshold for strengths."""
     if ctype == "gap":
         pts = (100 - value_0_100) * weight
+        t = cfg["materiality_thresholds"]
     else:
-        pts = value_0_100 * weight
+        strength_thr = cfg.get("tier_thresholds", {}).get("strength", 75)
+        pts = max(0, value_0_100 - strength_thr) * weight
+        t = cfg.get("strength_materiality_thresholds",
+                    {"score_3": 8.0, "score_2": 4.0, "score_1": 1.0})
     if pts >= t["score_3"]:
         return 3
     if pts >= t["score_2"]:
@@ -202,6 +206,7 @@ def _demonstrability_tier(
     anchor_row: Optional[dict],
     battery_results: Optional[dict],
     cfg: dict,
+    p: Optional["RankedProvider"] = None,
 ) -> int:
     if battery_results:
         eligible = cfg["demo"]["eligible_outcomes"]
@@ -212,11 +217,20 @@ def _demonstrability_tier(
                     and br.dominant_pct >= min_pct
                     and br.dominant_outcome in eligible):
                 return 3
-    if tier_key == "patient_experience_reviews" and anchor_row:
-        if anchor_row.get("google_url"):
-            return 2
-        if anchor_row.get("avg_rating") is not None:
-            return 1
+    if tier_key == "patient_experience_reviews":
+        if anchor_row:
+            if anchor_row.get("not_established"):
+                return 0  # listing not established — can't demo
+            if anchor_row.get("google_url"):
+                return 2
+            if anchor_row.get("avg_rating") is not None:
+                return 1
+        elif p is not None:  # hospital path — use google_footprint Pydantic model
+            gf = getattr(p, "google_footprint", None)
+            if gf is not None:
+                fd = getattr(gf, "front_door", None)
+                if fd is not None and getattr(fd, "rating", None) is not None:
+                    return 2
     if tier_key in ("access_fit", "credentials_recognition"):
         return 1
     return 0
@@ -271,17 +285,23 @@ def _emotional_salience_metric(metric_key: str, value: float, p: "RankedProvider
 
 
 def _actionability(tier_key: str, improvement_sections: list, cfg: dict) -> int:
-    """Map tier_key to improvement_section index via keyword match."""
+    """Keyword-match tier to roadmap section; enforce minimum per tier."""
+    minimum = cfg.get("minimum_actionability", {}).get(tier_key, 1)
     keywords = cfg["roadmap_tier_keywords"].get(tier_key, [])
     for idx, sec in enumerate(improvement_sections):
         title_lower = (sec.title or "").lower()
         if any(kw in title_lower for kw in keywords):
             if idx == 0:
-                return 3
+                return max(3, minimum)
             if idx == 1:
-                return 2
-            return 1
-    return 0 if not improvement_sections else 1
+                return max(2, minimum)
+            return max(1, minimum)
+    return minimum if improvement_sections else 0
+
+
+def _service_alignment(lookup_key: str, cfg: dict) -> int:
+    """0–3 score for how directly a finding maps to our service catalog."""
+    return cfg.get("service_catalog", {}).get(lookup_key, 0)
 
 
 def _edition_labels_weights(result: "AnalysisResult", profile: str) -> tuple[dict, dict]:
@@ -302,11 +322,12 @@ def _compute_variant_scores(cand: _Candidate, cfg: dict) -> None:
     weights_sales = cfg["variant_weights"]["sales"]
     weights_cs = cfg["variant_weights"]["cs"]
     dims = {
-        "materiality":          cand.materiality,
-        "demonstrability":      cand.demonstrability,
-        "emotional_salience":   cand.emotional_salience,
-        "actionability":        cand.actionability,
+        "materiality":           cand.materiality,
+        "demonstrability":       cand.demonstrability,
+        "emotional_salience":    cand.emotional_salience,
+        "actionability":         cand.actionability,
         "verification_strength": cand.verification_strength,
+        "service_alignment":     cand.service_alignment,
     }
     cand.score_sales = sum(dims[d] * weights_sales[d] for d in dims)
     cand.score_cs = sum(dims[d] * weights_cs[d] for d in dims)
@@ -339,6 +360,18 @@ def _build_candidate_pool(
     )
     city = result.location.split(",")[0].strip() if result.location else ""
     specialty = result.specialty or "this specialty"
+    strength_thr = cfg.get("tier_thresholds", {}).get("strength", 75)
+
+    # Resolve anchor reputation context for tier candidate contexts (practice path only;
+    # hospital reputation data surfaces via composite:anchor_reputation from google_footprint)
+    if anchor_row and anchor_row.get("avg_rating") is not None:
+        _anchor_rating_str   = f"{anchor_row['avg_rating']:.1f}"
+        _anchor_reviews_val  = anchor_row.get("total_reviews", "—")
+        _anchor_platforms    = anchor_row.get("platforms_found", "—")
+    else:
+        _anchor_rating_str  = "—"
+        _anchor_reviews_val = "—"
+        _anchor_platforms   = "—"
 
     # ── 1. Tier candidates ───────────────────────────────────────────────────
     for tk in TIER_KEYS:
@@ -347,18 +380,17 @@ def _build_candidate_pool(
             continue
         w = weights.get(tk, 0.0)
         label = labels.get(tk, tk)
-        strength_thr = cfg.get("tier_thresholds", {}).get("strength", 75)
         ctype = "strength" if ts_val >= strength_thr else "gap"
 
-        # Verification strength
-        vstren = _anchor_verification(anchor_row) if tk == "patient_experience_reviews" else 3
-        if vstren == 0:
-            continue  # excluded (no anchor data for this tier)
+        # Tier scores are always computed values — verification_strength is always 3.
+        # (The _anchor_verification gate applies only to composite:anchor_reputation.)
+        vstren = 3
 
         mat = _materiality(ts_val, w, ctype, cfg)
-        dem = _demonstrability_tier(tk, anchor_row, bat, cfg)
+        dem = _demonstrability_tier(tk, anchor_row, bat, cfg, p)
         sal = _emotional_salience_tier(tk, p, ctype, result)
         act = _actionability(tk, result.improvement_sections, cfg)
+        svc = _service_alignment(tk, cfg)
 
         ctx: dict = {
             "entity_name":          display_name,
@@ -367,9 +399,9 @@ def _build_candidate_pool(
             "tier_score":           ts_val,
             "top_tier_label":       top_tier_label,
             "is_top_tier":          (tk == top_tier_key),
-            "anchor_rating":        f"{anchor_row['avg_rating']:.1f}" if anchor_row and anchor_row.get("avg_rating") is not None else "—",
-            "anchor_review_count":  anchor_row.get("total_reviews", "—") if anchor_row else "—",
-            "n_platforms":          anchor_row.get("platforms_found", "—") if anchor_row else "—",
+            "anchor_rating":        _anchor_rating_str,
+            "anchor_review_count":  _anchor_reviews_val,
+            "n_platforms":          _anchor_platforms,
             "city":                 city,
             "specialty":            specialty,
         }
@@ -382,6 +414,7 @@ def _build_candidate_pool(
             emotional_salience=sal,
             actionability=act,
             verification_strength=vstren,
+            service_alignment=svc,
             source_ref=f"Tier: {label}",
             finding_type=f"tier:{tk}:{ctype}",
             context=ctx,
@@ -421,6 +454,7 @@ def _build_candidate_pool(
         dem = _demonstrability_metric(mk, mv, bat, cfg)
         sal = _emotional_salience_metric(mk, mv, p)
         act = _actionability(related_tier, result.improvement_sections, cfg)
+        svc = _service_alignment(f"metric:{mk}", cfg)
 
         ctx = {
             "entity_name":           display_name,
@@ -440,6 +474,7 @@ def _build_candidate_pool(
             emotional_salience=sal,
             actionability=act,
             verification_strength=3,
+            service_alignment=svc,
             source_ref=f"Metric: {mk.replace('_', ' ').title()}",
             finding_type=f"metric:{mk}:{ctype}",
             context=ctx,
@@ -466,6 +501,7 @@ def _build_candidate_pool(
             emotional_salience=2,
             actionability=3,
             verification_strength=3,
+            service_alignment=_service_alignment("modifier:score_ceiling", cfg),
             source_ref="Modifier: Score Ceiling",
             finding_type="modifier:score_ceiling",
             context=ctx,
@@ -474,6 +510,8 @@ def _build_candidate_pool(
         candidates.append(cand)
 
     # ── 4. Anchor composite reputation ────────────────────────────────────────
+    # Practice path: anchor_row with verified rating data
+    _composite_added = False
     if (anchor_row
             and anchor_row.get("avg_rating") is not None
             and not anchor_row.get("not_established")):
@@ -511,17 +549,124 @@ def _build_candidate_pool(
                     emotional_salience=sal,
                     actionability=act,
                     verification_strength=vstren,
+                    service_alignment=_service_alignment("composite:anchor_reputation", cfg),
                     source_ref="Composite: Reputation",
                     finding_type=f"composite:anchor_reputation:{ctype}",
                     context=ctx,
                 )
                 _compute_variant_scores(cand, cfg)
                 candidates.append(cand)
+                _composite_added = True
+
+    # Hospital path: google_footprint.front_door when no anchor_row
+    if not _composite_added and result.entity_type != "practice":
+        _gf = getattr(p, "google_footprint", None)
+        if _gf is not None:
+            _fd = getattr(_gf, "front_door", None)
+            if _fd is not None and getattr(_fd, "rating", None) is not None:
+                rating = _fd.rating
+                rev_count = _fd.count or 0
+                if rating >= 4.3 and rev_count >= 200:
+                    ctype = "strength"
+                elif rating < 3.5 or rev_count < 50:
+                    ctype = "gap"
+                else:
+                    ctype = None
+                if ctype is not None:
+                    mat = 3 if rev_count >= 500 else (2 if rev_count >= 100 else 1)
+                    sal = 2 if ctype == "strength" else 1
+                    act = _actionability("patient_experience_reviews", result.improvement_sections, cfg)
+                    ctx = {
+                        "entity_name":        entity_name,
+                        "display_name":       display_name,
+                        "anchor_rating":      f"{rating:.1f}",
+                        "anchor_review_count": rev_count,
+                        "n_platforms":        1,
+                        "google_url":         None,
+                    }
+                    cand = _Candidate(
+                        id="composite:anchor_reputation",
+                        tier_key="patient_experience_reviews",
+                        candidate_type=ctype,
+                        materiality=mat,
+                        demonstrability=2,  # google_footprint data = directly demonstrable
+                        emotional_salience=sal,
+                        actionability=act,
+                        verification_strength=3,  # API-sourced data, verified
+                        service_alignment=_service_alignment("composite:anchor_reputation", cfg),
+                        source_ref="Composite: Reputation",
+                        finding_type=f"composite:anchor_reputation:{ctype}",
+                        context=ctx,
+                    )
+                    _compute_variant_scores(cand, cfg)
+                    candidates.append(cand)
 
     return candidates
 
 
 # ── Selection ──────────────────────────────────────────────────────────────────
+
+def _enforce_lowest_pillar_guarantee(
+    candidates: list["_Candidate"],
+    selected: list["_Candidate"],
+    p: "RankedProvider",
+    weights: dict,
+    strength_thr: int,
+    score_attr: str,
+    hook_deficit_threshold: float,
+) -> list["_Candidate"]:
+    """2c/2d: Ensure the lowest-scoring gap pillar is represented; reorder for hook if deficit dominates.
+
+    The guarantee fires when the lowest-scoring pillar (by tier value) that is below
+    the strength threshold is absent from selected. It displaces the lowest-ranked gap
+    currently in selected. The 2d reorder then moves it first among gaps when its
+    composite-point deficit share exceeds hook_deficit_threshold.
+    """
+    from .scoring import TIER_KEYS
+    ts = p.tier_scores
+    pillar_scores = {tk: getattr(ts, tk) for tk in TIER_KEYS if getattr(ts, tk) is not None}
+    gap_pillars = {k: v for k, v in pillar_scores.items() if v < strength_thr}
+    if not gap_pillars:
+        return selected  # all pillars are strengths — no guarantee needed
+
+    lowest_key = min(gap_pillars, key=lambda k: gap_pillars[k])
+
+    # Inject if lowest pillar is not represented in any role (gap or relative_strength)
+    if not any(c.tier_key == lowest_key for c in selected):
+        lowest_cand = next(
+            (c for c in candidates if c.tier_key == lowest_key and c.candidate_type == "gap"),
+            None,
+        )
+        if lowest_cand is not None:
+            current_gaps = [c for c in selected if c.candidate_type == "gap"]
+            if current_gaps:
+                worst_gap = min(current_gaps, key=lambda c: (getattr(c, score_attr), c.id))
+                selected = [c for c in selected if c is not worst_gap] + [lowest_cand]
+
+    # Re-sort: gaps first (by score desc), then strengths/relative_strengths
+    gaps_out = sorted(
+        [c for c in selected if c.candidate_type == "gap"],
+        key=lambda c: (-getattr(c, score_attr), c.id),
+    )
+    strengths_out = sorted(
+        [c for c in selected if c.candidate_type in ("strength", "relative_strength")],
+        key=lambda c: (-getattr(c, score_attr), c.id),
+    )
+
+    # 2d: Move lowest-pillar gap to front if its deficit share dominates
+    total_deficit = sum((100 - v) * weights.get(k, 0.0) for k, v in gap_pillars.items())
+    if total_deficit > 0:
+        lowest_deficit_share = (
+            (100 - gap_pillars[lowest_key]) * weights.get(lowest_key, 0.0) / total_deficit
+        )
+        if lowest_deficit_share > hook_deficit_threshold:
+            pivot = next((c for c in gaps_out if c.tier_key == lowest_key), None)
+            if pivot and gaps_out and gaps_out[0] is not pivot:
+                gaps_out.remove(pivot)
+                gaps_out.insert(0, pivot)
+
+    return gaps_out + strengths_out
+
 
 def _select_findings(
     candidates: list[_Candidate], variant: str, cfg: dict
@@ -874,6 +1019,19 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
 
     candidates = _build_candidate_pool(result, p, cfg)
     findings_raw, strong_posture = _select_findings(candidates, variant, cfg)
+
+    # 2c/2d: Lowest-pillar guarantee + hook alignment
+    profile = p.weighting_profile or "procedural"
+    _, weights = _edition_labels_weights(result, profile)
+    strength_thr = cfg.get("tier_thresholds", {}).get("strength", 75)
+    score_attr = "score_sales" if variant == "sales" else "score_cs"
+    hook_deficit_threshold = cfg.get("hook_deficit_threshold", 0.35)
+    findings_raw = _enforce_lowest_pillar_guarantee(
+        candidates, findings_raw, p, weights, strength_thr, score_attr, hook_deficit_threshold
+    )
+    comp = cfg.get("composition", {}).get(variant, {"required_strengths": 1, "required_gaps": 2})
+    actual_gaps = sum(1 for c in findings_raw if c.candidate_type == "gap")
+    strong_posture = actual_gaps < comp.get("required_gaps", 2)
 
     # Build shared context for objections
     anchor_row = next(
