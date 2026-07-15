@@ -72,7 +72,7 @@
       "say":  "AI tools need a track record to recommend you confidently. Right now that footprint is working against {entity_name}."
     },
     "tier:credentials_recognition:strength": {
-      "what": "{entity_name} shows strong credentials and recognition signals in the {tier_label} tier ({tier_score}/100).",
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — credentials and recognition signals are indexed in AI-accessible sources.",
       "why":  "Board certifications, recognized affiliations, and clinical awards are heavily weighted by AI tools for procedural and specialist queries.",
       "say":  "Your credentials are visible and verifiable — that’s a differentiator when AI tools rank specialists."
     },
@@ -82,7 +82,7 @@
       "say":  "Your credentials exist but aren’t visible where it counts. We fix the indexing gap so AI tools can verify what you’ve already earned."
     },
     "tier:clinical_outcomes_safety:strength": {
-      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — a strong signal set for the highest-weight pillar.",
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — the highest-weight pillar is trending positive.",
       "why":  "{tier_label} carries the highest pillar weight in this scoring profile, making it the primary driver of AI recommendation capture.",
       "say":  "Your strongest pillar is also the one AI tools weight most heavily — that’s a real competitive advantage."
     },

@@ -166,6 +166,24 @@ def test_validation_raises_on_extract_with_bad_input():
         assert exc.missing
 
 
+def test_hospital_all_neutral_tier_scores_still_produces_briefing():
+    """All 4 tiers in the formerly-excluded 45-69 neutral zone must still yield 3 findings."""
+    p = _make_provider(
+        tier_scores=TierScores(
+            clinical_outcomes_safety=62,
+            credentials_recognition=58,
+            patient_experience_reviews=67,
+            access_fit=55,
+        ),
+        entity_resolution_pct=None,
+        linkage_integrity_pct=None,
+        physician_capture_rate=None,
+    )
+    result = _make_result(provider=p, entity_type=None)  # hospital run
+    br = extract(result, "sales")
+    assert len(br.findings) == 3
+
+
 # ── T3: Held physician exclusion ──────────────────────────────────────────────
 
 def test_held_physician_excludes_physician_capture_rate():

@@ -329,17 +329,16 @@ def _build_candidate_pool(
         w = weights.get(tk, 0.0)
         label = labels.get(tk, tk)
         ratio = ts_val / 100.0
-        if ratio >= 0.70:
-            ctype = "strength"
-        elif ratio < 0.45:
-            ctype = "gap"
-        else:
-            continue  # neutral — excluded
+        # Use 55 as the midpoint — no neutral exclusion zone.
+        # All four tiers are always candidates so hospital runs (no derived
+        # metrics) always have enough distinct signals to fill 3 findings.
+        # The rubric scoring naturally deprioritizes borderline tiers.
+        ctype = "strength" if ratio >= 0.55 else "gap"
 
         # Verification strength
         vstren = _anchor_verification(anchor_row) if tk == "patient_experience_reviews" else 3
         if vstren == 0:
-            continue  # excluded
+            continue  # excluded (no anchor data for this tier)
 
         mat = _materiality(ts_val, w, ctype, cfg)
         dem = _demonstrability_tier(tk, anchor_row, bat, cfg)
