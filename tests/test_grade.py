@@ -1459,19 +1459,24 @@ def test_ac2_3_practice_cache_not_served_for_hospital_request():
     )
     con.close()
 
-    # Hospital-typed request must NOT return the practice result
-    result = get_recent_run(_entity, _location, entity_type="hospital")
-    assert result is None, (
-        "get_recent_run returned a practice result for a hospital request — "
-        "this is the routing contamination bug (AC-2.3)"
-    )
+    try:
+        # Hospital-typed request must NOT return the practice result
+        result = get_recent_run(_entity, _location, entity_type="hospital")
+        assert result is None, (
+            "get_recent_run returned a practice result for a hospital request — "
+            "this is the routing contamination bug (AC-2.3)"
+        )
 
-    # Practice-typed request MUST return the practice result
-    result = get_recent_run(_entity, _location, entity_type="practice")
-    assert result is not None, (
-        "get_recent_run returned None for a practice request with matching entity_type"
-    )
-    assert result["run_id"] == _run_id
+        # Practice-typed request MUST return the practice result
+        result = get_recent_run(_entity, _location, entity_type="practice")
+        assert result is not None, (
+            "get_recent_run returned None for a practice request with matching entity_type"
+        )
+        assert result["run_id"] == _run_id
+    finally:
+        con = get_connection()
+        con.execute("DELETE FROM analysis_runs WHERE run_id = ?", [_run_id])
+        con.close()
 
 
 def test_ac2_3_hospital_cache_not_served_for_practice_request():
@@ -1496,16 +1501,21 @@ def test_ac2_3_hospital_cache_not_served_for_practice_request():
     )
     con.close()
 
-    # Practice request must not return the hospital result
-    result = get_recent_run(_entity, _location, entity_type="practice")
-    assert result is None, (
-        "get_recent_run returned a hospital result for a practice request (AC-2.3 inverse)"
-    )
+    try:
+        # Practice request must not return the hospital result
+        result = get_recent_run(_entity, _location, entity_type="practice")
+        assert result is None, (
+            "get_recent_run returned a hospital result for a practice request (AC-2.3 inverse)"
+        )
 
-    # Hospital request must find it
-    result = get_recent_run(_entity, _location, entity_type="hospital")
-    assert result is not None
-    assert result["run_id"] == _run_id
+        # Hospital request must find it
+        result = get_recent_run(_entity, _location, entity_type="hospital")
+        assert result is not None
+        assert result["run_id"] == _run_id
+    finally:
+        con = get_connection()
+        con.execute("DELETE FROM analysis_runs WHERE run_id = ?", [_run_id])
+        con.close()
 
 
 def test_ac2_3_null_entity_type_treated_as_hospital():
@@ -1532,13 +1542,18 @@ def test_ac2_3_null_entity_type_treated_as_hospital():
     )
     con.close()
 
-    # Hospital-typed request should find it (NULL treated as hospital)
-    result = get_recent_run(_entity, _location, entity_type="hospital")
-    assert result is not None, "NULL entity_type row not returned for hospital request"
+    try:
+        # Hospital-typed request should find it (NULL treated as hospital)
+        result = get_recent_run(_entity, _location, entity_type="hospital")
+        assert result is not None, "NULL entity_type row not returned for hospital request"
 
-    # Practice-typed request must NOT find it
-    result = get_recent_run(_entity, _location, entity_type="practice")
-    assert result is None, "NULL entity_type row returned for practice request"
+        # Practice-typed request must NOT find it
+        result = get_recent_run(_entity, _location, entity_type="practice")
+        assert result is None, "NULL entity_type row returned for practice request"
+    finally:
+        con = get_connection()
+        con.execute("DELETE FROM analysis_runs WHERE run_id = ?", [_run_id])
+        con.close()
 
 
 # ── Phase 3a — Fouse hold list ────────────────────────────────────────────────

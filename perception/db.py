@@ -92,6 +92,7 @@ def init_db() -> None:
         ("rubric_version", "VARCHAR"),
         ("practice_profile", "VARCHAR"),
         ("result_json", "VARCHAR"),
+        ("briefing_pdf_path", "VARCHAR"),
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -468,10 +469,12 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.generated_at,
                 a.pdf_path,
                 a.md_path,
+                a.briefing_pdf_path,
                 COUNT(p.rank) AS provider_count
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
-            GROUP BY a.run_id, a.location, a.specialty, a.generated_at, a.pdf_path, a.md_path
+            GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
+                     a.pdf_path, a.md_path, a.briefing_pdf_path
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
     else:
@@ -483,17 +486,29 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.generated_at,
                 a.pdf_path,
                 a.md_path,
+                a.briefing_pdf_path,
                 COUNT(p.rank) AS provider_count
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             WHERE a.user_role = ?
-            GROUP BY a.run_id, a.location, a.specialty, a.generated_at, a.pdf_path, a.md_path
+            GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
+                     a.pdf_path, a.md_path, a.briefing_pdf_path
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()
     cols = ["run_id", "location", "specialty", "generated_at",
-            "pdf_path", "md_path", "provider_count"]
+            "pdf_path", "md_path", "briefing_pdf_path", "provider_count"]
     con.close()
     return [dict(zip(cols, row)) for row in rows]
+
+
+def update_briefing_pdf_path(run_id: str, path: str) -> None:
+    """Persist briefing_pdf_path after it has been generated (post-_save_to_db)."""
+    con = get_connection()
+    con.execute(
+        "UPDATE analysis_runs SET briefing_pdf_path = ? WHERE run_id = ?",
+        [path, run_id],
+    )
+    con.close()
 
 
 def create_feedback(title: str, ftype: str, body: str, submitted_by: str) -> dict:

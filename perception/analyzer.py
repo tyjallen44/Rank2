@@ -877,6 +877,8 @@ def analyze_location(
                 _briefing_path = output_dir / f"{_stem}_Briefing-{_variant_label}.pdf"
                 render_briefing_pdf(_br, str(_briefing_path))
             result.briefing_pdf_path = str(_briefing_path)
+            from .db import update_briefing_pdf_path
+            update_briefing_pdf_path(result.run_id, str(_briefing_path))
             console.print(f"[green]✓[/green] Briefing PDF  → [dim]{_briefing_path}[/dim]")
             emit({"type": "briefing_ready", "path": str(_briefing_path)})
         except BriefingValidationError as exc:

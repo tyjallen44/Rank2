@@ -3848,6 +3848,15 @@ function dlPdf(runId) {
   document.body.removeChild(a);
 }
 
+function dlBriefingPdf(runId) {
+  const a = document.createElement('a');
+  a.href = `/api/reports/${runId}/briefing-pdf?token=${encodeURIComponent(_token)}`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 // ── Feedback ──────────────────────────────────────────────────────────────
 let _feedbackItems = [];
 let _feedbackSortField = 'date';
@@ -4220,6 +4229,7 @@ function renderHistory() {
           ${th('Type', 'type')}
           ${th('Providers', 'providers', 'right')}
           <th>Report</th>
+          <th>Briefing</th>
         </tr></thead>
         <tbody>
           ${runs.length ? runs.map(run => `
@@ -4233,6 +4243,9 @@ function renderHistory() {
               <td style="text-align:right">${run.provider_count}</td>
               <td>${run.has_pdf
                 ? `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`
+                : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
+              <td>${run.has_briefing_pdf
+                ? `<button class="btn btn-ghost btn-sm" onclick="dlBriefingPdf('${run.run_id}')">⬇ Briefing</button>`
                 : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
             </tr>`).join('')
           : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}

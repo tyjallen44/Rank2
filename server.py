@@ -614,7 +614,8 @@ async def get_history(role: str = Depends(require_auth)):
     init_db()
     return [
         {**r, "generated_at": str(r["generated_at"]),
-         "has_pdf": bool(r.get("pdf_path") and Path(r["pdf_path"]).exists())}
+         "has_pdf": bool(r.get("pdf_path") and Path(r["pdf_path"]).exists()),
+         "has_briefing_pdf": bool(r.get("briefing_pdf_path") and Path(r["briefing_pdf_path"]).exists())}
         for r in query_history(role)
     ]
 
@@ -628,6 +629,18 @@ async def download_pdf(run_id: str, role: str = Depends(require_auth)):
     pdf = Path(run["pdf_path"])
     if not pdf.exists():
         raise HTTPException(404, "PDF file not found on disk")
+    return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
+
+
+@app.get("/api/reports/{run_id}/briefing-pdf")
+async def download_briefing_pdf(run_id: str, role: str = Depends(require_auth)):
+    from perception.db import query_history
+    run = next((r for r in query_history(role) if r["run_id"] == run_id), None)
+    if not run or not run.get("briefing_pdf_path"):
+        raise HTTPException(404, "Briefing PDF not found for this run")
+    pdf = Path(run["briefing_pdf_path"])
+    if not pdf.exists():
+        raise HTTPException(404, "Briefing PDF file not found on disk")
     return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
 
 
