@@ -1,0 +1,14 @@
+{
+  "physician_holds": [
+    {
+      "physician": "MATTHEW FOUSE",
+      "entity": "Desert Orthopaedic Center",
+      "reason": "Identity verification pending — two Fouse records present"
+    },
+    {
+      "physician": "MERVYN FOUSE",
+      "entity": "Desert Orthopaedic Center",
+      "reason": "Identity verification pending — two Fouse records present"
+    }
+  ]
+}

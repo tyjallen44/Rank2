@@ -2767,12 +2767,32 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
                 _raw_ph = "Dr. " + _raw_ph
             ph_name = _e(_raw_ph)
             ph_coll = ph.get("collection_date", "")
+            # Hold list: render partial-hold state instead of rating data
+            try:
+                from .holds import is_held as _is_held
+                _ph_held = _is_held(
+                    ph.get("physician_name", ""),
+                    entity=row.get("practice_name", ""),
+                )
+            except Exception:
+                _ph_held = False
+            if _ph_held:
+                _ph_rating_cell = (
+                    '<span style="color:#7a9095;font-style:italic">'
+                    '&#9680; Partial &#8212; identity verification pending</span>'
+                )
+                _ph_reviews = "&#8212;"
+                _ph_platforms = "&#8212;"
+            else:
+                _ph_rating_cell = _rating_cell(ph)
+                _ph_reviews = str(ph.get("total_reviews") or "&#8212;")
+                _ph_platforms = _platforms_cell(ph)
             rows_html += f"""
     <tr style="border-bottom:1px solid {BD};background:#fafcfc">
       <td style="padding:6px 12px 6px 28px;font-size:9pt;color:#4a6568">{ph_name}</td>
-      <td style="padding:6px 12px;font-size:9pt">{_rating_cell(ph)}</td>
-      <td style="padding:6px 12px;text-align:right;font-size:9pt">{ph.get('total_reviews') or '&#8212;'}</td>
-      <td style="padding:6px 12px;font-size:9pt">{_platforms_cell(ph)}</td>
+      <td style="padding:6px 12px;font-size:9pt">{_ph_rating_cell}</td>
+      <td style="padding:6px 12px;text-align:right;font-size:9pt">{_ph_reviews}</td>
+      <td style="padding:6px 12px;font-size:9pt">{_ph_platforms}</td>
       <td style="padding:6px 12px;font-size:8pt;color:{M}">{_e(ph_coll)}</td>
     </tr>"""
 

@@ -1419,6 +1419,104 @@ def test_ac2_3_hospital_cache_not_served_for_practice_request():
     assert result["run_id"] == _run_id
 
 
+def test_ac2_3_null_entity_type_treated_as_hospital():
+    """AC-2.3: rows with entity_type IS NULL are returned for entity_type='hospital'
+    (backward-compat: old hospital runs were stored without entity_type)."""
+    from perception.db import init_db, get_connection, get_recent_run
+    init_db()
+
+    import json
+    from datetime import date
+
+    _entity = "__test_ac23c_entity__"
+    _location = "TestCity, NV"
+    _run_id = "run-test-ac23c-null-type"
+
+    con = get_connection()
+    # Insert a row with entity_type NULL (simulates pre-migration hospital run)
+    con.execute(
+        """INSERT OR REPLACE INTO analysis_runs
+           (run_id, location, entity_name, generated_at, result_json)
+           VALUES (?, ?, ?, ?, ?)""",
+        [_run_id, _location, _entity, date.today().isoformat(),
+         json.dumps({"entity_type": None, "run_id": _run_id})],
+    )
+    con.close()
+
+    # Hospital-typed request should find it (NULL treated as hospital)
+    result = get_recent_run(_entity, _location, entity_type="hospital")
+    assert result is not None, "NULL entity_type row not returned for hospital request"
+
+    # Practice-typed request must NOT find it
+    result = get_recent_run(_entity, _location, entity_type="practice")
+    assert result is None, "NULL entity_type row returned for practice request"
+
+
+# ── Phase 3a — Fouse hold list ────────────────────────────────────────────────
+
+def test_fouse_matthew_is_held():
+    from perception.holds import is_held
+    assert is_held("MATTHEW FOUSE", "Desert Orthopaedic Center")
+
+
+def test_fouse_mervyn_is_held():
+    from perception.holds import is_held
+    assert is_held("MERVYN FOUSE", "Desert Orthopaedic Center")
+
+
+def test_fouse_hold_case_insensitive():
+    from perception.holds import is_held
+    assert is_held("Matthew Fouse", "desert orthopaedic center")
+    assert is_held("matthew fouse", "Desert Orthopaedic Center")
+
+
+def test_fouse_hold_wrong_entity_not_held():
+    from perception.holds import is_held
+    assert not is_held("MATTHEW FOUSE", "Henderson Orthopedics")
+
+
+def test_unknown_physician_not_held():
+    from perception.holds import is_held
+    assert not is_held("JOHN SMITH", "Desert Orthopaedic Center")
+
+
+def test_hold_renders_partial_in_table():
+    """Held physician rows must show 'identity verification pending' not rating data."""
+    from perception.pdf import _practice_reputation_table_html
+    rows = [{
+        "practice_name":     "Desert Orthopaedic Center",
+        "is_anchor":         True,
+        "not_established":   False,
+        "avg_rating":        4.5,
+        "total_reviews":     1306,
+        "platforms_found":   1,
+        "platforms_list":    "Google",
+        "platform_entries":  [("google", 1306, None)],
+        "collection_date":   "2026-07-14",
+        "affiliation_verified": True,
+        "physicians": [
+            {
+                "physician_name": "MATTHEW FOUSE",
+                "not_established": False,
+                "avg_rating": 3.9,
+                "total_reviews": 45,
+                "platforms_found": 1,
+                "platforms_list": "Google",
+                "platform_entries": [("google", 45, None)],
+                "collection_date": "2026-07-14",
+            }
+        ],
+    }]
+    html = _practice_reputation_table_html(rows)
+    assert "identity verification pending" in html, (
+        "Held physician row must show 'identity verification pending'"
+    )
+    # Rating data must NOT appear for the held row
+    assert "3.9" not in html, (
+        "Held physician's rating (3.9) must not appear in the table"
+    )
+
+
 def test_discover_practices_cache_key_does_not_collide_with_siblings():
     """AC-2.4 proxy: discover_practices uses a '[hospital-composite]' prefix so
     its cache entry is distinct from the practice-sibling entry for the same name."""
