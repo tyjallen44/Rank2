@@ -153,12 +153,12 @@
     },
 
     "composite:anchor_reputation:strength": {
-      "what": "{entity_name}’s main listing averages {anchor_rating}★ on Google with {anchor_review_count} reviews across {n_platforms} platform(s).",
+      "what": "{display_name}’s main listing averages {anchor_rating}★ on Google with {anchor_review_count} reviews across {n_platforms} platform(s).",
       "why":  "Google reputation is a primary input to AI provider recommendation engines — rating and review volume directly influence whether AI tools surface this provider.",
       "say":  "{anchor_rating} stars and {anchor_review_count} reviews — that’s a strong front door. The work now is making sure AI tools can find it reliably."
     },
     "composite:anchor_reputation:gap": {
-      "what": "{entity_name}’s primary listing has a thin or inconsistent reputation footprint across platforms.",
+      "what": "{display_name}’s primary listing has a thin or inconsistent reputation footprint across platforms.",
       "why":  "A weak primary listing reduces the confidence AI tools assign when surfacing this provider for patient queries.",
       "say":  "The front door needs work. AI tools lead with reputation signals — a thin footprint here costs recommendations."
     }
@@ -270,8 +270,13 @@
   ],
 
   "ask_templates": {
-    "sales":        "The recommended next step is a {roadmap_section_title} engagement — that addresses {top_gap_label} directly and is the fastest path to moving the score.",
-    "cs_with_prior": "Your next 90-day targets: {roadmap_item_1}{roadmap_item_2_clause}. At the prior run ({prior_date}), your score was {prior_score}; the gap to close is {delta} point(s).",
-    "cs_no_prior":   "Your next 90-day targets: {roadmap_item_1}{roadmap_item_2_clause}. Progress will be measured at the next scheduled run."
+    "sales": [
+      "The recommended first step is {roadmap_title_clean} — this targets {top_gap_label} directly and is the fastest path to moving the score.",
+      "To move the needle on AI recommendation capture, start with {roadmap_title_clean}. This addresses the gap in {top_gap_label} and creates measurable score lift within 90 days."
+    ],
+    "cs_with_prior_positive": "Next 90-day targets: {roadmap_item_1}{roadmap_item_2_clause}. Score improved by {delta} {delta_points} since the prior run ({prior_date}) — the next target is {score}/100.",
+    "cs_with_prior_zero":     "Next 90-day targets: {roadmap_item_1}{roadmap_item_2_clause}. Score held at {score}/100 since the prior run ({prior_date}) — maintaining this position is the baseline; the targets below are how we extend it.",
+    "cs_with_prior_negative": "Next 90-day targets: {roadmap_item_1}{roadmap_item_2_clause}. Score declined by {delta} {delta_points} since the prior run ({prior_date}) — recovering to {prior_score} is the first target.",
+    "cs_no_prior":            "Next 90-day targets: {roadmap_item_1}{roadmap_item_2_clause}. Progress will be measured at the next scheduled run."
   }
 }

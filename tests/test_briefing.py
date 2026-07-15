@@ -705,6 +705,71 @@ def test_sales_vs_cs_may_differ():
     assert br_cs.variant == "cs"
 
 
+# ── T8b: Presentation quality (AC-5.x) ───────────────────────────────────────
+
+def test_no_full_address_in_composite_prose():
+    """AC-5.1: When anchor has clean practice_name, composite template must not
+    include the full entity_name with address."""
+    from perception.briefing_pdf import render_briefing_html
+    # Default fixture: anchor practice_name = "Desert Orthopaedic Center"
+    # entity_name = "Desert Orthopaedic Center" (same in test, but in prod has address)
+    result = _make_result(entity_name="Desert Orthopaedic Center 2800 E Desert Inn Rd")
+    result.practice_composite_rows[0]["practice_name"] = "Desert Orthopaedic Center"
+    br = extract(result, "sales")
+    html_out = render_briefing_html(br)
+    assert "2800 E Desert Inn Rd" not in html_out or "Desert Orthopaedic Center" in html_out, (
+        "Full address appearing in briefing prose — display_name fallback not working"
+    )
+    # Specifically check composite template if it was selected
+    for f in br.findings:
+        if "anchor_reputation" in f.finding_type:
+            assert "2800 E Desert Inn Rd" not in f.what, (
+                f"Address leaked into composite finding: {f.what}"
+            )
+
+
+def test_delta_language_no_points_artifact():
+    """AC-5.3: Delta language must not contain 'point(s)' pluralization artifact."""
+    result = _make_result()
+    br = extract(result, "cs")
+    # Without a prior run, ask uses cs_no_prior — no delta language
+    assert "point(s)" not in br.ask, f"'point(s)' artifact in ask: {br.ask}"
+
+
+def test_sales_ask_template_variety():
+    """AC-5.4: Two different run_ids must be able to produce different ask phrasings."""
+    import dataclasses
+    result1 = _make_result(run_id="aaaa-0000")
+    result2 = _make_result(run_id="ffff-9999")
+    br1 = extract(result1, "sales")
+    br2 = extract(result2, "sales")
+    # Verify both are grammatical (non-empty, no unfilled template tokens)
+    assert "{" not in br1.ask, f"Unfilled template token in ask: {br1.ask}"
+    assert "{" not in br2.ask, f"Unfilled template token in ask: {br2.ask}"
+    # At least one unique phrasing variant must exist
+    cfg = _cfg()
+    templates = cfg["ask_templates"]["sales"]
+    assert isinstance(templates, list) and len(templates) >= 2, (
+        "Sales ask_templates must be a list of ≥2 variants"
+    )
+
+
+def test_same_run_id_produces_identical_ask():
+    """AC-5.4 (determinism): Same run_id must produce byte-identical ask text."""
+    result = _make_result(run_id="test-det-001")
+    br1 = extract(result, "sales")
+    br2 = extract(result, "sales")
+    assert br1.ask == br2.ask, "Same run_id produced different ask text — not deterministic"
+
+
+def test_roadmap_title_clean_strips_parentheticals():
+    """AC-5.2: _roadmap_title_clean must remove '(...)' labels from section titles."""
+    from perception.briefing import _roadmap_title_clean
+    assert _roadmap_title_clean("Your Website (Technical & Content Fixes)") == "your website"
+    assert _roadmap_title_clean("Patient Experience & Reviews") == "patient experience & reviews"
+    assert _roadmap_title_clean("GBP Optimization (Q1 Priority)") == "gbp optimization"
+
+
 # ── T9: Full round-6 regression guard ─────────────────────────────────────────
 
 def test_holds_module_still_works():

@@ -334,6 +334,8 @@ def _build_candidate_pool(
         None,
     )
     entity_name = result.entity_name or ""
+    # display_name: prefer anchor practice_name (clean, no address) over full entity_name
+    display_name = (anchor_row or {}).get("practice_name") or entity_name
     city = result.location.split(",")[0].strip() if result.location else ""
     specialty = result.specialty or "this specialty"
 
@@ -359,6 +361,7 @@ def _build_candidate_pool(
 
         ctx: dict = {
             "entity_name":          entity_name,
+            "display_name":         display_name,
             "tier_label":           label,
             "tier_score":           ts_val,
             "top_tier_label":       top_tier_label,
@@ -492,6 +495,7 @@ def _build_candidate_pool(
                 act = _actionability("patient_experience_reviews", result.improvement_sections, cfg)
                 ctx = {
                     "entity_name":        entity_name,
+                    "display_name":       display_name,
                     "anchor_rating":      f"{rating:.1f}",
                     "anchor_review_count": rev_count,
                     "n_platforms":        n_plat,
@@ -731,6 +735,13 @@ def _get_prior(result: "AnalysisResult") -> dict:
         return {}
 
 
+def _roadmap_title_clean(raw_title: str) -> str:
+    """Strip parenthetical labels from roadmap section titles for clean prose."""
+    import re
+    cleaned = re.sub(r"\s*\([^)]*\)", "", raw_title).strip()
+    return cleaned.lower() if cleaned else raw_title.lower()
+
+
 def _build_ask(
     findings: list[_Candidate],
     result: "AnalysisResult",
@@ -748,28 +759,46 @@ def _build_ask(
     top_gap_label = top_gap.source_ref.split(": ", 1)[-1]
 
     ctx = {
-        "entity_name":          result.entity_name or "",
+        "entity_name":           result.entity_name or "",
         "roadmap_section_title": section_title,
-        "roadmap_item_1":       roadmap_item_1,
-        "roadmap_item_2":       roadmap_item_2 or "",
+        "roadmap_title_clean":   _roadmap_title_clean(section_title),
+        "roadmap_item_1":        roadmap_item_1,
+        "roadmap_item_2":        roadmap_item_2 or "",
         "roadmap_item_2_clause": ri2_clause,
-        "top_gap_label":        top_gap_label,
+        "top_gap_label":         top_gap_label,
     }
 
     if variant == "sales":
-        return _fill(cfg["ask_templates"]["sales"], ctx), None, None
+        # Deterministic variant selection by run_id hash (AC-5.4)
+        sales_templates = cfg["ask_templates"]["sales"]
+        if isinstance(sales_templates, list):
+            idx = abs(hash(result.run_id or "")) % len(sales_templates)
+            tpl = sales_templates[idx]
+        else:
+            tpl = sales_templates
+        return _fill(tpl, ctx), None, None
 
     prior = _get_prior(result)
     prior_score = prior.get("score")
     prior_date  = prior.get("generated_at")
     if prior_score is not None:
+        current = p.ai_visibility_score or 0
+        raw_delta = current - prior_score
+        delta_abs = abs(raw_delta)
+        delta_points = "point" if delta_abs == 1 else "points"
         ctx.update({
-            "prior_date":  prior_date or "",
-            "prior_score": prior_score,
-            "score":       p.ai_visibility_score or 0,
-            "delta":       abs((p.ai_visibility_score or 0) - prior_score),
+            "prior_date":    prior_date or "",
+            "prior_score":   prior_score,
+            "score":         current,
+            "delta":         delta_abs,
+            "delta_points":  delta_points,
         })
-        ask = _fill(cfg["ask_templates"]["cs_with_prior"], ctx)
+        if raw_delta > 0:
+            ask = _fill(cfg["ask_templates"]["cs_with_prior_positive"], ctx)
+        elif raw_delta == 0:
+            ask = _fill(cfg["ask_templates"]["cs_with_prior_zero"], ctx)
+        else:
+            ask = _fill(cfg["ask_templates"]["cs_with_prior_negative"], ctx)
     else:
         ask = _fill(cfg["ask_templates"]["cs_no_prior"], ctx)
     return ask, prior_score, prior_date
