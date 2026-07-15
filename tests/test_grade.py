@@ -1455,3 +1455,49 @@ def test_alias_parentheticals_regex_matches_known_phrases():
         assert not _ALIAS_PARENTHETICALS.search(phrase), (
             f"_ALIAS_PARENTHETICALS should NOT match {phrase!r} but did"
         )
+
+
+# ── Round 5 D: Fouse hold list ────────────────────────────────────────────────
+
+def test_hold_list_catches_matthew_fouse():
+    """MATTHEW FOUSE at Desert Orthopaedic Center must be on the hold list."""
+    from perception.holds import is_held
+    assert is_held("MATTHEW FOUSE", "Desert Orthopaedic Center"), \
+        "MATTHEW FOUSE should be held at Desert Orthopaedic Center"
+
+
+def test_hold_list_catches_mervyn_fouse():
+    """MERVYN FOUSE at Desert Orthopaedic Center must be on the hold list."""
+    from perception.holds import is_held
+    assert is_held("MERVYN FOUSE", "Desert Orthopaedic Center"), \
+        "MERVYN FOUSE should be held at Desert Orthopaedic Center"
+
+
+def test_hold_list_case_insensitive():
+    """Hold list matching must be case-insensitive."""
+    from perception.holds import is_held
+    assert is_held("Matthew Fouse", "Desert Orthopaedic Center"), \
+        "is_held() should match case-insensitively"
+    assert is_held("matthew fouse", "desert orthopaedic center"), \
+        "is_held() should match lowercase entity too"
+
+
+def test_hold_list_entity_mismatch_not_held():
+    """Same physician name at a different entity must NOT be held."""
+    from perception.holds import is_held
+    assert not is_held("MATTHEW FOUSE", "Henderson Orthopedics"), \
+        "MATTHEW FOUSE at a different entity should not be held"
+
+
+def test_hold_list_unknown_physician_not_held():
+    """A physician not on the hold list must return False."""
+    from perception.holds import is_held
+    assert not is_held("JOHN SMITH", "Desert Orthopaedic Center"), \
+        "JOHN SMITH is not on the hold list and should not be held"
+
+
+def test_hold_list_empty_entity_matches_any():
+    """If entity is blank, a hold with any entity must still match on physician name."""
+    from perception.holds import is_held
+    assert is_held("MATTHEW FOUSE", ""), \
+        "When entity is blank, hold should match on physician name alone"

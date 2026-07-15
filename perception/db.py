@@ -354,6 +354,19 @@ def init_db() -> None:
             except Exception:
                 pass
 
+    # Migrate practice_reputation_physicians to add hold_status (R5 D)
+    _prp_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name='practice_reputation_physicians'"
+    ).fetchall()}
+    if "hold_status" not in _prp_cols:
+        try:
+            con.execute(
+                "ALTER TABLE practice_reputation_physicians ADD COLUMN hold_status VARCHAR"
+            )
+        except Exception:
+            pass
+
     # ── Practice entity registry ──────────────────────────────────────────────
     # Caches the sibling roster discovered for each anchor practice so that
     # back-to-back runs produce an identical entity list.  Keyed on a
