@@ -798,10 +798,32 @@ def analyze_practice(
         from .data.places import _name_match as _nmatch
         _anchor_lc = entity_name.strip().lower()
 
+        # Recognized same-location alias markers stripped from sibling BEFORE token-overlap
+        # check.  Direction rule: the canonical anchor name is never modified; only the
+        # sibling is tested for alias-ness.  This catches "(Main Office)" even when the
+        # anchor name has no address tokens to pad the ratio.
+        _ALIAS_PARENTHETICALS = re.compile(
+            r'\s*\(\s*(main\s+(office|campus)|headquarters|hq'
+            r'|primary\s+(campus|location|office))\s*\)\s*$'
+            r'|\s*[-–—]\s*(main\s+(office|campus)|headquarters|hq)\s*$',
+            re.IGNORECASE,
+        )
+
         def _is_anchor_duplicate(sibling_name: str, sibling_address: str = "") -> bool:
             if sibling_name.strip().lower() == _anchor_lc:
                 return True
-            # Bidirectional name-token AND (catches location-label variants like "(Main Office)")
+            # Strip recognized alias markers from sibling before token-overlap check.
+            # Canonical anchor name is never modified — only the sibling is tested.
+            _stripped = _ALIAS_PARENTHETICALS.sub('', sibling_name).strip()
+            if _stripped.lower() != sibling_name.strip().lower():
+                if _stripped.lower() == _anchor_lc:
+                    return True
+                if (
+                    _nmatch(entity_name, _stripped) == "strong"
+                    and _nmatch(_stripped, entity_name) == "strong"
+                ):
+                    return True
+            # Bidirectional name-token AND on original name
             if (
                 _nmatch(entity_name, sibling_name) == "strong"
                 and _nmatch(sibling_name, entity_name) == "strong"

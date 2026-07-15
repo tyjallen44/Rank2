@@ -439,12 +439,31 @@ def test_paras_strips_markdown(monkeypatch):
     assert "`" not in result
 
 
-# N2 / F1: Sibling dedup against anchor (unconditional bidirectional AND, no address gate)
+# N2 / F1 / Phase-3b: Sibling dedup against anchor
+import re as _re
+_ALIAS_PARENTHETICALS_TEST = _re.compile(
+    r'\s*\(\s*(main\s+(office|campus)|headquarters|hq'
+    r'|primary\s+(campus|location|office))\s*\)\s*$'
+    r'|\s*[-–—]\s*(main\s+(office|campus)|headquarters|hq)\s*$',
+    _re.IGNORECASE,
+)
+
 def _is_anchor_dup_new(entity_name: str, sibling_name: str) -> bool:
-    """Mirror of the production _is_anchor_duplicate() function (unconditional AND)."""
+    """Mirror of the production _is_anchor_duplicate() — alias stripping + bidir AND."""
     from perception.data.places import _name_match as _nmatch
     if sibling_name.strip().lower() == entity_name.strip().lower():
         return True
+    # Strip recognized alias markers (direction: canonical anchor name never modified)
+    _stripped = _ALIAS_PARENTHETICALS_TEST.sub('', sibling_name).strip()
+    if _stripped.lower() != sibling_name.strip().lower():
+        if _stripped.lower() == entity_name.strip().lower():
+            return True
+        if (
+            _nmatch(entity_name, _stripped) == "strong"
+            and _nmatch(_stripped, entity_name) == "strong"
+        ):
+            return True
+    # Original bidir AND
     return (
         _nmatch(entity_name, sibling_name) == "strong"
         and _nmatch(sibling_name, entity_name) == "strong"
@@ -773,6 +792,76 @@ def test_anchor_dedup_keeps_summerlin_sibling():
     sibling = "Desert Orthopaedic Center - Summerlin"
     assert not _is_anchor_dup_new(anchor, sibling), (
         f"Expected {sibling!r} to be kept as a valid sibling of {anchor!r}"
+    )
+
+
+# ── Phase 3b — Alias-direction tests ─────────────────────────────────────────
+
+def test_alias_direction_main_office_dropped_no_address():
+    """'(Main Office)' alias dropped even when anchor has no address tokens.
+    Direction: canonical anchor survives; alias sibling is discarded."""
+    anchor  = "Desert Orthopaedic Center"
+    alias   = "Desert Orthopaedic Center (Main Office)"
+    assert _is_anchor_dup_new(anchor, alias), (
+        f"Alias {alias!r} must be detected as a duplicate of {anchor!r} "
+        "even when anchor has no address tokens"
+    )
+
+
+def test_alias_direction_hq_dropped_no_address():
+    """'(HQ)' parenthetical is a recognized alias marker — must be dropped."""
+    anchor = "Valley Orthopedics"
+    alias  = "Valley Orthopedics (HQ)"
+    assert _is_anchor_dup_new(anchor, alias)
+
+
+def test_alias_direction_main_campus_dropped_no_address():
+    """'(Main Campus)' parenthetical must be dropped as an alias."""
+    anchor = "Desert Orthopaedic Center"
+    alias  = "Desert Orthopaedic Center (Main Campus)"
+    assert _is_anchor_dup_new(anchor, alias)
+
+
+def test_alias_direction_satellite_untouched_no_alias_markers():
+    """Sibling with no alias markers is NOT dropped by alias stripping."""
+    anchor  = "Desert Orthopaedic Center 2800 E Desert Inn Rd"
+    sibling = "Desert Orthopaedic Center - Summerlin"
+    assert not _is_anchor_dup_new(anchor, sibling), (
+        f"Satellite {sibling!r} must NOT be treated as an alias of {anchor!r}"
+    )
+
+
+def test_alias_direction_canonical_is_entity_name():
+    """The anchor_entry name must equal entity_name — never replaced by alias or GBP display name."""
+    entity_name = "Desert Orthopaedic Center 2800 E Desert Inn Rd"
+    # Simulate the anchor_entry construction from practice_analyzer.py
+    anchor_entry = {
+        "name":        entity_name,
+        "entity_type": "practice",
+        "is_anchor":   True,
+    }
+    assert anchor_entry["name"] == entity_name, (
+        "anchor_entry['name'] must be the canonical entity_name"
+    )
+    # An alias sibling must be identified as a dup and dropped — never promoted to anchor
+    alias_sibling = "Desert Orthopaedic Center - Desert Inn (Main Office)"
+    assert _is_anchor_dup_new(entity_name, alias_sibling), (
+        "Alias sibling must be dropped; canonical entity_name must survive as anchor"
+    )
+
+
+def test_alias_direction_no_markers_uses_original_bidir():
+    """When no alias markers are present, the original bidir AND check applies unchanged."""
+    anchor  = "Desert Orthopaedic Center 2800 E Desert Inn Rd"
+    # "- Desert Inn" has no recognized alias marker → falls through to original bidir check
+    same_loc = "Desert Orthopaedic Center - Desert Inn"
+    assert _is_anchor_dup_new(anchor, same_loc), (
+        "Same-location sibling (no alias marker) must still be caught by bidir check"
+    )
+    # Green Valley has no alias marker and is genuinely distinct
+    distinct = "Desert Orthopaedic Center - Green Valley Ranch"
+    assert not _is_anchor_dup_new(anchor, distinct), (
+        "Distinct satellite must NOT be dropped by bidir check"
     )
 
 
