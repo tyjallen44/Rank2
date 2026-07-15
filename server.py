@@ -246,6 +246,7 @@ def _job_run_single(
             physician_composite=job.get("physician_composite", False),
             physician_roster=job.get("physician_roster") or {},
             force_rerun=job.get("force_rerun", False),
+            briefing_variant=job.get("briefing_variant"),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -255,6 +256,7 @@ def _job_run_single(
             "specialty": result.specialty,
             "provider_count": len(result.rankings),
             "pdf_path": result.pdf_path,
+            "briefing_pdf_path": result.briefing_pdf_path,
         }
     except Exception as exc:
         job["status"] = "error"
@@ -296,6 +298,7 @@ def _job_run_practice(
             physician_composite=job.get("physician_composite", False),
             physician_roster=job.get("physician_roster") or {},
             force_rerun=job.get("force_rerun", False),
+            briefing_variant=job.get("briefing_variant"),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -305,6 +308,7 @@ def _job_run_practice(
             "specialty": result.specialty,
             "provider_count": len(result.rankings),
             "pdf_path": result.pdf_path,
+            "briefing_pdf_path": result.briefing_pdf_path,
         }
     except Exception as exc:
         job["status"] = "error"
@@ -403,6 +407,7 @@ class AnalyzeRequest(BaseModel):
     physician_composite: bool = False       # include physician sub-rows in practice composite
     physician_roster: dict = {}             # {practice_name: [{name, npi, specialty, credential}]}
     force_rerun: bool = False               # bypass 90-day score cache
+    briefing_variant: Optional[str] = None  # "sales" | "cs" | None — generates Pulse Briefing companion
 
 
 class BatchRequest(BaseModel):
@@ -467,6 +472,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["physician_composite"] = req.physician_composite
     _jobs[job_id]["physician_roster"] = req.physician_roster
     _jobs[job_id]["force_rerun"] = req.force_rerun
+    _jobs[job_id]["briefing_variant"] = req.briefing_variant
 
     if req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)

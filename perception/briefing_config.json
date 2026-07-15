@@ -1,0 +1,222 @@
+{
+  "variant_weights": {
+    "sales": {
+      "materiality":         1.0,
+      "demonstrability":     2.5,
+      "emotional_salience":  2.0,
+      "actionability":       1.0,
+      "verification_strength": 1.5
+    },
+    "cs": {
+      "materiality":         2.0,
+      "demonstrability":     1.0,
+      "emotional_salience":  0.5,
+      "actionability":       2.5,
+      "verification_strength": 1.5
+    }
+  },
+
+  "derived_metric_thresholds": {
+    "physician_capture_rate": {"strength": 0.75, "gap": 0.45},
+    "linkage_integrity_pct":  {"strength": 0.85, "gap": 0.60},
+    "entity_resolution_pct":  {"strength": 0.85, "gap": 0.60}
+  },
+
+  "materiality_thresholds": {
+    "score_3": 15.0,
+    "score_2": 8.0,
+    "score_1": 3.0
+  },
+
+  "demo": {
+    "min_run_count": 5,
+    "min_dominant_pct": 0.80,
+    "eligible_outcomes": ["recommended", "absent", "competitor_named"]
+  },
+
+  "band_descriptors": {
+    "A":  "excellent digital presence",
+    "A-": "excellent digital presence",
+    "B+": "strong digital presence",
+    "B":  "strong digital presence",
+    "B-": "established presence with addressable gaps",
+    "C+": "moderate AI visibility",
+    "C":  "moderate AI visibility",
+    "C-": "below-average AI visibility",
+    "D":  "weak AI visibility",
+    "F":  "critical visibility deficit"
+  },
+
+  "roadmap_tier_keywords": {
+    "clinical_outcomes_safety": ["outcome", "safety", "quality", "clinical", "credential", "resolution", "entity"],
+    "credentials_recognition":  ["credential", "board", "recogni", "certif", "ranking", "award", "physician"],
+    "patient_experience_reviews": ["review", "experience", "rating", "reputation", "google", "star", "platform"],
+    "access_fit":               ["access", "location", "hours", "fit", "directory", "listing", "nap", "address", "linkage"]
+  },
+
+  "hook_templates": {
+    "contrast":       "{entity_name}'s {strength_label} is one of its strongest signals — but {gap_label} is actively suppressing its AI recommendation capture.",
+    "problem_lead":   "With a {band_descriptor} (score: {score}/100), {entity_name}'s biggest exposure is in {top_gap_label}.",
+    "strength_lead":  "{entity_name} scores {grade} ({score}/100) — a {band_descriptor} that puts it ahead of most peers on AI recommendation capture."
+  },
+
+  "finding_templates": {
+    "tier:patient_experience_reviews:strength": {
+      "what": "{entity_name} averages {anchor_rating}★ across {anchor_review_count} reviews on {n_platforms} platform(s).",
+      "why":  "Review depth and rating are the highest-weighted single signals AI tools use when generating provider recommendations.",
+      "say":  "You have {anchor_review_count} reviews at {anchor_rating} stars — that’s the social proof AI tools look for when recommending providers."
+    },
+    "tier:patient_experience_reviews:gap": {
+      "what": "{entity_name}’s online review footprint is below the threshold AI recommendation engines weight reliably.",
+      "why":  "Low review volume across platforms reduces the confidence score AI tools assign to provider recommendations.",
+      "say":  "AI tools need a track record to recommend you confidently. Right now that footprint is working against {entity_name}."
+    },
+    "tier:credentials_recognition:strength": {
+      "what": "{entity_name} shows strong credentials and recognition signals in the {tier_label} tier ({tier_score}/100).",
+      "why":  "Board certifications, recognized affiliations, and clinical awards are heavily weighted by AI tools for procedural and specialist queries.",
+      "say":  "Your credentials are visible and verifiable — that’s a differentiator when AI tools rank specialists."
+    },
+    "tier:credentials_recognition:gap": {
+      "what": "{entity_name}’s {tier_label} tier scores {tier_score}/100 — credentials and recognition signals are underrepresented in AI-indexable sources.",
+      "why":  "AI tools verify provider credibility through board certifications, affiliations, and awards. Missing signals here reduce recommendation confidence.",
+      "say":  "Your credentials exist but aren’t visible where it counts. We fix the indexing gap so AI tools can verify what you’ve already earned."
+    },
+    "tier:clinical_outcomes_safety:strength": {
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — a strong signal set for the highest-weight pillar.",
+      "why":  "{tier_label} carries the highest pillar weight in this scoring profile, making it the primary driver of AI recommendation capture.",
+      "say":  "Your strongest pillar is also the one AI tools weight most heavily — that’s a real competitive advantage."
+    },
+    "tier:clinical_outcomes_safety:gap": {
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — the highest-weight pillar with the most room to move.",
+      "why":  "{tier_label} carries the highest pillar weight; a low score here suppresses the composite more than any other signal set.",
+      "say":  "The signals AI tools weight most heavily are the ones where {entity_name} has the most room to improve. That’s where we start."
+    },
+    "tier:access_fit:strength": {
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — directory listings and access signals are consistent and well-indexed.",
+      "why":  "Consistent NAP data and directory coverage are foundational for AI localization — they determine whether AI tools can find and verify a provider’s location.",
+      "say":  "Your listings are clean and consistent. That’s foundational work that directly enables AI recommendation capture."
+    },
+    "tier:access_fit:gap": {
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — directory listings and NAP consistency have meaningful gaps.",
+      "why":  "Inconsistent name, address, or phone data across directories is a suppression signal that AI tools use to reduce recommendation confidence.",
+      "say":  "{entity_name} appears in multiple directories with conflicting information. AI tools can’t confidently recommend a provider when its own data disagrees with itself."
+    },
+    "metric:physician_capture_rate:strength": {
+      "what": "{physician_capture_rate_pct} of {entity_name}’s physicians have verified online reviews.",
+      "why":  "High physician capture signals a depth of reputation that AI tools surface for condition- and specialist-specific queries.",
+      "say":  "Your physicians are individually findable online — that’s a meaningful differentiator for patients searching by condition or procedure."
+    },
+    "metric:physician_capture_rate:gap": {
+      "what": "Only {physician_capture_rate_pct} of {entity_name}’s physicians have verified online reviews.",
+      "why":  "Patients comparing providers look for individual physicians; uncaptured physicians are invisible to AI tools responding to specialist queries.",
+      "say":  "A significant portion of your physicians don’t exist online where AI tools look. That’s referral volume your competitors can take."
+    },
+    "metric:linkage_integrity_pct:strength": {
+      "what": "{entity_name}’s directory listings show strong NAP consistency — name, address, and phone data align across sources.",
+      "why":  "High linkage integrity means AI tools can confidently attribute patient reviews and recommendations to the correct provider.",
+      "say":  "Your listings are consistent across the web. That’s the data foundation AI tools need to recommend you without qualification."
+    },
+    "metric:linkage_integrity_pct:gap": {
+      "what": "{entity_name}’s directory listings show inconsistent NAP data — name, address, or phone conflicts across sources.",
+      "why":  "AI systems treat NAP inconsistency as a trust signal. Conflicting data suppresses recommendation confidence and can cause misattribution.",
+      "say":  "{entity_name} appears in multiple places with conflicting information. AI tools can’t confidently recommend a practice when its own data disagrees with itself."
+    },
+    "metric:entity_resolution_pct:strength": {
+      "what": "AI tools correctly resolve queries to {entity_name} in approximately {entity_resolution_pct_pct} of standardized battery runs.",
+      "why":  "High entity resolution rate means AI tools reliably surface this practice when patients ask for relevant providers.",
+      "say":  "You’re already showing up reliably. The work now is holding that position and expanding to adjacent query types."
+    },
+    "metric:entity_resolution_pct:gap": {
+      "what": "AI tools correctly resolve queries to {entity_name} in approximately {entity_resolution_pct_pct} of standardized battery runs.",
+      "why":  "Low resolution rate means patients asking AI tools for a provider in this category are being directed elsewhere.",
+      "say":  "When someone asks an AI tool for {specialty} in {city}, {entity_name} comes up less than it should. That’s the gap we close."
+    },
+    "modifier:score_ceiling": {
+      "what": "A score ceiling of {ceiling_value} is currently applied — {entity_name}’s composite score cannot exceed {ceiling_value} until {score_ceiling_reason_plain}.",
+      "why":  "The ceiling blocks all composite improvement regardless of other signal strengths. No other work moves the number until this is resolved.",
+      "say":  "There’s a hard cap on your score right now. Nothing else we do moves the number above {ceiling_value} until one specific issue is resolved — which is exactly what we’d tackle first."
+    },
+    "composite:anchor_reputation:strength": {
+      "what": "{entity_name}’s main listing averages {anchor_rating}★ on Google with {anchor_review_count} reviews across {n_platforms} platform(s).",
+      "why":  "Google reputation is the highest-weight single input to AI provider recommendation engines.",
+      "say":  "{anchor_rating} stars and {anchor_review_count} reviews — that’s a strong front door. The work now is making sure AI tools can find it reliably."
+    },
+    "composite:anchor_reputation:gap": {
+      "what": "{entity_name}’s primary listing has a thin or inconsistent reputation footprint across platforms.",
+      "why":  "A weak primary listing reduces the confidence AI tools assign when surfacing this provider for patient queries.",
+      "say":  "The front door needs work. AI tools lead with reputation signals — a thin footprint here costs recommendations."
+    }
+  },
+
+  "demo_outcome_descriptions": {
+    "recommended":        "The AI tool explicitly names and recommends {entity_name}.",
+    "mentioned":          "The AI tool mentions {entity_name} without a direct recommendation.",
+    "absent":             "{entity_name} does not appear in the AI tool’s response.",
+    "competitor_named":   "A competitor is named in {entity_name}’s place."
+  },
+
+  "objections": [
+    {
+      "id": "obj-001",
+      "triggers": ["tier:patient_experience_reviews:gap", "metric:linkage_integrity_pct:gap"],
+      "objection": "Our Google rating is strong — why do we need this?",
+      "rebuttal":  "Google rating is the front door, but AI tools go deeper — they check whether your physicians are individually findable and whether your listings are consistent across the web. {entity_name}’s Google presence is solid; the gap is in {gap_label}.",
+      "variants": ["sales", "cs"]
+    },
+    {
+      "id": "obj-002",
+      "triggers": ["metric:entity_resolution_pct:gap"],
+      "objection": "We rank well on Google — isn’t that enough?",
+      "rebuttal":  "Traditional search and AI recommendation are different systems. AI tools query their own training data and retrieval indexes, not your Google rank. Low entity resolution rate is a gap that doesn’t show up in Google Analytics.",
+      "variants": ["sales"]
+    },
+    {
+      "id": "obj-003",
+      "triggers": ["modifier:score_ceiling"],
+      "objection": "What’s actually blocking the score from improving?",
+      "rebuttal":  "The {ceiling_value}-point ceiling applies when {score_ceiling_reason_plain}. It’s a hard block — no other improvement moves the number until this one issue is resolved.",
+      "variants": ["sales", "cs"]
+    },
+    {
+      "id": "obj-004",
+      "triggers": ["metric:physician_capture_rate:gap"],
+      "objection": "We’re a group practice — patients choose us, not individual doctors.",
+      "rebuttal":  "That’s shifting. AI tools increasingly surface individual physicians for condition-specific searches. Right now a significant portion of {entity_name}’s physicians have no reviewable online presence — those are search results your competitors can take.",
+      "variants": ["sales", "cs"]
+    },
+    {
+      "id": "obj-005",
+      "triggers": ["metric:linkage_integrity_pct:gap"],
+      "objection": "We control our own website — why does it matter what third-party sites say?",
+      "rebuttal":  "AI systems aggregate signals across dozens of listing sources, not just your website. When those sources disagree on your name, address, or phone, AI tools reduce recommendation confidence.",
+      "variants": ["sales", "cs"]
+    },
+    {
+      "id": "obj-006",
+      "triggers": ["metric:entity_resolution_pct:strength", "tier:patient_experience_reviews:strength"],
+      "objection": "If we’re already showing up well, why ongoing monitoring?",
+      "rebuttal":  "AI recommendation outputs change as models update and competitors improve. {entity_name} is in a strong position today — the work is holding it. Practices can drop significantly in 90 days after a competitor resolves a linkage gap.",
+      "variants": ["cs"]
+    },
+    {
+      "id": "obj-007",
+      "triggers": ["metric:entity_resolution_pct:gap", "metric:linkage_integrity_pct:gap"],
+      "objection": "We tried something similar before and it didn’t move the needle.",
+      "rebuttal":  "The difference is measurement. We run direct test queries against the AI tools your patients actually use — not an SEO proxy. The entity resolution rate is the exact number we move, re-measured every 90 days.",
+      "variants": ["sales"]
+    },
+    {
+      "id": "obj-008",
+      "triggers": ["modifier:score_ceiling", "metric:physician_capture_rate:gap"],
+      "objection": "What’s the ROI timeline?",
+      "rebuttal":  "The ceiling resolves once {score_ceiling_reason_plain}. Physician capture improvements typically appear within 60 days of profile setup. Both are re-measured at the 90-day rerun — you’ll see an exact score delta.",
+      "variants": ["sales", "cs"]
+    }
+  ],
+
+  "ask_templates": {
+    "sales":        "The recommended next step is a {roadmap_section_title} engagement — that addresses {top_gap_label} directly and is the fastest path to moving the score.",
+    "cs_with_prior": "Your next 90-day targets: {roadmap_item_1}{roadmap_item_2_clause}. At the prior run ({prior_date}), your score was {prior_score}; the gap to close is {delta} point(s).",
+    "cs_no_prior":   "Your next 90-day targets: {roadmap_item_1}{roadmap_item_2_clause}. Progress will be measured at the next scheduled run."
+  }
+}

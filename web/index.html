@@ -1362,6 +1362,19 @@ html, body {
             <input type="checkbox" id="ir-physician-composite" disabled>
             <span class="agg-label">Include Physicians in Composite</span>
           </label>
+          <label class="aggregate-toggle" id="ir-briefing-wrap" style="margin-top:10px" title="Generate a one-page Pulse Briefing companion with talking points for a sales or CS meeting. Requires full data collection scope.">
+            <input type="checkbox" id="ir-briefing-toggle" onchange="onBriefingToggle()">
+            <span class="agg-label">Include Pulse Briefing (talking points)</span>
+          </label>
+          <div id="ir-briefing-variant-wrap" style="display:none;margin-top:6px;margin-left:20px">
+            <select id="ir-briefing-variant" style="font-size:12px;padding:3px 6px;border:1px solid #cde0e2;border-radius:4px;color:#1c1c1e">
+              <option value="sales">Sales Edition — prospect meeting</option>
+              <option value="cs">Customer Success Edition — existing customer</option>
+            </select>
+            <div style="margin-top:5px;font-size:11px;color:#c07a30;font-style:italic">
+              &#9650; Scope disclosure: Pulse Briefing requires full data collection (all locations, all physician listings, battery metrics). Run time will be longer.
+            </div>
+          </div>
           <label class="aggregate-toggle" style="margin-top:10px" title="Collect and store analysis data without generating a PDF — useful for tracking AI visibility trends over time.">
             <input type="checkbox" id="ir-skip-pdf-toggle">
             <span class="agg-label">Skip PDF — collect data only</span>
@@ -3371,6 +3384,10 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
   const teaser_report      = document.getElementById('ir-teaser-toggle').checked;
   const force_rerun        = document.getElementById('ir-force-rerun')?.checked || false;
   const physician_composite = practiceComposite && document.getElementById('ir-physician-composite')?.checked;
+  const briefingChecked = document.getElementById('ir-briefing-toggle')?.checked;
+  const briefing_variant = (briefingChecked && !skip_pdf)
+    ? (document.getElementById('ir-briefing-variant')?.value || null)
+    : null;
 
   const body = {
     city: _irResolvedCity,
@@ -3389,6 +3406,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     physician_composite,
     physician_roster:     physician_composite ? physicianRoster : {},
     force_rerun,
+    briefing_variant,
   };
 
   const btn = document.getElementById('ir-run-btn');
@@ -3422,6 +3440,12 @@ function onPracticeCompositeChange() {
   const phCb    = document.getElementById('ir-physician-composite');
   phCb.disabled = !checked;
   if (!checked) phCb.checked = false;
+}
+
+function onBriefingToggle() {
+  const checked = document.getElementById('ir-briefing-toggle')?.checked;
+  const wrap = document.getElementById('ir-briefing-variant-wrap');
+  if (wrap) wrap.style.display = checked ? 'block' : 'none';
 }
 
 function irBackFromPracticeDiscovery() {

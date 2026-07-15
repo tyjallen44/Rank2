@@ -195,6 +195,16 @@ class ComparisonSummary(BaseModel):
     verdict: str = ""                           # 2–3 paragraph analyst narrative
 
 
+class BatteryPromptResult(BaseModel):
+    """Per-prompt battery run record for demo eligibility and variance tracking."""
+    prompt_id: str
+    prompt_text: str
+    run_count: int
+    outcomes: list[str]          # coded: "recommended"|"mentioned"|"absent"|"competitor_named"|"error"
+    dominant_outcome: str
+    dominant_pct: float          # fraction of runs with dominant_outcome
+
+
 class AnalysisResult(BaseModel):
     """Structured result from a Claude-powered market analysis."""
     run_id: str
@@ -225,3 +235,6 @@ class AnalysisResult(BaseModel):
     report_markdown: str = ""              # full narrative report text
     pdf_path: Optional[str] = None
     md_path: Optional[str] = None
+    briefing_variant: Optional[str] = None          # "sales" | "cs" | None
+    briefing_pdf_path: Optional[str] = None         # path to companion briefing PDF
+    battery_results: Optional[dict[str, BatteryPromptResult]] = None  # prompt_id → result

@@ -575,6 +575,7 @@ def analyze_practice(
     physician_composite: bool = False,
     physician_roster: dict | None = None,
     force_rerun: bool = False,
+    briefing_variant: Optional[str] = None,
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -924,6 +925,26 @@ def analyze_practice(
         physician_capture_rate=physician_capture_rate,
         key_person_flag=key_person_flag,
     )
+
+    if briefing_variant and not skip_pdf:
+        result.briefing_variant = briefing_variant
+        try:
+            from .briefing import extract as _briefing_extract, BriefingValidationError
+            from .briefing_pdf import render_briefing_pdf
+            emit({"type": "phase", "name": "briefing", "text": f"Generating Pulse Briefing ({briefing_variant})"})
+            with console.status(f"[bold dark_sea_green4]Generating Pulse Briefing ({briefing_variant})…[/bold dark_sea_green4]"):
+                _br = _briefing_extract(result, briefing_variant)
+                _variant_label = "Sales" if briefing_variant == "sales" else "CS"
+                _briefing_path = output_dir / f"{_stem}_Briefing-{_variant_label}.pdf"
+                render_briefing_pdf(_br, str(_briefing_path))
+            result.briefing_pdf_path = str(_briefing_path)
+            console.print(f"[green]✓[/green] Briefing PDF  → [dim]{_briefing_path}[/dim]")
+            emit({"type": "briefing_ready", "path": str(_briefing_path)})
+        except BriefingValidationError as exc:
+            console.print(f"[yellow]⚠[/yellow] Briefing skipped — missing inputs: {exc.missing}")
+            emit({"type": "briefing_skipped", "missing": exc.missing})
+        except Exception as exc:
+            console.print(f"[yellow]⚠[/yellow] Briefing generation failed: {exc}")
 
     emit({"type": "phase", "name": "done_item", "text": "Complete"})
     return result
