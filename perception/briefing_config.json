@@ -145,9 +145,9 @@
       "say":  "Your listings are clean and consistent. That’s foundational work that directly enables AI recommendation capture."
     },
     "tier:access_fit:gap": {
-      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — directory listings and NAP consistency have meaningful gaps.",
-      "why":  "Inconsistent name, address, or phone data across directories is a suppression signal that AI tools use to reduce recommendation confidence.",
-      "say":  "{entity_name} appears in multiple directories with conflicting information. AI tools can’t confidently recommend a provider when its own data disagrees with itself."
+      "what": "{entity_name} scores {tier_score}/100 on {tier_label} — directory listings and access signals have meaningful gaps.",
+      "why":  "Inconsistent or incomplete name, address, or phone data across directories is a suppression signal that AI tools use to reduce recommendation confidence.",
+      "say":  "Access & Fit signals show meaningful gaps. AI tools can’t confidently surface a provider when directory data is inconsistent or incomplete — that’s the fix we start with."
     },
     "metric:physician_capture_rate:strength": {
       "what": "{physician_capture_rate_pct} of {entity_name}’s physicians have verified online reviews.",
@@ -165,9 +165,9 @@
       "say":  "Your listings are consistent across the web. That’s the data foundation AI tools need to recommend you without qualification."
     },
     "metric:linkage_integrity_pct:gap": {
-      "what": "{entity_name}’s directory listings show inconsistent NAP data — name, address, or phone conflicts across sources.",
-      "why":  "AI systems treat NAP inconsistency as a trust signal. Conflicting data suppresses recommendation confidence and can cause misattribution.",
-      "say":  "{entity_name} appears in multiple places with conflicting information. AI tools can’t confidently recommend a practice when its own data disagrees with itself."
+      "what": "{entity_name}’s directory listings show a linkage integrity score of {linkage_integrity_pct_pct} — name, address, or phone data is not fully consistent across sources.",
+      "why":  "AI systems treat NAP inconsistency as a trust signal. Conflicting data suppresses recommendation confidence and can cause misattribution to competitors.",
+      "say":  "Linkage integrity is at {linkage_integrity_pct_pct} — that means directory data isn’t fully consistent across the web. AI tools use this as a confidence signal; inconsistencies cost recommendations."
     },
     "metric:entity_resolution_pct:strength": {
       "what": "AI tools correctly resolve queries to {entity_name} in approximately {entity_resolution_pct_pct} of standardized battery runs.",

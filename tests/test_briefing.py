@@ -70,6 +70,20 @@ def _make_anchor_row(**kwargs) -> dict:
     return base
 
 
+def _make_battery(dominant_pct: float = 0.60) -> dict:
+    """Below-threshold battery by default (dominant_pct < 0.80 → no demo selected)."""
+    return {
+        "prompt-test": BatteryPromptResult(
+            prompt_id="prompt-test",
+            prompt_text="What orthopedic practices are in Las Vegas?",
+            run_count=5,
+            outcomes=["mentioned"] * 3 + ["absent"] * 2,
+            dominant_outcome="mentioned",
+            dominant_pct=dominant_pct,
+        )
+    }
+
+
 def _make_result(**kwargs) -> AnalysisResult:
     p = kwargs.pop("provider", _make_provider())
     anchor = kwargs.pop("anchor", _make_anchor_row())
@@ -96,7 +110,7 @@ def _make_result(**kwargs) -> AnalysisResult:
                 items=["Audit directory listings", "Correct phone and address data"],
             ),
         ],
-        battery_results=None,
+        battery_results=_make_battery(),  # below-threshold battery present by default
     )
     defaults.update(kwargs)
     return AnalysisResult(**defaults)
@@ -408,8 +422,23 @@ def test_no_two_from_same_tier():
             used_tiers.append(tk)
 
 
-def test_demo_absent_when_no_battery():
+def test_missing_battery_raises_validation_error():
+    """Phase 4: Absent battery_results must fail loudly — briefing must not generate."""
     result = _make_result(battery_results=None)
+    errors = validate_briefing_inputs(result)
+    assert any("battery_results" in e for e in errors), (
+        f"Missing battery_results must appear in validation errors: {errors}"
+    )
+    try:
+        extract(result, "sales")
+        assert False, "Expected BriefingValidationError for missing battery"
+    except BriefingValidationError as exc:
+        assert any("battery" in m for m in exc.missing)
+
+
+def test_demo_absent_when_below_threshold():
+    """Battery present but no prompt meets the 80% threshold → demo=None (not a gate failure)."""
+    result = _make_result(battery_results=_make_battery(dominant_pct=0.60))
     br = extract(result, "sales")
     assert br.demo is None
 
@@ -491,14 +520,15 @@ def test_objections_always_two():
         )
 
 
-def test_demo_fallback_present_in_html_when_no_battery():
-    """AC-4.1: When no battery, demo section renders a fallback note (not silently absent)."""
+def test_demo_fallback_present_in_html_below_threshold():
+    """AC-4.1: When battery exists but below threshold, demo section renders a fallback note."""
     from perception.briefing_pdf import render_briefing_html
-    result = _make_result(battery_results=None)
+    result = _make_result(battery_results=_make_battery(dominant_pct=0.60))
     br = extract(result, "sales")
+    assert br.demo is None
     html_out = render_briefing_html(br)
-    assert "Live demo not available" in html_out or "battery not yet executed" in html_out, (
-        "Demo section silently disappeared when battery_results=None — must render a fallback"
+    assert "too variable" in html_out or "not recommended" in html_out, (
+        "Demo section must render 'too variable' fallback when below threshold"
     )
     assert "Live Demo Prompt" in html_out  # section header always present
 

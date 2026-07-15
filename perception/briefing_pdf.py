@@ -310,7 +310,7 @@ def render_briefing_html(br: "BriefingResult") -> str:
         demo_html = """
         <h2>Live Demo Prompt</h2>
         <div class="demo-fallback">
-          Live demo not available for this run — battery not yet executed for this entity.
+          Demo not recommended for this run — battery results too variable for a consistent demonstration.
         </div>
         """
 
