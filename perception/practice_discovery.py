@@ -49,14 +49,33 @@ def discover_practices(
     city: str,
     state: str,
     on_event: Optional[Callable] = None,
+    force_rerun: bool = False,
 ) -> list[dict]:
     """
     Use Claude to discover practices and facilities associated with a health system.
     Returns a list of dicts: {name, entity_type, city, state}.
+
+    Results are cached in the entity registry for 90 days (same TTL as sibling
+    discovery) so that hospital composite enumeration is stable across same-day
+    runs.  Pass force_rerun=True to bypass the cache and call the LLM fresh.
     """
+    from .entity_registry import get_registry_siblings, save_registry_siblings, expire_registry
+
     def emit(e: dict) -> None:
         if on_event:
             on_event(e)
+
+    # Use a prefixed anchor_key to avoid collision with practice-sibling entries
+    _cache_name = f"[hospital-composite] {entity_name}"
+
+    if force_rerun:
+        expire_registry(_cache_name, city, state)
+    else:
+        cached = get_registry_siblings(_cache_name, city, state)
+        if cached is not None:
+            emit({"type": "text",
+                  "text": f"Using registry: {len(cached)} affiliated practices for {entity_name}"})
+            return cached
 
     client = _get_client()
     prompt = (
@@ -101,6 +120,7 @@ def discover_practices(
             "state": p.get("state") or state,
         })
 
+    save_registry_siblings(_cache_name, city, state, practices)
     emit({"type": "text", "text": f"Found {len(practices)} associated practices."})
     return practices
 
