@@ -3446,6 +3446,15 @@ function onBriefingToggle() {
   const checked = document.getElementById('ir-briefing-toggle')?.checked;
   const wrap = document.getElementById('ir-briefing-variant-wrap');
   if (wrap) wrap.style.display = checked ? 'block' : 'none';
+  if (checked) {
+    const pcCb = document.getElementById('ir-practice-composite');
+    if (pcCb && !pcCb.checked) {
+      pcCb.checked = true;
+      onPracticeCompositeChange();  // enables the physician checkbox
+    }
+    const phCb = document.getElementById('ir-physician-composite');
+    if (phCb) phCb.checked = true;
+  }
 }
 
 function irBackFromPracticeDiscovery() {
