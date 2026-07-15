@@ -89,6 +89,15 @@ def _physician_label(count: str) -> str:
     return f"{prefix} physicians"
 
 
+_ESTIMATED_KEYWORDS = ("estimated", "approx", "approximately", "~")
+
+
+def _is_estimated_count(s: str) -> bool:
+    """Return True if the physician count string contains estimation language."""
+    sl = s.lower()
+    return any(kw in sl for kw in _ESTIMATED_KEYWORDS)
+
+
 def _logo_data_uri() -> str:
     if _LOGO_PATH.exists():
         data = base64.b64encode(_LOGO_PATH.read_bytes()).decode()
@@ -510,7 +519,8 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
     _pc = (p.physician_count or "").strip()
     physician_pill = (
         f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
-        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
+        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60
+        and not _is_estimated_count(_pc) else ""
     )
     return f"""
     <div class="card">
@@ -564,7 +574,7 @@ def _individual_entity_card(p: RankedProvider) -> str:
     physician_pill = (
         f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
         if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60
-        else ""
+        and not _is_estimated_count(_pc) else ""
     )
     return f"""
     <div class="card" style="border:2px solid {_TEAL}">
@@ -604,7 +614,8 @@ def _individual_teaser_card(p: RankedProvider) -> str:
     _pc = (p.physician_count or "").strip()
     physician_html = (
         f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
-        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
+        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60
+        and not _is_estimated_count(_pc) else ""
     )
     strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
@@ -688,7 +699,8 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
     _pc = (p.physician_count or "").strip()
     physician_html = (
         f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
-        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
+        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60
+        and not _is_estimated_count(_pc) else ""
     )
     strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
@@ -2690,12 +2702,7 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
         avg = row.get("avg_rating")
         if avg is None:
             return "&#8212;"
-        unverified = not row.get("affiliation_verified", True)
-        suffix = (
-            ' <span style="font-size:8pt;color:#7a9095">(unverified affiliation)</span>'
-            if unverified else ""
-        )
-        return f'<strong>{avg:.1f}</strong> / 5{suffix}'
+        return f'<strong>{avg:.1f}</strong> / 5'
 
     def _platforms_cell(row: dict) -> str:
         count = row.get("platforms_found", 0)

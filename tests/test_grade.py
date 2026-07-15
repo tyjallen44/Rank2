@@ -1501,3 +1501,89 @@ def test_hold_list_empty_entity_matches_any():
     from perception.holds import is_held
     assert is_held("MATTHEW FOUSE", ""), \
         "When entity is blank, hold should match on physician name alone"
+
+
+# ── Round 5 C-1: (unverified affiliation) suffix removed ─────────────────────
+
+def test_rating_cell_no_unverified_affiliation_suffix():
+    """_rating_cell must not render '(unverified affiliation)' even when
+    affiliation_verified=False — this tag was an unrequested R4 artifact (C-1)."""
+    # Build a minimal HTML fragment to check _rating_cell output
+    import re as _re
+    from perception import pdf as _pdf
+
+    # Call the inner helper by building the HTML directly through a mock context.
+    # Since _rating_cell is a closure inside _practice_reputation_table_html,
+    # we verify the PDF output doesn't contain the string for unverified rows.
+    row_unverified = {
+        "practice_name":   "Test Practice",
+        "is_anchor":       False,
+        "affiliation_verified": False,
+        "not_established": False,
+        "avg_rating":      4.2,
+        "total_reviews":   80,
+        "platforms_found": 1,
+        "platforms_list":  "Google",
+        "platform_entries": [("google", 80, None)],
+        "collection_date": "2026-07-14",
+    }
+    html = _pdf._practice_reputation_table_html([row_unverified])
+    assert "unverified affiliation" not in html, (
+        "_practice_reputation_table_html must not render '(unverified affiliation)' — "
+        "this tag was removed in R5 C-1"
+    )
+
+
+# ── Round 5 C-3: Estimated physician count pill suppressed ───────────────────
+
+def test_is_estimated_count_detects_estimated():
+    """_is_estimated_count must return True for strings containing 'estimated'."""
+    from perception.pdf import _is_estimated_count
+    assert _is_estimated_count("25-35 (estimated)")
+    assert _is_estimated_count("Estimated 30")
+    assert _is_estimated_count("approximately 20")
+    assert _is_estimated_count("approx 15")
+    assert _is_estimated_count("~25 physicians")
+
+
+def test_is_estimated_count_passes_exact_counts():
+    """_is_estimated_count must return False for clean integer-like strings."""
+    from perception.pdf import _is_estimated_count
+    assert not _is_estimated_count("12")
+    assert not _is_estimated_count("5-10")
+    assert not _is_estimated_count("20-30")
+
+
+def test_physician_pill_suppressed_for_estimated_count():
+    """Cards must not render the physician pill when physician_count contains
+    estimation language — this was an unrequested R4 artifact (C-3)."""
+    from perception.models import RankedProvider
+    from perception.pdf import _individual_entity_card
+
+    p = RankedProvider(
+        rank=1,
+        name="Test Orthopaedic Group",
+        report_type="practice",
+    )
+    p.physician_count = "25-35 (estimated)"
+    html = _individual_entity_card(p)
+    assert "surgeon-pill" not in html, (
+        "Estimated physician count must not be rendered as a pill — C-3 fix"
+    )
+
+
+def test_physician_pill_shown_for_exact_count():
+    """Cards must still render the physician pill for non-estimated counts."""
+    from perception.models import RankedProvider
+    from perception.pdf import _individual_entity_card
+
+    p = RankedProvider(
+        rank=1,
+        name="Test Orthopaedic Group",
+        report_type="practice",
+    )
+    p.physician_count = "12"
+    html = _individual_entity_card(p)
+    assert "surgeon-pill" in html, (
+        "Exact physician count '12' should still render as a pill"
+    )
