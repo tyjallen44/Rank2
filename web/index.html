@@ -3816,8 +3816,13 @@ function showSingleDone(r) {
     ? `/api/compare/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
     : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
 
+  const briefingBtn = (!isComparison && r.briefing_pdf_path)
+    ? `<button class="btn btn-ghost" onclick="window.location.href='/api/reports/${r.run_id}/briefing-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Briefing</button>`
+    : '';
+
   document.getElementById('done-actions').innerHTML = `
-    <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download PDF</button>
+    <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
+    ${briefingBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${isComparison ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
   document.getElementById('prog-done').classList.remove('hidden');
