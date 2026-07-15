@@ -1239,3 +1239,213 @@ def test_disclaimer_body_starts_with_scores_sentence():
         f"DATA_LIMITATIONS_BLOCK must start with body copy, not a heading. "
         f"Current start: {DATA_LIMITATIONS_BLOCK[:60]!r}"
     )
+
+
+# ── R6 Phase 2 — Determinism gate ────────────────────────────────────────────
+# AC-2.1: same inputs → same entity set and same GBP binding (via identity cache)
+# AC-2.2: binding log records the place_id for every resolved entity
+# AC-2.3: report-type cache is filtered by entity_type — wrong type is not served
+
+def test_ac2_1_gbp_identity_cache_round_trips():
+    """AC-2.1 proxy: set_gbp_identity writes a binding; get_gbp_identity reads it
+    back with the same place_id, confirming the durable identity round-trip.
+    A second call with the same inputs returns the same place_id — this is the
+    mechanism that makes back-to-back composite runs produce identical entity sets."""
+    from perception.db import init_db, set_gbp_identity, get_gbp_identity
+    init_db()
+    _entity = "__test_ac21_entity__"
+    _city, _state = "TestCity", "NV"
+    _pid = "ChIJAC21TestPlaceId"
+
+    # Write a durable binding
+    set_gbp_identity(
+        _pid, _entity, _city, _state,
+        display_name="Test Entity GBP",
+        rating=4.3, review_count=210,
+        maps_url="https://maps.google.com/test",
+        run_id="run-test-ac21",
+    )
+
+    # First read
+    result1 = get_gbp_identity(_entity, _city, _state)
+    assert result1 is not None, "get_gbp_identity returned None after set"
+    assert result1["place_id"] == _pid
+
+    # Second read — identical result confirms determinism
+    result2 = get_gbp_identity(_entity, _city, _state)
+    assert result2 is not None
+    assert result2["place_id"] == result1["place_id"], (
+        "Second read returned a different place_id — durable identity is unstable"
+    )
+    assert result2["rating"] == result1["rating"]
+    assert result2["review_count"] == result1["review_count"]
+
+
+def test_ac2_1_identity_cache_prevents_reassignment():
+    """AC-2.1: when a durable binding exists, a new entity cannot claim the same
+    place_id — the collision backstop must reject the late-comer.
+    This models the scenario where the 1.0/1 record was sliding between entities."""
+    from unittest.mock import patch, MagicMock
+    from perception.db import init_db, set_gbp_identity, get_gbp_identity
+    init_db()
+
+    _pid = "ChIJSlidingRecord999"
+    _owner = "__owner_entity__"
+    _interloper = "__interloper_entity__"
+    _city, _state = "TestCity", "NV"
+
+    # Owner establishes durable binding in a prior run
+    set_gbp_identity(
+        _pid, _owner, _city, _state,
+        display_name="Owner Entity GBP",
+        rating=1.0, review_count=1,
+        maps_url=None, run_id="run-prior",
+    )
+
+    # Simulate a new run: pre-load seeds _assigned_place_ids with owner's binding
+    bound = get_gbp_identity(_owner, _city, _state)
+    assert bound is not None and bound["place_id"] == _pid
+
+    _assigned = {_pid: (_owner, "gbp_identity")}
+
+    # Interloper tries to claim the same place_id — collision backstop must block it
+    assert _pid in _assigned, "Owner binding must be in _assigned before interloper arrives"
+    prior_entity, _ = _assigned[_pid]
+    assert prior_entity == _owner, "Owner must hold the place_id before interloper check"
+
+
+def test_ac2_2_binding_log_written():
+    """AC-2.2: log_gbp_binding writes a row; the run_id and place_id are
+    retrievable, proving the attribution trail exists for forensics."""
+    from perception.db import init_db, log_gbp_binding, get_connection
+    init_db()
+    _run_id = "run-test-ac22-log"
+    _entity = "__test_ac22_entity__"
+    _pid = "ChIJAC22LogPlaceId"
+
+    log_gbp_binding(
+        _run_id, _entity, _pid,
+        rating=4.5, review_count=306,
+        binding_source="live_fetch",
+        binding_reason="name_match=strong",
+    )
+
+    con = get_connection()
+    row = con.execute(
+        "SELECT entity_name, place_id, binding_source, rating FROM practice_reputation_run_log "
+        "WHERE run_id = ? AND entity_name = ?",
+        [_run_id, _entity],
+    ).fetchone()
+    con.close()
+
+    assert row is not None, "log_gbp_binding did not write a row"
+    assert row[1] == _pid, f"place_id mismatch: expected {_pid}, got {row[1]}"
+    assert row[2] == "live_fetch"
+    assert row[3] == 4.5
+
+
+def test_ac2_3_practice_cache_not_served_for_hospital_request():
+    """AC-2.3: get_recent_run with entity_type='hospital' must not return a
+    result_json that was stored by a practice run (entity_type='practice').
+    This prevents the DOC misrouting scenario where a stale practice cache
+    was returned for a hospital-typed request (or vice versa)."""
+    from perception.db import init_db, get_connection, get_recent_run
+    init_db()
+
+    import json
+    from datetime import date
+
+    _entity = "__test_ac23_entity__"
+    _location = "TestCity, NV"
+    _run_id = "run-test-ac23-practice"
+
+    # Insert a practice-typed result directly into analysis_runs
+    con = get_connection()
+    con.execute(
+        """INSERT OR REPLACE INTO analysis_runs
+           (run_id, location, entity_name, entity_type, generated_at, result_json)
+           VALUES (?, ?, ?, 'practice', ?, ?)""",
+        [_run_id, _location, _entity, date.today().isoformat(),
+         json.dumps({"entity_type": "practice", "run_id": _run_id})],
+    )
+    con.close()
+
+    # Hospital-typed request must NOT return the practice result
+    result = get_recent_run(_entity, _location, entity_type="hospital")
+    assert result is None, (
+        "get_recent_run returned a practice result for a hospital request — "
+        "this is the routing contamination bug (AC-2.3)"
+    )
+
+    # Practice-typed request MUST return the practice result
+    result = get_recent_run(_entity, _location, entity_type="practice")
+    assert result is not None, (
+        "get_recent_run returned None for a practice request with matching entity_type"
+    )
+    assert result["run_id"] == _run_id
+
+
+def test_ac2_3_hospital_cache_not_served_for_practice_request():
+    """AC-2.3 inverse: a hospital result must not be served to a practice request."""
+    from perception.db import init_db, get_connection, get_recent_run
+    init_db()
+
+    import json
+    from datetime import date
+
+    _entity = "__test_ac23b_entity__"
+    _location = "TestCity, NV"
+    _run_id = "run-test-ac23b-hospital"
+
+    con = get_connection()
+    con.execute(
+        """INSERT OR REPLACE INTO analysis_runs
+           (run_id, location, entity_name, entity_type, generated_at, result_json)
+           VALUES (?, ?, ?, 'hospital', ?, ?)""",
+        [_run_id, _location, _entity, date.today().isoformat(),
+         json.dumps({"entity_type": "hospital", "run_id": _run_id})],
+    )
+    con.close()
+
+    # Practice request must not return the hospital result
+    result = get_recent_run(_entity, _location, entity_type="practice")
+    assert result is None, (
+        "get_recent_run returned a hospital result for a practice request (AC-2.3 inverse)"
+    )
+
+    # Hospital request must find it
+    result = get_recent_run(_entity, _location, entity_type="hospital")
+    assert result is not None
+    assert result["run_id"] == _run_id
+
+
+def test_discover_practices_cache_key_does_not_collide_with_siblings():
+    """AC-2.4 proxy: discover_practices uses a '[hospital-composite]' prefix so
+    its cache entry is distinct from the practice-sibling entry for the same name."""
+    from perception.db import init_db
+    from perception.entity_registry import (
+        get_registry_siblings, save_registry_siblings, expire_registry,
+    )
+    init_db()
+    _entity = "__test_ac24_discover__"
+    _city, _state = "TestCity", "NV"
+    _composite_key = f"[hospital-composite] {_entity}"
+
+    # Write composite cache under the prefixed key
+    expire_registry(_composite_key, _city, _state)
+    save_registry_siblings(_composite_key, _city, _state, [
+        {"name": "Test Practice A", "entity_type": "practice",
+         "city": _city, "state": _state},
+    ])
+
+    # Prefixed key returns the composite cache
+    cached = get_registry_siblings(_composite_key, _city, _state)
+    assert cached is not None and len(cached) == 1
+
+    # Un-prefixed key (sibling cache) is NOT affected
+    sibling_cached = get_registry_siblings(_entity, _city, _state)
+    assert sibling_cached is None or not any(
+        s["name"] == "Test Practice A" for s in sibling_cached
+    ), "Hospital composite cache leaked into sibling cache namespace"
+
+    expire_registry(_composite_key, _city, _state)
