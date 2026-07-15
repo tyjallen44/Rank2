@@ -56,6 +56,13 @@ from .analyzer import (
 
 _RUBRIC_VERSION = "practice-v1.0"
 
+# ── Alias parenthetical strip for anchor dedup ───────────────────────────────
+_ALIAS_PARENTHETICALS = re.compile(
+    r'\(\s*(?:main\s+(?:office|campus|location|clinic|site)|flagship'
+    r'|headquarters|hq|original\s+location|primary\s+location)\s*\)',
+    re.IGNORECASE,
+)
+
 # ── Address normalization for composite dedup ─────────────────────────────────
 _DIRECTIONAL_ABBR: dict[str, str] = {
     r"\bne\b": "northeast", r"\bnw\b": "northwest",
@@ -516,6 +523,14 @@ def _ground_and_score_practice(
     prov._score_ceiling_applied = ceiling_applied   # type: ignore[attr-defined]
     prov._score_ceiling_reason  = ceiling_reason    # type: ignore[attr-defined]
 
+    if ceiling_applied:
+        import sys as _sys
+        print(
+            f"[score_ceiling] {prov.name}: raw score capped at 74 "
+            f"({ceiling_reason})",
+            file=_sys.stderr,
+        )
+
 
 def _save_practice_extras(
     result: AnalysisResult,
@@ -801,7 +816,7 @@ def analyze_practice(
         def _is_anchor_duplicate(sibling_name: str, sibling_address: str = "") -> bool:
             if sibling_name.strip().lower() == _anchor_lc:
                 return True
-            # Bidirectional name-token AND (catches location-label variants like "(Main Office)")
+            # Bidirectional name-token AND (catches location-label variants)
             if (
                 _nmatch(entity_name, sibling_name) == "strong"
                 and _nmatch(sibling_name, entity_name) == "strong"
@@ -818,6 +833,24 @@ def analyze_practice(
                     remainder = re.sub(r'^[\s\-,]+', '', sn_lower[len(_anchor_lc):])
                     if remainder and _normalize_street(remainder) == _anchor_addr_norm:
                         return True
+            # Alias parenthetical strip: "(Main Office)" adds tokens that defeat the
+            # bidirectional AND.  Strip recognised parentheticals and retry.
+            _stripped = _ALIAS_PARENTHETICALS.sub("", sibling_name)
+            _stripped = re.sub(r"[\s\-,]+$", "", _stripped).strip()
+            if _stripped and _stripped.lower() != sibling_name.strip().lower():
+                if _stripped.strip().lower() == _anchor_lc:
+                    return True
+                if (
+                    _nmatch(entity_name, _stripped) == "strong"
+                    and _nmatch(_stripped, entity_name) == "strong"
+                ):
+                    return True
+                if _anchor_addr_norm:
+                    sn_lower_stripped = _stripped.lower()
+                    if sn_lower_stripped.startswith(_anchor_lc):
+                        _rem = re.sub(r'^[\s\-,]+', '', sn_lower_stripped[len(_anchor_lc):])
+                        if _rem and _normalize_street(_rem) == _anchor_addr_norm:
+                            return True
             return False
 
         deduped: list[dict] = []

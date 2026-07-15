@@ -160,10 +160,42 @@ def collect_platform_data(
         except Exception:
             pass
 
+    # Pre-load cached GBP bindings for non-anchor entities.  A binding cached from a
+    # prior run is used directly; this prevents rating records from sliding to a different
+    # entity when enumeration order changes between runs (A-1 durable identity).
+    try:
+        from .entity_registry import get_cached_gbp as _get_cached_gbp
+    except Exception:
+        _get_cached_gbp = None  # type: ignore[assignment]
+
     for p in practices:
         entity_name_key = p["name"]
         p_city  = p.get("city") or city
         p_state = p.get("state") or state
+
+        # Use cached GBP binding when available (non-anchor only; anchor is always re-fetched)
+        if not p.get("is_anchor") and _get_cached_gbp:
+            try:
+                _cached = _get_cached_gbp(hospital_name, city, state, entity_name_key)
+            except Exception:
+                _cached = None
+            if _cached and _cached.get("place_id"):
+                _pid_c = _cached["place_id"]
+                if _pid_c not in _assigned_place_ids:
+                    _assigned_place_ids[_pid_c] = (entity_name_key, "cached")
+                    google_data[entity_name_key] = (
+                        _cached["rating"], _cached["count"], _cached["url"], _pid_c
+                    )
+                else:
+                    import sys
+                    print(
+                        f"[practice_reputation] Cached place_id collision: {_pid_c} "
+                        f"already claimed — {entity_name_key} → Not established",
+                        file=sys.stderr,
+                    )
+                    google_data[entity_name_key] = (None, None, None, None)
+                continue
+
         try:
             read, _ = places.fetch_provider(entity_name_key, p_city, p_state)
         except Exception:
@@ -209,9 +241,14 @@ def collect_platform_data(
         # Update registry canonical name from confirmed GBP listing (non-anchor only).
         if not p.get("is_anchor") and read.matched_name:
             try:
-                from .entity_registry import update_canonical_name
+                from .entity_registry import update_canonical_name, set_cached_gbp
                 update_canonical_name(hospital_name, city, state,
                                       entity_name_key, read.matched_name)
+                # Write GBP binding to cache so subsequent runs use the durable place_id
+                if pid:
+                    set_cached_gbp(hospital_name, city, state, entity_name_key,
+                                   pid, read.rating, read.review_count,
+                                   _strip_tracking(read.maps_url))
             except Exception:
                 pass
 
@@ -324,6 +361,7 @@ def collect_platform_data(
             "entity_type":            p.get("entity_type", "practice"),
             "is_anchor":              bool(p.get("is_anchor", False)),
             "affiliation_verified":   affiliation_ok,
+            "google_place_id":        _g_pid,
             "google_rating":          g_rating,
             "google_count":           g_count,
             "google_url":             g_url,
@@ -408,6 +446,7 @@ def save_practice_reputation(run_id: str, practices: list[dict]) -> str:
             """INSERT INTO practice_reputation_practices
                (id, rep_run_id, practice_name, city, state, entity_type, is_anchor,
                 affiliation_verified,
+                google_place_id,
                 google_rating, google_count, google_url,
                 healthgrades_rating, healthgrades_count, healthgrades_url,
                 vitals_rating, vitals_count, vitals_url,
@@ -417,12 +456,13 @@ def save_practice_reputation(run_id: str, practices: list[dict]) -> str:
                 primary_url,
                 avg_rating, total_reviews, platforms_found, platforms_list,
                 not_established, collection_date, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             [
                 str(uuid.uuid4()), rep_run_id,
                 p["practice_name"], p.get("city"), p.get("state"),
                 p.get("entity_type", "practice"), p.get("is_anchor", False),
                 p.get("affiliation_verified", True),
+                p.get("google_place_id"),
                 p.get("google_rating"), p.get("google_count"), p.get("google_url"),
                 p.get("healthgrades_rating"), p.get("healthgrades_count"), p.get("healthgrades_url"),
                 p.get("vitals_rating"), p.get("vitals_count"), p.get("vitals_url"),

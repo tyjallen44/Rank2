@@ -782,7 +782,8 @@ def analyze_location(
         if not roster:
             # Auto-discover when no roster provided (comparison path — no UI confirmation step)
             from .practice_discovery import discover_practices
-            roster = discover_practices(entity_name, city, state, on_event=emit)
+            roster = discover_practices(entity_name, city, state, on_event=emit,
+                                        force_rerun=force_rerun)
 
         # Hospital-anchored table: the anchor hospital itself must NOT appear as a
         # row.  Exact-name guard: remove only the entry whose name is the hospital's

@@ -114,3 +114,58 @@ def expire_registry(entity_name: str, city: str, state: str) -> None:
         "DELETE FROM practice_entity_registry WHERE anchor_key = ?", [key]
     )
     con.close()
+
+
+def get_cached_gbp(
+    entity_name: str,
+    city: str,
+    state: str,
+    sibling_name: str,
+) -> Optional[dict]:
+    """Return cached GBP data for a sibling, or None if no cached binding exists.
+
+    Returns a dict with keys: place_id, rating, count, url.
+    Only returns data when place_id is set — a partial entry (canonical_name only)
+    is not sufficient to reconstruct the binding.
+    """
+    key = _anchor_key(entity_name, city, state)
+    now = datetime.utcnow().isoformat()
+    con = get_connection()
+    row = con.execute(
+        """SELECT place_id, cached_rating, cached_count, cached_url
+           FROM practice_entity_registry
+           WHERE anchor_key = ? AND LOWER(name) = LOWER(?) AND expires_at > ?
+             AND place_id IS NOT NULL""",
+        [key, sibling_name, now],
+    ).fetchone()
+    con.close()
+    if not row:
+        return None
+    return {"place_id": row[0], "rating": row[1], "count": row[2], "url": row[3]}
+
+
+def set_cached_gbp(
+    entity_name: str,
+    city: str,
+    state: str,
+    sibling_name: str,
+    place_id: str,
+    rating: Optional[float],
+    count: Optional[int],
+    url: Optional[str],
+) -> None:
+    """Write the GBP place_id and rating back to the registry entry for a sibling.
+
+    Called after a confirmed strong-match GBP fetch so that subsequent runs can
+    use the cached binding instead of re-fetching (durable identity, A-1).
+    """
+    key = _anchor_key(entity_name, city, state)
+    now = datetime.utcnow().isoformat()
+    con = get_connection()
+    con.execute(
+        """UPDATE practice_entity_registry
+           SET place_id = ?, cached_rating = ?, cached_count = ?, cached_url = ?, cached_at = ?
+           WHERE anchor_key = ? AND LOWER(name) = LOWER(?)""",
+        [place_id, rating, count, url, now, key, sibling_name],
+    )
+    con.close()

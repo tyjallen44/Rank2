@@ -342,6 +342,8 @@ def init_db() -> None:
         "vitals_url": "VARCHAR", "webmd_url": "VARCHAR",
         "yelp_url": "VARCHAR", "ratemds_url": "VARCHAR", "primary_url": "VARCHAR",
         "is_anchor": "BOOLEAN DEFAULT FALSE", "entity_type": "VARCHAR",
+        # Attribution audit trail: durable identity key for GBP record binding (A-1)
+        "google_place_id": "VARCHAR",
     }
     for _col, _def in _pr_col_defs.items():
         if _col not in _pr_cols:
@@ -377,6 +379,26 @@ def init_db() -> None:
         )
     except Exception:
         pass
+
+    # Migrate practice_entity_registry to add GBP-binding cache columns (A-1 durable identity)
+    _per_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name='practice_entity_registry'"
+    ).fetchall()}
+    for _col, _def in {
+        "place_id":     "VARCHAR",
+        "cached_rating": "DOUBLE",
+        "cached_count":  "INTEGER",
+        "cached_url":    "VARCHAR",
+        "cached_at":     "TIMESTAMP",
+    }.items():
+        if _col not in _per_cols:
+            try:
+                con.execute(
+                    f"ALTER TABLE practice_entity_registry ADD COLUMN {_col} {_def}"
+                )
+            except Exception:
+                pass
 
     con.execute("""
         CREATE TABLE IF NOT EXISTS tracked_entities (
