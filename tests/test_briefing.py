@@ -422,23 +422,9 @@ def test_no_two_from_same_tier():
             used_tiers.append(tk)
 
 
-def test_missing_battery_raises_validation_error():
-    """Phase 4: Absent battery_results must fail loudly — briefing must not generate."""
+def test_demo_absent_when_no_battery():
+    """Absent battery → demo=None, briefing still generates (graceful fallback)."""
     result = _make_result(battery_results=None)
-    errors = validate_briefing_inputs(result)
-    assert any("battery_results" in e for e in errors), (
-        f"Missing battery_results must appear in validation errors: {errors}"
-    )
-    try:
-        extract(result, "sales")
-        assert False, "Expected BriefingValidationError for missing battery"
-    except BriefingValidationError as exc:
-        assert any("battery" in m for m in exc.missing)
-
-
-def test_demo_absent_when_below_threshold():
-    """Battery present but no prompt meets the 80% threshold → demo=None (not a gate failure)."""
-    result = _make_result(battery_results=_make_battery(dominant_pct=0.60))
     br = extract(result, "sales")
     assert br.demo is None
 
@@ -520,17 +506,18 @@ def test_objections_always_two():
         )
 
 
-def test_demo_fallback_present_in_html_below_threshold():
-    """AC-4.1: When battery exists but below threshold, demo section renders a fallback note."""
+def test_demo_fallback_present_in_html_when_demo_absent():
+    """Demo section renders a fallback note whenever demo=None (battery absent or below threshold)."""
     from perception.briefing_pdf import render_briefing_html
-    result = _make_result(battery_results=_make_battery(dominant_pct=0.60))
-    br = extract(result, "sales")
-    assert br.demo is None
-    html_out = render_briefing_html(br)
-    assert "too variable" in html_out or "not recommended" in html_out, (
-        "Demo section must render 'too variable' fallback when below threshold"
-    )
-    assert "Live Demo Prompt" in html_out  # section header always present
+    for bat in (None, _make_battery(dominant_pct=0.60)):
+        result = _make_result(battery_results=bat)
+        br = extract(result, "sales")
+        assert br.demo is None
+        html_out = render_briefing_html(br)
+        assert "not available" in html_out or "not recommended" in html_out, (
+            f"Demo section must render fallback when demo=None (battery={bat})"
+        )
+        assert "Live Demo Prompt" in html_out
 
 
 def test_objections_key_off_actual_findings():

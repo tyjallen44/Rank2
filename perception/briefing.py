@@ -119,11 +119,6 @@ def validate_briefing_inputs(result: "AnalysisResult") -> list[str]:
         if getattr(ts, tk, None) is None:
             missing.append(f"rankings[0].tier_scores.{tk}")
 
-    # Battery results are a required input — absent battery → fail loudly.
-    # The "demo not recommended" fallback is only for battery present / no eligible prompt.
-    if result.battery_results is None:
-        missing.append("battery_results (required for demo section)")
-
     # Practice edition: anchor composite row required for full candidate pool
     if result.entity_type == "practice":
         if not result.practice_composite_rows:
