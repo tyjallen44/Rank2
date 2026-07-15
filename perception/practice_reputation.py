@@ -111,6 +111,7 @@ def collect_platform_data(
     city: str,
     state: str,
     on_event: Optional[Callable] = None,
+    run_id: Optional[str] = None,
 ) -> list[dict]:
     """
     Collect platform reputation data for each practice.
@@ -140,8 +141,35 @@ def collect_platform_data(
     #     entity row.  When two entities both best-match the same profile the
     #     stronger match wins; the other renders "Not established".
     from .data.places import _is_healthcare as _phc
+    from .db import get_gbp_identity, set_gbp_identity, log_gbp_binding
     google_data: dict[str, tuple] = {}  # entity name → (rating, count, maps_url, place_id)
     _assigned_place_ids: dict[str, tuple[str, str]] = {}  # place_id → (entity_name, match_strength)
+    _log_run_id = run_id or ""
+
+    # ── Pre-load durable GBP identity bindings ───────────────────────────────
+    # For each non-anchor entity, check whether a confirmed place_id binding
+    # exists from a prior run.  Seed _assigned_place_ids so the collision
+    # backstop prevents any live fetch from overwriting a durable binding.
+    for p in practices:
+        if p.get("is_anchor"):
+            continue
+        _ename = p["name"]
+        _pc    = p.get("city") or city
+        _ps    = p.get("state") or state
+        _bound = get_gbp_identity(_ename, _pc, _ps)
+        if _bound and _bound.get("place_id"):
+            _pid = _bound["place_id"]
+            if _pid not in _assigned_place_ids:
+                _assigned_place_ids[_pid] = (_ename, "gbp_identity")
+                google_data[_ename] = (
+                    _bound["rating"], _bound["review_count"],
+                    _bound["maps_url"], _pid,
+                )
+                log_gbp_binding(
+                    _log_run_id, _ename, _pid,
+                    _bound["rating"], _bound["review_count"],
+                    "gbp_identity_cache", "durable binding from prior run",
+                )
 
     # Pre-quarantine the anchor's place_id so no sibling can inherit it, even when
     # the anchor's own main-loop fetch returns verified=False (wrong top result, API
@@ -164,21 +192,32 @@ def collect_platform_data(
         entity_name_key = p["name"]
         p_city  = p.get("city") or city
         p_state = p.get("state") or state
+
+        # Skip entities whose GBP binding was already loaded from the identity cache.
+        if entity_name_key in google_data:
+            continue
+
         try:
             read, _ = places.fetch_provider(entity_name_key, p_city, p_state)
         except Exception:
             google_data[entity_name_key] = (None, None, None, None)
+            log_gbp_binding(_log_run_id, entity_name_key, None, None, None,
+                            "not_established", "fetch_provider raised exception")
             continue
 
         if not read.verified:
             # fetch_provider already rejected weak/none name matches
             google_data[entity_name_key] = (None, None, None, None)
+            log_gbp_binding(_log_run_id, entity_name_key, None, None, None,
+                            "not_established", f"unverified: {read.reason or read.name_match}")
             continue
 
         # Category gate: if Google returned a non-empty types list, confirm it's healthcare.
         # Only a real non-empty list triggers the gate; missing/empty types pass through.
         if isinstance(read.types, list) and read.types and not _phc(read.types):
             google_data[entity_name_key] = (None, None, None, None)
+            log_gbp_binding(_log_run_id, entity_name_key, read.place_id, None, None,
+                            "not_established", "category gate: non-healthcare types")
             continue
 
         # Collision backstop: if this place_id was already claimed by another entity,
@@ -201,6 +240,9 @@ def collect_platform_data(
                     file=sys.stderr,
                 )
                 google_data[entity_name_key] = (None, None, None, None)
+                log_gbp_binding(_log_run_id, entity_name_key, pid, None, None,
+                                "not_established",
+                                f"place_id collision with '{prior_entity}' ({prior_strength})")
                 continue
 
         if pid:
@@ -215,10 +257,26 @@ def collect_platform_data(
             except Exception:
                 pass
 
+        # Write durable GBP identity binding for non-anchor entities (strong match only).
+        if not p.get("is_anchor") and pid and read.name_match == "strong":
+            try:
+                set_gbp_identity(
+                    pid, entity_name_key, p_city, p_state,
+                    read.matched_name, read.rating,
+                    read.review_count, _strip_tracking(read.maps_url),
+                    _log_run_id,
+                )
+            except Exception:
+                pass
+
+        _url = _strip_tracking(read.maps_url)
+        log_gbp_binding(_log_run_id, entity_name_key, pid,
+                        read.rating, read.review_count,
+                        "live_fetch", f"name_match={read.name_match}")
         google_data[entity_name_key] = (
             read.rating,
             read.review_count,
-            _strip_tracking(read.maps_url),
+            _url,
             pid,
         )
 

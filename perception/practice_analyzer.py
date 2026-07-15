@@ -599,7 +599,7 @@ def analyze_practice(
     if not force_rerun:
         from .db import get_recent_run
         _loc_key = f"{city}, {state}"
-        _cached = get_recent_run(entity_name, _loc_key)
+        _cached = get_recent_run(entity_name, _loc_key, entity_type="practice")
         if _cached:
             emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
             return AnalysisResult.model_validate_json(_cached["result_json"])
@@ -836,7 +836,7 @@ def analyze_practice(
         roster = [anchor_entry] + sibling_roster
 
         result.practice_composite_rows = collect_platform_data(
-            roster, entity_name, city, state, on_event=emit
+            roster, entity_name, city, state, on_event=emit, run_id=result.run_id
         )
 
         if physician_composite and result.practice_composite_rows:

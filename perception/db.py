@@ -378,6 +378,57 @@ def init_db() -> None:
     except Exception:
         pass
 
+    # ── GBP durable identity table ───────────────────────────────────────────
+    # Keyed by place_id (Google's permanent listing identifier).  Written once
+    # on first confirmed strong-match fetch; read at the start of every composite
+    # run to seed _assigned_place_ids before any live API call.  This prevents
+    # the same listing from sliding between entity names across runs.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS gbp_identity (
+            place_id      VARCHAR PRIMARY KEY,
+            entity_name   VARCHAR NOT NULL,
+            city          VARCHAR NOT NULL,
+            state         VARCHAR NOT NULL,
+            display_name  VARCHAR,
+            rating        DOUBLE,
+            review_count  INTEGER,
+            maps_url      VARCHAR,
+            bound_at      TIMESTAMP NOT NULL,
+            run_id        VARCHAR
+        )
+    """)
+    try:
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_gbp_identity_entity "
+            "ON gbp_identity (LOWER(entity_name), LOWER(city), LOWER(state))"
+        )
+    except Exception:
+        pass
+
+    # ── Per-row binding audit log ─────────────────────────────────────────────
+    # Records which place_id was bound to each entity in each composite run,
+    # and whether the binding came from the identity cache or a live fetch.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS practice_reputation_run_log (
+            id             VARCHAR PRIMARY KEY,
+            run_id         VARCHAR NOT NULL,
+            entity_name    VARCHAR NOT NULL,
+            place_id       VARCHAR,
+            rating         DOUBLE,
+            review_count   INTEGER,
+            binding_source VARCHAR,
+            binding_reason VARCHAR,
+            logged_at      TIMESTAMP
+        )
+    """)
+    try:
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_prrl_run_id "
+            "ON practice_reputation_run_log (run_id)"
+        )
+    except Exception:
+        pass
+
     con.execute("""
         CREATE TABLE IF NOT EXISTS tracked_entities (
             id           VARCHAR PRIMARY KEY,
@@ -647,26 +698,130 @@ def get_entity_trend(entity_name: str) -> list[dict]:
     return results
 
 
-def get_recent_run(entity_name: str, location: str, days: int = 90) -> dict | None:
+def get_recent_run(
+    entity_name: str,
+    location: str,
+    days: int = 90,
+    entity_type: str | None = None,
+) -> dict | None:
     """Return the most recent individual analysis within `days` days for this entity/location.
 
-    Matching is case-insensitive on both entity_name and location. Returns a dict with
-    keys run_id, generated_at, result_json, or None if no qualifying run exists.
+    Matching is case-insensitive on both entity_name and location.  Pass
+    entity_type="practice" or entity_type="hospital" to restrict the cache
+    lookup to the correct report path — this prevents a cached hospital result
+    from being served to a practice request (and vice-versa).
+
+    Returns a dict with keys run_id, generated_at, result_json, or None.
     """
     cutoff = (date.today() - timedelta(days=days)).isoformat()
     con = get_connection()
+
+    if entity_type == "practice":
+        type_clause = "AND entity_type = 'practice'"
+        params = [entity_name, location, cutoff]
+    elif entity_type == "hospital":
+        type_clause = "AND (entity_type = 'hospital' OR entity_type IS NULL)"
+        params = [entity_name, location, cutoff]
+    else:
+        type_clause = ""
+        params = [entity_name, location, cutoff]
+
     row = con.execute(
-        """SELECT run_id, generated_at, result_json
+        f"""SELECT run_id, generated_at, result_json
            FROM analysis_runs
            WHERE LOWER(entity_name) = LOWER(?)
              AND LOWER(location) = LOWER(?)
              AND generated_at >= ?
              AND result_json IS NOT NULL
+             {type_clause}
            ORDER BY generated_at DESC, run_id DESC
            LIMIT 1""",
-        [entity_name, location, cutoff],
+        params,
     ).fetchone()
     con.close()
     if not row:
         return None
     return {"run_id": str(row[0]), "generated_at": str(row[1]), "result_json": row[2]}
+
+
+def get_gbp_identity(
+    entity_name: str, city: str, state: str, days: int = 90
+) -> dict | None:
+    """Return a durable GBP binding for this entity if one exists within TTL.
+
+    Returns dict with keys: place_id, rating, review_count, maps_url, display_name.
+    """
+    from datetime import datetime, timedelta as _td
+    cutoff = (datetime.utcnow() - _td(days=days)).isoformat()
+    con = get_connection()
+    row = con.execute(
+        """SELECT place_id, rating, review_count, maps_url, display_name
+           FROM gbp_identity
+           WHERE LOWER(entity_name) = LOWER(?)
+             AND LOWER(city) = LOWER(?)
+             AND LOWER(state) = LOWER(?)
+             AND bound_at >= ?""",
+        [entity_name, city, state, cutoff],
+    ).fetchone()
+    con.close()
+    if not row:
+        return None
+    return {
+        "place_id": row[0], "rating": row[1],
+        "review_count": row[2], "maps_url": row[3], "display_name": row[4],
+    }
+
+
+def set_gbp_identity(
+    place_id: str,
+    entity_name: str,
+    city: str,
+    state: str,
+    display_name: str | None,
+    rating: float | None,
+    review_count: int | None,
+    maps_url: str | None,
+    run_id: str,
+) -> None:
+    """Write or update the durable GBP binding for a place_id.
+
+    Uses INSERT OR REPLACE so that a stronger/fresher binding supersedes a
+    stale one without leaving orphan rows.
+    """
+    from datetime import datetime
+    now = datetime.utcnow().isoformat()
+    con = get_connection()
+    con.execute(
+        """INSERT OR REPLACE INTO gbp_identity
+           (place_id, entity_name, city, state, display_name,
+            rating, review_count, maps_url, bound_at, run_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [place_id, entity_name, city, state, display_name,
+         rating, review_count, maps_url, now, run_id],
+    )
+    con.close()
+
+
+def log_gbp_binding(
+    run_id: str,
+    entity_name: str,
+    place_id: str | None,
+    rating: float | None,
+    review_count: int | None,
+    binding_source: str,
+    binding_reason: str,
+) -> None:
+    """Append one row to the per-run GBP binding audit log."""
+    import uuid as _uuid
+    from datetime import datetime
+    con = get_connection()
+    con.execute(
+        """INSERT INTO practice_reputation_run_log
+           (id, run_id, entity_name, place_id, rating, review_count,
+            binding_source, binding_reason, logged_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [str(_uuid.uuid4()), run_id, entity_name, place_id,
+         rating, review_count, binding_source, binding_reason,
+         datetime.utcnow().isoformat()],
+    )
+    con.close()

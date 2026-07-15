@@ -547,7 +547,7 @@ def analyze_location(
     if individual_report and entity_name and not force_rerun:
         from .db import get_recent_run
         _loc_key = f"{city}, {state}"
-        _cached = get_recent_run(entity_name, _loc_key)
+        _cached = get_recent_run(entity_name, _loc_key, entity_type="hospital")
         if _cached:
             emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
             return AnalysisResult.model_validate_json(_cached["result_json"])
@@ -782,7 +782,8 @@ def analyze_location(
         if not roster:
             # Auto-discover when no roster provided (comparison path — no UI confirmation step)
             from .practice_discovery import discover_practices
-            roster = discover_practices(entity_name, city, state, on_event=emit)
+            roster = discover_practices(entity_name, city, state, on_event=emit,
+                                        force_rerun=force_rerun)
 
         # Hospital-anchored table: the anchor hospital itself must NOT appear as a
         # row.  Exact-name guard: remove only the entry whose name is the hospital's
@@ -796,7 +797,7 @@ def analyze_location(
         ]
 
         result.practice_composite_rows = collect_platform_data(
-            roster, entity_name, city, state, on_event=emit
+            roster, entity_name, city, state, on_event=emit, run_id=result.run_id
         )
 
         if physician_composite and result.practice_composite_rows:
@@ -1089,15 +1090,16 @@ def compare_locations(
         if on_event:
             on_event(ev)
 
-    def _load_cached(entity_name: str, city: str, state: str) -> _AR | None:
+    def _load_cached(entity_name: str, city: str, state: str, etype: str | None) -> _AR | None:
         location = f"{city}, {state}"
-        cached = get_recent_run(entity_name, location)
+        etype_key = "practice" if etype == "practice" else "hospital"
+        cached = get_recent_run(entity_name, location, entity_type=etype_key)
         if cached:
             return _AR.model_validate_json(cached["result_json"])
         return None
 
     # ── Phase 1: Entity A ────────────────────────────────────────────────────
-    cached_a = None if force_rerun_a else _load_cached(entity_a_name, city_a, state_a)
+    cached_a = None if force_rerun_a else _load_cached(entity_a_name, city_a, state_a, entity_type_a)
     if cached_a:
         emit({"type": "phase", "name": "entity_a", "text": f"Using cached result for {entity_a_name}"})
         result_a = cached_a
@@ -1122,7 +1124,7 @@ def compare_locations(
             )
 
     # ── Phase 2: Entity B ────────────────────────────────────────────────────
-    cached_b = None if force_rerun_b else _load_cached(entity_b_name, city_b, state_b)
+    cached_b = None if force_rerun_b else _load_cached(entity_b_name, city_b, state_b, entity_type_b)
     if cached_b:
         emit({"type": "phase", "name": "entity_b", "text": f"Using cached result for {entity_b_name}"})
         result_b = cached_b
