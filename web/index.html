@@ -3466,14 +3466,17 @@ function onBriefingToggle() {
   const checked = document.getElementById('ir-briefing-toggle')?.checked;
   const wrap = document.getElementById('ir-briefing-variant-wrap');
   if (wrap) wrap.style.display = checked ? 'block' : 'none';
+  const pcCb = document.getElementById('ir-practice-composite');
+  const phCb = document.getElementById('ir-physician-composite');
   if (checked) {
-    const pcCb = document.getElementById('ir-practice-composite');
-    if (pcCb && !pcCb.checked) {
-      pcCb.checked = true;
-      onPracticeCompositeChange();  // enables the physician checkbox
-    }
-    const phCb = document.getElementById('ir-physician-composite');
-    if (phCb) phCb.checked = true;
+    // Briefing requires composite data — lock both on so user can see they're forced
+    if (pcCb) { pcCb.checked = true; pcCb.disabled = true; }
+    if (phCb) { phCb.checked = true; phCb.disabled = true; }
+  } else {
+    // Briefing off — clear and unlock; let onPracticeCompositeChange re-apply disabled state
+    if (pcCb) { pcCb.checked = false; pcCb.disabled = false; }
+    if (phCb) { phCb.checked = false; }
+    onPracticeCompositeChange();
   }
 }
 
