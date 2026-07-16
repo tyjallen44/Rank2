@@ -1383,9 +1383,9 @@ html, body {
             <input type="checkbox" id="ir-teaser-toggle">
             <span class="agg-label">Create Teaser Report</span>
           </label>
-          <label class="aggregate-toggle" style="margin-top:10px" title="Bypass the 90-day score cache and run a fresh analysis.">
+          <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
             <input type="checkbox" id="ir-force-rerun">
-            <span class="agg-label">Re-run analysis (ignore cached results)</span>
+            <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
           </label>
         </div>
 
@@ -1564,9 +1564,9 @@ html, body {
             <input type="checkbox" id="cmp-teaser">
             <span class="agg-label">Create Teaser version</span>
           </label>
-          <label class="aggregate-toggle mt10">
+          <label class="aggregate-toggle mt10" style="display:none" id="cmp-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
             <input type="checkbox" id="cmp-force-rerun">
-            <span class="agg-label">Re-run analysis (ignore cached results within 90 days)</span>
+            <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
           </label>
           <div id="cmp-run-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
@@ -2608,6 +2608,11 @@ function showApp() {
   document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
   const adminBtn = document.getElementById('nav-admin');
   if (adminBtn) adminBtn.style.display = (_role === 'admin') ? 'flex' : 'none';
+  const isAdmin = (_role === 'admin');
+  const irLock = document.getElementById('ir-override-lock-label');
+  const cmpLock = document.getElementById('cmp-override-lock-label');
+  if (irLock)  irLock.style.display  = isAdmin ? '' : 'none';
+  if (cmpLock) cmpLock.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
     el.textContent = 'build ' + d.build;
@@ -3332,8 +3337,7 @@ async function runComparison() {
     practice_roster_a:    [],
     practice_composite_b: !!pcB,
     practice_roster_b:    [],
-    force_rerun_a: document.getElementById('cmp-force-rerun').checked,
-    force_rerun_b: document.getElementById('cmp-force-rerun').checked,
+    override_today_lock: document.getElementById('cmp-force-rerun').checked,
   };
 
   const btn = document.getElementById('cmp-run-btn');
@@ -3382,7 +3386,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
   const aggregate          = document.getElementById('ir-agg-toggle').checked;
   const skip_pdf           = document.getElementById('ir-skip-pdf-toggle').checked;
   const teaser_report      = document.getElementById('ir-teaser-toggle').checked;
-  const force_rerun        = document.getElementById('ir-force-rerun')?.checked || false;
+  const override_today_lock = document.getElementById('ir-force-rerun')?.checked || false;
   const physician_composite = practiceComposite && document.getElementById('ir-physician-composite')?.checked;
   const briefingChecked = document.getElementById('ir-briefing-toggle')?.checked;
   const briefing_variant = (briefingChecked && !skip_pdf)
@@ -3405,7 +3409,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     practice_roster:      practiceRoster,
     physician_composite,
     physician_roster:     physician_composite ? physicianRoster : {},
-    force_rerun,
+    override_today_lock,
     briefing_variant,
   };
 

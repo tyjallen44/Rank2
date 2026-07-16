@@ -246,6 +246,7 @@ def _job_run_single(
             physician_composite=job.get("physician_composite", False),
             physician_roster=job.get("physician_roster") or {},
             force_rerun=job.get("force_rerun", False),
+            override_today_lock=job.get("override_today_lock", False),
             briefing_variant=job.get("briefing_variant"),
         )
         set_run_role(result.run_id, job["role"])
@@ -299,6 +300,7 @@ def _job_run_practice(
             physician_composite=job.get("physician_composite", False),
             physician_roster=job.get("physician_roster") or {},
             force_rerun=job.get("force_rerun", False),
+            override_today_lock=job.get("override_today_lock", False),
             briefing_variant=job.get("briefing_variant"),
         )
         set_run_role(result.run_id, job["role"])
@@ -409,6 +411,7 @@ class AnalyzeRequest(BaseModel):
     physician_composite: bool = False       # include physician sub-rows in practice composite
     physician_roster: dict = {}             # {practice_name: [{name, npi, specialty, credential}]}
     force_rerun: bool = False               # bypass 90-day score cache
+    override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
     briefing_variant: Optional[str] = None  # "sales" | "cs" | None — generates Pulse Briefing companion
 
 
@@ -438,6 +441,7 @@ class CompareRequest(BaseModel):
     practice_roster_b: List[dict] = []
     force_rerun_a: bool = False
     force_rerun_b: bool = False
+    override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
 
 
 @app.post("/api/analyze")
@@ -474,6 +478,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["physician_composite"] = req.physician_composite
     _jobs[job_id]["physician_roster"] = req.physician_roster
     _jobs[job_id]["force_rerun"] = req.force_rerun
+    _jobs[job_id]["override_today_lock"] = req.override_today_lock and (role == "admin")
     _jobs[job_id]["briefing_variant"] = req.briefing_variant
 
     if req.entity_type == "practice" and entity_name:
@@ -526,6 +531,7 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
             practice_roster_b=req_dict.get("practice_roster_b") or [],
             force_rerun_a=req_dict.get("force_rerun_a", False),
             force_rerun_b=req_dict.get("force_rerun_b", False),
+            override_today_lock=req_dict.get("override_today_lock", False),
         )
         job["status"] = "done"
         job["result"] = {
@@ -548,7 +554,10 @@ async def start_comparison(req: CompareRequest, payload: dict = Depends(get_curr
     brand = payload.get("brand", "original")
     role  = payload.get("role", "user")
     job_id = _new_job(role, brand)
-    _pool.submit(_job_run_comparison, job_id, req.dict())
+    req_dict = req.dict()
+    # Gate override_today_lock to admin users only
+    req_dict["override_today_lock"] = req.override_today_lock and (role == "admin")
+    _pool.submit(_job_run_comparison, job_id, req_dict)
     return {"job_id": job_id}
 
 

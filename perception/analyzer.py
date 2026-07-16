@@ -523,6 +523,7 @@ def analyze_location(
     physician_roster: dict | None = None,
     force_rerun: bool = False,
     briefing_variant: str | None = None,
+    override_today_lock: bool = False,
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -544,14 +545,21 @@ def analyze_location(
     emit({"type": "phase", "name": "starting", "text": "Starting analysis"})
     init_db()
 
-    # 90-day score reuse: return cached result for individual reports
-    if individual_report and entity_name and not force_rerun:
+    # Cache logic for individual reports
+    if individual_report and entity_name and not override_today_lock:
         from .db import get_recent_run
         _loc_key = f"{city}, {state}"
-        _cached = get_recent_run(entity_name, _loc_key, entity_type="hospital")
-        if _cached:
-            emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
-            return AnalysisResult.model_validate_json(_cached["result_json"])
+        # Same-day lock: always serve today's result regardless of force_rerun
+        _today = get_recent_run(entity_name, _loc_key, days=0, entity_type="hospital")
+        if _today:
+            emit({"type": "phase", "name": "cached", "text": f"Returning today's cached result for {entity_name}"})
+            return AnalysisResult.model_validate_json(_today["result_json"])
+        # 90-day cache (only when force_rerun is not set)
+        if not force_rerun:
+            _cached = get_recent_run(entity_name, _loc_key, entity_type="hospital")
+            if _cached:
+                emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
+                return AnalysisResult.model_validate_json(_cached["result_json"])
 
     client = _get_client()
     run_id = str(uuid.uuid4())
@@ -1099,11 +1107,13 @@ def compare_locations(
     practice_roster_b: list[dict] | None = None,
     force_rerun_a: bool = False,
     force_rerun_b: bool = False,
+    override_today_lock: bool = False,
 ) -> tuple[AnalysisResult, AnalysisResult, object]:
     """Run two individual-report analyses then synthesize a structured comparison.
 
     If a run for either entity exists within the last 90 days and the corresponding
     force_rerun flag is False, the cached result is reused instead of re-scoring.
+    Same-day lock: today's result is always served unless override_today_lock=True.
 
     Returns (result_a, result_b, comparison_summary).
     """
@@ -1118,16 +1128,23 @@ def compare_locations(
         if on_event:
             on_event(ev)
 
-    def _load_cached(entity_name: str, city: str, state: str, etype: str | None) -> _AR | None:
+    def _load_cached(entity_name: str, city: str, state: str, etype: str | None, force_rerun: bool) -> _AR | None:
         location = f"{city}, {state}"
         etype_key = "practice" if etype == "practice" else "hospital"
-        cached = get_recent_run(entity_name, location, entity_type=etype_key)
-        if cached:
-            return _AR.model_validate_json(cached["result_json"])
+        if not override_today_lock:
+            # Same-day lock: always serve today's result
+            today = get_recent_run(entity_name, location, days=0, entity_type=etype_key)
+            if today:
+                return _AR.model_validate_json(today["result_json"])
+        # 90-day cache (skipped when force_rerun or override_today_lock)
+        if not force_rerun and not override_today_lock:
+            cached = get_recent_run(entity_name, location, entity_type=etype_key)
+            if cached:
+                return _AR.model_validate_json(cached["result_json"])
         return None
 
     # ── Phase 1: Entity A ────────────────────────────────────────────────────
-    cached_a = None if force_rerun_a else _load_cached(entity_a_name, city_a, state_a, entity_type_a)
+    cached_a = _load_cached(entity_a_name, city_a, state_a, entity_type_a, force_rerun_a)
     if cached_a:
         emit({"type": "phase", "name": "entity_a", "text": f"Using cached result for {entity_a_name}"})
         result_a = cached_a
@@ -1152,7 +1169,7 @@ def compare_locations(
             )
 
     # ── Phase 2: Entity B ────────────────────────────────────────────────────
-    cached_b = None if force_rerun_b else _load_cached(entity_b_name, city_b, state_b, entity_type_b)
+    cached_b = _load_cached(entity_b_name, city_b, state_b, entity_type_b, force_rerun_b)
     if cached_b:
         emit({"type": "phase", "name": "entity_b", "text": f"Using cached result for {entity_b_name}"})
         result_b = cached_b
