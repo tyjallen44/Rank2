@@ -1187,15 +1187,48 @@ def compare_locations(
         messages=[{"role": "user", "content": user_prompt}],
     ).content[0].text.strip()
 
+    def _sanitize_json(s: str) -> str:
+        """Replace unescaped literal newlines inside JSON string values with a space.
+
+        The model occasionally wraps long strings across lines without escaping
+        the newline character, producing invalid JSON that json.loads rejects.
+        """
+        out = []
+        in_string = False
+        escape_next = False
+        for ch in s:
+            if escape_next:
+                out.append(ch)
+                escape_next = False
+            elif ch == "\\":
+                out.append(ch)
+                escape_next = True
+            elif ch == '"':
+                in_string = not in_string
+                out.append(ch)
+            elif ch == "\n" and in_string:
+                out.append(" ")
+            else:
+                out.append(ch)
+        return "".join(out)
+
     try:
         # Strip markdown fences that the model sometimes adds despite being told not to
         cleaned = raw
         if cleaned.startswith("```"):
             cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
             cleaned = re.sub(r"\s*```$", "", cleaned.rstrip())
+        # Fix unescaped newlines inside string values (invalid JSON but models do it)
+        cleaned = _sanitize_json(cleaned)
         comp_data = json.loads(cleaned)
     except Exception:
-        comp_data = {"headline": "", "similarities": [], "differences": [], "verdict": raw}
+        # Last resort: try to pull the JSON object out of any surrounding text
+        try:
+            first = raw.index("{")
+            last = raw.rindex("}")
+            comp_data = json.loads(_sanitize_json(raw[first:last + 1]))
+        except Exception:
+            comp_data = {"headline": "", "similarities": [], "differences": [], "verdict": raw}
 
     comparison = ComparisonSummary(
         headline=comp_data.get("headline", ""),
