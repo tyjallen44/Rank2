@@ -602,13 +602,13 @@ def analyze_practice(
     _loc_key = f"{city}, {state}"
     if not override_today_lock:
         # Same-day lock: always serve today's result regardless of force_rerun
-        _today = get_recent_run(entity_name, _loc_key, days=0, entity_type="practice")
+        _today = get_recent_run(entity_name, _loc_key, days=0, entity_type="practice", aggregate=aggregate)
         if _today:
             emit({"type": "phase", "name": "cached", "text": f"Returning today's cached result for {entity_name}"})
             return AnalysisResult.model_validate_json(_today["result_json"])
         # 90-day cache (only when force_rerun is not set)
         if not force_rerun:
-            _cached = get_recent_run(entity_name, _loc_key, entity_type="practice")
+            _cached = get_recent_run(entity_name, _loc_key, entity_type="practice", aggregate=aggregate)
             if _cached:
                 emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
                 return AnalysisResult.model_validate_json(_cached["result_json"])

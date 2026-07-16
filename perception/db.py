@@ -718,13 +718,15 @@ def get_recent_run(
     location: str,
     days: int = 90,
     entity_type: str | None = None,
+    aggregate: bool | None = None,
 ) -> dict | None:
     """Return the most recent individual analysis within `days` days for this entity/location.
 
     Matching is case-insensitive on both entity_name and location.  Pass
     entity_type="practice" or entity_type="hospital" to restrict the cache
     lookup to the correct report path — this prevents a cached hospital result
-    from being served to a practice request (and vice-versa).
+    from being served to a practice request (and vice-versa).  Pass aggregate=True/False
+    to differentiate aggregate vs. non-aggregate practice runs.
 
     Returns a dict with keys run_id, generated_at, result_json, or None.
     """
@@ -741,6 +743,11 @@ def get_recent_run(
         type_clause = ""
         params = [entity_name, location, cutoff]
 
+    agg_clause = ""
+    if aggregate is not None:
+        agg_clause = "AND aggregate = ?"
+        params = list(params) + [aggregate]
+
     row = con.execute(
         f"""SELECT run_id, generated_at, result_json
            FROM analysis_runs
@@ -749,6 +756,7 @@ def get_recent_run(
              AND generated_at >= ?
              AND result_json IS NOT NULL
              {type_clause}
+             {agg_clause}
            ORDER BY generated_at DESC, run_id DESC
            LIMIT 1""",
         params,
