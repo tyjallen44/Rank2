@@ -2470,11 +2470,10 @@ def _comparison_summary_block(comparison) -> str:
   </div>"""
 
 
-def _entity_deep_dive(result: AnalysisResult) -> str:
+def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True) -> str:
     """Full individual-report content for one entity: card + assessment + improvement."""
     p = result.rankings[0] if result.rankings else None
     name = _e(result.entity_name or result.location)
-    divider = f'<div style="border-top:2px solid {_TEAL};margin:28px 0 20px;opacity:0.3"></div>'
 
     card_html = _individual_entity_card(p) if p else ""
 
@@ -2486,26 +2485,27 @@ def _entity_deep_dive(result: AnalysisResult) -> str:
     <p>{assessment}</p>
   </div>"""
 
-    # Improvement Opportunities
-    if result.improvement_sections:
-        parts = []
-        for i, sec in enumerate(result.improvement_sections, 1):
-            items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
-            parts.append(
-                f'<div class="advice-group">'
-                f'<div class="advice-group-title">{i}. {_e(_strip_md(sec.title))}</div>'
-                f'<div class="advice-group-desc">{_e(_strip_md(sec.description))}</div>'
-                f'<ol>{items_li}</ol>'
-                f'</div>'
-            )
-        improvement_body = "\n".join(parts)
-    elif result.practical_advice:
-        flat = "\n".join(f"<li>{_e(_strip_md(a))}</li>" for a in result.practical_advice)
-        improvement_body = f"<ol>{flat}</ol>"
-    else:
-        improvement_body = ""
+    improvement_html = ""
+    if include_roadmap:
+        if result.improvement_sections:
+            parts = []
+            for i, sec in enumerate(result.improvement_sections, 1):
+                items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
+                parts.append(
+                    f'<div class="advice-group">'
+                    f'<div class="advice-group-title">{i}. {_e(_strip_md(sec.title))}</div>'
+                    f'<div class="advice-group-desc">{_e(_strip_md(sec.description))}</div>'
+                    f'<ol>{items_li}</ol>'
+                    f'</div>'
+                )
+            improvement_body = "\n".join(parts)
+        elif result.practical_advice:
+            flat = "\n".join(f"<li>{_e(_strip_md(a))}</li>" for a in result.practical_advice)
+            improvement_body = f"<ol>{flat}</ol>"
+        else:
+            improvement_body = ""
 
-    improvement_html = f"""
+        improvement_html = f"""
   <div class="advice" style="margin-top:20px">
     <div class="section-title">AI Visibility Improvement Roadmap</div>
     {improvement_body}
@@ -2584,10 +2584,10 @@ def _build_comparison_html(
 
   {_comparison_summary_block(comparison)}
 
-  {_entity_deep_dive(result_a)}
+  {_entity_deep_dive(result_a, include_roadmap=False)}
   {_practice_reputation_table_html(result_a.practice_composite_rows, result_a.generated_at.strftime("%B %d, %Y")) if result_a.practice_composite_rows else ""}
 
-  {_entity_deep_dive(result_b)}
+  {_entity_deep_dive(result_b, include_roadmap=False)}
   {_practice_reputation_table_html(result_b.practice_composite_rows, result_b.generated_at.strftime("%B %d, %Y")) if result_b.practice_composite_rows else ""}
 
   {_practice_appendix_html() if (result_a.entity_type == "practice" or result_b.entity_type == "practice") else _appendix_html()}
