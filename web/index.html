@@ -1363,6 +1363,10 @@ html, body {
             <input type="checkbox" id="ir-physician-composite" disabled>
             <span class="agg-label">Include Physicians in Composite</span>
           </label>
+          <label class="aggregate-toggle" id="ir-practice-agg-wrap" style="margin-top:10px;display:none" title="Instruct the AI to discover and roll all practice locations into the core analysis scores and narrative — without adding a composite table to the report.">
+            <input type="checkbox" id="ir-practice-agg-toggle">
+            <span class="agg-label">Include all locations in analysis</span>
+          </label>
           <label class="aggregate-toggle" id="ir-briefing-wrap" style="margin-top:10px" title="Generate a one-page Pulse Briefing companion with talking points for a sales or CS meeting. Requires full data collection scope.">
             <input type="checkbox" id="ir-briefing-toggle" onchange="onBriefingToggle()">
             <span class="agg-label">Include Pulse Briefing (talking points)</span>
@@ -1376,13 +1380,13 @@ html, body {
               &#9650; Scope disclosure: Pulse Briefing requires full data collection (all locations, all physician listings, battery metrics). Run time will be longer.
             </div>
           </div>
-          <label class="aggregate-toggle" style="margin-top:10px" title="Collect and store analysis data without generating a PDF — useful for tracking AI visibility trends over time.">
-            <input type="checkbox" id="ir-skip-pdf-toggle">
-            <span class="agg-label">Skip PDF — collect data only</span>
-          </label>
           <label class="aggregate-toggle" style="margin-top:10px" title="Create a teaser version with blurred details for sending to prospects.">
             <input type="checkbox" id="ir-teaser-toggle">
             <span class="agg-label">Create Teaser Report</span>
+          </label>
+          <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-skip-pdf-label" title="Admin only: collect and store analysis data without generating a PDF.">
+            <input type="checkbox" id="ir-skip-pdf-toggle">
+            <span class="agg-label">Skip PDF — collect data only <span style="font-size:11px;color:#888">(Admin only)</span></span>
           </label>
           <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
             <input type="checkbox" id="ir-force-rerun">
@@ -2610,10 +2614,12 @@ function showApp() {
   const adminBtn = document.getElementById('nav-admin');
   if (adminBtn) adminBtn.style.display = (_role === 'admin') ? 'flex' : 'none';
   const isAdmin = (_role === 'admin');
-  const irLock = document.getElementById('ir-override-lock-label');
-  const cmpLock = document.getElementById('cmp-override-lock-label');
-  if (irLock)  irLock.style.display  = isAdmin ? '' : 'none';
-  if (cmpLock) cmpLock.style.display = isAdmin ? '' : 'none';
+  const irLock    = document.getElementById('ir-override-lock-label');
+  const cmpLock   = document.getElementById('cmp-override-lock-label');
+  const irSkipPdf = document.getElementById('ir-skip-pdf-label');
+  if (irLock)    irLock.style.display    = isAdmin ? '' : 'none';
+  if (cmpLock)   cmpLock.style.display   = isAdmin ? '' : 'none';
+  if (irSkipPdf) irSkipPdf.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
     el.textContent = 'build ' + d.build;
@@ -2976,10 +2982,16 @@ function setIrType(t) {
   document.getElementById('ir-tg-hospital').classList.toggle('on',  t === 'hospital');
   document.getElementById('ir-tg-specialty').classList.toggle('on', t === 'specialty');
   document.getElementById('ir-specialty-wrap').classList.toggle('hidden', t !== 'specialty');
-  // agg toggle is hospital-only; practice composite is available for both types
+  // agg toggle is hospital-only; practice composite + practice agg are specialty-only
   document.getElementById('ir-composite-opts').style.display = t === 'hospital' ? '' : 'none';
+  const practiceAggWrap = document.getElementById('ir-practice-agg-wrap');
+  if (practiceAggWrap) practiceAggWrap.style.display = t === 'specialty' ? '' : 'none';
   if (t !== 'hospital') {
     document.getElementById('ir-agg-toggle').checked = false;
+  }
+  if (t !== 'specialty') {
+    const practiceAgg = document.getElementById('ir-practice-agg-toggle');
+    if (practiceAgg) practiceAgg.checked = false;
   }
 }
 
@@ -3384,7 +3396,10 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     ? (document.getElementById('ir-specialty').value.trim() || null) : null;
   if (_irType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
 
-  const aggregate          = document.getElementById('ir-agg-toggle').checked;
+  const practiceAggEl = document.getElementById('ir-practice-agg-toggle');
+  const aggregate = _irType === 'specialty'
+    ? (practiceAggEl?.checked || practiceComposite)  // practice: aggregate when locations toggle OR composite is on
+    : document.getElementById('ir-agg-toggle').checked;
   const skip_pdf           = document.getElementById('ir-skip-pdf-toggle').checked;
   const teaser_report      = document.getElementById('ir-teaser-toggle').checked;
   const override_today_lock = document.getElementById('ir-force-rerun')?.checked || false;
