@@ -486,6 +486,7 @@ html, body {
 
 /* ── Misc ────────────────────────────────────────────────────── */
 .err { background: var(--red-bg); border: 1px solid #f5c6c2; color: var(--red); border-radius: 8px; padding: 11px 15px; font-size: 13px; }
+.err a { color: var(--red); font-weight: 600; }
 .rn-section { margin-bottom: 28px; }
 .rn-heading { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 10px; border-radius: 4px; display: inline-block; margin-bottom: 14px; }
 .rn-heading.new      { background: rgba(15,65,70,0.1);  color: var(--teal); }
@@ -3791,7 +3792,14 @@ function onSSE(ev) {
 
   if (ev.type === 'error') {
     _es.close();
-    document.getElementById('prog-err-msg').textContent = ev.message;
+    const errEl = document.getElementById('prog-err-msg');
+    if (ev.message === '__OVERLOADED__') {
+      errEl.innerHTML = '<strong>Anthropic AI service is temporarily overloaded.</strong><br>' +
+        'Check the status page at <a href="https://status.anthropic.com" target="_blank" rel="noopener">status.anthropic.com</a> ' +
+        'and try again in a few minutes.';
+    } else {
+      errEl.textContent = ev.message;
+    }
     document.getElementById('prog-err').classList.remove('hidden');
   }
 }

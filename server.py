@@ -216,6 +216,13 @@ def _put(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, event: Any) -> N
     asyncio.run_coroutine_threadsafe(queue.put(event), loop)
 
 
+def _job_error(exc: Exception) -> str:
+    s = str(exc)
+    if "529" in s or "overloaded" in s.lower():
+        return "__OVERLOADED__"
+    return s
+
+
 def _job_run_single(
     job_id: str, city: str, state: str, specialty: Optional[str],
     aggregate: bool = False, radius_miles: Optional[int] = None,
@@ -262,7 +269,7 @@ def _job_run_single(
         }
     except Exception as exc:
         job["status"] = "error"
-        job["error"] = str(exc)
+        job["error"] = _job_error(exc)
     finally:
         _put(loop, queue, None)  # sentinel → closes SSE stream
 
@@ -316,7 +323,7 @@ def _job_run_practice(
         }
     except Exception as exc:
         job["status"] = "error"
-        job["error"] = str(exc)
+        job["error"] = _job_error(exc)
     finally:
         _put(loop, queue, None)
 
@@ -360,7 +367,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
         job["results"] = results
     except Exception as exc:
         job["status"] = "error"
-        job["error"] = str(exc)
+        job["error"] = _job_error(exc)
     finally:
         _put(loop, queue, None)
 
@@ -544,7 +551,7 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
         }
     except Exception as exc:
         job["status"] = "error"
-        job["error"] = str(exc)
+        job["error"] = _job_error(exc)
     finally:
         _put(loop, queue, None)
 

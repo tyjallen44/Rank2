@@ -496,8 +496,11 @@ def _stream_narrative(client, system_prompt, user_prompt, emit, console) -> str:
         return _run([])
     try:
         return _run([tool])
-    except Exception as exc:  # web search not enabled for this key, etc.
-        console.print(f"[yellow]⚠[/yellow] Web search unavailable ({str(exc)[:80]}); continuing without it.")
+    except Exception as exc:
+        exc_str = str(exc)
+        if "529" in exc_str or "overloaded" in exc_str.lower():
+            raise  # propagate capacity errors; don't silently retry
+        console.print(f"[yellow]⚠[/yellow] Web search unavailable ({exc_str[:80]}); continuing without it.")
         emit({"type": "phase", "name": "generating", "text": "Generating analysis (no web search)"})
         return _run([])
 
