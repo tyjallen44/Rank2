@@ -579,6 +579,7 @@ def analyze_practice(
     override_today_lock: bool = False,
     report_title: Optional[str] = None,
     confirmed_siblings: Optional[list] = None,
+    org_name: Optional[str] = None,
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -667,9 +668,18 @@ def analyze_practice(
         else:
             from .practice_discovery import discover_practice_siblings as _disc_siblings
             emit({"type": "phase", "name": "discovery", "text": f"Discovering {entity_name} locations"})
-            _siblings = _disc_siblings(entity_name, city, state, on_event=emit, force_rerun=force_rerun)
+            _siblings, _discovered_org_name = _disc_siblings(
+                entity_name, city, state, on_event=emit, force_rerun=force_rerun
+            )
             if _siblings:
                 _location_roster = [entity_name] + [s["name"] for s in _siblings]
+            # Use discovered org name as fallback when not provided by frontend
+            if not org_name and _discovered_org_name:
+                org_name = _discovered_org_name
+
+    # If org_name is set and no custom report_title provided, default title to org_name
+    if org_name and not report_title:
+        report_title = org_name
 
     system_prompt, user_prompt = build_practice_prompt(
         entity_name=entity_name,
@@ -680,6 +690,7 @@ def analyze_practice(
         aggregate=aggregate,
         practice_profile=practice_profile,
         location_roster=_location_roster,
+        org_name=org_name,
     )
 
     # ── Phase 1: Stream narrative ─────────────────────────────────────────────

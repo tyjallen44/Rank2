@@ -131,13 +131,16 @@ def discover_practice_siblings(
     state: str,
     on_event: Optional[Callable] = None,
     force_rerun: bool = False,
-) -> list[dict]:
+) -> tuple[list[dict], str]:
     """
     Use Claude to discover sibling practices, clinics, and hospitals that share
     the same parent organization as this specialty practice.
 
-    Returns sibling entities ONLY — the anchor practice itself is NOT included.
-    Returns [] if no parent organization can be established (true independent).
+    Returns (siblings, parent_org_name).
+    siblings: sibling entities ONLY — the anchor is NOT included.
+    parent_org_name: canonical parent org brand name (e.g. "Illinois Bone & Joint
+      Institute"), or "" when served from cache (caller should use its own stored value).
+    Returns ([], "") if no parent organization can be established.
 
     Results are persisted in the entity registry (90-day TTL).  Subsequent calls
     with the same anchor return the cached roster without calling the LLM.
@@ -160,7 +163,7 @@ def discover_practice_siblings(
         if cached is not None:
             emit({"type": "text",
                   "text": f"Using registry: {len(cached)} affiliated entities for {entity_name}"})
-            return cached
+            return cached, ""  # parent_org_name not cached; caller uses frontend-provided value
 
     client = _get_client()
     prompt = (
@@ -195,6 +198,7 @@ def discover_practice_siblings(
             roster_data = block.input if isinstance(block.input, dict) else json.loads(block.input)
             break
 
+    parent_org_name = _clean(roster_data.get("system_name") or "")
     raw = roster_data.get("practices") or []
     siblings: list[dict] = []
     for p in raw:
@@ -208,5 +212,5 @@ def discover_practice_siblings(
         })
 
     save_registry_siblings(entity_name, city, state, siblings)
-    emit({"type": "text", "text": f"Found {len(siblings)} affiliated entities."})
-    return siblings
+    emit({"type": "text", "text": f"Found {len(siblings)} affiliated entities for {parent_org_name or entity_name}."})
+    return siblings, parent_org_name

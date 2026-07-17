@@ -326,6 +326,7 @@ def _job_run_practice(
             briefing_variant=job.get("briefing_variant"),
             report_title=job.get("report_title"),
             confirmed_siblings=job.get("confirmed_siblings"),
+            org_name=job.get("org_name"),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -427,6 +428,7 @@ class AnalyzeRequest(BaseModel):
     teaser_report: bool = False
     entity_name: Optional[str] = None
     report_title: Optional[str] = None          # display override for PDF title
+    org_name: Optional[str] = None              # parent org brand name; drives prompt subject in org mode
     confirmed_siblings: Optional[List[dict]] = None  # pre-confirmed location list from initiation flow; None = run discovery inside analyzer
     individual_report: bool = False
     skip_pdf: bool = False
@@ -507,6 +509,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["override_today_lock"] = req.override_today_lock and (role == "admin")
     _jobs[job_id]["briefing_variant"] = req.briefing_variant
     _jobs[job_id]["report_title"] = _normalize_input(req.report_title) if req.report_title else None
+    _jobs[job_id]["org_name"] = _normalize_input(req.org_name) if req.org_name else None
     _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list
 
     if req.entity_type == "practice" and entity_name:
@@ -1418,8 +1421,8 @@ async def practice_siblings(
         init_db()
         city  = _normalize_input(req.city)
         state = req.state.strip().upper()
-        siblings = discover_practice_siblings(req.entity_name, city, state)
-        return {"siblings": siblings, "count": len(siblings)}
+        siblings, parent_org_name = discover_practice_siblings(req.entity_name, city, state)
+        return {"siblings": siblings, "parent_org_name": parent_org_name, "count": len(siblings)}
     except Exception as exc:
         raise HTTPException(500, f"Sibling discovery error: {exc}")
 

@@ -3007,6 +3007,7 @@ let _irSelected            = null;
 let _irReportTitle         = null;
 let _irDiscoveredSiblings  = [];
 let _irConfirmedSiblings   = [];
+let _irOrgName             = null;  // parent org brand name from discovery
 let _irResolvedCity        = null;
 let _irResolvedState  = null;
 let _irPracticeProfile = null;
@@ -3238,14 +3239,16 @@ async function irStartDiscovery() {
     if (!r.ok) throw new Error(await errDetail(r, 'Location discovery failed'));
     const data = await r.json();
     _irDiscoveredSiblings = data.siblings || [];
-    renderIrSiblings(_irDiscoveredSiblings, orgName);
+    // Prefer the AI-identified parent org name; fall back to what the user typed
+    _irOrgName = (data.parent_org_name || '').trim() || orgName;
+    renderIrSiblings(_irDiscoveredSiblings);
   } catch(e) {
     document.getElementById('ir-siblings-loading').classList.add('hidden');
     showErr(document.getElementById('ir-siblings-err'), e.message);
   }
 }
 
-function renderIrSiblings(siblings, orgName) {
+function renderIrSiblings(siblings) {
   document.getElementById('ir-siblings-loading').classList.add('hidden');
   document.getElementById('ir-siblings-content').classList.remove('hidden');
   document.getElementById('ir-siblings-confirm-btn').style.display = '';
@@ -3253,16 +3256,24 @@ function renderIrSiblings(siblings, orgName) {
   const total = 1 + siblings.length;
   const countEl = document.getElementById('ir-siblings-count');
   countEl.innerHTML = siblings.length > 0
-    ? `Found <strong>${total}</strong> locations in the <strong>${orgName}</strong> organization.`
-    : `No additional locations found — this report will cover <strong>${orgName}</strong> as a single-location practice.`;
+    ? `<div style="margin-bottom:10px">
+         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Parent Organization</span><br>
+         <span style="font-size:17px;font-weight:800;color:var(--teal)">${_irOrgName}</span>
+       </div>
+       <div style="font-size:13px;color:var(--text)">Found <strong>${total} locations</strong> across this organization. Uncheck any that are false positives.</div>`
+    : `<div style="margin-bottom:10px">
+         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Organization</span><br>
+         <span style="font-size:17px;font-weight:800;color:var(--teal)">${_irOrgName}</span>
+       </div>
+       <div style="font-size:13px;color:var(--muted)">No additional locations found — this will be analyzed as a single-location organization.</div>`;
 
   const listEl = document.getElementById('ir-siblings-list');
   let html = `
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1.5px solid var(--teal);border-radius:6px;margin-bottom:6px">
+    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1.5px solid var(--teal);border-radius:6px;margin-bottom:6px">
       <input type="checkbox" checked disabled style="accent-color:var(--teal);flex-shrink:0;width:15px;height:15px">
       <div style="flex:1;min-width:0">
         <span style="font-size:13px;font-weight:700;color:var(--teal)">${_irSelected.name}</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:6px">anchor</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:6px">search anchor</span>
       </div>
     </div>`;
 
@@ -3287,8 +3298,8 @@ function irConfirmOrg() {
     return cb ? cb.checked : true;
   });
 
-  const orgName = document.getElementById('ir-name').value.trim();
-  _irReportTitle = orgName;
+  // Default report title to the AI-identified parent org name
+  _irReportTitle = _irOrgName || document.getElementById('ir-name').value.trim();
 
   const totalCount = 1 + _irConfirmedSiblings.length;
   const countBadge = totalCount > 1
@@ -3296,8 +3307,8 @@ function irConfirmOrg() {
     : '';
 
   document.getElementById('ir-selected-display').innerHTML = `
-    <div style="font-weight:700;font-size:15px;color:var(--teal)">${orgName}${countBadge}</div>
-    ${_irSelected.address ? `<div style="font-size:12px;color:var(--muted);margin-top:3px">Anchor: ${_irSelected.address}</div>` : ''}`;
+    <div style="font-weight:700;font-size:16px;color:var(--teal)">${_irOrgName}${countBadge}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">Search anchor: ${_irSelected.name}</div>`;
 
   const titleInput  = document.getElementById('ir-custom-title');
   const titlePreview = document.getElementById('ir-title-preview');
@@ -3316,6 +3327,7 @@ function irResetSearch() {
   _irPracticeProfile = null;
   _irDiscoveredSiblings = [];
   _irConfirmedSiblings = [];
+  _irOrgName = null;
   document.getElementById('ir-step2').classList.add('hidden');
   document.getElementById('ir-step2b').classList.add('hidden');
   document.getElementById('ir-step2c').classList.add('hidden');
@@ -3581,6 +3593,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     entity_name: _irSelected.name,
     report_title: (_irReportTitle && _irReportTitle !== _irSelected.name) ? _irReportTitle : undefined,
     confirmed_siblings: _irType === 'specialty' ? _irConfirmedSiblings : undefined,
+    org_name: _irType === 'specialty' ? _irOrgName : undefined,
     patient_perspective: false,
     teaser_report,
     skip_pdf,

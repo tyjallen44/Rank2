@@ -524,6 +524,7 @@ def build_practice_prompt(
     aggregate: bool = False,
     practice_profile: str = "practice_procedural",
     location_roster: list[str] | None = None,
+    org_name: Optional[str] = None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for a practice AI Visibility analysis."""
     from .practice_models import PROFILE_DISPLAY
@@ -531,9 +532,54 @@ def build_practice_prompt(
     specialty_line = specialty or "General Practice / Multi-specialty"
     profile_label = PROFILE_DISPLAY.get(practice_profile, "Procedural")
 
+    # Org mode: parent org brand is the analysis subject; anchor is evidence only
+    is_org_mode = bool(org_name and aggregate)
+    subject = org_name if is_org_mode else entity_name
+
+    # In org mode, prepend an anchor note to the evidence block so Claude knows
+    # the Google data came from one specific office and should not drive the framing
+    if is_org_mode:
+        anchor_note = (
+            f"\n> **Evidence Anchor Note:** The Google Places data below was gathered "
+            f"using '{entity_name}' (one office within {org_name}) as the search anchor. "
+            f"Treat this location as incidental evidence — do NOT center the report, "
+            f"narrative, or any recommendation on this specific office. All analysis "
+            f"and recommendations must address **{org_name}** as the full organization.\n\n"
+        )
+        full_evidence = anchor_note + evidence_block
+    else:
+        full_evidence = evidence_block
+
+    # Build the scope / aggregate block
     if aggregate:
-        if location_roster:
-            # Explicit, registry-backed location list — Claude scores exactly these locations
+        if is_org_mode and location_roster:
+            loc_count = len(location_roster)
+            loc_lines = "\n".join(f"  - {loc}" for loc in location_roster)
+            aggregate_block = (
+                f"**ORGANIZATION SCOPE — {org_name.upper()} ({loc_count} LOCATIONS)**\n\n"
+                f"This is an ORGANIZATION-LEVEL report for **{org_name}** — a "
+                f"{loc_count}-location network. It is NOT a report about any single "
+                f"office.\n\n"
+                f"**Mandatory framing rules — apply throughout the entire report:**\n"
+                f"1. Use **{org_name}** (not any individual office name) as the subject "
+                f"in every section heading, paragraph, and bullet.\n"
+                f"2. All findings and scores reflect the full network, not one location. "
+                f"Write '{org_name}'s {loc_count} Google Business Profiles…' not "
+                f"'the [office] GBP…'\n"
+                f"3. Every improvement recommendation must be org-wide and executable "
+                f"across the network. Write 'Standardize Schema.org markup across all "
+                f"{loc_count} location pages' — never 'Fix the [office] page.'\n"
+                f"4. Patient Voice synthesizes review themes across all {loc_count} "
+                f"locations, calling out org-wide operational patterns.\n"
+                f"5. Physician credentials and linkage analysis covers the full physician "
+                f"panel across the entire network.\n"
+                f"6. Entity resolution scoring reflects how well AI assistants resolve "
+                f"**{org_name}** as the organization brand — not any individual location.\n\n"
+                f"**Confirmed network locations ({loc_count} total):**\n{loc_lines}\n\n"
+                f"List each in consolidated_locations. Tier scores must reflect the "
+                f"full aggregate across ALL confirmed locations."
+            )
+        elif location_roster:
             loc_lines = "\n".join(f"  - {loc}" for loc in location_roster)
             aggregate_block = (
                 f"**Multi-location aggregation enabled.** The following confirmed locations "
@@ -556,18 +602,19 @@ def build_practice_prompt(
             )
     else:
         aggregate_block = (
-            "**Single-location focus.** Analyze the specific named practice at the location \
-provided. Do not aggregate data from other affiliated locations. If the practice has \
-multiple locations, note this briefly but keep scores focused on the primary named entity."
+            "**Single-location focus.** Analyze the specific named practice at the location "
+            "provided. Do not aggregate data from other affiliated locations. If the practice "
+            "has multiple locations, note this briefly but keep scores focused on the primary "
+            "named entity."
         )
 
     user = _PRACTICE_USER_PROMPT.format(
-        entity_name=entity_name,
+        entity_name=subject,
         city=city,
         state=state,
         specialty_line=specialty_line,
         profile_label=profile_label,
-        evidence_block=evidence_block,
+        evidence_block=full_evidence,
         aggregate_block=aggregate_block,
     )
     return PRACTICE_SYSTEM_PROMPT, user
