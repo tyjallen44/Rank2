@@ -301,17 +301,15 @@ def _google_stat(p: RankedProvider) -> str:
         fd_label = "Google Front Door"
         fd_context = ""
 
-    if fd.verified and fd.rating is not None:
-        front = (
-            f'<strong>{fd.rating:.1f}&#9733;</strong>'
-            f'{_vflag("verified")}'
+    fd_verified = fd.verified and fd.rating is not None
+    if fd_verified:
+        front_line = (
+            f'<span style="font-size:6.5pt;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:0.08em;color:#5a7880">{fd_label}:</span> '
+            f'<strong>{fd.rating:.1f}&#9733;</strong>{_vflag("verified")} {fd_context}<br>'
         )
     else:
-        front = (
-            f'<strong>Not verified</strong>'
-            f' <span class="google-gap">— {_e(fd.reason or "no rated listing found")}</span>'
-            f'{_vflag("not_established")}'
-        )
+        front_line = ""  # omit entirely — showing "Not verified" is worse than silence
 
     # ── System-wide aggregate ─────────────────────────────────────────────
     system_line = ""
@@ -351,8 +349,7 @@ def _google_stat(p: RankedProvider) -> str:
     <div class="google-stat-section">
       <div class="google-stat-label">Public &amp; Social Ratings</div>
       <div class="google-stat">
-        <span style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#5a7880">{fd_label}:</span> {front} {fd_context}<br>
-        {system_line}
+        {front_line}{system_line}
         <span style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#5a7880">Footprint:</span> {footprint}{consistency}<br>
         <span style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#5a7880">Third-Party</span> <span style="font-size:6.5pt;color:#7a9095">(Healthgrades, Vitals, WebMD, Yelp):</span> <strong>{agg}</strong>{gap}
       </div>
