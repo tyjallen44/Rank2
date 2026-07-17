@@ -2622,7 +2622,8 @@ function showApp() {
   if (irSkipPdf) irSkipPdf.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
-    let label = 'v' + d.build;
+    let label = 'v' + (d.version || d.build);
+    if (d.commit) label += '  ·  ' + d.commit;
     if (d.deployed) {
       const dt = new Date(d.deployed);
       const mdt = dt.toLocaleString('en-US', {

@@ -199,9 +199,24 @@ _APP_VERSION = "1.5"
 _SERVER_START = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def _get_commit_sha() -> str:
+    try:
+        return Path(__file__).parent.joinpath("VERSION").read_text().strip()
+    except Exception:
+        pass
+    try:
+        import subprocess
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
 @app.get("/api/version")
 async def version():
-    return {"build": _APP_VERSION, "deployed": _SERVER_START}
+    return {"version": _APP_VERSION, "commit": _get_commit_sha(), "deployed": _SERVER_START}
 
 
 # ── Job management ────────────────────────────────────────────────────────────
