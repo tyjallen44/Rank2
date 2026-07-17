@@ -578,6 +578,7 @@ def analyze_practice(
     briefing_variant: Optional[str] = None,
     override_today_lock: bool = False,
     report_title: Optional[str] = None,
+    confirmed_siblings: Optional[list] = None,
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -649,15 +650,26 @@ def analyze_practice(
         _street_line = _indiv_read.formatted_address.split(",")[0]
         _anchor_addr_norm = _normalize_street(_street_line)
 
-    # For aggregate runs, discover sibling locations before the scoring prompt so
-    # Claude scores against a stable, registry-backed list rather than guessing.
+    # For aggregate runs, build a stable location roster for the scoring prompt.
+    # When confirmed_siblings is provided by the initiation flow, use it directly
+    # (skips the Claude discovery call). None means run discovery as usual.
     _location_roster: list[str] | None = None
     if aggregate:
-        from .practice_discovery import discover_practice_siblings as _disc_siblings
-        emit({"type": "phase", "name": "discovery", "text": f"Discovering {entity_name} locations"})
-        _siblings = _disc_siblings(entity_name, city, state, on_event=emit, force_rerun=force_rerun)
-        if _siblings:
-            _location_roster = [entity_name] + [s["name"] for s in _siblings]
+        if confirmed_siblings is not None:
+            # Pre-confirmed by the user in the initiation screen
+            if confirmed_siblings:
+                _location_roster = [entity_name] + [s["name"] for s in confirmed_siblings]
+                emit({"type": "phase", "name": "discovery",
+                      "text": f"Using confirmed roster: {len(_location_roster)} locations"})
+            else:
+                emit({"type": "phase", "name": "discovery",
+                      "text": f"Single-location run for {entity_name}"})
+        else:
+            from .practice_discovery import discover_practice_siblings as _disc_siblings
+            emit({"type": "phase", "name": "discovery", "text": f"Discovering {entity_name} locations"})
+            _siblings = _disc_siblings(entity_name, city, state, on_event=emit, force_rerun=force_rerun)
+            if _siblings:
+                _location_roster = [entity_name] + [s["name"] for s in _siblings]
 
     system_prompt, user_prompt = build_practice_prompt(
         entity_name=entity_name,

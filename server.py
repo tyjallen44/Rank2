@@ -325,6 +325,7 @@ def _job_run_practice(
             override_today_lock=job.get("override_today_lock", False),
             briefing_variant=job.get("briefing_variant"),
             report_title=job.get("report_title"),
+            confirmed_siblings=job.get("confirmed_siblings"),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -425,7 +426,8 @@ class AnalyzeRequest(BaseModel):
     patient_perspective: bool = False
     teaser_report: bool = False
     entity_name: Optional[str] = None
-    report_title: Optional[str] = None     # display override for PDF title
+    report_title: Optional[str] = None          # display override for PDF title
+    confirmed_siblings: Optional[List[dict]] = None  # pre-confirmed location list from initiation flow; None = run discovery inside analyzer
     individual_report: bool = False
     skip_pdf: bool = False
     entity_type: Optional[str] = None       # "practice" routes to practice_analyzer
@@ -505,6 +507,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["override_today_lock"] = req.override_today_lock and (role == "admin")
     _jobs[job_id]["briefing_variant"] = req.briefing_variant
     _jobs[job_id]["report_title"] = _normalize_input(req.report_title) if req.report_title else None
+    _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list
 
     if req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)
@@ -1401,6 +1404,24 @@ async def practice_discover(
         return {"practices": practices, "count": len(practices)}
     except Exception as exc:
         raise HTTPException(500, f"Practice discovery error: {exc}")
+
+
+@app.post("/api/practice/siblings")
+async def practice_siblings(
+    req: PracticeDiscoverRequest,
+    _: str = Depends(require_auth),
+):
+    """Discover sibling locations of a specialty practice for the initiation-screen roster step."""
+    try:
+        from perception.db import init_db
+        from perception.practice_discovery import discover_practice_siblings
+        init_db()
+        city  = _normalize_input(req.city)
+        state = req.state.strip().upper()
+        siblings = discover_practice_siblings(req.entity_name, city, state)
+        return {"siblings": siblings, "count": len(siblings)}
+    except Exception as exc:
+        raise HTTPException(500, f"Sibling discovery error: {exc}")
 
 
 class PhysicianDiscoverRequest(BaseModel):
