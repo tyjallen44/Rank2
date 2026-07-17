@@ -212,18 +212,10 @@ def _locations_block(p: RankedProvider) -> str:
         return ""
     parts = []
     for loc in p.consolidated_locations:
-        # Suppress the text overall_rating when structured Google data is present
-        # to avoid rendering the same rating twice side-by-side.
-        rating_span = (
-            f'&thinsp;—&thinsp;<span class="loc-rating">{_e(loc.overall_rating)}</span>'
-            if loc.overall_rating and loc.google_rating is None else ""
-        )
-        google_span = ""
-        if loc.google_rating is not None:
-            count_txt = f"&thinsp;·&thinsp;{loc.google_review_count:,} reviews" if loc.google_review_count else ""
-            google_span = f'&ensp;<span class="loc-google">{loc.google_rating:.1f}&#9733;{count_txt}</span>'
+        # Never show review counts here — we only have data for the anchor location,
+        # not all siblings, so showing partial numbers would be misleading.
         addr_span = f'&ensp;<span class="loc-addr">{_e(loc.address)}</span>' if loc.address else ""
-        parts.append(f'<li><span class="loc-name">{_e(loc.name)}</span>{rating_span}{google_span}{addr_span}</li>')
+        parts.append(f'<li><span class="loc-name">{_e(loc.name)}</span>{addr_span}</li>')
     items = "".join(parts)
     return f'<div class="locations-block"><div class="locations-label">Includes locations:</div><ul class="locations-list">{items}</ul></div>'
 
@@ -310,13 +302,8 @@ def _google_stat(p: RankedProvider) -> str:
         fd_context = ""
 
     if fd.verified and fd.rating is not None:
-        recency = f" · {_e(fd.recency)}" if fd.recency else ""
-        stars_filled = "&#9733;" * int(fd.rating)
-        stars_empty  = "&#9734;" * (5 - int(fd.rating))
         front = (
             f'<strong>{fd.rating:.1f}&#9733;</strong>'
-            f' <span style="font-size:7pt;color:#7a9095">{stars_filled}{stars_empty}</span>'
-            f' &nbsp;·&nbsp; <strong>{fd.count or 0:,} reviews</strong>{recency}'
             f'{_vflag("verified")}'
         )
     else:
