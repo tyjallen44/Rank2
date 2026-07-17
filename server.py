@@ -195,23 +195,13 @@ async def me(payload: dict = Depends(get_current_user_payload)):
     }
 
 
+_APP_VERSION = "1.5"
 _SERVER_START = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 @app.get("/api/version")
 async def version():
-    try:
-        build = Path(__file__).parent.joinpath("VERSION").read_text().strip()
-    except Exception:
-        try:
-            import subprocess
-            build = subprocess.check_output(
-                ["git", "rev-parse", "--short", "HEAD"],
-                text=True, stderr=subprocess.DEVNULL
-            ).strip()
-        except Exception:
-            build = "dev"
-    return {"build": build, "deployed": _SERVER_START}
+    return {"build": _APP_VERSION, "deployed": _SERVER_START}
 
 
 # ── Job management ────────────────────────────────────────────────────────────
