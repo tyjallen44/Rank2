@@ -1910,11 +1910,21 @@ html, body {
 
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
           <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.4</div>
-          <div style="font-size:13px;color:var(--muted)">Released July 13, 2026</div>
+          <div style="font-size:13px;color:var(--muted)">Released July 17, 2026</div>
         </div>
 
         <div class="rn-section">
           <div class="rn-heading new">New Features</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Organization-Level Pulse Diagnostics for Specialty Practices</div>
+            <div class="rn-body">Pulse Diagnostics for specialty practices now operate at the full organization level rather than focusing on the individual location used to initiate the report. When a specialty practice is selected, Pulse automatically identifies the parent organization and discovers all sibling locations under that brand. The report narrative, findings, recommendations, and scores then address the entire practice network — not the single office entered at the start. A multi-step initiation flow walks through parent org confirmation before running, and the report title defaults to the AI-identified parent organization name.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Parent Organization Discovery &amp; Location Roster Confirmation</div>
+            <div class="rn-body">A new confirmation step in the Pulse Diagnostic initiation flow surfaces the AI-identified parent organization name and the full list of discovered sibling locations before the report runs. Each location can be individually included or excluded. The confirmed roster is passed directly to the analysis pipeline, skipping redundant discovery work and ensuring the report reflects exactly the locations the user intended to include.</div>
+          </div>
 
           <div class="rn-item">
             <div class="rn-title">Practice Composite Report</div>
@@ -1930,6 +1940,16 @@ html, body {
 
         <div class="rn-section">
           <div class="rn-heading improved">Improvements</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Editable Report Title with Live Preview</div>
+            <div class="rn-body">The Pulse Diagnostic initiation flow now shows a live report title preview as soon as a candidate is selected or an organization is confirmed. For specialty practices, the title defaults to the AI-identified parent org name. Users can override the title at any time before running — the edited name is carried through to the PDF cover page.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Candidate Row Highlighting</div>
+            <div class="rn-body">When selecting a location candidate in the Pulse Diagnostic initiation screen, the selected row is now highlighted in teal, making the active selection clearly visible before moving to the next step.</div>
+          </div>
 
           <div class="rn-item">
             <div class="rn-title">Page Numbers in PDF Reports</div>
@@ -1951,6 +1971,8 @@ html, body {
         <div class="rn-section">
           <div class="rn-heading fixed">Bug Fixes</div>
           <ul class="rn-fixes">
+            <li><strong>Report cover title showing search anchor instead of organization name</strong> — The PDF cover page was using the Google Places search anchor location (e.g., "IBJI Doctors' Office - Chicago-Avondale") as the title even when a parent org name or custom title was set. The cover now correctly uses the report title field, falling back to entity name only when no override is present.</li>
+            <li><strong>Custom report title not carried to PDF</strong> — A guard condition in the run request was silently dropping the report title when it differed from the entity name in an unexpected way. The condition has been removed; the report title is now always sent when set.</li>
             <li><strong>Practice Composite PDF download returning 404</strong> — The composite PDF was not stored under the standard report history path, causing the download link to return 404. A dedicated <code>/api/composite/{job_id}/pdf</code> endpoint now serves the file directly from the completed job.</li>
             <li><strong>Duplicate practices in composite for same-name multi-location groups</strong> — Practices with multiple locations registered under the same name were appearing as duplicate entries in the composite table. A post-processing deduplication step now collapses same-name records into a single entry.</li>
             <li><strong>Sibling discovery failing for specialty practices</strong> — The sibling-location discovery step was using name comparison instead of object identity for filtering, causing specialty practices to incorrectly exclude themselves from their own sibling list. Fixed by switching to identity comparison.</li>
