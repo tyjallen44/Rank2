@@ -1343,7 +1343,14 @@ html, body {
       <!-- Step 3: Options + Run -->
       <div id="ir-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Selected Organization</div>
-        <div id="ir-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:20px"></div>
+        <div id="ir-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
+
+        <div style="margin-bottom:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Report Title</div>
+          <div id="ir-title-preview" style="font-size:14px;font-weight:700;color:var(--teal);padding:9px 14px;background:#fff;border:1.5px solid var(--border);border-radius:6px;margin-bottom:8px;min-height:1.4em"></div>
+          <input type="text" id="ir-custom-title" placeholder="Edit title…" oninput="onIrTitleInput(this.value)"
+            style="width:100%;box-sizing:border-box;font-size:13px;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);outline:none">
+        </div>
 
         <div class="fg" style="margin-bottom:0">
           <label class="fl">Options</label>
@@ -2975,6 +2982,7 @@ let _irLocMode = 'city';
 let _irType    = 'hospital';
 let _irCandidates   = [];
 let _irSelected       = null;
+let _irReportTitle    = null;
 let _irResolvedCity   = null;
 let _irResolvedState  = null;
 let _irPracticeProfile = null;
@@ -3060,7 +3068,7 @@ function showIrCandidates() {
   }
 
   html += _irCandidates.map((c, i) => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;gap:12px">
+    <div id="ir-cand-${i}" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;gap:12px;transition:background 0.15s,border-color 0.15s">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:14px;color:var(--teal)">${c.name || ''}</div>
         ${c.address ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${c.address}</div>` : ''}
@@ -3076,7 +3084,7 @@ function showIrCandidates() {
 
   const enteredName = document.getElementById('ir-name').value.trim();
   html += `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--pale);border:1.5px dashed var(--border);border-radius:8px;margin-top:${_irCandidates.length ? '6' : '0'}px;gap:12px">
+    <div id="ir-cand-manual" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--pale);border:1.5px dashed var(--border);border-radius:8px;margin-top:${_irCandidates.length ? '6' : '0'}px;gap:12px;transition:background 0.15s,border-color 0.15s">
       <div style="font-size:13px;color:var(--muted)">
         ${_irCandidates.length ? 'Not finding the right match? Use:' : 'Proceed with:'}
         <strong style="color:var(--teal)">${enteredName}</strong>
@@ -3088,10 +3096,28 @@ function showIrCandidates() {
 }
 
 function selectIrCandidate(idx) {
+  // Clear previous highlight
+  _irCandidates.forEach((_, i) => {
+    const el = document.getElementById(`ir-cand-${i}`);
+    if (el) { el.style.background = '#fff'; el.style.borderColor = 'var(--border)'; }
+  });
+  const manualEl = document.getElementById('ir-cand-manual');
+  if (manualEl) { manualEl.style.background = 'var(--pale)'; manualEl.style.borderColor = 'var(--border)'; }
+
+  // Highlight the chosen card
+  if (idx === -1) {
+    if (manualEl) { manualEl.style.background = '#e8f4f6'; manualEl.style.borderColor = 'var(--teal)'; }
+  } else {
+    const selEl = document.getElementById(`ir-cand-${idx}`);
+    if (selEl) { selEl.style.background = '#e8f4f6'; selEl.style.borderColor = 'var(--teal)'; }
+  }
+
   const enteredName = document.getElementById('ir-name').value.trim();
   _irSelected = idx === -1
     ? { name: enteredName, address: '', rating: null, review_count: null }
     : (_irCandidates[idx] || { name: enteredName, address: '', rating: null, review_count: null });
+
+  _irReportTitle = _irSelected.name;
 
   const ratingLine = _irSelected.rating != null
     ? ` <span style="font-size:12px;color:var(--teal);font-weight:600">${_irSelected.rating.toFixed(1)}★</span>` +
@@ -3106,6 +3132,11 @@ function selectIrCandidate(idx) {
     <div style="font-weight:700;font-size:15px;color:var(--teal)">${_irSelected.name}${ratingLine}</div>
     ${addrLine}
     ${cityStateLine}`;
+
+  const titleInput = document.getElementById('ir-custom-title');
+  const titlePreview = document.getElementById('ir-title-preview');
+  if (titleInput) titleInput.value = _irReportTitle;
+  if (titlePreview) titlePreview.textContent = _irReportTitle;
 
   if (_irType === 'specialty') {
     showIrProfileStep();
@@ -3150,6 +3181,12 @@ async function showIrProfileStep() {
   document.getElementById('ir-step2b').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+function onIrTitleInput(val) {
+  _irReportTitle = val.trim() || (_irSelected && _irSelected.name) || '';
+  const preview = document.getElementById('ir-title-preview');
+  if (preview) preview.textContent = _irReportTitle;
+}
+
 function irConfirmProfile() {
   _irPracticeProfile = document.getElementById('ir-profile-select').value;
   document.getElementById('ir-step2b').classList.add('hidden');
@@ -3159,6 +3196,7 @@ function irConfirmProfile() {
 
 function irResetSearch() {
   _irSelected = null;
+  _irReportTitle = null;
   _irCandidates = [];
   _irPracticeProfile = null;
   document.getElementById('ir-step2').classList.add('hidden');
@@ -3424,6 +3462,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     aggregate,
     individual_report: true,
     entity_name: _irSelected.name,
+    report_title: (_irReportTitle && _irReportTitle !== _irSelected.name) ? _irReportTitle : undefined,
     patient_perspective: false,
     teaser_report,
     skip_pdf,
@@ -3449,7 +3488,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     if (!r.ok) throw new Error(await errDetail(r, 'Failed to start'));
     const { job_id } = await r.json();
     _lastPage = 'individual';
-    startProgress(job_id, _irSelected.name, false);
+    startProgress(job_id, (_irReportTitle || _irSelected.name), false);  // display name in progress tracker
   } catch(e) {
     showErr(errEl, e.message);
   } finally {

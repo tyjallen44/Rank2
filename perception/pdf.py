@@ -2371,7 +2371,7 @@ def _comparison_overview_block(result: AnalysisResult, label: str, mixed_rubric_
     """
     from .scoring import TIER_KEYS
     p = result.rankings[0] if result.rankings else None
-    name = _e(result.entity_name or result.location)
+    name = _e(result.report_title or result.entity_name or result.location)
     score_html = ""
     if p and p.ai_visibility_score is not None:
         letter_grade, band_label = grade_from_score(p.ai_visibility_score)
@@ -2457,7 +2457,7 @@ def _comparison_summary_block(comparison) -> str:
 def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True) -> str:
     """Full individual-report content for one entity: card + assessment + improvement."""
     p = result.rankings[0] if result.rankings else None
-    name = _e(result.entity_name or result.location)
+    name = _e(result.report_title or result.entity_name or result.location)
 
     card_html = _individual_entity_card(p) if p else ""
 

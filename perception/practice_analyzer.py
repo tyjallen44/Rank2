@@ -577,6 +577,7 @@ def analyze_practice(
     force_rerun: bool = False,
     briefing_variant: Optional[str] = None,
     override_today_lock: bool = False,
+    report_title: Optional[str] = None,
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -769,6 +770,7 @@ def analyze_practice(
         teaser_report=teaser_report,
         individual_report=True,
         entity_name=entity_name,
+        report_title=report_title,
         generated_at=date.today(),
         weighting_profile=run_profile,
         entity_type="practice",

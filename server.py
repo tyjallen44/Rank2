@@ -269,6 +269,7 @@ def _job_run_single(
             override_today_lock=job.get("override_today_lock", False),
             briefing_variant=job.get("briefing_variant"),
             entity_type=entity_type,
+            report_title=job.get("report_title"),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -323,6 +324,7 @@ def _job_run_practice(
             force_rerun=job.get("force_rerun", False),
             override_today_lock=job.get("override_today_lock", False),
             briefing_variant=job.get("briefing_variant"),
+            report_title=job.get("report_title"),
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -423,6 +425,7 @@ class AnalyzeRequest(BaseModel):
     patient_perspective: bool = False
     teaser_report: bool = False
     entity_name: Optional[str] = None
+    report_title: Optional[str] = None     # display override for PDF title
     individual_report: bool = False
     skip_pdf: bool = False
     entity_type: Optional[str] = None       # "practice" routes to practice_analyzer
@@ -501,6 +504,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["force_rerun"] = req.force_rerun
     _jobs[job_id]["override_today_lock"] = req.override_today_lock and (role == "admin")
     _jobs[job_id]["briefing_variant"] = req.briefing_variant
+    _jobs[job_id]["report_title"] = _normalize_input(req.report_title) if req.report_title else None
 
     if req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)

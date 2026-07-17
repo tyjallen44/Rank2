@@ -532,6 +532,7 @@ def analyze_location(
     briefing_variant: str | None = None,
     override_today_lock: bool = False,
     entity_type: str | None = None,
+    report_title: str | None = None,
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -850,6 +851,7 @@ def analyze_location(
         teaser_report=teaser_report,
         individual_report=individual_report,
         entity_name=entity_name if individual_report else None,
+        report_title=report_title if individual_report else None,
         generated_at=date.today(),
         weighting_profile=run_profile,
         entity_type=entity_type,

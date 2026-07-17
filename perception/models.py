@@ -215,6 +215,7 @@ class AnalysisResult(BaseModel):
     teaser_report: bool = False            # summary-only cards with CTA; implies patient_perspective
     individual_report: bool = False        # single-entity deep-dive report
     entity_name: Optional[str] = None     # named entity for individual_report mode
+    report_title: Optional[str] = None    # display name override (PDF title); defaults to entity_name
     zip_code: Optional[str] = None         # set when search was by ZIP code
     radius_miles: Optional[int] = None     # set when search was by ZIP code
     generated_at: date
