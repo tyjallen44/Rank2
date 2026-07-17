@@ -1538,7 +1538,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
     # Cover location/specialty/sub differ for individual reports
     if result.individual_report:
-        _raw_entity = result.entity_name or result.location
+        _raw_entity = result.report_title or result.entity_name or result.location
         # D8: For practice reports whose entity_name embeds a street address
         # (e.g., "Desert Orthopaedic Center 2800 E Desert Inn Rd, Las Vegas, NV 89121"),
         # split at the first street-number to show only the practice name as the cover title.

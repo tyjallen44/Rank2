@@ -3203,7 +3203,7 @@ async function showIrProfileStep() {
 }
 
 function onIrTitleInput(val) {
-  _irReportTitle = val.trim() || (_irSelected && _irSelected.name) || '';
+  _irReportTitle = val.trim() || _irOrgName || (_irSelected && _irSelected.name) || '';
   const preview = document.getElementById('ir-title-preview');
   if (preview) preview.textContent = _irReportTitle;
 }
@@ -3591,7 +3591,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     aggregate,
     individual_report: true,
     entity_name: _irSelected.name,
-    report_title: (_irReportTitle && _irReportTitle !== _irSelected.name) ? _irReportTitle : undefined,
+    report_title: _irReportTitle || undefined,
     confirmed_siblings: _irType === 'specialty' ? _irConfirmedSiblings : undefined,
     org_name: _irType === 'specialty' ? _irOrgName : undefined,
     patient_perspective: false,
