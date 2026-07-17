@@ -1364,7 +1364,7 @@ html, body {
             <span class="agg-label">Include Physicians in Composite</span>
           </label>
           <label class="aggregate-toggle" id="ir-practice-agg-wrap" style="margin-top:10px;display:none" title="Instruct the AI to discover and roll all practice locations into the core analysis scores and narrative — without adding a composite table to the report.">
-            <input type="checkbox" id="ir-practice-agg-toggle">
+            <input type="checkbox" id="ir-practice-agg-toggle" checked>
             <span class="agg-label">Include all locations in analysis</span>
           </label>
           <label class="aggregate-toggle" id="ir-briefing-wrap" style="margin-top:10px" title="Generate a one-page Pulse Briefing companion with talking points for a sales or CS meeting. Requires full data collection scope.">
@@ -2999,10 +2999,8 @@ function setIrType(t) {
   if (t !== 'hospital') {
     document.getElementById('ir-agg-toggle').checked = false;
   }
-  if (t !== 'specialty') {
-    const practiceAgg = document.getElementById('ir-practice-agg-toggle');
-    if (practiceAgg) practiceAgg.checked = false;
-  }
+  const practiceAgg = document.getElementById('ir-practice-agg-toggle');
+  if (practiceAgg) practiceAgg.checked = (t === 'specialty');
 }
 
 async function runIrSearch() {
