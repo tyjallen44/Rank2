@@ -173,7 +173,11 @@ _STRUCTURED_OUTPUT_TOOL = {
             },
             "weighting_profile": {
                 "type": "string",
-                "enum": ["procedural", "relationship"],
+                "enum": [
+                    "procedural", "relationship",
+                    "practice_procedural", "practice_relationship",
+                    "practice_referral_fed", "practice_hybrid",
+                ],
                 "description": "The AI Visibility weighting profile used for this market.",
             },
             "top_recommendation": {"type": "string"},
@@ -608,7 +612,10 @@ def analyze_location(
         google_index = evidence.google_index()
         footprint_index = evidence.footprint_index()
         console.print(f"[green]✓[/green] Evidence: {coverage_note_text}")
-        if specialty:
+        if entity_type == "practice" and specialty:
+            from .practice_prompts import build_practice_specialty_prompt
+            system_prompt, user_prompt = build_practice_specialty_prompt(city, state, specialty, evidence_text, aggregate=aggregate, radius_miles=radius_miles)
+        elif specialty:
             system_prompt, user_prompt = build_specialty_prompt(city, state, specialty, evidence_text, aggregate=aggregate, radius_miles=radius_miles)
         else:
             system_prompt, user_prompt = build_hospital_prompt(city, state, evidence_text, aggregate=aggregate, radius_miles=radius_miles)

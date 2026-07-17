@@ -347,6 +347,174 @@ classification is displayed."]
 """
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Practice-edition MARKET prompt  (Patient Pulse — Specialty Practice mode)
+# ─────────────────────────────────────────────────────────────────────────────
+PRACTICE_SPECIALTY_SYSTEM_PROMPT = f"""\
+You are an expert healthcare research analyst specializing in specialty care \
+quality, physician reputation, and specialty-group market intelligence. You \
+produce thorough, evidence-based AI Visibility market reports for specialty \
+practice markets, anchored to the Practice Edition of the AI Visibility Score \
+methodology below.
+
+{_VOICE}
+
+Completeness is a core requirement: identify and rank EVERY findable specialty \
+practice, group, and hospital-affiliated department in the market. The evidence \
+block gives you NPPES market sizing and candidate organization names — use it to \
+size the field, then enumerate the real practices. A report that omits practices \
+is worse than one that includes them with limited data.
+
+A critical part of your analysis is classifying every practice as either \
+INDEPENDENT (privately owned/operated by the physicians) or HOSPITAL/ACADEMIC-\
+AFFILIATED (employed by or owned by a hospital, health system, or medical \
+school). These compete differently and must be ranked in separate lists.
+
+{_PRACTICE_AIVS_METHODOLOGY}
+
+{_PRACTICE_SIGNAL_EXCLUSIONS}
+"""
+
+_PRACTICE_SPECIALTY_USER_PROMPT = """\
+Produce a comprehensive AI Visibility market analysis of {specialty} care \
+quality and options in {city}, {state} and the broader metropolitan area, \
+using the Practice Edition rubric.
+
+{evidence_block}
+
+Use the evidence block above to size the market and seed candidate practice \
+names; enumerate as many real {specialty} practices and groups as possible \
+(Healthgrades, Zocdoc, Google Maps, NPI registry, US News, Castle Connolly). \
+Every ranked practice's Google front-door number is fetched and supplied back to \
+you after you name it — use the provided numbers verbatim; do not invent ratings.
+
+**Rebrands and name changes.** NPI registry records are rarely updated when a \
+practice rebrands. If a candidate name is a former name, use the CURRENT public \
+name and note the former name in parentheses.
+
+**Classification (apply to every practice).** Independent = physician-owned \
+(ownership/partnership stakes, not hospital employees; admitting privileges alone \
+still count as Independent). Hospital/Academic-Affiliated = employed/owned by a \
+hospital, health system, or academic medical center.
+
+**Score every practice on the four Practice Edition AI Visibility tiers** using \
+the anchor rubric provided. Select the weighting profile (practice_procedural / \
+practice_relationship / practice_referral_fed / practice_hybrid) based on the \
+specialty. For {specialty}, pick the best match and apply it consistently. \
+Provide a three-layer Google footprint and third-party aggregate per practice, \
+and flag any disqualifiers.
+
+**Required Output Format**
+
+## {specialty} Practice Market Analysis: {city}, {state}
+
+### Market Overview
+[2–3 paragraphs on the local {specialty} landscape: how independent and \
+hospital-affiliated groups differ in this market, the dominant players, and the \
+clearest pattern separating credential visibility from online reputation.]
+
+### AI Visibility Verdict
+[2–3 sentences, neutral analyst voice: how this market surfaces to AI assistants, \
+the weighting profile used and why, and the single group whose AI visibility most \
+undersells its clinical quality. Reference the 0–100 scale. State the overall \
+Physician Capture Rate for the market.]
+
+### Independent Practices (Privately Owned & Operated)
+Rank ALL independent {specialty} practices, strongest to weakest:
+**[Rank]. [Practice/Group Name]** — Independent — AI Visibility: [NN]/100
+- Website: [primary public URL]
+- Tier scores: Practitioner Credentials & Clinical Quality [NN] · Reviews & Reputation [NN] · Identity & Machine-Readability [NN] · Access & Fit [NN]
+- Physicians: [count or estimate]
+- Overall Rating: [letter grade or score]
+- Google front door: [rating ★ · N reviews · recency — verbatim, or "not verified"]
+- Google footprint: [breadth + rating range + unified/fragmented + claimed/unclaimed]
+- Third-Party Aggregate (Healthgrades, Vitals, WebMD): [representative rating · one-line gap vs. Google]
+- Physician review profiles: [Healthgrades+Vitals+Google panel average ★ · volume summary]
+- Patient Voice: [2–3 sentences on recurring themes — org AND physician-level if they diverge]
+- Physician Capture Rate: [% of physician-first discovery runs where any physician from this practice appears — estimate from evidence]
+- Entity Resolution: [% of AI runs correctly resolving this practice — note naming or identity risks]
+- Board Certification: [panel summary — verifiable/gated/unverifiable for sampled physicians]
+- Practice Accreditation: [AAAHC / AAAASF / NCQA PCMH / specialty certs, or "none confirmed"]
+- Hospital Affiliations & Privileges: [named hospitals + consistency, or "not surfaced"]
+- U.S. News: [e.g. "Affiliated hospital Nationally Ranked #8 in Orthopedics" or "not ranked/not applicable"]
+- Teaching/Academic Status: [academic-affiliated / residency program / not teaching / not applicable]
+- Wikipedia: [current & accurate / stub or outdated / absent — absence is NORMAL for practices]
+- Reddit/Forum Sentiment: [positive / mixed / negative / not found — 1 sentence on dominant theme]
+- Website Machine-Readability: [Schema.org present / absent · physician bios crawlable or buried · llms.txt present/absent]
+- Yelp / Facebook: [rating + review count, or "not found"]
+- Key Strengths / Notable Weaknesses: [bullets]
+- Disqualifiers: [none / list]
+- Best Suited For / Summary: [patient types; 2–3 sentence recommendation]
+- What AI Currently Says: [1–2 sentences: how AI assistants (ChatGPT, Gemini, Claude) would describe \
+this practice today. Note whether physicians surface in physician-first queries. \
+Frame as "AI assistants typically describe [name] as…"]
+
+### Hospital & Academic-Affiliated Groups
+**[Rank]. [Group Name]** — Affiliated with [Hospital/System] — AI Visibility: [NN]/100
+[Same per-entry structure as Independent Practices above, including U.S. News, \
+Teaching/Academic Status, and Hospital Affiliations & Privileges fields.]
+
+### AI Visibility Assessment & Improvement Opportunities — {city} {specialty} Market
+[Begin with 2–3 sentences on the overall posture of this market's AI visibility \
+through the Practice Edition lens. Then list ALL specific improvement actions \
+grouped under these labeled sections:
+
+**1. Your Website (Technical & Content Fixes)**
+*Physician bios, schema markup, and structured data you control on your own site:*
+#N – [item with: current gap · concrete action · channel (retrieval-time)]
+
+**2. Third-Party Listings & Profiles**
+*Claiming and cleaning physician profiles on platforms you don't own:*
+#N – [item with: current gap · concrete action · channel (retrieval-time)]
+
+**3. Reputation, Press & Community (Long-Term Training Data)**
+*Building the durable public record that AI models learn from:*
+#N – [item with: current gap · concrete action · channel (training-data)]
+
+[Additional Section Title if needed]
+*[One-line description]:*
+#N – [item...]
+
+Maintain globally sequential item numbers (#1, #2, #3...) across all sections. \
+Cover every material gap: physician bio accuracy (NPI/ABMS), Google Business \
+Profile hygiene, physician review profiles (Healthgrades/Vitals/Google), roster \
+currency, entity disambiguation, website schema.org markup (Physician / \
+MedicalClinic), llms.txt, Reddit/forum presence, insurance listing accuracy, \
+online scheduling, and practice-specific issues. Do NOT cap the total.]
+
+### Data Limitations & Disclaimer
+[Data currency and methodology limits; verify with insurer and treating \
+physician. MUST include this note verbatim: "The Pulse Score (0–100) is an \
+AI-visibility measure reflecting how favorably this provider surfaces to today's \
+leading AI assistants — scored on the public sources those assistants state they \
+weight when recommending providers, blended by each assistant's usage. It is a \
+market-perception measure, not a clinical-quality verdict. This report uses the \
+Practice Edition rubric (practice-rubric.md v1.0), which scores on Practitioner \
+Credentials & Clinical Quality, Reviews & Reputation, Identity & \
+Machine-Readability, and Access & Fit."]
+"""
+
+
+def build_practice_specialty_prompt(
+    city: str,
+    state: str,
+    specialty: str,
+    evidence_block: str = "",
+    aggregate: bool = False,
+    radius_miles: int | None = None,
+) -> tuple[str, str]:
+    """Return (system_prompt, user_prompt) for a practice-edition market analysis."""
+    from .prompts import _AGGREGATE_INSTRUCTIONS, _RADIUS_INSTRUCTIONS
+    user = _PRACTICE_SPECIALTY_USER_PROMPT.format(
+        city=city, state=state, specialty=specialty, evidence_block=evidence_block,
+    )
+    if aggregate:
+        user += _AGGREGATE_INSTRUCTIONS
+    if radius_miles:
+        user += _RADIUS_INSTRUCTIONS.format(radius_miles=radius_miles)
+    return PRACTICE_SPECIALTY_SYSTEM_PROMPT, user
+
+
 def build_practice_prompt(
     entity_name: str,
     city: str,
