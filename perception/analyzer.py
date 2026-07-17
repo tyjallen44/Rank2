@@ -553,6 +553,37 @@ def analyze_location(
     emit({"type": "phase", "name": "starting", "text": "Starting analysis"})
     init_db()
 
+    # Compute synthetic cache key for market (non-individual) reports.
+    # Market reports have no entity_name, so we build a deterministic key from
+    # the parameters that make one market run distinct from another.
+    _mkey: str | None = None
+    if not individual_report:
+        _mkey = "__market__{}_{}_{}_{}{}" .format(
+            (specialty or "any").lower().replace(" ", "_"),
+            (entity_type or "hospital"),
+            "agg" if aggregate else "single",
+            "pp" if patient_perspective else "mkt",
+            "_teaser" if teaser_report else "",
+        )
+
+    # Cache logic for market reports (Patient Pulse, hospital/specialty market)
+    if _mkey and not override_today_lock:
+        from .db import get_recent_run as _grr
+        _mloc = f"{city}, {state}"
+        # Same-day lock — always return today's market result regardless of force_rerun
+        _today_mkt = _grr(_mkey, _mloc, days=0)
+        if _today_mkt:
+            emit({"type": "phase", "name": "cached",
+                  "text": f"Returning today's cached market result for {city}, {state}"})
+            return AnalysisResult.model_validate_json(_today_mkt["result_json"])
+        # 90-day cache (only when force_rerun is not set)
+        if not force_rerun:
+            _cached_mkt = _grr(_mkey, _mloc)
+            if _cached_mkt:
+                emit({"type": "phase", "name": "cached",
+                      "text": f"Returning cached market result for {city}, {state}"})
+                return AnalysisResult.model_validate_json(_cached_mkt["result_json"])
+
     # Cache logic for individual reports
     if individual_report and entity_name and not override_today_lock:
         from .db import get_recent_run
@@ -923,7 +954,7 @@ def analyze_location(
         result.pdf_path = str(pdf_path)
         result.md_path = str(report_path)
 
-    _save_to_db(result)
+    _save_to_db(result, market_key=_mkey)
 
     if result.practice_composite_rows:
         from .practice_reputation import save_practice_reputation
@@ -1324,8 +1355,11 @@ def compare_locations(
     return result_a, result_b, comparison, str(pdf_path)
 
 
-def _save_to_db(result: AnalysisResult) -> None:
+def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
     con = get_connection()
+    # For market reports, write the synthetic market key as entity_name so that
+    # get_recent_run() can find this row on subsequent same-day requests.
+    db_entity_name = market_key if market_key else result.entity_name
 
     con.execute(
         """
@@ -1342,7 +1376,7 @@ def _save_to_db(result: AnalysisResult) -> None:
             result.market_overview, result.ai_visibility_verdict, result.coverage_note,
             result.top_recommendation, json.dumps(result.practical_advice),
             result.disclaimer, result.report_markdown, result.pdf_path, result.md_path,
-            result.entity_name, result.individual_report,
+            db_entity_name, result.individual_report,
             result.model_dump_json(),
         ],
     )
