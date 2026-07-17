@@ -523,6 +523,7 @@ def build_practice_prompt(
     evidence_block: str = "",
     aggregate: bool = False,
     practice_profile: str = "practice_procedural",
+    location_roster: list[str] | None = None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for a practice AI Visibility analysis."""
     from .practice_models import PROFILE_DISPLAY
@@ -531,13 +532,28 @@ def build_practice_prompt(
     profile_label = PROFILE_DISPLAY.get(practice_profile, "Procedural")
 
     if aggregate:
-        aggregate_block = (
-            f"**Multi-location aggregation enabled.** If {entity_name} operates multiple \
-locations, include ALL in this report. List each location in consolidated_locations \
-with its individual Google rating, review count, and address. Tier scores should reflect \
-the full aggregate across locations; Patient Voice should synthesize reviews from all; \
-physician credentials apply across the whole practice."
-        )
+        if location_roster:
+            # Explicit, registry-backed location list — Claude scores exactly these locations
+            loc_lines = "\n".join(f"  - {loc}" for loc in location_roster)
+            aggregate_block = (
+                f"**Multi-location aggregation enabled.** The following confirmed locations "
+                f"operate under {entity_name}:\n{loc_lines}\n\n"
+                "Include ALL of the above locations in this report. List each in "
+                "consolidated_locations with its individual Google rating, review count, "
+                "and address. Tier scores must reflect the full aggregate across ALL "
+                "confirmed locations — not just the flagship. Patient Voice should "
+                "synthesize reviews across all locations; physician credentials apply "
+                "across the whole practice."
+            )
+        else:
+            aggregate_block = (
+                f"**Multi-location aggregation enabled.** If {entity_name} operates multiple "
+                "locations, include ALL in this report. List each location in "
+                "consolidated_locations with its individual Google rating, review count, "
+                "and address. Tier scores should reflect the full aggregate across locations; "
+                "Patient Voice should synthesize reviews from all; physician credentials "
+                "apply across the whole practice."
+            )
     else:
         aggregate_block = (
             "**Single-location focus.** Analyze the specific named practice at the location \

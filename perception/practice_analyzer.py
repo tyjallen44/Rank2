@@ -648,6 +648,16 @@ def analyze_practice(
         _street_line = _indiv_read.formatted_address.split(",")[0]
         _anchor_addr_norm = _normalize_street(_street_line)
 
+    # For aggregate runs, discover sibling locations before the scoring prompt so
+    # Claude scores against a stable, registry-backed list rather than guessing.
+    _location_roster: list[str] | None = None
+    if aggregate:
+        from .practice_discovery import discover_practice_siblings as _disc_siblings
+        emit({"type": "phase", "name": "discovery", "text": f"Discovering {entity_name} locations"})
+        _siblings = _disc_siblings(entity_name, city, state, on_event=emit, force_rerun=force_rerun)
+        if _siblings:
+            _location_roster = [entity_name] + [s["name"] for s in _siblings]
+
     system_prompt, user_prompt = build_practice_prompt(
         entity_name=entity_name,
         city=city,
@@ -656,6 +666,7 @@ def analyze_practice(
         evidence_block=evidence_text,
         aggregate=aggregate,
         practice_profile=practice_profile,
+        location_roster=_location_roster,
     )
 
     # ── Phase 1: Stream narrative ─────────────────────────────────────────────
