@@ -2944,13 +2944,13 @@ async function runPatient() {
     const state = document.getElementById('pp-state').value.trim().toUpperCase();
     if (!city)                        return showErr(errEl, 'Please enter a city.');
     if (!state || state.length !== 2) return showErr(errEl, 'Please enter a 2-letter state code.');
-    body  = {city, state, specialty, aggregate, patient_perspective: true, teaser_report};
+    body  = {city, state, specialty, aggregate, patient_perspective: true, teaser_report, entity_type: _ppType === 'specialty' ? 'practice' : null};
     label = `${city}, ${state}` + (specialty ? ` — ${specialty}` : '');
   } else {
     const zip    = document.getElementById('pp-zip').value.trim();
     const radius = parseInt(document.getElementById('pp-radius').value);
     if (!zip || !/^\d{5}$/.test(zip)) return showErr(errEl, 'Please enter a valid 5-digit ZIP code.');
-    body  = {zip_code: zip, radius_miles: radius, specialty, aggregate, patient_perspective: true, teaser_report};
+    body  = {zip_code: zip, radius_miles: radius, specialty, aggregate, patient_perspective: true, teaser_report, entity_type: _ppType === 'specialty' ? 'practice' : null};
     label = `ZIP ${zip} · ${radius} mi radius` + (specialty ? ` — ${specialty}` : '');
   }
 

@@ -238,6 +238,7 @@ def _job_error(exc: Exception) -> str:
 def _job_run_single(
     job_id: str, city: str, state: str, specialty: Optional[str],
     aggregate: bool = False, radius_miles: Optional[int] = None,
+    entity_type: Optional[str] = None,
 ) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
@@ -267,6 +268,7 @@ def _job_run_single(
             force_rerun=job.get("force_rerun", False),
             override_today_lock=job.get("override_today_lock", False),
             briefing_variant=job.get("briefing_variant"),
+            entity_type=entity_type,
         )
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -503,7 +505,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     if req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)
     else:
-        _pool.submit(_job_run_single, job_id, city, state, specialty, req.aggregate, radius)
+        _pool.submit(_job_run_single, job_id, city, state, specialty, req.aggregate, radius, req.entity_type)
     return {"job_id": job_id}
 
 
