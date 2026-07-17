@@ -692,11 +692,19 @@ def analyze_practice(
         "Set key_person_flag=true for solo or two-physician practices.\n\n"
         "CEILING NOTE: The system applies the ≤74 ceiling automatically — report "
         "the raw pillar scores honestly; do NOT pre-apply the ceiling yourself.\n\n"
-        "CONSOLIDATED LOCATIONS: If the report covers multiple locations (aggregate run), "
-        "populate consolidated_locations with every location mentioned in the report, "
-        "including its name, google_rating, google_review_count, and address where stated. "
-        "Always include the anchor/flagship location as the first entry.\n\n"
-        "The practice entity must appear as rank=1 in rankings.\n\n"
+        + (
+            "CONSOLIDATED LOCATIONS: This is an aggregate run covering the following confirmed "
+            "locations — populate consolidated_locations with ALL of them. Use the ratings and "
+            "addresses from the report where available; set google_rating=null and "
+            "google_review_count=null for locations not individually rated in the report. "
+            "The anchor/flagship must be the first entry.\n\nConfirmed locations:\n"
+            + "\n".join(f"  - {loc}" for loc in (_location_roster or [entity_name]))
+            + "\n\n"
+            if _location_roster else
+            "CONSOLIDATED LOCATIONS: Populate consolidated_locations with any locations "
+            "mentioned in the report with their ratings.\n\n"
+        )
+        + "The practice entity must appear as rank=1 in rankings.\n\n"
         "--- REPORT ---\n"
         f"{report_markdown}\n--- END REPORT ---"
     )
