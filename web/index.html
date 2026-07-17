@@ -2622,8 +2622,17 @@ function showApp() {
   if (irSkipPdf) irSkipPdf.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
-    el.textContent = 'build ' + d.build;
-    if (d.deployed) el.textContent += '  ·  ' + d.deployed;
+    let label = 'commit ' + d.build;
+    if (d.deployed) {
+      const dt = new Date(d.deployed);
+      const mdt = dt.toLocaleString('en-US', {
+        timeZone: 'America/Denver',
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+      });
+      label += '  ·  ' + mdt;
+    }
+    el.textContent = label;
   }).catch(() => {});
   navigate('new');
 }
