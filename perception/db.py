@@ -93,6 +93,7 @@ def init_db() -> None:
         ("practice_profile", "VARCHAR"),
         ("result_json", "VARCHAR"),
         ("briefing_pdf_path", "VARCHAR"),
+        ("event_id", "VARCHAR"),
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -447,7 +448,160 @@ def init_db() -> None:
             notes        VARCHAR
         )
     """)
+
+    # ── Events Pulse tables ───────────────────────────────────────────────────
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS event_runs (
+            id                VARCHAR PRIMARY KEY,
+            event_name        VARCHAR NOT NULL,
+            event_date        VARCHAR,
+            entity_type       VARCHAR NOT NULL,
+            csv_filename      VARCHAR,
+            total_count       INTEGER DEFAULT 0,
+            done_count        INTEGER DEFAULT 0,
+            skip_count        INTEGER DEFAULT 0,
+            status            VARCHAR DEFAULT 'running',
+            user_role         VARCHAR DEFAULT 'user',
+            enriched_csv_path VARCHAR,
+            created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS event_entities (
+            id             VARCHAR PRIMARY KEY,
+            event_id       VARCHAR NOT NULL,
+            row_num        INTEGER NOT NULL,
+            input_name     VARCHAR,
+            input_city     VARCHAR,
+            input_state    VARCHAR,
+            resolved_name  VARCHAR,
+            resolved_addr  VARCHAR,
+            run_id         VARCHAR,
+            pulse_score    INTEGER,
+            letter_grade   VARCHAR,
+            band_label     VARCHAR,
+            status         VARCHAR DEFAULT 'pending',
+            error_msg      VARCHAR
+        )
+    """)
     con.close()
+
+
+# ── Event Pulse helpers ───────────────────────────────────────────────────────
+
+def create_event_run(
+    event_id: str, event_name: str, event_date: Optional[str],
+    entity_type: str, csv_filename: Optional[str],
+    total_count: int, role: str,
+) -> None:
+    from datetime import datetime
+    con = get_connection()
+    con.execute(
+        "INSERT INTO event_runs (id, event_name, event_date, entity_type, csv_filename, "
+        "total_count, done_count, skip_count, status, user_role, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?)",
+        [event_id, event_name, event_date, entity_type, csv_filename, total_count, role,
+         datetime.utcnow()],
+    )
+    con.close()
+
+
+def create_event_entities(entities: list) -> None:
+    con = get_connection()
+    for e in entities:
+        con.execute(
+            "INSERT INTO event_entities (id, event_id, row_num, input_name, input_city, "
+            "input_state, resolved_name, resolved_addr, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+            [e["id"], e["event_id"], e["row_num"], e["input_name"], e["input_city"],
+             e["input_state"], e["resolved_name"], e["resolved_addr"]],
+        )
+    con.close()
+
+
+def update_event_entity(
+    entity_id: str, run_id: Optional[str], pulse_score: Optional[int],
+    letter_grade: str, band_label: str, status: str,
+    error_msg: Optional[str] = None,
+) -> None:
+    con = get_connection()
+    con.execute(
+        "UPDATE event_entities SET run_id=?, pulse_score=?, letter_grade=?, band_label=?, "
+        "status=?, error_msg=? WHERE id=?",
+        [run_id, pulse_score, letter_grade, band_label, status, error_msg, entity_id],
+    )
+    con.close()
+
+
+def increment_event_progress(event_id: str, done: int = 0, skipped: int = 0) -> None:
+    con = get_connection()
+    con.execute(
+        "UPDATE event_runs SET done_count = done_count + ?, skip_count = skip_count + ? WHERE id = ?",
+        [done, skipped, event_id],
+    )
+    con.close()
+
+
+def finalize_event_run(event_id: str, enriched_csv_path: str) -> None:
+    con = get_connection()
+    con.execute(
+        "UPDATE event_runs SET status='complete', enriched_csv_path=? WHERE id=?",
+        [enriched_csv_path, event_id],
+    )
+    con.close()
+
+
+def get_event_run(event_id: str) -> Optional[dict]:
+    con = get_connection()
+    row = con.execute(
+        "SELECT id, event_name, event_date, entity_type, csv_filename, total_count, "
+        "done_count, skip_count, status, user_role, enriched_csv_path, created_at "
+        "FROM event_runs WHERE id = ?",
+        [event_id],
+    ).fetchone()
+    con.close()
+    if not row:
+        return None
+    cols = ["id", "event_name", "event_date", "entity_type", "csv_filename",
+            "total_count", "done_count", "skip_count", "status", "user_role",
+            "enriched_csv_path", "created_at"]
+    return dict(zip(cols, row))
+
+
+def get_event_entities(event_id: str) -> list:
+    con = get_connection()
+    rows = con.execute(
+        "SELECT id, event_id, row_num, input_name, input_city, input_state, "
+        "resolved_name, resolved_addr, run_id, pulse_score, letter_grade, band_label, "
+        "status, error_msg FROM event_entities WHERE event_id = ? ORDER BY row_num",
+        [event_id],
+    ).fetchall()
+    con.close()
+    cols = ["id", "event_id", "row_num", "input_name", "input_city", "input_state",
+            "resolved_name", "resolved_addr", "run_id", "pulse_score", "letter_grade",
+            "band_label", "status", "error_msg"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def list_event_runs(role: str) -> list:
+    con = get_connection()
+    if role == "admin":
+        rows = con.execute(
+            "SELECT id, event_name, event_date, entity_type, total_count, done_count, "
+            "skip_count, status, enriched_csv_path, created_at "
+            "FROM event_runs ORDER BY created_at DESC"
+        ).fetchall()
+    else:
+        rows = con.execute(
+            "SELECT id, event_name, event_date, entity_type, total_count, done_count, "
+            "skip_count, status, enriched_csv_path, created_at "
+            "FROM event_runs WHERE user_role = ? ORDER BY created_at DESC",
+            [role],
+        ).fetchall()
+    con.close()
+    cols = ["id", "event_name", "event_date", "entity_type", "total_count",
+            "done_count", "skip_count", "status", "enriched_csv_path", "created_at"]
+    return [dict(zip(cols, r)) for r in rows]
 
 
 def set_run_role(run_id: str, role: str) -> None:
@@ -470,11 +624,12 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.pdf_path,
                 a.md_path,
                 a.briefing_pdf_path,
+                a.event_id,
                 COUNT(p.rank) AS provider_count
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
-                     a.pdf_path, a.md_path, a.briefing_pdf_path
+                     a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
     else:
@@ -487,16 +642,17 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.pdf_path,
                 a.md_path,
                 a.briefing_pdf_path,
+                a.event_id,
                 COUNT(p.rank) AS provider_count
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             WHERE a.user_role = ?
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
-                     a.pdf_path, a.md_path, a.briefing_pdf_path
+                     a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()
     cols = ["run_id", "location", "specialty", "generated_at",
-            "pdf_path", "md_path", "briefing_pdf_path", "provider_count"]
+            "pdf_path", "md_path", "briefing_pdf_path", "event_id", "provider_count"]
     con.close()
     return [dict(zip(cols, row)) for row in rows]
 

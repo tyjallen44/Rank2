@@ -1453,6 +1453,339 @@ async def physician_discover(
 
 
 # ── Frontend (catch-all — must be last) ───────────────────────────────────────
+# ── Events Pulse ──────────────────────────────────────────────────────────────
+
+class EventRunRequest(BaseModel):
+    event_name: str
+    event_date: Optional[str] = None
+    entity_type: str                   # "hospital" or "practice"
+    csv_filename: Optional[str] = None
+    entities: List[dict]               # confirmed list: {input_name,input_city,input_state,resolved_name,resolved_addr}
+
+
+_event_job_map: dict[str, str] = {}   # event_id -> job_id
+
+
+@app.post("/api/event/upload")
+async def event_upload(file: UploadFile = File(...), _: str = Depends(require_auth)):
+    """Parse an event CSV and resolve each row via Google Places (batches of 5)."""
+    import csv
+    import io as _io
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")  # strip BOM if present
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(_io.StringIO(text))
+    rows = []
+    for i, row in enumerate(reader, start=1):
+        name  = (row.get("name") or row.get("Name") or "").strip()
+        city  = (row.get("city") or row.get("City") or "").strip()
+        state = (row.get("state") or row.get("State") or "").strip().upper()
+        if not name:
+            continue
+        rows.append({"row_num": i, "input_name": name, "input_city": city, "input_state": state})
+
+    if not rows:
+        raise HTTPException(400, "No valid rows found. Ensure the CSV has name, city, state columns.")
+
+    from perception.data.places import search_entity_candidates
+    loop = asyncio.get_running_loop()
+
+    async def resolve_row(row: dict) -> dict:
+        candidates = await loop.run_in_executor(
+            None,
+            lambda: search_entity_candidates(row["input_name"], row["input_city"], row["input_state"])
+        )
+        n = len(candidates)
+        status = "resolved" if n == 1 else ("ambiguous" if n > 1 else "not_found")
+        return {**row, "candidates": candidates, "status": status}
+
+    results = []
+    for i in range(0, len(rows), 5):
+        batch = rows[i:i+5]
+        resolved = await asyncio.gather(*[resolve_row(r) for r in batch])
+        results.extend(resolved)
+
+    return {"rows": results, "original_filename": file.filename or "upload.csv"}
+
+
+@app.post("/api/event/run")
+async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_user_payload)):
+    """Create an event run record and kick off batch analysis."""
+    from perception.db import init_db, create_event_run, create_event_entities
+    role  = payload["role"]
+    brand = payload.get("brand", "original")
+
+    init_db()
+    event_id = str(uuid.uuid4())
+    entities_db = [
+        {
+            "id":           str(uuid.uuid4()),
+            "event_id":     event_id,
+            "row_num":      i,
+            "input_name":   _normalize_input(e.get("input_name", "")),
+            "input_city":   _normalize_input(e.get("input_city", "")),
+            "input_state":  (e.get("input_state") or "").strip().upper(),
+            "resolved_name": _normalize_input(e.get("resolved_name") or e.get("input_name", "")),
+            "resolved_addr": e.get("resolved_addr", ""),
+        }
+        for i, e in enumerate(req.entities, start=1)
+    ]
+
+    create_event_run(
+        event_id=event_id,
+        event_name=req.event_name.strip(),
+        event_date=req.event_date,
+        entity_type=req.entity_type,
+        csv_filename=req.csv_filename,
+        total_count=len(entities_db),
+        role=role,
+    )
+    create_event_entities(entities_db)
+
+    job_id = _new_job(role, brand)
+    _event_job_map[event_id] = job_id
+    _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type)
+    return {"event_id": event_id, "job_id": job_id}
+
+
+def _run_event_job(
+    job_id: str, event_id: str, entities: list, entity_type: str
+) -> None:
+    """Background: analyze all entities in the event, 5 at a time."""
+    import re as _re
+    import threading
+    from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
+    from datetime import datetime as _dt
+
+    job   = _jobs[job_id]
+    loop  = job["loop"]
+    queue = job["queue"]
+    emit  = lambda e: _put(loop, queue, e)
+    brand = job.get("brand", "original")
+    role  = job["role"]
+
+    try:
+        from perception.db import (
+            init_db, set_run_role, update_event_entity, increment_event_progress,
+            finalize_event_run, get_event_run, get_event_entities, get_connection,
+        )
+        from perception.scoring import grade_from_score
+        init_db()
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        semaphore = threading.Semaphore(5)
+
+        def _run_one(entity: dict) -> None:
+            entity_id     = entity["id"]
+            resolved_name = entity["resolved_name"]
+            city          = entity["input_city"]
+            state         = entity["input_state"]
+
+            with semaphore:
+                emit({"type": "entity_start", "entity_id": entity_id, "name": resolved_name})
+                try:
+                    if entity_type == "practice":
+                        from perception.practice_analyzer import analyze_practice
+                        result = analyze_practice(
+                            entity_name=resolved_name,
+                            city=city, state=state,
+                            aggregate=True,
+                            confirmed_siblings=[],   # single-entity; skip discovery
+                            individual_report=True,
+                            output_dir=REPORTS_DIR,
+                            on_event=lambda _e: None,
+                            brand=brand,
+                        )
+                    else:
+                        from perception.analyzer import analyze_location
+                        result = analyze_location(
+                            city=city, state=state,
+                            entity_name=resolved_name,
+                            aggregate=True,
+                            individual_report=True,
+                            output_dir=REPORTS_DIR,
+                            on_event=lambda _e: None,
+                            brand=brand,
+                        )
+
+                    set_run_role(result.run_id, role)
+
+                    # Tag the run with this event
+                    _con = get_connection()
+                    _con.execute(
+                        "UPDATE analysis_runs SET event_id=? WHERE run_id=?",
+                        [event_id, result.run_id],
+                    )
+                    _con.close()
+
+                    # Extract score
+                    pulse_score = None
+                    letter = "—"
+                    band   = "Unscored"
+                    if result.rankings:
+                        pulse_score = result.rankings[0].ai_visibility_score
+                        letter, band = grade_from_score(pulse_score)
+
+                    # Rename PDF: replace "Pulse-Diagnostic" with "EventReport"
+                    new_pdf_path = result.pdf_path
+                    if result.pdf_path:
+                        old = Path(result.pdf_path)
+                        new_stem = old.stem.replace("Pulse-Diagnostic", "EventReport")
+                        if new_stem == old.stem:
+                            new_stem = old.stem + "_EventReport"
+                        new_p = old.parent / f"{new_stem}{old.suffix}"
+                        try:
+                            old.rename(new_p)
+                            new_pdf_path = str(new_p)
+                            _con2 = get_connection()
+                            _con2.execute(
+                                "UPDATE analysis_runs SET pdf_path=? WHERE run_id=?",
+                                [new_pdf_path, result.run_id],
+                            )
+                            _con2.close()
+                        except Exception:
+                            pass
+
+                    update_event_entity(entity_id, result.run_id, pulse_score, letter, band, "done")
+                    increment_event_progress(event_id, done=1)
+                    emit({
+                        "type": "entity_done", "entity_id": entity_id,
+                        "name": resolved_name, "score": pulse_score,
+                        "grade": letter, "band": band, "run_id": result.run_id,
+                    })
+
+                except Exception as exc:
+                    err = str(exc)[:200]
+                    update_event_entity(entity_id, None, None, "—", "Unscored", "skipped", err)
+                    increment_event_progress(event_id, skipped=1)
+                    emit({"type": "entity_skip", "entity_id": entity_id,
+                          "name": resolved_name, "error": err})
+
+        with _TPE(max_workers=10) as pool:
+            futures = {pool.submit(_run_one, e): e for e in entities}
+            for fut in _ac(futures):
+                try:
+                    fut.result()
+                except Exception:
+                    pass
+
+        # Build enriched CSV
+        import csv as _csv
+        import io as _io2
+        ev_entities = get_event_entities(event_id)
+        ev          = get_event_run(event_id)
+        out = _io2.StringIO()
+        writer = _csv.writer(out)
+        writer.writerow(["name", "city", "state", "pulse_score", "letter_grade",
+                         "band_label", "notes"])
+        for e in ev_entities:
+            if e["status"] == "done":
+                notes = "scored"
+            else:
+                notes = f"skipped — {e['error_msg'] or 'not found'}"
+            writer.writerow([
+                e["input_name"], e["input_city"], e["input_state"],
+                e["pulse_score"] if e["pulse_score"] is not None else "",
+                e["letter_grade"] or "", e["band_label"] or "", notes,
+            ])
+
+        ts         = _dt.utcnow().strftime("%y%m%d-%H%M")
+        safe_name  = _re.sub(r"[^a-zA-Z0-9_-]", "-", (ev["event_name"] or "event"))[:40]
+        csv_name   = f"{safe_name}_EventReport-{ts}.csv"
+        csv_path   = REPORTS_DIR / csv_name
+        csv_path.write_text(out.getvalue(), encoding="utf-8")
+
+        finalize_event_run(event_id, str(csv_path))
+        job["status"] = "done"
+        job["result"] = {"event_id": event_id, "csv_filename": csv_name}
+
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"]  = str(exc)
+    finally:
+        _put(loop, queue, None)
+
+
+@app.get("/api/event/{event_id}/stream")
+async def event_stream(event_id: str, _: str = Depends(require_auth)):
+    """SSE stream for an event run — delegates to the underlying job queue."""
+    job_id = _event_job_map.get(event_id)
+    if not job_id or job_id not in _jobs:
+        raise HTTPException(404, "Event job not found or already expired")
+    queue: asyncio.Queue = _jobs[job_id]["queue"]
+
+    async def generate():
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=25)
+            except asyncio.TimeoutError:
+                yield 'data: {"type":"ping"}\n\n'
+                continue
+            if event is None:
+                job = _jobs[job_id]
+                if job["status"] == "done":
+                    payload = {"type": "done", **job.get("result", {})}
+                else:
+                    payload = {"type": "error", "message": job.get("error", "Unknown error")}
+                yield f"data: {json.dumps(payload)}\n\n"
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/event/{event_id}/status")
+async def event_status(event_id: str, _: str = Depends(require_auth)):
+    """Poll-based status for an event run."""
+    from perception.db import init_db, get_event_run, get_event_entities
+    init_db()
+    ev = get_event_run(event_id)
+    if not ev:
+        raise HTTPException(404, "Event not found")
+    entities = get_event_entities(event_id)
+    return {
+        **{k: str(v) if k == "created_at" else v for k, v in ev.items()},
+        "entities": entities,
+    }
+
+
+@app.get("/api/event/{event_id}/csv")
+async def event_csv_download(event_id: str, _: str = Depends(require_auth)):
+    """Download the enriched CSV for a completed event run."""
+    from perception.db import init_db, get_event_run
+    init_db()
+    ev = get_event_run(event_id)
+    if not ev or not ev.get("enriched_csv_path"):
+        raise HTTPException(404, "Enriched CSV not ready")
+    csv_path = Path(ev["enriched_csv_path"])
+    if not csv_path.exists():
+        raise HTTPException(404, "CSV file not found on disk")
+    return FileResponse(
+        str(csv_path), media_type="text/csv", filename=csv_path.name
+    )
+
+
+@app.get("/api/events")
+async def list_events(role: str = Depends(require_auth)):
+    """List all event runs for the current user (admin sees all)."""
+    from perception.db import init_db, list_event_runs
+    init_db()
+    events = list_event_runs(role)
+    return [
+        {**{k: str(v) if k == "created_at" else v for k, v in e.items()},
+         "has_csv": bool(e.get("enriched_csv_path") and Path(e["enriched_csv_path"]).exists())}
+        for e in events
+    ]
+
+
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 async def frontend(full_path: str):
     html_path = Path(__file__).parent / "web" / "index.html"

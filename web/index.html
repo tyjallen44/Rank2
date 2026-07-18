@@ -273,6 +273,10 @@ html, body {
   line-height: 1.4;
 }
 .aggregate-toggle:hover .agg-label { color: var(--teal); }
+.field-label {
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+}
 
 /* ── Buttons ─────────────────────────────────────────────────── */
 .btn {
@@ -345,6 +349,7 @@ html, body {
 }
 .bg-gold  { background: rgba(128,248,228,0.22); color: var(--teal); border: 1px solid rgba(128,248,228,0.6); }
 .bg-muted { background: var(--pale);            color: var(--muted); }
+.bg-teal  { background: var(--teal);            color: #fff; }
 .bg-green { background: rgba(90,220,160,0.15);  color: #1d6b4a; }
 
 /* ── Progress ────────────────────────────────────────────────── */
@@ -891,6 +896,9 @@ html, body {
       </button>
       <button class="nav-btn" id="nav-compare" onclick="navigate('compare')" title="Compare two organizations head-to-head on Pulse Score">
         <span class="ni">⇄</span><span class="nb-lbl">Pulse Comparison</span>
+      </button>
+      <button class="nav-btn" id="nav-events" onclick="navigate('events')" title="Generate Pulse Diagnostics for an event attendee list">
+        <span class="ni">◫</span><span class="nb-lbl">Events Pulse</span>
       </button>
 
       <div class="nav-divider"></div>
@@ -1734,6 +1742,123 @@ html, body {
         <div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>
       </div>
     </div>
+
+    <!-- ── Events Pulse ─────────────────────────────────────────────────── -->
+    <div id="page-events" class="page">
+      <div class="page-title">Events Pulse</div>
+      <div class="page-sub">Upload an event attendee list to generate a Pulse Diagnostic for every practice or hospital — and download an enriched CSV with scores.</div>
+
+      <!-- Step 1: Setup -->
+      <div id="ev-step1" style="max-width:680px">
+        <div class="card">
+          <div class="section-title" style="margin-bottom:18px">Event Setup</div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+            <div>
+              <div class="field-label">Event Name</div>
+              <input id="ev-name" type="text" class="input" placeholder="e.g. AAOS Annual Meeting 2026" style="width:100%">
+            </div>
+            <div>
+              <div class="field-label">Event Date</div>
+              <input id="ev-date" type="date" class="input" style="width:100%">
+            </div>
+          </div>
+
+          <div style="margin-bottom:16px">
+            <div class="field-label">Entity Type</div>
+            <div style="display:flex;gap:10px;margin-top:6px">
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
+                <input type="radio" name="ev-type" value="hospital" id="ev-type-hospital" checked> Hospital / Health System
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
+                <input type="radio" name="ev-type" value="practice" id="ev-type-practice"> Specialty Practice
+              </label>
+            </div>
+          </div>
+
+          <div style="margin-bottom:20px">
+            <div class="field-label">Attendee List CSV</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap">
+              <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0">
+                <input type="file" id="ev-file" accept=".csv" style="display:none" onchange="evFileChosen(this)">
+                Choose File
+              </label>
+              <span id="ev-filename" style="font-size:13px;color:var(--muted)">No file chosen</span>
+              <button class="btn btn-ghost btn-sm" onclick="evDownloadTemplate()" style="margin-left:auto">↓ Download Template</button>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:8px">Required columns: <strong>name</strong>, <strong>city</strong>, <strong>state</strong> — one row per attendee.</div>
+          </div>
+
+          <div id="ev-step1-err" class="hidden" style="color:#c0392b;font-size:13px;margin-bottom:12px"></div>
+          <button class="btn btn-primary" onclick="evUploadAndResolve()" id="ev-upload-btn">Upload &amp; Resolve Entities →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Confirmation -->
+      <div id="ev-step2" class="hidden" style="max-width:820px">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div class="section-title" style="margin:0">Confirm Entities</div>
+            <button class="btn btn-ghost btn-sm" onclick="evReset()">← Start Over</button>
+          </div>
+          <div id="ev-confirm-summary" style="font-size:13px;color:var(--muted);margin-bottom:18px"></div>
+
+          <div id="ev-confirm-loading" style="text-align:center;padding:32px 0;color:var(--muted)">
+            <div style="font-size:20px;margin-bottom:8px">⟳</div>Resolving entities via Google Places…
+          </div>
+
+          <div id="ev-confirm-table" class="hidden">
+            <div style="display:grid;grid-template-columns:28px 1fr 140px 60px 80px;gap:0;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;padding:0 10px 8px">
+              <div></div><div>Entity</div><div>City, State</div><div>Status</div><div></div>
+            </div>
+            <div id="ev-confirm-rows"></div>
+
+            <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--pale);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <div id="ev-confirm-counts" style="font-size:13px;color:var(--muted);flex:1"></div>
+              <button class="btn btn-primary" onclick="evSubmitRun()" id="ev-run-btn">Run Analyses →</button>
+            </div>
+          </div>
+
+          <div id="ev-step2-err" class="hidden" style="color:#c0392b;font-size:13px;margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- Step 3: Progress -->
+      <div id="ev-step3" class="hidden" style="max-width:820px">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div>
+              <div class="section-title" style="margin:0" id="ev-progress-title">Running Analyses</div>
+              <div id="ev-progress-sub" style="font-size:13px;color:var(--muted);margin-top:4px"></div>
+            </div>
+          </div>
+
+          <!-- Progress bar -->
+          <div style="background:var(--pale);border-radius:4px;height:6px;overflow:hidden;margin-bottom:20px">
+            <div id="ev-progress-bar" style="background:var(--teal);height:100%;width:0%;transition:width 0.4s"></div>
+          </div>
+
+          <div id="ev-entity-rows" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+
+      <!-- Step 4: Complete -->
+      <div id="ev-step4" class="hidden" style="max-width:680px">
+        <div class="card">
+          <div style="text-align:center;padding:16px 0 24px">
+            <div style="font-size:32px;margin-bottom:12px">✓</div>
+            <div style="font-size:20px;font-weight:700;color:var(--teal);margin-bottom:8px" id="ev-complete-title">Analysis Complete</div>
+            <div id="ev-complete-sub" style="font-size:14px;color:var(--muted);margin-bottom:24px"></div>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="evDownloadCsv()" id="ev-dl-btn">↓ Download Enriched CSV</button>
+              <button class="btn btn-secondary" onclick="navigate('history')">View in History</button>
+              <button class="btn btn-ghost" onclick="evReset()">New Event</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /page-events -->
 
     <!-- ── History ───────────────────────────────────────────────────────── -->
     <div id="page-history" class="page">
@@ -4483,9 +4608,11 @@ function renderHistory() {
               <td style="color:var(--muted);font-size:13px;white-space:nowrap">${run.generated_at}</td>
               <td style="font-weight:500">${run.location}</td>
               <td style="font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_historyFilename(run)}">${_historyFilename(run)}</td>
-              <td>${run.specialty
-                ? `<span class="badge bg-gold">${run.specialty}</span>`
-                : `<span class="badge bg-muted">Hospitals</span>`}</td>
+              <td>${run.event_id
+                ? `<span class="badge bg-teal">Event</span>`
+                : run.specialty
+                  ? `<span class="badge bg-gold">${run.specialty}</span>`
+                  : `<span class="badge bg-muted">Hospitals</span>`}</td>
               <td style="text-align:right">${run.provider_count}</td>
               <td>${run.has_pdf
                 ? `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`
@@ -5416,6 +5543,341 @@ async function submitAddEntity() {
     errEl.textContent = 'Failed to add entity — try again.';
     errEl.classList.remove('hidden');
   }
+}
+
+// ── Events Pulse ──────────────────────────────────────────────────────────────
+
+let _evRows        = [];       // raw resolved rows from /api/event/upload
+let _evEventId     = null;     // current event_id after run starts
+let _evCsvFilename = null;     // original upload filename
+let _evTotal       = 0;
+let _evDone        = 0;
+let _evSkipped     = 0;
+let _evEntityMap   = {};       // entity_id -> DOM row element
+
+function evFileChosen(input) {
+  const f = input.files[0];
+  document.getElementById('ev-filename').textContent = f ? f.name : 'No file chosen';
+  _evCsvFilename = f ? f.name : null;
+}
+
+function evDownloadTemplate() {
+  const content = 'name,city,state\n';
+  const blob = new Blob([content], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'events-pulse-template.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function evUploadAndResolve() {
+  const name = document.getElementById('ev-name').value.trim();
+  const file = document.getElementById('ev-file').files[0];
+  const errEl = document.getElementById('ev-step1-err');
+  errEl.classList.add('hidden');
+
+  if (!name)  { showErr(errEl, 'Please enter an event name.'); return; }
+  if (!file)  { showErr(errEl, 'Please choose a CSV file.'); return; }
+
+  document.getElementById('ev-upload-btn').disabled = true;
+  document.getElementById('ev-upload-btn').textContent = 'Uploading…';
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await api('/api/event/upload', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error(await errDetail(r, 'Upload failed'));
+    const data = await r.json();
+    _evRows = data.rows || [];
+    if (!_evRows.length) throw new Error('No valid rows found in the CSV.');
+    evShowConfirmation();
+  } catch(e) {
+    showErr(errEl, e.message);
+  } finally {
+    document.getElementById('ev-upload-btn').disabled = false;
+    document.getElementById('ev-upload-btn').textContent = 'Upload & Resolve Entities →';
+  }
+}
+
+function evShowConfirmation() {
+  document.getElementById('ev-step1').classList.add('hidden');
+  const step2 = document.getElementById('ev-step2');
+  step2.classList.remove('hidden');
+  step2.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  document.getElementById('ev-confirm-loading').classList.add('hidden');
+  document.getElementById('ev-confirm-table').classList.remove('hidden');
+
+  const resolved  = _evRows.filter(r => r.status === 'resolved').length;
+  const ambiguous = _evRows.filter(r => r.status === 'ambiguous').length;
+  const notFound  = _evRows.filter(r => r.status === 'not_found').length;
+  document.getElementById('ev-confirm-summary').textContent =
+    `${_evRows.length} entities from CSV — ${resolved} auto-confirmed, ${ambiguous} need selection, ${notFound} not found.`;
+
+  const container = document.getElementById('ev-confirm-rows');
+  container.innerHTML = '';
+
+  _evRows.forEach((row, idx) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:grid;grid-template-columns:28px 1fr 140px 60px 80px;gap:0;align-items:center;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:2px';
+    div.style.background = idx % 2 === 0 ? '#f9fafb' : '#fff';
+
+    let statusIcon, resolvedHtml;
+    if (row.status === 'resolved') {
+      statusIcon   = `<span style="color:var(--teal);font-size:15px">✓</span>`;
+      resolvedHtml = `<div style="font-weight:600;color:var(--teal)">${row.candidates[0].name}</div>
+                      <div style="font-size:11px;color:var(--muted)">${row.candidates[0].address || ''}</div>`;
+    } else if (row.status === 'ambiguous') {
+      statusIcon = `<span style="color:#e67e22;font-size:15px">⚠</span>`;
+      const opts = row.candidates.map((c, ci) =>
+        `<option value="${ci}">${c.name}${c.address ? ' — ' + c.address : ''}</option>`
+      ).join('');
+      resolvedHtml = `<select id="ev-sel-${idx}" class="input" style="font-size:12px;padding:4px 8px;width:100%">
+        <option value="">— select the correct match —</option>${opts}</select>`;
+    } else {
+      statusIcon   = `<span style="color:#999;font-size:15px">✗</span>`;
+      resolvedHtml = `<div style="color:#999;font-style:italic;font-size:12px">Not found — will be skipped</div>`;
+    }
+
+    div.innerHTML = `
+      ${statusIcon}
+      <div style="padding:0 10px">${resolvedHtml}</div>
+      <div style="color:var(--muted);font-size:12px">${row.input_city}, ${row.input_state}</div>
+      <div style="text-align:center">
+        ${row.status === 'not_found'
+          ? `<input type="checkbox" id="ev-skip-${idx}" checked onchange="evUpdateCounts()" title="Skip this entity">`
+          : `<input type="checkbox" id="ev-inc-${idx}" checked onchange="evUpdateCounts()">`}
+      </div>
+      <div style="font-size:11px;color:var(--muted);text-align:center">
+        ${row.status === 'not_found' ? 'Skip' : 'Include'}
+      </div>`;
+    container.appendChild(div);
+  });
+
+  evUpdateCounts();
+}
+
+function evUpdateCounts() {
+  let included = 0, skipped = 0;
+  _evRows.forEach((row, idx) => {
+    if (row.status === 'not_found') {
+      skipped++;
+    } else {
+      const cb = document.getElementById(`ev-inc-${idx}`);
+      if (cb && cb.checked) included++; else skipped++;
+    }
+  });
+  document.getElementById('ev-confirm-counts').textContent =
+    `${included} entities will be analyzed · ${skipped} will be skipped`;
+  document.getElementById('ev-run-btn').textContent = `Run Analyses (${included}) →`;
+}
+
+async function evSubmitRun() {
+  const errEl = document.getElementById('ev-step2-err');
+  errEl.classList.add('hidden');
+
+  const eventName = document.getElementById('ev-name').value.trim();
+  const eventDate = document.getElementById('ev-date').value || null;
+  const entityType = document.querySelector('input[name="ev-type"]:checked').value;
+
+  const entities = [];
+  _evRows.forEach((row, idx) => {
+    if (row.status === 'not_found') return;
+    const cb = document.getElementById(`ev-inc-${idx}`);
+    if (cb && !cb.checked) return;
+
+    let resolvedName, resolvedAddr;
+    if (row.status === 'resolved') {
+      resolvedName = row.candidates[0].name;
+      resolvedAddr = row.candidates[0].address || '';
+    } else {
+      const sel = document.getElementById(`ev-sel-${idx}`);
+      const ci  = sel ? parseInt(sel.value) : NaN;
+      if (isNaN(ci) || ci < 0 || !row.candidates[ci]) return; // not selected
+      resolvedName = row.candidates[ci].name;
+      resolvedAddr = row.candidates[ci].address || '';
+    }
+    entities.push({
+      input_name:   row.input_name,
+      input_city:   row.input_city,
+      input_state:  row.input_state,
+      resolved_name: resolvedName,
+      resolved_addr: resolvedAddr,
+    });
+  });
+
+  if (!entities.length) { showErr(errEl, 'No entities selected for analysis.'); return; }
+
+  const btn = document.getElementById('ev-run-btn');
+  btn.disabled = true; btn.textContent = 'Starting…';
+
+  try {
+    const r = await api('/api/event/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: eventName,
+        event_date: eventDate,
+        entity_type: entityType,
+        csv_filename: _evCsvFilename,
+        entities,
+      }),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start event run'));
+    const data = await r.json();
+    _evEventId = data.event_id;
+    _evTotal   = entities.length;
+    _evDone    = 0;
+    _evSkipped = 0;
+    evShowProgress(entities);
+    evStreamProgress(_evEventId);
+  } catch(e) {
+    showErr(errEl, e.message);
+    btn.disabled = false;
+    btn.textContent = `Run Analyses (${entities.length}) →`;
+  }
+}
+
+function evShowProgress(entities) {
+  document.getElementById('ev-step2').classList.add('hidden');
+  const step3 = document.getElementById('ev-step3');
+  step3.classList.remove('hidden');
+  step3.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  document.getElementById('ev-progress-title').textContent =
+    document.getElementById('ev-name').value.trim();
+  document.getElementById('ev-progress-sub').textContent =
+    `0 of ${entities.length} complete`;
+
+  const container = document.getElementById('ev-entity-rows');
+  container.innerHTML = '';
+  _evEntityMap = {};
+
+  entities.forEach(e => {
+    const key = e.resolved_name;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;background:#f9fafb;font-size:13px';
+    row.innerHTML = `
+      <span class="ev-status-icon" style="font-size:16px;width:20px;text-align:center;color:var(--muted)">○</span>
+      <span style="flex:1;font-weight:500">${e.resolved_name}</span>
+      <span style="font-size:12px;color:var(--muted)">${e.input_city}, ${e.input_state}</span>
+      <span class="ev-score-badge" style="font-size:12px;font-weight:700;min-width:60px;text-align:right;color:var(--muted)"></span>`;
+    container.appendChild(row);
+    _evEntityMap[key] = row;
+  });
+}
+
+function evUpdateEntityRow(entityId, name, status, score, grade, band) {
+  // Find by name since entity_id isn't in the initial entity list
+  const row = _evEntityMap[name];
+  if (!row) return;
+  const icon  = row.querySelector('.ev-status-icon');
+  const badge = row.querySelector('.ev-score-badge');
+  if (status === 'running') {
+    icon.textContent = '⟳'; icon.style.color = 'var(--teal)';
+    row.style.background = '#eaf7f5';
+  } else if (status === 'done') {
+    icon.textContent = '✓'; icon.style.color = 'var(--teal)';
+    row.style.background = '#eaf7f5';
+    if (score != null) badge.textContent = `${score} ${grade}`;
+    badge.style.color = 'var(--teal)';
+  } else if (status === 'skipped') {
+    icon.textContent = '✗'; icon.style.color = '#999';
+    row.style.background = '#f5f5f5';
+    badge.textContent = 'Skipped'; badge.style.color = '#999';
+  }
+}
+
+function evStreamProgress(eventId) {
+  const es = new EventSource(`/api/event/${eventId}/stream?token=${encodeURIComponent(_token)}`);
+
+  es.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+
+    if (msg.type === 'entity_start') {
+      evUpdateEntityRow(msg.entity_id, msg.name, 'running', null, null, null);
+    } else if (msg.type === 'entity_done') {
+      _evDone++;
+      evUpdateEntityRow(msg.entity_id, msg.name, 'done', msg.score, msg.grade, msg.band);
+      evUpdateProgressBar();
+    } else if (msg.type === 'entity_skip') {
+      _evSkipped++;
+      evUpdateEntityRow(msg.entity_id, msg.name, 'skipped', null, null, null);
+      evUpdateProgressBar();
+    } else if (msg.type === 'done') {
+      es.close();
+      evShowComplete();
+    } else if (msg.type === 'error') {
+      es.close();
+      document.getElementById('ev-progress-sub').textContent = `Error: ${msg.message}`;
+    }
+  };
+
+  es.onerror = () => { es.close(); };
+}
+
+function evUpdateProgressBar() {
+  const pct = Math.round((_evDone + _evSkipped) / _evTotal * 100);
+  document.getElementById('ev-progress-bar').style.width = pct + '%';
+  document.getElementById('ev-progress-sub').textContent =
+    `${_evDone + _evSkipped} of ${_evTotal} complete`;
+}
+
+function evShowComplete() {
+  document.getElementById('ev-step3').classList.add('hidden');
+  const step4 = document.getElementById('ev-step4');
+  step4.classList.remove('hidden');
+  step4.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('ev-complete-title').textContent =
+    document.getElementById('ev-name').value.trim() + ' — Complete';
+  document.getElementById('ev-complete-sub').textContent =
+    `${_evDone} report${_evDone !== 1 ? 's' : ''} generated · ${_evSkipped} skipped`;
+}
+
+async function evDownloadCsv() {
+  if (!_evEventId) return;
+  const btn = document.getElementById('ev-dl-btn');
+  btn.disabled = true; btn.textContent = 'Preparing…';
+  try {
+    const r = await api(`/api/event/${_evEventId}/csv`);
+    if (!r.ok) throw new Error(await errDetail(r, 'Download failed'));
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    const cd = r.headers.get('content-disposition') || '';
+    const m  = cd.match(/filename="?([^"]+)"?/);
+    a.download = m ? m[1] : 'events-pulse.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Download failed: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '↓ Download Enriched CSV';
+  }
+}
+
+function evReset() {
+  _evRows = []; _evEventId = null; _evCsvFilename = null;
+  _evTotal = 0; _evDone = 0; _evSkipped = 0; _evEntityMap = {};
+  document.getElementById('ev-name').value = '';
+  document.getElementById('ev-date').value = '';
+  document.getElementById('ev-file').value = '';
+  document.getElementById('ev-filename').textContent = 'No file chosen';
+  document.getElementById('ev-step1-err').classList.add('hidden');
+  document.getElementById('ev-step2-err').classList.add('hidden');
+  document.getElementById('ev-confirm-rows').innerHTML = '';
+  document.getElementById('ev-entity-rows').innerHTML = '';
+  document.getElementById('ev-progress-bar').style.width = '0%';
+  ['ev-step2','ev-step3','ev-step4'].forEach(id =>
+    document.getElementById(id).classList.add('hidden'));
+  document.getElementById('ev-step1').classList.remove('hidden');
+}
+
+// Load event history into the Events section (called on navigate)
+async function loadEventHistory() {
+  // future: render event list in history page
 }
 </script>
 </body>
