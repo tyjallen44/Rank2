@@ -1825,6 +1825,27 @@ html, body {
 
       <!-- Step 3: Progress -->
       <div id="ev-step3" class="hidden" style="max-width:820px">
+
+        <!-- Analyzing screen (same layout as other report pages) -->
+        <div style="margin-bottom:22px">
+          <div style="font-size:20px;font-weight:700" id="ev-prog-title">Analyzing…</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px" id="ev-prog-sub"></div>
+        </div>
+        <div class="prog-layout" style="margin-bottom:24px">
+          <div class="card" style="align-self:start">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:12px">Progress</div>
+            <ul class="ph-list">
+              <li class="ph-item" id="ev-ph-starting"><div class="ph-dot"></div><span>Starting</span></li>
+              <li class="ph-item" id="ev-ph-analyzing"><div class="ph-dot"></div><span>Analyzing entities</span></li>
+              <li class="ph-item" id="ev-ph-finalizing"><div class="ph-dot"></div><span>Finalizing reports</span></li>
+            </ul>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:8px">Live Output</div>
+            <div class="stream-box" id="ev-stream-box"></div>
+          </div>
+        </div>
+
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
             <div>
@@ -5791,14 +5812,27 @@ async function evSubmitRun() {
   }
 }
 
+function evSetPhase(name, state) {
+  const el = document.getElementById('ev-ph-' + name);
+  if (!el) return;
+  el.className = 'ph-item ' + state;
+  el.querySelector('.ph-dot').textContent = state === 'done' ? '✓' : '';
+}
+
 function evShowProgress(entities) {
   document.getElementById('ev-step2').classList.add('hidden');
   const step3 = document.getElementById('ev-step3');
   step3.classList.remove('hidden');
   step3.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  document.getElementById('ev-progress-title').textContent =
-    document.getElementById('ev-name').value.trim();
+  const eventName = document.getElementById('ev-name').value.trim();
+  document.getElementById('ev-prog-title').textContent = eventName || 'Analyzing…';
+  document.getElementById('ev-prog-sub').textContent   = 'Starting analyses…';
+  document.getElementById('ev-stream-box').textContent = '';
+  ['starting','analyzing','finalizing'].forEach(p => evSetPhase(p, ''));
+  evSetPhase('starting', 'active');
+
+  document.getElementById('ev-progress-title').textContent = eventName;
   document.getElementById('ev-progress-sub').textContent =
     `0 of ${entities.length} complete`;
 
@@ -5842,27 +5876,51 @@ function evUpdateEntityRow(entityId, name, status, score, grade, band) {
 }
 
 function evStreamProgress(eventId) {
-  const es = new EventSource(`/api/event/${eventId}/stream?token=${encodeURIComponent(_token)}`);
+  const es  = new EventSource(`/api/event/${eventId}/stream?token=${encodeURIComponent(_token)}`);
+  const box = document.getElementById('ev-stream-box');
+  let firstEntity = true;
+
+  const appendStream = (line) => {
+    box.textContent += line + '\n';
+    box.scrollTop = box.scrollHeight;
+  };
 
   es.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
 
     if (msg.type === 'entity_start') {
+      if (firstEntity) {
+        evSetPhase('starting', 'done');
+        evSetPhase('analyzing', 'active');
+        document.getElementById('ev-prog-sub').textContent = 'Running analyses…';
+        firstEntity = false;
+      }
+      appendStream(`▶  ${msg.name}`);
       evUpdateEntityRow(msg.entity_id, msg.name, 'running', null, null, null);
+
     } else if (msg.type === 'entity_done') {
       _evDone++;
+      appendStream(`✓  ${msg.name}  —  ${msg.score} ${msg.grade} · ${msg.band}`);
       evUpdateEntityRow(msg.entity_id, msg.name, 'done', msg.score, msg.grade, msg.band);
       evUpdateProgressBar();
+
     } else if (msg.type === 'entity_skip') {
       _evSkipped++;
+      appendStream(`✗  ${msg.name}  —  Skipped`);
       evUpdateEntityRow(msg.entity_id, msg.name, 'skipped', null, null, null);
       evUpdateProgressBar();
+
     } else if (msg.type === 'done') {
+      evSetPhase('analyzing', 'done');
+      evSetPhase('finalizing', 'done');
+      document.getElementById('ev-prog-sub').textContent = 'Complete';
       es.close();
       evShowComplete();
+
     } else if (msg.type === 'error') {
       es.close();
+      document.getElementById('ev-prog-sub').textContent = `Error: ${msg.message}`;
       document.getElementById('ev-progress-sub').textContent = `Error: ${msg.message}`;
     }
   };
@@ -5947,6 +6005,8 @@ function evReset() {
   document.getElementById('ev-confirm-rows').innerHTML = '';
   document.getElementById('ev-entity-rows').innerHTML = '';
   document.getElementById('ev-progress-bar').style.width = '0%';
+  document.getElementById('ev-stream-box').textContent = '';
+  ['starting','analyzing','finalizing'].forEach(p => evSetPhase(p, ''));
   ['ev-step2','ev-step3','ev-step4'].forEach(id =>
     document.getElementById(id).classList.add('hidden'));
   document.getElementById('ev-step1').classList.remove('hidden');
