@@ -40,7 +40,7 @@ except ImportError:
     pass
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
 _PRESERVE_UPPERCASE: frozenset[str] = frozenset({
     # US state abbreviations
@@ -1817,6 +1817,19 @@ async def list_events(_: str = Depends(require_auth)):
         }
         for e in events
     ]
+
+
+@app.delete("/api/event/{event_id}")
+async def delete_event(event_id: str, _: dict = Depends(require_admin)):
+    """Delete an event run, its analysis runs, and all files on disk."""
+    import shutil
+    from perception.db import init_db, delete_event_run
+    init_db()
+    delete_event_run(event_id)
+    event_dir = REPORTS_DIR / "events" / event_id
+    if event_dir.exists():
+        shutil.rmtree(event_dir, ignore_errors=True)
+    return Response(status_code=204)
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)

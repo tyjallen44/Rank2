@@ -604,6 +604,23 @@ def list_event_runs(role: str) -> list:
     return [dict(zip(cols, r)) for r in rows]
 
 
+def delete_event_run(event_id: str) -> None:
+    """Delete an event run and all associated analysis runs + provider data."""
+    con = get_connection()
+    # Collect run_ids belonging to this event so we can cascade to ranked_providers
+    run_ids = [r[0] for r in con.execute(
+        "SELECT run_id FROM event_entities WHERE event_id = ? AND run_id IS NOT NULL",
+        [event_id],
+    ).fetchall()]
+    if run_ids:
+        placeholders = ",".join("?" * len(run_ids))
+        con.execute(f"DELETE FROM ranked_providers WHERE run_id IN ({placeholders})", run_ids)
+        con.execute(f"DELETE FROM analysis_runs WHERE run_id IN ({placeholders})", run_ids)
+    con.execute("DELETE FROM event_entities WHERE event_id = ?", [event_id])
+    con.execute("DELETE FROM event_runs WHERE id = ?", [event_id])
+    con.close()
+
+
 def set_run_role(run_id: str, role: str) -> None:
     """Tag an analysis run with the role of the user who created it."""
     con = get_connection()

@@ -4573,6 +4573,9 @@ function renderHistory(events) {
       const zipBtn = ev.has_zip
         ? `<button class="btn btn-secondary btn-sm" onclick="evDlZipById('${ev.id}')">⬇ ZIP</button>`
         : `<span style="color:var(--muted);font-size:12px">—</span>`;
+      const delBtn = _role === 'admin'
+        ? `<button class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="evDeleteById('${ev.id}','${(ev.event_name||'').replace(/'/g,"\\'")}')">Delete</button>`
+        : '';
       return `<tr>
         <td style="color:var(--muted);font-size:13px;white-space:nowrap">${date}</td>
         <td style="font-weight:600">${ev.event_name || '—'}</td>
@@ -4582,6 +4585,7 @@ function renderHistory(events) {
         <td>${statusBadge}</td>
         <td>${csvBtn}</td>
         <td>${zipBtn}</td>
+        ${_role === 'admin' ? `<td>${delBtn}</td>` : ''}
       </tr>`;
     }).join('');
     evHtml = `
@@ -4592,6 +4596,7 @@ function renderHistory(events) {
             <thead><tr>
               <th>Date</th><th>Event Name</th><th>Event Date</th><th>Type</th>
               <th>Entities</th><th>Status</th><th>CSV</th><th>All Reports (ZIP)</th>
+              ${_role === 'admin' ? '<th></th>' : ''}
             </tr></thead>
             <tbody>${evRows}</tbody>
           </table>
@@ -5917,6 +5922,17 @@ async function evDlCsvById(eventId) {
 async function evDlZipById(eventId) {
   try { await _evDownloadFile(`/api/event/${eventId}/zip`, 'event-reports.zip'); }
   catch(e) { alert('Download failed: ' + e.message); }
+}
+
+async function evDeleteById(eventId, eventName) {
+  if (!confirm(`Delete event run "${eventName || eventId}" and all its reports?\nThis cannot be undone.`)) return;
+  try {
+    const r = await api(`/api/event/${eventId}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(await r.text());
+    loadHistory();
+  } catch(e) {
+    alert('Delete failed: ' + e.message);
+  }
 }
 
 function evReset() {
