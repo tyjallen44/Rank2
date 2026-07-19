@@ -1599,7 +1599,6 @@ def _run_event_job(
                             city=city, state=state,
                             aggregate=True,
                             confirmed_siblings=[],
-                            individual_report=True,
                             output_dir=event_dir,
                             on_event=lambda _e: None,
                             brand=brand,
