@@ -5636,7 +5636,7 @@ function evFileChosen(input) {
 }
 
 function evDownloadTemplate() {
-  const content = 'name,city,state\n';
+  const content = 'name,city,state,url\n';
   const blob = new Blob([content], { type: 'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -5775,6 +5775,7 @@ async function evSubmitRun() {
       input_name:   row.input_name,
       input_city:   row.input_city,
       input_state:  row.input_state,
+      input_url:    row.input_url || '',
       resolved_name: resolvedName,
       resolved_addr: resolvedAddr,
     });

@@ -481,6 +481,7 @@ def init_db() -> None:
             input_name     VARCHAR,
             input_city     VARCHAR,
             input_state    VARCHAR,
+            input_url      VARCHAR,
             resolved_name  VARCHAR,
             resolved_addr  VARCHAR,
             run_id         VARCHAR,
@@ -491,6 +492,12 @@ def init_db() -> None:
             error_msg      VARCHAR
         )
     """)
+    # Migrate existing event_entities rows that pre-date input_url
+    _ee_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='event_entities'"
+    ).fetchall()}
+    if "input_url" not in _ee_cols:
+        con.execute("ALTER TABLE event_entities ADD COLUMN input_url VARCHAR")
     con.close()
 
 
@@ -518,10 +525,10 @@ def create_event_entities(entities: list) -> None:
     for e in entities:
         con.execute(
             "INSERT INTO event_entities (id, event_id, row_num, input_name, input_city, "
-            "input_state, resolved_name, resolved_addr, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+            "input_state, input_url, resolved_name, resolved_addr, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
             [e["id"], e["event_id"], e["row_num"], e["input_name"], e["input_city"],
-             e["input_state"], e["resolved_name"], e["resolved_addr"]],
+             e["input_state"], e.get("input_url", ""), e["resolved_name"], e["resolved_addr"]],
         )
     con.close()
 
@@ -578,13 +585,13 @@ def get_event_run(event_id: str) -> Optional[dict]:
 def get_event_entities(event_id: str) -> list:
     con = get_connection()
     rows = con.execute(
-        "SELECT id, event_id, row_num, input_name, input_city, input_state, "
+        "SELECT id, event_id, row_num, input_name, input_city, input_state, input_url, "
         "resolved_name, resolved_addr, run_id, pulse_score, letter_grade, band_label, "
         "status, error_msg FROM event_entities WHERE event_id = ? ORDER BY row_num",
         [event_id],
     ).fetchall()
     con.close()
-    cols = ["id", "event_id", "row_num", "input_name", "input_city", "input_state",
+    cols = ["id", "event_id", "row_num", "input_name", "input_city", "input_state", "input_url",
             "resolved_name", "resolved_addr", "run_id", "pulse_score", "letter_grade",
             "band_label", "status", "error_msg"]
     return [dict(zip(cols, r)) for r in rows]
