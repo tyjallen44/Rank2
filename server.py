@@ -1678,6 +1678,10 @@ def _run_event_job(
         import io as _io2
         ev_entities = get_event_entities(event_id)
         ev          = get_event_run(event_id)
+        def _ascii_grade(g: str) -> str:
+            """Replace Unicode typographic chars that break Excel CSV display."""
+            return (g or "").replace("−", "-").replace("—", "N/A").replace("–", "-")
+
         out = _io2.StringIO()
         writer = _csv.writer(out)
         writer.writerow(["name", "city", "state", "pulse_score", "letter_grade",
@@ -1686,18 +1690,21 @@ def _run_event_job(
             if e["status"] == "done":
                 notes = "scored"
             else:
-                notes = f"skipped — {e['error_msg'] or 'not found'}"
+                notes = f"skipped - {e['error_msg'] or 'not found'}"
             writer.writerow([
                 e["input_name"], e["input_city"], e["input_state"],
                 e["pulse_score"] if e["pulse_score"] is not None else "",
-                e["letter_grade"] or "", e["band_label"] or "", notes,
+                _ascii_grade(e["letter_grade"]),
+                e["band_label"] or "",
+                notes,
             ])
 
         ts         = _dt.utcnow().strftime("%y%m%d-%H%M")
         safe_name  = _re.sub(r"[^a-zA-Z0-9_-]", "-", (ev["event_name"] or "event"))[:40]
         csv_name   = f"{safe_name}_EventReport-{ts}.csv"
         csv_path   = REPORTS_DIR / csv_name
-        csv_path.write_text(out.getvalue(), encoding="utf-8")
+        # UTF-8 BOM so Excel opens without garbled characters
+        csv_path.write_bytes(b"\xef\xbb\xbf" + out.getvalue().encode("utf-8"))
 
         finalize_event_run(event_id, str(csv_path))
         job["status"] = "done"
