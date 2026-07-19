@@ -2056,7 +2056,7 @@ html, body {
 
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
           <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.4</div>
-          <div style="font-size:13px;color:var(--muted)">Released July 17, 2026</div>
+          <div style="font-size:13px;color:var(--muted)">Released July 19, 2026</div>
         </div>
 
         <div class="rn-section">
@@ -2080,6 +2080,16 @@ html, body {
           <div class="rn-item">
             <div class="rn-title">Physician Roster &amp; Individual Ratings</div>
             <div class="rn-body">Each practice in a Practice Composite now includes a physician roster with individual reputation data. Physicians are discovered in real time from the NPPES NPI Registry (MDs and DOs only — no PAs or Nurse Practitioners) and enriched with per-physician Google ratings fetched via the Google Places API alongside Healthgrades, Vitals, WebMD, Yelp, and RateMDs data. Physicians appear as sub-rows beneath each practice entry, sorted by total review count.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Events Pulse</div>
+            <div class="rn-body">A new report type for generating batch Pulse Diagnostics from a CSV list of event attendees. Upload a CSV with name, city, state, and optional URL columns using the provided template; the app resolves each entity via Google Places, auto-confirming single matches and presenting a dropdown for ambiguous results. After confirmation, analyses run five at a time. Each entity receives an individual Pulse Diagnostic PDF (named with an <em>EventReport</em> suffix) and the run produces an enriched CSV appending Pulse Score, letter grade, and band label to the original data, plus a ZIP bundle of all PDFs. Event runs are shared across all logged-in users and appear in the History section. Events Pulse is accessible from the left navigation.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Admin: Delete Event Runs</div>
+            <div class="rn-body">Admin users can now delete event runs directly from the History page. Deleting an event removes the run record, all associated analysis runs and provider data, and the entire event folder on disk — including all PDFs, the enriched CSV, and the ZIP. A confirmation prompt prevents accidental deletion. The Delete button is visible only to users with the Admin role.</div>
           </div>
 
         </div>
@@ -2112,6 +2122,16 @@ html, body {
             <div class="rn-body">Individual physician Google ratings and review counts are now fetched live via the Google Places API — one concurrent lookup per physician — replacing the prior approach of asking Claude to recall time-sensitive review data from training. Each lookup validates the returned listing name against the physician's last name before accepting it, preventing misattribution from common-name collisions.</div>
           </div>
 
+          <div class="rn-item">
+            <div class="rn-title">Live Analysis Progress on Events Pulse</div>
+            <div class="rn-body">The Events Pulse progress screen now shows the same phase list and live output stream used on other report pages. Three phases — <em>Starting</em>, <em>Analyzing entities</em>, and <em>Finalizing reports</em> — advance in real time as the job runs. Each entity's result is logged to the stream with a status prefix: <em>▶</em> when started, <em>✓</em> with score and grade when complete, and <em>✗</em> when skipped. The phase panel and stream appear above the existing progress bar and entity row list.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">URL Column in Events Pulse CSV</div>
+            <div class="rn-body">The Events Pulse CSV template now includes a <em>url</em> column alongside name, city, and state. URLs supplied in the upload are stored with each entity and written as the fourth column in the enriched EventReport CSV output, preserving the original link data alongside the appended Pulse Score, grade, and band.</div>
+          </div>
+
         </div>
 
         <div class="rn-section">
@@ -2122,6 +2142,7 @@ html, body {
             <li><strong>Practice Composite PDF download returning 404</strong> — The composite PDF was not stored under the standard report history path, causing the download link to return 404. A dedicated <code>/api/composite/{job_id}/pdf</code> endpoint now serves the file directly from the completed job.</li>
             <li><strong>Duplicate practices in composite for same-name multi-location groups</strong> — Practices with multiple locations registered under the same name were appearing as duplicate entries in the composite table. A post-processing deduplication step now collapses same-name records into a single entry.</li>
             <li><strong>Sibling discovery failing for specialty practices</strong> — The sibling-location discovery step was using name comparison instead of object identity for filtering, causing specialty practices to incorrectly exclude themselves from their own sibling list. Fixed by switching to identity comparison.</li>
+            <li><strong>Events Pulse producing 0 reports</strong> — All entities in an event run were silently marked as skipped because <code>individual_report</code> was passed as a keyword argument to <code>analyze_practice</code>, which does not accept that parameter. The argument has been removed; <code>analyze_practice</code> handles individual report generation internally.</li>
             <li><strong>Individual report runs showing [object Object]</strong> — A serialization error was causing the run payload to render as <em>[object Object]</em> in the live output stream instead of the report content. Fixed by ensuring the payload is correctly stringified before dispatch.</li>
             <li><strong>PAs and Nurse Practitioners included in physician rosters</strong> — Some mid-level providers (PAs, NPs, CRNAs) who self-register a physician taxonomy code alongside their actual credential in NPPES were being included in physician discovery results. Fixed by adding an explicit exclusion check — any record with a PA/NP/CRNA taxonomy code is excluded even when it also carries a physician taxonomy.</li>
             <li><strong>Co-located non-specialty physicians contaminating rosters</strong> — At shared medical buildings, physicians from unrelated practices (urologists, ENTs, ophthalmologists) were being seeded into orthopedic clinic rosters because the NPPES postal-code search returns all providers at a given address. Fixed by applying a specialty taxonomy filter in the NPPES seed search whenever the practice name implies a specialty, restricting results to providers whose taxonomy matches the practice type.</li>
