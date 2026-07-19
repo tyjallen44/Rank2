@@ -1577,6 +1577,10 @@ def _run_event_job(
         init_db()
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+        # Dedicated subfolder for this event — all files (PDFs, CSV, ZIP) go here
+        event_dir = REPORTS_DIR / "events" / event_id
+        event_dir.mkdir(parents=True, exist_ok=True)
+
         semaphore = threading.Semaphore(5)
 
         def _run_one(entity: dict) -> None:
@@ -1594,9 +1598,9 @@ def _run_event_job(
                             entity_name=resolved_name,
                             city=city, state=state,
                             aggregate=True,
-                            confirmed_siblings=[],   # single-entity; skip discovery
+                            confirmed_siblings=[],
                             individual_report=True,
-                            output_dir=REPORTS_DIR,
+                            output_dir=event_dir,
                             on_event=lambda _e: None,
                             brand=brand,
                         )
@@ -1607,17 +1611,17 @@ def _run_event_job(
                             entity_name=resolved_name,
                             aggregate=True,
                             individual_report=True,
-                            output_dir=REPORTS_DIR,
+                            output_dir=event_dir,
                             on_event=lambda _e: None,
                             brand=brand,
                         )
 
                     set_run_role(result.run_id, role)
 
-                    # Tag the run with this event
+                    # Tag the run with this event; make it visible to all users
                     _con = get_connection()
                     _con.execute(
-                        "UPDATE analysis_runs SET event_id=? WHERE run_id=?",
+                        "UPDATE analysis_runs SET event_id=?, user_role='admin' WHERE run_id=?",
                         [event_id, result.run_id],
                     )
                     _con.close()
@@ -1673,13 +1677,14 @@ def _run_event_job(
                 except Exception:
                     pass
 
-        # Build enriched CSV
+        # ── Build enriched CSV ────────────────────────────────────────────────
         import csv as _csv
         import io as _io2
+        import zipfile as _zf
         ev_entities = get_event_entities(event_id)
         ev          = get_event_run(event_id)
+
         def _ascii_grade(g: str) -> str:
-            """Replace Unicode typographic chars that break Excel CSV display."""
             return (g or "").replace("−", "-").replace("—", "N/A").replace("–", "-")
 
         out = _io2.StringIO()
@@ -1687,28 +1692,31 @@ def _run_event_job(
         writer.writerow(["name", "city", "state", "pulse_score", "letter_grade",
                          "band_label", "notes"])
         for e in ev_entities:
-            if e["status"] == "done":
-                notes = "scored"
-            else:
-                notes = f"skipped - {e['error_msg'] or 'not found'}"
+            notes = "scored" if e["status"] == "done" else f"skipped - {e['error_msg'] or 'not found'}"
             writer.writerow([
                 e["input_name"], e["input_city"], e["input_state"],
                 e["pulse_score"] if e["pulse_score"] is not None else "",
-                _ascii_grade(e["letter_grade"]),
-                e["band_label"] or "",
-                notes,
+                _ascii_grade(e["letter_grade"]), e["band_label"] or "", notes,
             ])
 
-        ts         = _dt.utcnow().strftime("%y%m%d-%H%M")
-        safe_name  = _re.sub(r"[^a-zA-Z0-9_-]", "-", (ev["event_name"] or "event"))[:40]
-        csv_name   = f"{safe_name}_EventReport-{ts}.csv"
-        csv_path   = REPORTS_DIR / csv_name
-        # UTF-8 BOM so Excel opens without garbled characters
+        ts        = _dt.utcnow().strftime("%y%m%d-%H%M")
+        safe_name = _re.sub(r"[^a-zA-Z0-9_-]", "-", (ev["event_name"] or "event"))[:40]
+        csv_name  = f"{safe_name}_EventReport-{ts}.csv"
+        csv_path  = event_dir / csv_name
         csv_path.write_bytes(b"\xef\xbb\xbf" + out.getvalue().encode("utf-8"))
 
-        finalize_event_run(event_id, str(csv_path))
+        # ── Build ZIP of all PDFs in the event folder ─────────────────────────
+        zip_name = f"{safe_name}_EventReport-{ts}.zip"
+        zip_path = event_dir / zip_name
+        pdfs = sorted(event_dir.glob("*.pdf"))
+        with _zf.ZipFile(zip_path, "w", _zf.ZIP_DEFLATED) as zf:
+            for pdf in pdfs:
+                zf.write(pdf, pdf.name)
+            zf.write(csv_path, csv_name)   # include the CSV in the ZIP too
+
+        finalize_event_run(event_id, str(csv_path), str(zip_path))
         job["status"] = "done"
-        job["result"] = {"event_id": event_id, "csv_filename": csv_name}
+        job["result"] = {"event_id": event_id, "csv_filename": csv_name, "zip_filename": zip_name}
 
     except Exception as exc:
         job["status"] = "error"
@@ -1775,20 +1783,39 @@ async def event_csv_download(event_id: str, _: str = Depends(require_auth)):
     csv_path = Path(ev["enriched_csv_path"])
     if not csv_path.exists():
         raise HTTPException(404, "CSV file not found on disk")
+    return FileResponse(str(csv_path), media_type="text/csv", filename=csv_path.name)
+
+
+@app.get("/api/event/{event_id}/zip")
+async def event_zip_download(event_id: str, _: str = Depends(require_auth)):
+    """Download a ZIP of all PDFs + CSV for a completed event run."""
+    from perception.db import init_db, get_event_run
+    init_db()
+    ev = get_event_run(event_id)
+    if not ev or not ev.get("zip_path"):
+        raise HTTPException(404, "ZIP not ready")
+    zip_path = Path(ev["zip_path"])
+    if not zip_path.exists():
+        raise HTTPException(404, "ZIP file not found on disk")
     return FileResponse(
-        str(csv_path), media_type="text/csv", filename=csv_path.name
+        str(zip_path),
+        media_type="application/zip",
+        filename=zip_path.name,
     )
 
 
 @app.get("/api/events")
-async def list_events(role: str = Depends(require_auth)):
-    """List all event runs for the current user (admin sees all)."""
+async def list_events(_: str = Depends(require_auth)):
+    """List all event runs — visible to every logged-in user."""
     from perception.db import init_db, list_event_runs
     init_db()
-    events = list_event_runs(role)
+    events = list_event_runs("admin")   # always fetch all; visibility is open
     return [
-        {**{k: str(v) if k == "created_at" else v for k, v in e.items()},
-         "has_csv": bool(e.get("enriched_csv_path") and Path(e["enriched_csv_path"]).exists())}
+        {
+            **{k: str(v) if k == "created_at" else v for k, v in e.items()},
+            "has_csv": bool(e.get("enriched_csv_path") and Path(e["enriched_csv_path"]).exists()),
+            "has_zip": bool(e.get("zip_path") and Path(e["zip_path"]).exists()),
+        }
         for e in events
     ]
 

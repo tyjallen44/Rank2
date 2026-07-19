@@ -463,9 +463,16 @@ def init_db() -> None:
             status            VARCHAR DEFAULT 'running',
             user_role         VARCHAR DEFAULT 'user',
             enriched_csv_path VARCHAR,
+            zip_path          VARCHAR,
             created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # Migrate existing event_runs rows that pre-date zip_path
+    _er_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='event_runs'"
+    ).fetchall()}
+    if "zip_path" not in _er_cols:
+        con.execute("ALTER TABLE event_runs ADD COLUMN zip_path VARCHAR")
     con.execute("""
         CREATE TABLE IF NOT EXISTS event_entities (
             id             VARCHAR PRIMARY KEY,
@@ -542,11 +549,11 @@ def increment_event_progress(event_id: str, done: int = 0, skipped: int = 0) -> 
     con.close()
 
 
-def finalize_event_run(event_id: str, enriched_csv_path: str) -> None:
+def finalize_event_run(event_id: str, enriched_csv_path: str, zip_path: str = "") -> None:
     con = get_connection()
     con.execute(
-        "UPDATE event_runs SET status='complete', enriched_csv_path=? WHERE id=?",
-        [enriched_csv_path, event_id],
+        "UPDATE event_runs SET status='complete', enriched_csv_path=?, zip_path=? WHERE id=?",
+        [enriched_csv_path, zip_path or None, event_id],
     )
     con.close()
 
@@ -555,7 +562,7 @@ def get_event_run(event_id: str) -> Optional[dict]:
     con = get_connection()
     row = con.execute(
         "SELECT id, event_name, event_date, entity_type, csv_filename, total_count, "
-        "done_count, skip_count, status, user_role, enriched_csv_path, created_at "
+        "done_count, skip_count, status, user_role, enriched_csv_path, zip_path, created_at "
         "FROM event_runs WHERE id = ?",
         [event_id],
     ).fetchone()
@@ -564,7 +571,7 @@ def get_event_run(event_id: str) -> Optional[dict]:
         return None
     cols = ["id", "event_name", "event_date", "entity_type", "csv_filename",
             "total_count", "done_count", "skip_count", "status", "user_role",
-            "enriched_csv_path", "created_at"]
+            "enriched_csv_path", "zip_path", "created_at"]
     return dict(zip(cols, row))
 
 
@@ -584,23 +591,16 @@ def get_event_entities(event_id: str) -> list:
 
 
 def list_event_runs(role: str) -> list:
+    """Return all event runs — visible to every logged-in user regardless of role."""
     con = get_connection()
-    if role == "admin":
-        rows = con.execute(
-            "SELECT id, event_name, event_date, entity_type, total_count, done_count, "
-            "skip_count, status, enriched_csv_path, created_at "
-            "FROM event_runs ORDER BY created_at DESC"
-        ).fetchall()
-    else:
-        rows = con.execute(
-            "SELECT id, event_name, event_date, entity_type, total_count, done_count, "
-            "skip_count, status, enriched_csv_path, created_at "
-            "FROM event_runs WHERE user_role = ? ORDER BY created_at DESC",
-            [role],
-        ).fetchall()
+    rows = con.execute(
+        "SELECT id, event_name, event_date, entity_type, total_count, done_count, "
+        "skip_count, status, enriched_csv_path, zip_path, created_at "
+        "FROM event_runs ORDER BY created_at DESC"
+    ).fetchall()
     con.close()
     cols = ["id", "event_name", "event_date", "entity_type", "total_count",
-            "done_count", "skip_count", "status", "enriched_csv_path", "created_at"]
+            "done_count", "skip_count", "status", "enriched_csv_path", "zip_path", "created_at"]
     return [dict(zip(cols, r)) for r in rows]
 
 

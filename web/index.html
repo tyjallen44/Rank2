@@ -4519,12 +4519,16 @@ async function loadHistory() {
   const el = document.getElementById('history-body');
   el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
   try {
-    const r = await api('/api/history');
-    _historyRuns = await r.json();
+    const [runsResp, eventsResp] = await Promise.all([
+      api('/api/history'),
+      api('/api/events'),
+    ]);
+    _historyRuns = await runsResp.json();
+    const events  = await eventsResp.json();
     _historySortField = 'date';
     _historySortDir = 'desc';
     _historySearch = '';
-    renderHistory();
+    renderHistory(events);
   } catch(e) {
     el.innerHTML = `<div class="err">${e.message}</div>`;
   }
@@ -4549,10 +4553,53 @@ function _historyFilename(r) {
   return (r.pdf_path || '').split('/').pop().replace(/\.pdf$/i, '') || '—';
 }
 
-function renderHistory() {
+function renderHistory(events) {
   const searchWasFocused = document.activeElement && document.activeElement.id === 'history-search';
   const el = document.getElementById('history-body');
-  if (!_historyRuns.length) {
+
+  // ── Events section ────────────────────────────────────────────────────────
+  let evHtml = '';
+  if (events && events.length) {
+    const evRows = events.map(ev => {
+      const date  = (ev.created_at || '').slice(0, 10);
+      const count = `${ev.done_count} scored${ev.skip_count ? ` · ${ev.skip_count} skipped` : ''}`;
+      const type  = ev.entity_type === 'practice' ? 'Practice' : 'Hospital';
+      const statusBadge = ev.status === 'complete'
+        ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
+        : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
+      const csvBtn = ev.has_csv
+        ? `<button class="btn btn-gold btn-sm" onclick="evDlCsvById('${ev.id}')">⬇ CSV</button>`
+        : `<span style="color:var(--muted);font-size:12px">—</span>`;
+      const zipBtn = ev.has_zip
+        ? `<button class="btn btn-secondary btn-sm" onclick="evDlZipById('${ev.id}')">⬇ ZIP</button>`
+        : `<span style="color:var(--muted);font-size:12px">—</span>`;
+      return `<tr>
+        <td style="color:var(--muted);font-size:13px;white-space:nowrap">${date}</td>
+        <td style="font-weight:600">${ev.event_name || '—'}</td>
+        <td>${ev.event_date || '—'}</td>
+        <td><span class="badge bg-muted">${type}</span></td>
+        <td style="font-size:13px;color:var(--muted)">${count}</td>
+        <td>${statusBadge}</td>
+        <td>${csvBtn}</td>
+        <td>${zipBtn}</td>
+      </tr>`;
+    }).join('');
+    evHtml = `
+      <div style="margin-bottom:24px">
+        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Event Runs</div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="tbl">
+            <thead><tr>
+              <th>Date</th><th>Event Name</th><th>Event Date</th><th>Type</th>
+              <th>Entities</th><th>Status</th><th>CSV</th><th>All Reports (ZIP)</th>
+            </tr></thead>
+            <tbody>${evRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  if (!_historyRuns.length && !evHtml) {
     el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
     return;
   }
@@ -4583,7 +4630,8 @@ function renderHistory() {
     return `<th onclick="historySort('${field}')" style="cursor:pointer;user-select:none${align ? ';text-align:' + align : ''}">${label}${icon}</th>`;
   };
 
-  el.innerHTML = `
+  el.innerHTML = evHtml + `
+    <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">All Reports</div>
     <div style="margin-bottom:16px">
       <input id="history-search" type="text" class="input"
         placeholder="Search by location or name…"
@@ -5840,22 +5888,35 @@ async function evDownloadCsv() {
   const btn = document.getElementById('ev-dl-btn');
   btn.disabled = true; btn.textContent = 'Preparing…';
   try {
-    const r = await api(`/api/event/${_evEventId}/csv`);
-    if (!r.ok) throw new Error(await errDetail(r, 'Download failed'));
-    const blob = await r.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url;
-    const cd = r.headers.get('content-disposition') || '';
-    const m  = cd.match(/filename="?([^"]+)"?/);
-    a.download = m ? m[1] : 'events-pulse.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    await _evDownloadFile(`/api/event/${_evEventId}/csv`, 'events-pulse.csv');
   } catch(e) {
     alert('Download failed: ' + e.message);
   } finally {
     btn.disabled = false; btn.textContent = '↓ Download Enriched CSV';
   }
+}
+
+async function _evDownloadFile(url, fallbackName) {
+  const r = await api(url);
+  if (!r.ok) throw new Error(await errDetail(r, 'Download failed'));
+  const blob = await r.blob();
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  const cd   = r.headers.get('content-disposition') || '';
+  const m    = cd.match(/filename="?([^"]+)"?/);
+  a.download = m ? m[1] : fallbackName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function evDlCsvById(eventId) {
+  try { await _evDownloadFile(`/api/event/${eventId}/csv`, 'event-report.csv'); }
+  catch(e) { alert('Download failed: ' + e.message); }
+}
+
+async function evDlZipById(eventId) {
+  try { await _evDownloadFile(`/api/event/${eventId}/zip`, 'event-reports.zip'); }
+  catch(e) { alert('Download failed: ' + e.message); }
 }
 
 function evReset() {
