@@ -662,7 +662,7 @@ def _rankings_section(providers: list[RankedProvider], title: str, subtitle: str
   </div>"""
 
 
-_TEASER_DEMO_URL = "https://www.rldatix.com/en-nam/book-a-demo/"
+_TEASER_DEMO_URL = "https://web.rldatix.com/pxg-report?hs_preview=sSVWpYTV-439532565740"
 _TEASER_PHONE    = "866.338.8270"
 
 
