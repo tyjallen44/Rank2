@@ -1467,6 +1467,7 @@ class EventRunRequest(BaseModel):
     event_date: Optional[str] = None
     entity_type: str                   # "hospital" or "practice"
     csv_filename: Optional[str] = None
+    include_teaser: bool = False
     entities: List[dict]               # confirmed list: {input_name,input_city,input_state,resolved_name,resolved_addr}
 
 
@@ -1557,12 +1558,13 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
 
     job_id = _new_job(role, brand)
     _event_job_map[event_id] = job_id
-    _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type)
+    _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser)
     return {"event_id": event_id, "job_id": job_id}
 
 
 def _run_event_job(
-    job_id: str, event_id: str, entities: list, entity_type: str
+    job_id: str, event_id: str, entities: list, entity_type: str,
+    include_teaser: bool = False,
 ) -> None:
     """Background: analyze all entities in the event, 5 at a time."""
     import re as _re
@@ -1661,6 +1663,47 @@ def _run_event_job(
                             _con2.close()
                         except Exception:
                             pass
+
+                    # Teaser report (optional second pass per entity)
+                    if include_teaser:
+                        try:
+                            if entity_type == "practice":
+                                from perception.practice_analyzer import analyze_practice
+                                t_result = analyze_practice(
+                                    entity_name=resolved_name,
+                                    city=city, state=state,
+                                    aggregate=True,
+                                    confirmed_siblings=[],
+                                    output_dir=event_dir,
+                                    on_event=lambda _e: None,
+                                    brand=brand,
+                                    teaser_report=True,
+                                )
+                            else:
+                                from perception.analyzer import analyze_location
+                                t_result = analyze_location(
+                                    city=city, state=state,
+                                    entity_name=resolved_name,
+                                    aggregate=True,
+                                    individual_report=True,
+                                    teaser_report=True,
+                                    output_dir=event_dir,
+                                    on_event=lambda _e: None,
+                                    brand=brand,
+                                )
+                            # Rename teaser PDF
+                            if t_result.pdf_path:
+                                t_old = Path(t_result.pdf_path)
+                                t_stem = t_old.stem.replace("Pulse-Diagnostic", "EventReport_Teaser")
+                                if "EventReport_Teaser" not in t_stem:
+                                    t_stem = t_old.stem + "_EventReport_Teaser"
+                                t_new = t_old.parent / f"{t_stem}{t_old.suffix}"
+                                try:
+                                    t_old.rename(t_new)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass  # teaser failure doesn't affect the main result
 
                     update_event_entity(entity_id, result.run_id, pulse_score, letter, band, "done")
                     increment_event_progress(event_id, done=1)
