@@ -1821,6 +1821,43 @@ async def list_events(_: str = Depends(require_auth)):
     ]
 
 
+@app.post("/api/event/{event_id}/upload-files")
+async def event_upload_files(
+    event_id: str,
+    _: dict = Depends(require_admin),
+    csv: Optional[UploadFile] = File(None),
+    zip: Optional[UploadFile] = File(None),
+):
+    """Admin-only: replace the enriched CSV and/or ZIP for an existing event run."""
+    from perception.db import init_db, get_event_run, update_event_files
+    init_db()
+    ev = get_event_run(event_id)
+    if not ev:
+        raise HTTPException(404, "Event not found")
+
+    event_dir = REPORTS_DIR / "events" / event_id
+    event_dir.mkdir(parents=True, exist_ok=True)
+
+    new_csv_path: Optional[str] = None
+    new_zip_path: Optional[str] = None
+
+    if csv is not None:
+        csv_dest = event_dir / (csv.filename or f"{event_id}_enriched.csv")
+        csv_dest.write_bytes(await csv.read())
+        new_csv_path = str(csv_dest)
+
+    if zip is not None:
+        zip_dest = event_dir / (zip.filename or f"{event_id}_reports.zip")
+        zip_dest.write_bytes(await zip.read())
+        new_zip_path = str(zip_dest)
+
+    if new_csv_path is None and new_zip_path is None:
+        raise HTTPException(400, "No files provided")
+
+    update_event_files(event_id, enriched_csv_path=new_csv_path, zip_path=new_zip_path)
+    return {"ok": True}
+
+
 @app.delete("/api/event/{event_id}")
 async def delete_event(event_id: str, _: dict = Depends(require_admin)):
     """Delete an event run, its analysis runs, and all files on disk."""
@@ -1832,6 +1869,18 @@ async def delete_event(event_id: str, _: dict = Depends(require_admin)):
     if event_dir.exists():
         shutil.rmtree(event_dir, ignore_errors=True)
     return Response(status_code=204)
+
+
+_EVENTS_DISPLAY_GCS_URL = (
+    "https://storage.googleapis.com/rank2-499218-rank2-data"
+    "/downloads/EventsDisplay-1.0.0-arm64.dmg"
+)
+
+@app.get("/api/downloads/events-display")
+async def download_events_display(_: str = Depends(require_auth)):
+    # DMG is hosted on GCS (too large for the Docker image / git repo)
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=_EVENTS_DISPLAY_GCS_URL)
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)

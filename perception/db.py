@@ -556,6 +556,27 @@ def increment_event_progress(event_id: str, done: int = 0, skipped: int = 0) -> 
     con.close()
 
 
+def update_event_files(event_id: str, enriched_csv_path: Optional[str] = None, zip_path: Optional[str] = None) -> None:
+    """Update only the file paths for an event run without changing status."""
+    con = get_connection()
+    if enriched_csv_path is not None and zip_path is not None:
+        con.execute(
+            "UPDATE event_runs SET enriched_csv_path=?, zip_path=? WHERE id=?",
+            [enriched_csv_path, zip_path, event_id],
+        )
+    elif enriched_csv_path is not None:
+        con.execute(
+            "UPDATE event_runs SET enriched_csv_path=? WHERE id=?",
+            [enriched_csv_path, event_id],
+        )
+    elif zip_path is not None:
+        con.execute(
+            "UPDATE event_runs SET zip_path=? WHERE id=?",
+            [zip_path, event_id],
+        )
+    con.close()
+
+
 def finalize_event_run(event_id: str, enriched_csv_path: str, zip_path: str = "") -> None:
     con = get_connection()
     con.execute(

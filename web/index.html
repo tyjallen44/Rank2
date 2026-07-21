@@ -1784,7 +1784,8 @@ html, body {
                 Choose File
               </label>
               <span id="ev-filename" style="font-size:13px;color:var(--muted)">No file chosen</span>
-              <button class="btn btn-ghost btn-sm" onclick="evDownloadTemplate()" style="margin-left:auto">↓ Download Template</button>
+              <button class="btn btn-ghost btn-sm" onclick="evDownloadEventsDisplay()" style="margin-left:auto">↓ Download EventsDisplay</button>
+              <button class="btn btn-ghost btn-sm" onclick="evDownloadTemplate()">↓ Download Template</button>
             </div>
             <div style="font-size:12px;color:var(--muted);margin-top:8px">Required columns: <strong>name</strong>, <strong>city</strong>, <strong>state</strong> — one row per attendee.</div>
           </div>
@@ -4615,9 +4616,18 @@ function renderHistory(events) {
       const zipBtn = ev.has_zip
         ? `<button class="btn btn-secondary btn-sm" onclick="evDlZipById('${ev.id}')">⬇ ZIP</button>`
         : `<span style="color:var(--muted);font-size:12px">—</span>`;
-      const delBtn = _role === 'admin'
-        ? `<button class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="evDeleteById('${ev.id}','${(ev.event_name||'').replace(/'/g,"\\'")}')">Delete</button>`
-        : '';
+      const adminBtns = _role === 'admin' ? `
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <label class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;margin:0" title="Replace CSV">
+            <input type="file" accept=".csv" style="display:none" onchange="evUploadFile('${ev.id}','csv',this)">
+            ↑ CSV
+          </label>
+          <label class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;margin:0" title="Replace ZIP">
+            <input type="file" accept=".zip" style="display:none" onchange="evUploadFile('${ev.id}','zip',this)">
+            ↑ ZIP
+          </label>
+          <button class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="evDeleteById('${ev.id}','${(ev.event_name||'').replace(/'/g,"\\'")}')">Delete</button>
+        </div>` : '';
       return `<tr>
         <td style="color:var(--muted);font-size:13px;white-space:nowrap">${date}</td>
         <td style="font-weight:600">${ev.event_name || '—'}</td>
@@ -4627,7 +4637,7 @@ function renderHistory(events) {
         <td>${statusBadge}</td>
         <td>${csvBtn}</td>
         <td>${zipBtn}</td>
-        ${_role === 'admin' ? `<td>${delBtn}</td>` : ''}
+        ${_role === 'admin' ? `<td>${adminBtns}</td>` : ''}
       </tr>`;
     }).join('');
     evHtml = `
@@ -5656,6 +5666,10 @@ function evFileChosen(input) {
   _evCsvFilename = f ? f.name : null;
 }
 
+function evDownloadEventsDisplay() {
+  window.location.href = `/api/downloads/events-display?token=${encodeURIComponent(_token)}`;
+}
+
 function evDownloadTemplate() {
   const content = 'name,city,state,url\n';
   const blob = new Blob([content], { type: 'text/csv' });
@@ -6002,6 +6016,23 @@ async function evDlCsvById(eventId) {
 async function evDlZipById(eventId) {
   try { await _evDownloadFile(`/api/event/${eventId}/zip`, 'event-reports.zip'); }
   catch(e) { alert('Download failed: ' + e.message); }
+}
+
+async function evUploadFile(eventId, type, input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  const fd = new FormData();
+  fd.append(type, file);
+  try {
+    const r = await fetch(`/api/event/${eventId}/upload-files?token=${encodeURIComponent(_token)}`, {
+      method: 'POST', body: fd,
+    });
+    if (!r.ok) throw new Error(await r.text());
+    loadHistory();
+  } catch(e) {
+    alert(`Upload failed: ${e.message}`);
+  }
 }
 
 async function evDeleteById(eventId, eventName) {
