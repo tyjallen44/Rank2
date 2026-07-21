@@ -1798,6 +1798,14 @@ html, body {
             <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Each entity will produce both a full Pulse Diagnostic and a teaser (summary-only) PDF.</div>
           </div>
 
+          <div style="margin-bottom:16px">
+            <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px">
+              <input type="checkbox" id="ev-override-cache">
+              Override cache — re-analyze from scratch
+            </label>
+            <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Bypasses today's cache lock and the 90-day score cache. Use when you need fresh results for entities already run today.</div>
+          </div>
+
           <div id="ev-step1-err" class="hidden" style="color:#c0392b;font-size:13px;margin-bottom:12px"></div>
           <button class="btn btn-primary" onclick="evUploadAndResolve()" id="ev-upload-btn">Upload &amp; Resolve Entities →</button>
         </div>
@@ -5790,7 +5798,8 @@ async function evSubmitRun() {
   const eventName    = document.getElementById('ev-name').value.trim();
   const eventDate    = document.getElementById('ev-date').value || null;
   const entityType   = document.querySelector('input[name="ev-type"]:checked').value;
-  const includeteaser = document.getElementById('ev-include-teaser')?.checked || false;
+  const includeteaser   = document.getElementById('ev-include-teaser')?.checked || false;
+  const overrideCache   = document.getElementById('ev-override-cache')?.checked || false;
 
   const entities = [];
   _evRows.forEach((row, idx) => {
@@ -5836,7 +5845,8 @@ async function evSubmitRun() {
         event_date: eventDate,
         entity_type: entityType,
         csv_filename: _evCsvFilename,
-        include_teaser: includeteaser,
+        include_teaser:  includeteaser,
+        override_cache:  overrideCache,
         entities,
       }),
     });

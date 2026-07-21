@@ -1468,6 +1468,7 @@ class EventRunRequest(BaseModel):
     entity_type: str                   # "hospital" or "practice"
     csv_filename: Optional[str] = None
     include_teaser: bool = False
+    override_cache: bool = False       # bypass same-day lock + 90-day score cache
     entities: List[dict]               # confirmed list: {input_name,input_city,input_state,resolved_name,resolved_addr}
 
 
@@ -1558,13 +1559,14 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
 
     job_id = _new_job(role, brand)
     _event_job_map[event_id] = job_id
-    _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser)
+    _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser, req.override_cache)
     return {"event_id": event_id, "job_id": job_id}
 
 
 def _run_event_job(
     job_id: str, event_id: str, entities: list, entity_type: str,
     include_teaser: bool = False,
+    override_cache: bool = False,
 ) -> None:
     """Background: analyze all entities in the event, 5 at a time."""
     import re as _re
@@ -1628,6 +1630,8 @@ def _run_event_job(
                             output_dir=event_dir,
                             on_event=lambda _e: None,
                             brand=brand,
+                            force_rerun=override_cache,
+                            override_today_lock=override_cache,
                         ), resolved_name)
                     else:
                         from perception.analyzer import analyze_location
@@ -1639,6 +1643,8 @@ def _run_event_job(
                             output_dir=event_dir,
                             on_event=lambda _e: None,
                             brand=brand,
+                            force_rerun=override_cache,
+                            override_today_lock=override_cache,
                         ), resolved_name)
 
                     set_run_role(result.run_id, role)
