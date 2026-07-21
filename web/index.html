@@ -5731,7 +5731,7 @@ function evShowConfirmation() {
   const ambiguous = _evRows.filter(r => r.status === 'ambiguous').length;
   const notFound  = _evRows.filter(r => r.status === 'not_found').length;
   document.getElementById('ev-confirm-summary').textContent =
-    `${_evRows.length} entities from CSV — ${resolved} auto-confirmed, ${ambiguous} need selection, ${notFound} not found.`;
+    `${_evRows.length} entities from CSV — ${resolved} auto-confirmed, ${ambiguous} need selection, ${notFound} unresolved (best effort).`;
 
   const container = document.getElementById('ev-confirm-rows');
   container.innerHTML = '';
@@ -5751,11 +5751,11 @@ function evShowConfirmation() {
       const opts = row.candidates.map((c, ci) =>
         `<option value="${ci}">${c.name}${c.address ? ' — ' + c.address : ''}</option>`
       ).join('');
-      resolvedHtml = `<select id="ev-sel-${idx}" class="input" style="font-size:12px;padding:4px 8px;width:100%">
-        <option value="">— select the correct match —</option>${opts}</select>`;
+      resolvedHtml = `<select id="ev-sel-${idx}" class="input" style="font-size:12px;padding:4px 8px;width:100%">${opts}</select>`;
     } else {
-      statusIcon   = `<span style="color:#999;font-size:15px">✗</span>`;
-      resolvedHtml = `<div style="color:#999;font-style:italic;font-size:12px">Not found — will be skipped</div>`;
+      statusIcon   = `<span style="color:#e67e22;font-size:15px">◎</span>`;
+      resolvedHtml = `<div style="font-weight:600">${row.input_name}</div>
+                      <div style="font-size:11px;color:var(--muted)">Not found in Google Places — will analyze using CSV name</div>`;
     }
 
     div.innerHTML = `
@@ -5763,13 +5763,9 @@ function evShowConfirmation() {
       <div style="padding:0 10px">${resolvedHtml}</div>
       <div style="color:var(--muted);font-size:12px">${row.input_city}, ${row.input_state}</div>
       <div style="text-align:center">
-        ${row.status === 'not_found'
-          ? `<input type="checkbox" id="ev-skip-${idx}" checked onchange="evUpdateCounts()" title="Skip this entity">`
-          : `<input type="checkbox" id="ev-inc-${idx}" checked onchange="evUpdateCounts()">`}
+        <input type="checkbox" id="ev-inc-${idx}" checked onchange="evUpdateCounts()">
       </div>
-      <div style="font-size:11px;color:var(--muted);text-align:center">
-        ${row.status === 'not_found' ? 'Skip' : 'Include'}
-      </div>`;
+      <div style="font-size:11px;color:var(--muted);text-align:center">Include</div>`;
     container.appendChild(div);
   });
 
@@ -5779,12 +5775,8 @@ function evShowConfirmation() {
 function evUpdateCounts() {
   let included = 0, skipped = 0;
   _evRows.forEach((row, idx) => {
-    if (row.status === 'not_found') {
-      skipped++;
-    } else {
-      const cb = document.getElementById(`ev-inc-${idx}`);
-      if (cb && cb.checked) included++; else skipped++;
-    }
+    const cb = document.getElementById(`ev-inc-${idx}`);
+    if (cb && cb.checked) included++; else skipped++;
   });
   document.getElementById('ev-confirm-counts').textContent =
     `${included} entities will be analyzed · ${skipped} will be skipped`;
@@ -5802,7 +5794,6 @@ async function evSubmitRun() {
 
   const entities = [];
   _evRows.forEach((row, idx) => {
-    if (row.status === 'not_found') return;
     const cb = document.getElementById(`ev-inc-${idx}`);
     if (cb && !cb.checked) return;
 
@@ -5810,18 +5801,22 @@ async function evSubmitRun() {
     if (row.status === 'resolved') {
       resolvedName = row.candidates[0].name;
       resolvedAddr = row.candidates[0].address || '';
-    } else {
+    } else if (row.status === 'ambiguous') {
       const sel = document.getElementById(`ev-sel-${idx}`);
-      const ci  = sel ? parseInt(sel.value) : NaN;
-      if (isNaN(ci) || ci < 0 || !row.candidates[ci]) return; // not selected
-      resolvedName = row.candidates[ci].name;
-      resolvedAddr = row.candidates[ci].address || '';
+      const ci  = sel ? parseInt(sel.value) : 0;
+      const candidate = row.candidates[isNaN(ci) || ci < 0 ? 0 : ci];
+      resolvedName = candidate ? candidate.name : row.input_name;
+      resolvedAddr = candidate ? (candidate.address || '') : '';
+    } else {
+      // not_found: best-effort using raw CSV name
+      resolvedName = row.input_name;
+      resolvedAddr = '';
     }
     entities.push({
-      input_name:   row.input_name,
-      input_city:   row.input_city,
-      input_state:  row.input_state,
-      input_url:    row.input_url || '',
+      input_name:    row.input_name,
+      input_city:    row.input_city,
+      input_state:   row.input_state,
+      input_url:     row.input_url || '',
       resolved_name: resolvedName,
       resolved_addr: resolvedAddr,
     });

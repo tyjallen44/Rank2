@@ -1594,6 +1594,21 @@ def _run_event_job(
 
         semaphore = threading.Semaphore(5)
 
+        def _analyze_with_retry(fn, kwargs, name, max_attempts=3):
+            import time as _time
+            last_exc = None
+            for attempt in range(max_attempts):
+                try:
+                    return fn(**kwargs)
+                except Exception as exc:
+                    last_exc = exc
+                    if attempt < max_attempts - 1:
+                        wait = 2 ** attempt  # 1s, 2s
+                        emit({"type": "log", "text":
+                              f"↻ {name}: attempt {attempt + 1} failed — retrying in {wait}s…"})
+                        _time.sleep(wait)
+            raise last_exc
+
         def _run_one(entity: dict) -> None:
             entity_id     = entity["id"]
             resolved_name = entity["resolved_name"]
@@ -1605,7 +1620,7 @@ def _run_event_job(
                 try:
                     if entity_type == "practice":
                         from perception.practice_analyzer import analyze_practice
-                        result = analyze_practice(
+                        result = _analyze_with_retry(analyze_practice, dict(
                             entity_name=resolved_name,
                             city=city, state=state,
                             aggregate=True,
@@ -1613,10 +1628,10 @@ def _run_event_job(
                             output_dir=event_dir,
                             on_event=lambda _e: None,
                             brand=brand,
-                        )
+                        ), resolved_name)
                     else:
                         from perception.analyzer import analyze_location
-                        result = analyze_location(
+                        result = _analyze_with_retry(analyze_location, dict(
                             city=city, state=state,
                             entity_name=resolved_name,
                             aggregate=True,
@@ -1624,7 +1639,7 @@ def _run_event_job(
                             output_dir=event_dir,
                             on_event=lambda _e: None,
                             brand=brand,
-                        )
+                        ), resolved_name)
 
                     set_run_role(result.run_id, role)
 
