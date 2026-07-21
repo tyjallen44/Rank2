@@ -1679,46 +1679,21 @@ def _run_event_job(
                         except Exception:
                             pass
 
-                    # Teaser report (optional second pass per entity)
+                    # Teaser PDF: re-render the already-collected result with teaser_report=True.
+                    # No API calls — just a second Playwright PDF render from the same data.
                     if include_teaser:
                         try:
-                            if entity_type == "practice":
-                                from perception.practice_analyzer import analyze_practice
-                                t_result = analyze_practice(
-                                    entity_name=resolved_name,
-                                    city=city, state=state,
-                                    aggregate=True,
-                                    confirmed_siblings=[],
-                                    output_dir=event_dir,
-                                    on_event=lambda _e: None,
-                                    brand=brand,
-                                    teaser_report=True,
-                                )
-                            else:
-                                from perception.analyzer import analyze_location
-                                t_result = analyze_location(
-                                    city=city, state=state,
-                                    entity_name=resolved_name,
-                                    aggregate=True,
-                                    individual_report=True,
-                                    teaser_report=True,
-                                    output_dir=event_dir,
-                                    on_event=lambda _e: None,
-                                    brand=brand,
-                                )
-                            # Rename teaser PDF
-                            if t_result.pdf_path:
-                                t_old = Path(t_result.pdf_path)
-                                t_stem = t_old.stem.replace("Pulse-Diagnostic", "EventReport_Teaser")
-                                if "EventReport_Teaser" not in t_stem:
-                                    t_stem = t_old.stem + "_EventReport_Teaser"
-                                t_new = t_old.parent / f"{t_stem}{t_old.suffix}"
-                                try:
-                                    t_old.rename(t_new)
-                                except Exception:
-                                    pass
-                        except Exception:
-                            pass  # teaser failure doesn't affect the main result
+                            import copy as _copy
+                            from perception.pdf import render_pdf as _render_pdf
+                            t_result = _copy.copy(result)
+                            t_result.teaser_report  = True
+                            t_result.individual_report = True
+                            base_stem = Path(new_pdf_path).stem if new_pdf_path else resolved_name
+                            t_pdf_path = event_dir / f"{base_stem}_Teaser.pdf"
+                            _render_pdf(t_result, t_pdf_path, brand=brand)
+                        except Exception as _te:
+                            emit({"type": "log", "text":
+                                  f"⚠ Teaser PDF failed for {resolved_name}: {_te}"})
 
                     update_event_entity(entity_id, result.run_id, pulse_score, letter, band, "done")
                     increment_event_progress(event_id, done=1)
