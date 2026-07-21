@@ -1824,7 +1824,7 @@ html, body {
 
             <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--pale);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
               <div id="ev-confirm-counts" style="font-size:13px;color:var(--muted);flex:1"></div>
-              <button class="btn btn-primary" onclick="evSubmitRun()" id="ev-run-btn">Run Analyses →</button>
+              <button class="btn btn-primary" onclick="evSubmitRun()" id="ev-run-btn">Run Analysis →</button>
             </div>
           </div>
 
@@ -1858,7 +1858,7 @@ html, body {
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
             <div>
-              <div class="section-title" style="margin:0" id="ev-progress-title">Running Analyses</div>
+              <div class="section-title" style="margin:0" id="ev-progress-title">Running Analysis</div>
               <div id="ev-progress-sub" style="font-size:13px;color:var(--muted);margin-top:4px"></div>
             </div>
           </div>
@@ -5788,7 +5788,7 @@ function evUpdateCounts() {
   });
   document.getElementById('ev-confirm-counts').textContent =
     `${included} entities will be analyzed · ${skipped} will be skipped`;
-  document.getElementById('ev-run-btn').textContent = `Run Analyses (${included}) →`;
+  document.getElementById('ev-run-btn').textContent = `Run Analysis (${included}) →`;
 }
 
 async function evSubmitRun() {
@@ -5856,7 +5856,7 @@ async function evSubmitRun() {
   } catch(e) {
     showErr(errEl, e.message);
     btn.disabled = false;
-    btn.textContent = `Run Analyses (${entities.length}) →`;
+    btn.textContent = `Run Analysis (${entities.length}) →`;
   }
 }
 
@@ -6062,7 +6062,7 @@ function evReset() {
   _evRows = []; _evEventId = null; _evCsvFilename = null;
   _evTotal = 0; _evDone = 0; _evSkipped = 0; _evEntityMap = {};
   const runBtn = document.getElementById('ev-run-btn');
-  if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Run Analyses →'; }
+  if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Run Analysis →'; }
   document.getElementById('ev-name').value = '';
   document.getElementById('ev-date').value = '';
   document.getElementById('ev-file').value = '';
