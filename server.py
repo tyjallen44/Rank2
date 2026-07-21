@@ -1871,16 +1871,17 @@ async def delete_event(event_id: str, _: dict = Depends(require_admin)):
     return Response(status_code=204)
 
 
-_EVENTS_DISPLAY_GCS_URL = (
-    "https://storage.googleapis.com/rank2-499218-rank2-data"
-    "/downloads/EventsDisplay-1.0.0-arm64.dmg"
-)
-
 @app.get("/api/downloads/events-display")
 async def download_events_display(_: str = Depends(require_auth)):
-    # DMG is hosted on GCS (too large for the Docker image / git repo)
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url=_EVENTS_DISPLAY_GCS_URL)
+    # On Cloud Run the GCS bucket is mounted at /data; locally fall back to downloads/ next to server.py
+    candidates = [
+        REPORTS_DIR.parent / "downloads" / "EventsDisplay-1.0.0-arm64.dmg",
+        Path(__file__).parent / "downloads" / "EventsDisplay-1.0.0-arm64.dmg",
+    ]
+    dmg = next((p for p in candidates if p.exists()), None)
+    if dmg is None:
+        raise HTTPException(404, "EventsDisplay installer not found")
+    return FileResponse(str(dmg), media_type="application/octet-stream", filename=dmg.name)
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)
