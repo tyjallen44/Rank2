@@ -74,6 +74,13 @@ def _normalize_input(text: str | None) -> str | None:
 
 app = FastAPI(title="Pulse", docs_url=None, redoc_url=None)
 
+@app.middleware("http")
+async def no_cache_api(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 # ── Config ────────────────────────────────────────────────────────────────────
 _raw_pw = os.environ.get("ACCESS_PASSWORD", "")
 ACCESS_PASSWORDS: set[str] = {p.strip() for p in _raw_pw.split(",") if p.strip()}
