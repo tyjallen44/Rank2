@@ -1880,7 +1880,7 @@ async def delete_event(event_id: str, _: dict = Depends(require_admin)):
 
 _EVENTS_DISPLAY_URL = (
     "https://storage.googleapis.com/rank2-public-downloads"
-    "/EventsDisplay-1.0.0-arm64.dmg"
+    "/EventsDisplay-1.0.0.1-arm64.dmg"
 )
 
 @app.get("/api/downloads/events-display")
