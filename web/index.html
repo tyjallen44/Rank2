@@ -5717,6 +5717,8 @@ async function evUploadAndResolve() {
 }
 
 function evShowConfirmation() {
+  const runBtn = document.getElementById('ev-run-btn');
+  if (runBtn) { runBtn.disabled = false; }
   document.getElementById('ev-step1').classList.add('hidden');
   const step2 = document.getElementById('ev-step2');
   step2.classList.remove('hidden');
@@ -6059,6 +6061,8 @@ async function evDeleteById(eventId, eventName) {
 function evReset() {
   _evRows = []; _evEventId = null; _evCsvFilename = null;
   _evTotal = 0; _evDone = 0; _evSkipped = 0; _evEntityMap = {};
+  const runBtn = document.getElementById('ev-run-btn');
+  if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Run Analyses →'; }
   document.getElementById('ev-name').value = '';
   document.getElementById('ev-date').value = '';
   document.getElementById('ev-file').value = '';
