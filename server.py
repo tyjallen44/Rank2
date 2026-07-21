@@ -1874,14 +1874,29 @@ async def delete_event(event_id: str, _: dict = Depends(require_admin)):
 @app.get("/api/downloads/events-display")
 async def download_events_display(_: str = Depends(require_auth)):
     # On Cloud Run the GCS bucket is mounted at /data; locally fall back to downloads/ next to server.py
+    import traceback, logging
     candidates = [
         REPORTS_DIR.parent / "downloads" / "EventsDisplay-1.0.0-arm64.dmg",
         Path(__file__).parent / "downloads" / "EventsDisplay-1.0.0-arm64.dmg",
     ]
-    dmg = next((p for p in candidates if p.exists()), None)
+    logging.warning(f"[EventsDisplay] checking candidates: {candidates}")
+    dmg = None
+    for p in candidates:
+        try:
+            if p.exists():
+                dmg = p
+                break
+            logging.warning(f"[EventsDisplay] not found: {p}")
+        except Exception as e:
+            logging.error(f"[EventsDisplay] exists() raised on {p}: {e}\n{traceback.format_exc()}")
     if dmg is None:
         raise HTTPException(404, "EventsDisplay installer not found")
-    return FileResponse(str(dmg), media_type="application/octet-stream", filename=dmg.name)
+    logging.warning(f"[EventsDisplay] serving from {dmg}")
+    try:
+        return FileResponse(str(dmg), media_type="application/octet-stream", filename=dmg.name)
+    except Exception as e:
+        logging.error(f"[EventsDisplay] FileResponse failed: {e}\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Failed to serve file: {e}")
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)
