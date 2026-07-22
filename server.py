@@ -1186,10 +1186,8 @@ async def admin_invite_user(req: InviteUserRequest, payload: dict = Depends(requ
 
 
 # ── Feedback ──────────────────────────────────────────────────────────────────
-class FeedbackSubmitRequest(BaseModel):
-    title: str
-    type: str
-    body: str
+_FEEDBACK_ATTACH_DIR = REPORTS_DIR.parent / "feedback-attachments"
+_FEEDBACK_ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".txt", ".docx", ".csv"}
 
 class FeedbackActionRequest(BaseModel):
     action: str
@@ -1202,12 +1200,76 @@ class FeedbackEditRequest(BaseModel):
     notes:  Optional[str] = None
 
 @app.post("/api/feedback")
-async def submit_feedback(req: FeedbackSubmitRequest, payload: dict = Depends(get_current_user_payload)):
+async def submit_feedback(
+    payload: dict = Depends(get_current_user_payload),
+    title: str = Form(...),
+    type: str = Form(...),
+    body: str = Form(...),
+    files: List[UploadFile] = File(default=[]),
+):
     from perception.db import init_db, create_feedback
-    if req.type not in ("bug", "feature"):
+    if type not in ("bug", "feature"):
         raise HTTPException(400, "type must be 'bug' or 'feature'")
+    if not title.strip():
+        raise HTTPException(400, "title is required")
+    if not body.strip():
+        raise HTTPException(400, "body is required")
     init_db()
-    return create_feedback(req.title.strip(), req.type, req.body.strip(), payload.get("email", "unknown"))
+
+    # Save any uploaded attachments
+    saved: list[str] = []
+    import uuid as _uuid
+    for f in files:
+        if not f.filename:
+            continue
+        ext = Path(f.filename).suffix.lower()
+        if ext not in _FEEDBACK_ALLOWED_EXTS:
+            continue
+        data = await f.read()
+        if len(data) > 15 * 1024 * 1024:  # 15 MB cap per file
+            continue
+        tmp_id = str(_uuid.uuid4())
+        attach_dir = _FEEDBACK_ATTACH_DIR / tmp_id
+        attach_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = Path(f.filename).name
+        (attach_dir / safe_name).write_bytes(data)
+        saved.append(f"{tmp_id}/{safe_name}")
+
+    item = create_feedback(title.strip(), type, body.strip(),
+                           payload.get("email", "unknown"), attachments=saved)
+    # Move attachments into the feedback id folder now that we have it
+    import shutil as _shutil
+    for att in saved:
+        tmp_id, fname = att.split("/", 1)
+        src = _FEEDBACK_ATTACH_DIR / tmp_id / fname
+        dst_dir = _FEEDBACK_ATTACH_DIR / item["id"]
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        _shutil.move(str(src), str(dst_dir / fname))
+        try:
+            (_FEEDBACK_ATTACH_DIR / tmp_id).rmdir()
+        except Exception:
+            pass
+
+    # Update stored attachment paths to use the real feedback id
+    if saved:
+        import json as _json
+        final_atts = [f"{item['id']}/{att.split('/',1)[1]}" for att in saved]
+        item["attachments"] = final_atts
+        from perception.db import update_feedback as _uf
+        _uf(item["id"], attachments=_json.dumps(final_atts))
+
+    return item
+
+@app.get("/api/feedback/{feedback_id}/attachment/{filename}")
+async def get_feedback_attachment(
+    feedback_id: str, filename: str, _: str = Depends(require_auth)
+):
+    """Serve an uploaded feedback attachment."""
+    safe = Path(filename).name  # strip any path traversal
+    path = _FEEDBACK_ATTACH_DIR / feedback_id / safe
+    if not path.exists():
+        raise HTTPException(404, "Attachment not found")
+    return FileResponse(str(path), filename=safe)
 
 @app.get("/api/feedback")
 async def get_feedback(_: str = Depends(require_auth)):
@@ -1216,8 +1278,7 @@ async def get_feedback(_: str = Depends(require_auth)):
         init_db()
         return list_feedback()
     except Exception as exc:
-        import traceback
-        raise HTTPException(500, detail=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-800:]}")
+        raise HTTPException(500, detail=f"{type(exc).__name__}: {exc}")
 
 @app.patch("/api/feedback/{feedback_id}")
 async def patch_feedback(feedback_id: str, req: FeedbackEditRequest, _: dict = Depends(require_admin)):

@@ -1734,6 +1734,10 @@ html, body {
           <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Details</div>
           <textarea id="fb-body" class="input" rows="4" placeholder="Describe the bug or feature in detail…" style="width:100%;resize:vertical;font-family:inherit;line-height:1.6"></textarea>
         </div>
+        <div style="margin-bottom:20px">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Attachments <span style="font-weight:400;text-transform:none">(optional — screenshots, PDFs, etc.)</span></div>
+          <input id="fb-files" type="file" multiple accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.docx,.csv" style="font-size:13px;color:var(--ink)">
+        </div>
         <button class="btn btn-primary" onclick="submitFeedback()">Submit</button>
         <span id="fb-msg" class="hidden" style="margin-left:14px;font-size:13px"></span>
       </div>
@@ -4321,15 +4325,18 @@ async function submitFeedback() {
   if (!title) { msg.textContent = 'Please enter a title.'; msg.style.color = 'var(--err,#c00)'; msg.classList.remove('hidden'); return; }
   if (!body)  { msg.textContent = 'Please enter details.'; msg.style.color = 'var(--err,#c00)'; msg.classList.remove('hidden'); return; }
   try {
-    const r = await api('/api/feedback', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({title, type, body})
-    });
+    const fd = new FormData();
+    fd.append('title', title);
+    fd.append('type', type);
+    fd.append('body', body);
+    const fileInput = document.getElementById('fb-files');
+    if (fileInput) Array.from(fileInput.files).forEach(f => fd.append('files', f));
+    const r = await api('/api/feedback', { method: 'POST', body: fd });
     if (!r.ok) throw new Error((await r.json()).detail || 'Submission failed');
     const item = await r.json();
     document.getElementById('fb-title').value = '';
     document.getElementById('fb-body').value = '';
+    if (fileInput) fileInput.value = '';
     _feedbackItems.unshift(item);
     renderFeedback();
     msg.textContent = 'Submitted — thank you!';
@@ -4532,6 +4539,20 @@ function renderFeedback() {
                         Submitted by <strong>${f.submitted_by}</strong> · ${(f.submitted_at||'').slice(0,16).replace('T',' ')} UTC
                       </div>
                       <div style="white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--ink)">${f.body.replace(/</g,'&lt;')}</div>
+                      ${(f.attachments||[]).length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--pale)">
+                        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Attachments</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:10px">
+                          ${(f.attachments||[]).map(att => {
+                            const fname = att.split('/').pop();
+                            const ext = fname.split('.').pop().toLowerCase();
+                            const isImg = ['png','jpg','jpeg','gif','webp'].includes(ext);
+                            const url = `/api/feedback/${f.id}/attachment/${encodeURIComponent(fname)}?token=${encodeURIComponent(_token)}`;
+                            return isImg
+                              ? `<a href="${url}" target="_blank" style="display:block"><img src="${url}" style="max-height:120px;max-width:200px;border-radius:6px;border:1px solid var(--pale);object-fit:cover" title="${fname}"></a>`
+                              : `<a href="${url}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:13px;padding:6px 12px;background:#fff;border:1px solid var(--pale);border-radius:6px;text-decoration:none;color:var(--ink)">📎 ${fname}</a>`;
+                          }).join('')}
+                        </div>
+                      </div>` : ''}
                       ${f.notes ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--pale);font-size:12px;color:var(--muted)"><strong>Notes:</strong> ${f.notes.replace(/</g,'&lt;')}</div>` : ''}
                     </td></tr>`
                   : '';

@@ -223,8 +223,9 @@ def init_db() -> None:
         "SELECT column_name FROM information_schema.columns WHERE table_name='feedback'"
     ).fetchall()}
     for col, definition in [
-        ("number", "INTEGER"),
-        ("notes",  "VARCHAR DEFAULT ''"),
+        ("number",      "INTEGER"),
+        ("notes",       "VARCHAR DEFAULT ''"),
+        ("attachments", "VARCHAR DEFAULT '[]'"),
     ]:
         if col not in existing_fb_cols:
             con.execute(f"ALTER TABLE feedback ADD COLUMN {col} {definition}")
@@ -712,38 +713,51 @@ def update_briefing_pdf_path(run_id: str, path: str) -> None:
     con.close()
 
 
-def create_feedback(title: str, ftype: str, body: str, submitted_by: str) -> dict:
-    import uuid
+def create_feedback(title: str, ftype: str, body: str, submitted_by: str,
+                    attachments: Optional[list] = None) -> dict:
+    import uuid, json
     from datetime import datetime
     con = get_connection()
     fid = str(uuid.uuid4())
     now = datetime.utcnow()
+    att = json.dumps(attachments or [])
     row = con.execute("SELECT COALESCE(MAX(number), 0) + 1 FROM feedback").fetchone()
     next_num = row[0] if row else 1
     con.execute(
-        "INSERT INTO feedback (id, number, title, type, body, submitted_by, submitted_at, action, notes) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', '')",
-        [fid, next_num, title, ftype, body, submitted_by, now]
+        "INSERT INTO feedback (id, number, title, type, body, submitted_by, submitted_at, action, notes, attachments) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', '', ?)",
+        [fid, next_num, title, ftype, body, submitted_by, now, att]
     )
     con.close()
     return {"id": fid, "number": next_num, "title": title, "type": ftype, "body": body,
-            "submitted_by": submitted_by, "submitted_at": str(now), "action": "pending", "notes": ""}
+            "submitted_by": submitted_by, "submitted_at": str(now), "action": "pending",
+            "notes": "", "attachments": attachments or []}
 
 
 def list_feedback() -> list[dict]:
+    import json
     con = get_connection()
     rows = con.execute("""
-        SELECT id, number, title, type, body, submitted_by, submitted_at, action, notes
+        SELECT id, number, title, type, body, submitted_by, submitted_at, action, notes, attachments
         FROM feedback
         ORDER BY submitted_at DESC
     """).fetchall()
     con.close()
-    cols = ["id", "number", "title", "type", "body", "submitted_by", "submitted_at", "action", "notes"]
-    return [dict(zip(cols, r)) | {"submitted_at": str(r[6])} for r in rows]
+    cols = ["id", "number", "title", "type", "body", "submitted_by", "submitted_at", "action", "notes", "attachments"]
+    result = []
+    for r in rows:
+        d = dict(zip(cols, r))
+        d["submitted_at"] = str(r[6])
+        try:
+            d["attachments"] = json.loads(r[9] or "[]")
+        except Exception:
+            d["attachments"] = []
+        result.append(d)
+    return result
 
 
 def update_feedback(feedback_id: str, **kwargs) -> None:
-    allowed = {"title", "type", "body", "action", "notes"}
+    allowed = {"title", "type", "body", "action", "notes", "attachments"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
