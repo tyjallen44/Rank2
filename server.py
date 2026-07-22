@@ -39,7 +39,7 @@ try:
 except ImportError:
     pass
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
 _PRESERVE_UPPERCASE: frozenset[str] = frozenset({
