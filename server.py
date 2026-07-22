@@ -112,9 +112,9 @@ _SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "30"))
 
 
 def _signing_key() -> bytes:
-    """Derive a consistent HMAC signing key from the access password."""
-    pw = next(iter(ACCESS_PASSWORDS), "rank2")
-    return _hmac.new(pw.encode(), b"rank2-session-v1", hashlib.sha256).digest()
+    """Derive a consistent HMAC signing key from all access passwords, sorted for stability."""
+    combined = "|".join(sorted(ACCESS_PASSWORDS)) or "rank2"
+    return _hmac.new(combined.encode(), b"rank2-session-v1", hashlib.sha256).digest()
 
 
 def _create_token(role_id: str, **extra: object) -> str:
