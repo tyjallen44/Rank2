@@ -1873,6 +1873,66 @@ async def list_events(_: str = Depends(require_auth)):
     ]
 
 
+# upload_id -> {"tmp_path": str, "fd": int, "filename": str, "file_type": str}
+_chunk_sessions: dict[str, dict] = {}
+
+
+@app.post("/api/event/{event_id}/upload-chunk")
+async def event_upload_chunk(
+    event_id: str,
+    _: dict = Depends(require_admin),
+    upload_id: str = Form(...),
+    filename: str = Form(...),
+    file_type: str = Form(...),
+    is_last: str = Form("false"),
+    chunk: UploadFile = File(...),
+):
+    """Chunked admin upload — sends one ≤10 MB slice at a time; assembles in /tmp."""
+    import shutil as _shutil
+    import os as _os
+
+    chunk_data = await chunk.read()
+    done = is_last.lower() == "true"
+
+    if upload_id not in _chunk_sessions:
+        suffix = Path(filename).suffix
+        fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+        _chunk_sessions[upload_id] = {
+            "tmp_path": tmp_path, "fd": fd,
+            "filename": filename, "file_type": file_type,
+        }
+
+    state = _chunk_sessions[upload_id]
+    _os.write(state["fd"], chunk_data)
+
+    if not done:
+        return {"ok": True, "done": False}
+
+    _os.close(state["fd"])
+    del _chunk_sessions[upload_id]
+
+    from perception.db import init_db, get_event_run, update_event_files
+    init_db()
+    ev = get_event_run(event_id)
+    if not ev:
+        _os.unlink(state["tmp_path"])
+        raise HTTPException(404, "Event not found")
+
+    event_dir = REPORTS_DIR / "events" / event_id
+    event_dir.mkdir(parents=True, exist_ok=True)
+    dest = event_dir / state["filename"]
+    _shutil.move(state["tmp_path"], str(dest))
+
+    ft = state["file_type"]
+    from perception.db import update_event_files as _uef
+    _uef(
+        event_id,
+        enriched_csv_path=str(dest) if ft == "csv" else None,
+        zip_path=str(dest) if ft == "zip" else None,
+    )
+    return {"ok": True, "done": True}
+
+
 @app.post("/api/event/{event_id}/upload-files")
 async def event_upload_files(
     event_id: str,
