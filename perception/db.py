@@ -68,6 +68,10 @@ class _StaleHandleConnection:
                     continue
                 raise
 
+    @property
+    def description(self):
+        return self._con.description
+
     def fetchall(self):
         return self._con.fetchall()
 
