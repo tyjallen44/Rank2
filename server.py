@@ -1555,13 +1555,15 @@ async def event_upload(file: UploadFile = File(...), _: str = Depends(require_au
     reader = csv.DictReader(_io.StringIO(text))
     rows = []
     for i, row in enumerate(reader, start=1):
-        name  = (row.get("name") or row.get("Name") or "").strip()
-        city  = (row.get("city") or row.get("City") or "").strip()
-        state = (row.get("state") or row.get("State") or "").strip().upper()
-        url   = (row.get("url") or row.get("URL") or row.get("Url") or "").strip()
+        name     = (row.get("name") or row.get("Name") or "").strip()
+        city     = (row.get("city") or row.get("City") or "").strip()
+        state    = (row.get("state") or row.get("State") or "").strip().upper()
+        url      = (row.get("url") or row.get("URL") or row.get("Url") or "").strip()
+        customer = (row.get("customer") or row.get("Customer") or "").strip()
         if not name:
             continue
-        rows.append({"row_num": i, "input_name": name, "input_city": city, "input_state": state, "input_url": url})
+        rows.append({"row_num": i, "input_name": name, "input_city": city, "input_state": state,
+                     "input_url": url, "input_customer": customer})
 
     if not rows:
         raise HTTPException(400, "No valid rows found. Ensure the CSV has name, city, state columns.")
@@ -1601,12 +1603,13 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
             "id":           str(uuid.uuid4()),
             "event_id":     event_id,
             "row_num":      i,
-            "input_name":   _normalize_input(e.get("input_name", "")),
-            "input_city":   _normalize_input(e.get("input_city", "")),
-            "input_state":  (e.get("input_state") or "").strip().upper(),
-            "input_url":    (e.get("input_url") or "").strip(),
-            "resolved_name": _normalize_input(e.get("resolved_name") or e.get("input_name", "")),
-            "resolved_addr": e.get("resolved_addr", ""),
+            "input_name":     _normalize_input(e.get("input_name", "")),
+            "input_city":     _normalize_input(e.get("input_city", "")),
+            "input_state":    (e.get("input_state") or "").strip().upper(),
+            "input_url":      (e.get("input_url") or "").strip(),
+            "input_customer": (e.get("input_customer") or "").strip(),
+            "resolved_name":  _normalize_input(e.get("resolved_name") or e.get("input_name", "")),
+            "resolved_addr":  e.get("resolved_addr", ""),
         }
         for i, e in enumerate(req.entities, start=1)
     ]
@@ -1843,12 +1846,13 @@ def _run_event_job(
 
         out = _io2.StringIO()
         writer = _csv.writer(out)
-        writer.writerow(["name", "city", "state", "url", "pulse_score", "letter_grade",
-                         "band_label", "notes"])
+        writer.writerow(["name", "city", "state", "url", "customer", "pulse_score",
+                         "letter_grade", "band_label", "notes"])
         for e in ev_entities:
             notes = "scored" if e["status"] == "done" else f"skipped - {e['error_msg'] or 'not found'}"
             writer.writerow([
                 e["input_name"], e["input_city"], e["input_state"], e.get("input_url") or "",
+                e.get("input_customer") or "",
                 e["pulse_score"] if e["pulse_score"] is not None else "",
                 _ascii_grade(e["letter_grade"]), e["band_label"] or "", notes,
             ])
