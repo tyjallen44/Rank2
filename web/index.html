@@ -4595,6 +4595,7 @@ let _historyRuns = [];
 let _historySortField = 'date';
 let _historySortDir = 'desc';
 let _historySearch = '';
+let _cachedEvents = [];
 
 async function loadHistory() {
   const el = document.getElementById('history-body');
@@ -4635,6 +4636,8 @@ function _historyFilename(r) {
 }
 
 function renderHistory(events) {
+  if (events !== undefined) _cachedEvents = events;
+  events = _cachedEvents;
   const searchWasFocused = document.activeElement && document.activeElement.id === 'history-search';
   const el = document.getElementById('history-body');
 
@@ -4656,6 +4659,7 @@ function renderHistory(events) {
         : `<span style="color:var(--muted);font-size:12px">—</span>`;
       const adminBtns = _role === 'admin' ? `
         <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="evStartEditMeta('${ev.id}')" style="font-size:11px;padding:3px 8px">Edit</button>
           <label class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;margin:0" title="Replace CSV">
             <input type="file" accept=".csv" style="display:none" onchange="evUploadFile('${ev.id}','csv',this)">
             ↑ CSV
@@ -4666,7 +4670,25 @@ function renderHistory(events) {
           </label>
           <button class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="evDeleteById('${ev.id}','${(ev.event_name||'').replace(/'/g,"\\'")}')">Delete</button>
         </div>` : '';
-      return `<tr>
+      const EVCOLS = _role === 'admin' ? 9 : 8;
+      const editRow = (_role === 'admin' && _evEditingId === ev.id) ? `
+        <tr><td colspan="${EVCOLS}" style="background:#f0f7f7;padding:16px 20px;border-top:1px solid var(--pale)" onclick="event.stopPropagation()">
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px">
+              <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em">Event Name</div>
+              <input id="ev-edit-name-${ev.id}" class="input" value="${(ev.event_name||'').replace(/"/g,'&quot;')}" style="width:100%">
+            </div>
+            <div style="min-width:160px">
+              <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em">Event Date</div>
+              <input id="ev-edit-date-${ev.id}" class="input" type="date" value="${ev.event_date || ''}" style="width:100%">
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px">
+              <button class="btn btn-primary btn-sm" onclick="evSaveEditMeta('${ev.id}')">Save</button>
+              <button class="btn btn-ghost btn-sm" onclick="evCancelEditMeta()">Cancel</button>
+            </div>
+          </div>
+        </td></tr>` : '';
+      return `<tr style="${_evEditingId === ev.id ? 'background:#f0f7f7' : ''}">
         <td style="color:var(--muted);font-size:13px;white-space:nowrap">${date}</td>
         <td style="font-weight:600">${ev.event_name || '—'}</td>
         <td>${ev.event_date || '—'}</td>
@@ -4676,7 +4698,7 @@ function renderHistory(events) {
         <td>${csvBtn}</td>
         <td>${zipBtn}</td>
         ${_role === 'admin' ? `<td>${adminBtns}</td>` : ''}
-      </tr>`;
+      </tr>${editRow}`;
     }).join('');
     evHtml = `
       <div style="margin-bottom:24px">
@@ -5697,6 +5719,7 @@ let _evTotal       = 0;
 let _evDone        = 0;
 let _evSkipped     = 0;
 let _evEntityMap   = {};       // entity_id -> DOM row element
+let _evEditingId   = null;     // event run id currently being edited in history
 
 function evFileChosen(input) {
   const f = input.files[0];
@@ -6095,6 +6118,35 @@ async function evUploadFile(eventId, type, input) {
     loadHistory();
   } catch(e) {
     alert(`Upload failed: ${e.message}`);
+  }
+}
+
+function evStartEditMeta(eventId) {
+  _evEditingId = eventId;
+  renderHistory(_cachedEvents);
+  setTimeout(() => { const el = document.getElementById(`ev-edit-name-${eventId}`); if (el) el.focus(); }, 50);
+}
+
+function evCancelEditMeta() {
+  _evEditingId = null;
+  renderHistory(_cachedEvents);
+}
+
+async function evSaveEditMeta(eventId) {
+  const name = document.getElementById(`ev-edit-name-${eventId}`)?.value.trim();
+  const date = document.getElementById(`ev-edit-date-${eventId}`)?.value || null;
+  if (!name) { alert('Event name cannot be blank.'); return; }
+  try {
+    const r = await api(`/api/event/${eventId}/meta`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ event_name: name, event_date: date || null }),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Save failed'));
+    _evEditingId = null;
+    loadHistory();
+  } catch(e) {
+    alert('Save failed: ' + e.message);
   }
 }
 

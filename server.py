@@ -2077,6 +2077,27 @@ async def event_upload_files(
     return {"ok": True}
 
 
+class EventRunMetaRequest(BaseModel):
+    event_name: Optional[str] = None
+    event_date: Optional[str] = None
+
+@app.patch("/api/event/{event_id}/meta")
+async def patch_event_meta(event_id: str, req: EventRunMetaRequest, _: dict = Depends(require_admin)):
+    """Admin: update event name and/or event date."""
+    from perception.db import init_db, get_event_run, update_event_run_meta
+    init_db()
+    if not get_event_run(event_id):
+        raise HTTPException(404, "Event not found")
+    if req.event_name is not None and not req.event_name.strip():
+        raise HTTPException(400, "Event name cannot be blank")
+    update_event_run_meta(
+        event_id,
+        event_name=req.event_name.strip() if req.event_name else None,
+        event_date=req.event_date,
+    )
+    return Response(status_code=204)
+
+
 @app.delete("/api/event/{event_id}")
 async def delete_event(event_id: str, _: dict = Depends(require_admin)):
     """Delete an event run, its analysis runs, and all files on disk."""

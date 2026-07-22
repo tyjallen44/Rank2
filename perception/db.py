@@ -587,6 +587,19 @@ def finalize_event_run(event_id: str, enriched_csv_path: str, zip_path: str = ""
     con.close()
 
 
+def update_event_run_meta(event_id: str, event_name: Optional[str] = None, event_date: Optional[str] = None) -> None:
+    fields, values = [], []
+    if event_name is not None:
+        fields.append("event_name = ?"); values.append(event_name)
+    if event_date is not None:
+        fields.append("event_date = ?"); values.append(event_date or None)
+    if not fields:
+        return
+    con = get_connection()
+    con.execute(f"UPDATE event_runs SET {', '.join(fields)} WHERE id = ?", values + [event_id])
+    con.close()
+
+
 def get_event_run(event_id: str) -> Optional[dict]:
     con = get_connection()
     row = con.execute(
