@@ -1594,10 +1594,11 @@ def _run_event_job(
         event_dir = REPORTS_DIR / "events" / event_id
         event_dir.mkdir(parents=True, exist_ok=True)
 
+        import time as _time
+
         semaphore = threading.Semaphore(5)
 
-        def _analyze_with_retry(fn, kwargs, name, max_attempts=3):
-            import time as _time
+        def _analyze_with_retry(fn, kwargs, name, max_attempts=3, base_wait=1):
             last_exc = None
             for attempt in range(max_attempts):
                 try:
@@ -1605,20 +1606,25 @@ def _run_event_job(
                 except Exception as exc:
                     last_exc = exc
                     if attempt < max_attempts - 1:
-                        wait = 2 ** attempt  # 1s, 2s
+                        wait = base_wait * (2 ** attempt)
                         emit({"type": "log", "text":
                               f"↻ {name}: attempt {attempt + 1} failed — retrying in {wait}s…"})
                         _time.sleep(wait)
             raise last_exc
 
-        def _run_one(entity: dict) -> None:
+        def _run_one(entity: dict, pass_num: int = 1) -> bool:
+            """Returns True on success, False on failure."""
             entity_id     = entity["id"]
             resolved_name = entity["resolved_name"]
             city          = entity["input_city"]
             state         = entity["input_state"]
+            is_retry      = pass_num > 1
+            # Longer per-entity backoff on retry passes (5s, 10s vs 1s, 2s)
+            base_wait     = 5 if is_retry else 1
 
             with semaphore:
-                emit({"type": "entity_start", "entity_id": entity_id, "name": resolved_name})
+                emit({"type": "entity_start", "entity_id": entity_id,
+                      "name": resolved_name, "retry": is_retry})
                 try:
                     if entity_type == "practice":
                         from perception.practice_analyzer import analyze_practice
@@ -1632,7 +1638,7 @@ def _run_event_job(
                             brand=brand,
                             force_rerun=override_cache,
                             override_today_lock=override_cache,
-                        ), resolved_name)
+                        ), resolved_name, base_wait=base_wait)
                     else:
                         from perception.analyzer import analyze_location
                         result = _analyze_with_retry(analyze_location, dict(
@@ -1645,7 +1651,7 @@ def _run_event_job(
                             brand=brand,
                             force_rerun=override_cache,
                             override_today_lock=override_cache,
-                        ), resolved_name)
+                        ), resolved_name, base_wait=base_wait)
 
                     set_run_role(result.run_id, role)
 
@@ -1702,27 +1708,63 @@ def _run_event_job(
                                   f"⚠ Teaser PDF failed for {resolved_name}: {_te}"})
 
                     update_event_entity(entity_id, result.run_id, pulse_score, letter, band, "done")
-                    increment_event_progress(event_id, done=1)
+                    if is_retry:
+                        # Flip the previously-counted skip to a done
+                        increment_event_progress(event_id, done=1, skipped=-1)
+                    else:
+                        increment_event_progress(event_id, done=1)
                     emit({
                         "type": "entity_done", "entity_id": entity_id,
                         "name": resolved_name, "score": pulse_score,
                         "grade": letter, "band": band, "run_id": result.run_id,
+                        "retry": is_retry,
                     })
+                    return True
 
                 except Exception as exc:
                     err = str(exc)[:200]
                     update_event_entity(entity_id, None, None, "—", "Unscored", "skipped", err)
-                    increment_event_progress(event_id, skipped=1)
+                    if not is_retry:
+                        # Only count as skipped on the first pass; retry passes don't double-count
+                        increment_event_progress(event_id, skipped=1)
                     emit({"type": "entity_skip", "entity_id": entity_id,
-                          "name": resolved_name, "error": err})
+                          "name": resolved_name, "error": err, "retry": is_retry})
+                    return False
 
-        with _TPE(max_workers=10) as pool:
-            futures = {pool.submit(_run_one, e): e for e in entities}
-            for fut in _ac(futures):
-                try:
-                    fut.result()
-                except Exception:
-                    pass
+        def _run_pass(pending: list, pass_num: int) -> list:
+            """Run one wave; return entities that still failed."""
+            still_failed = []
+            with _TPE(max_workers=10) as pool:
+                futures = {pool.submit(_run_one, e, pass_num): e for e in pending}
+                for fut in _ac(futures):
+                    e = futures[fut]
+                    try:
+                        if not fut.result():
+                            still_failed.append(e)
+                    except Exception:
+                        still_failed.append(e)
+            return still_failed
+
+        # ── Pass 1 ────────────────────────────────────────────────────────────
+        skipped = _run_pass(entities, pass_num=1)
+
+        # ── Pass 2 (30 s later) ───────────────────────────────────────────────
+        if skipped:
+            emit({"type": "log", "text":
+                  f"⟳ Pass 2 — {len(skipped)} entit{'y' if len(skipped)==1 else 'ies'} skipped, "
+                  f"retrying in 30 s…"})
+            _time.sleep(30)
+            emit({"type": "log", "text": "⟳ Pass 2 starting…"})
+            skipped = _run_pass(skipped, pass_num=2)
+
+        # ── Pass 3 (another 30 s later) ───────────────────────────────────────
+        if skipped:
+            emit({"type": "log", "text":
+                  f"⟳ Pass 3 — {len(skipped)} entit{'y' if len(skipped)==1 else 'ies'} still skipped, "
+                  f"retrying in 30 s…"})
+            _time.sleep(30)
+            emit({"type": "log", "text": "⟳ Pass 3 starting…"})
+            _run_pass(skipped, pass_num=3)
 
         # ── Build enriched CSV ────────────────────────────────────────────────
         import csv as _csv

@@ -5949,20 +5949,22 @@ function evStreamProgress(eventId) {
         document.getElementById('ev-prog-sub').textContent = 'Running analyses…';
         firstEntity = false;
       }
-      appendStream(`▶  ${msg.name}`);
+      const retryLabel = msg.retry ? ' (retry)' : '';
+      appendStream(`▶  ${msg.name}${retryLabel}`);
       evUpdateEntityRow(msg.entity_id, msg.name, 'running', null, null, null);
 
     } else if (msg.type === 'entity_done') {
+      if (msg.retry) { _evSkipped = Math.max(0, _evSkipped - 1); }
       _evDone++;
       appendStream(`✓  ${msg.name}  —  ${msg.score} ${msg.grade} · ${msg.band}`);
       evUpdateEntityRow(msg.entity_id, msg.name, 'done', msg.score, msg.grade, msg.band);
       evUpdateProgressBar();
 
     } else if (msg.type === 'entity_skip') {
-      _evSkipped++;
+      if (!msg.retry) { _evSkipped++; }
       appendStream(`✗  ${msg.name}  —  Skipped`);
       evUpdateEntityRow(msg.entity_id, msg.name, 'skipped', null, null, null);
-      evUpdateProgressBar();
+      if (!msg.retry) { evUpdateProgressBar(); }
 
     } else if (msg.type === 'done') {
       evSetPhase('analyzing', 'done');
