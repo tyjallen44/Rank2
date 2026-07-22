@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import duckdb
+import time as _time
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -10,8 +11,78 @@ from .config import settings
 from typing import Any
 
 
-def get_connection() -> duckdb.DuckDBPyConnection:
-    return duckdb.connect(settings.db_path)
+class _StaleHandleConnection:
+    """
+    Wraps a DuckDB connection to transparently retry on GCS FUSE stale file
+    handle errors (ESTALE).  When a stale handle is detected the WAL file is
+    removed so the next connect can start clean, then the operation is retried.
+    Returns `self` from execute/executemany so callers can chain .fetchall().
+    """
+
+    def __init__(self) -> None:
+        self._open()
+
+    def _open(self) -> None:
+        self._con = duckdb.connect(settings.db_path)
+
+    def _handle_stale(self, attempt: int) -> None:
+        try:
+            self._con.close()
+        except Exception:
+            pass
+        wal = Path(str(settings.db_path) + ".wal")
+        try:
+            if wal.exists():
+                wal.unlink()
+        except Exception:
+            pass
+        _time.sleep(0.5 * (attempt + 1))
+        self._open()
+
+    @staticmethod
+    def _is_stale(exc: Exception) -> bool:
+        return "Stale file handle" in str(exc) or "stale file handle" in str(exc).lower()
+
+    def execute(self, query: str, params=None):
+        for attempt in range(3):
+            try:
+                if params is not None:
+                    self._con.execute(query, params)
+                else:
+                    self._con.execute(query)
+                return self
+            except Exception as exc:
+                if self._is_stale(exc) and attempt < 2:
+                    self._handle_stale(attempt)
+                    continue
+                raise
+
+    def executemany(self, query: str, params_list=None):
+        for attempt in range(3):
+            try:
+                self._con.executemany(query, params_list or [])
+                return self
+            except Exception as exc:
+                if self._is_stale(exc) and attempt < 2:
+                    self._handle_stale(attempt)
+                    continue
+                raise
+
+    def fetchall(self):
+        return self._con.fetchall()
+
+    def fetchone(self):
+        return self._con.fetchone()
+
+    def close(self) -> None:
+        try:
+            self._con.close()
+        except Exception:
+            pass
+
+
+def get_connection() -> _StaleHandleConnection:
+    return _StaleHandleConnection()
 
 
 def init_db() -> None:
