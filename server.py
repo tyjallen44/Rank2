@@ -1212,8 +1212,12 @@ async def submit_feedback(req: FeedbackSubmitRequest, payload: dict = Depends(ge
 @app.get("/api/feedback")
 async def get_feedback(_: str = Depends(require_auth)):
     from perception.db import init_db, list_feedback
-    init_db()
-    return list_feedback()
+    try:
+        init_db()
+        return list_feedback()
+    except Exception as exc:
+        import traceback
+        raise HTTPException(500, detail=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-800:]}")
 
 @app.patch("/api/feedback/{feedback_id}")
 async def patch_feedback(feedback_id: str, req: FeedbackEditRequest, _: dict = Depends(require_admin)):

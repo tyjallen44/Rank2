@@ -4300,6 +4300,7 @@ async function loadFeedback() {
   el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
   try {
     const r = await api('/api/feedback');
+    if (!r.ok) throw new Error(await errDetail(r, `Server error ${r.status}`));
     _feedbackItems = await r.json();
     _feedbackSortField = 'date';
     _feedbackSortDir = 'desc';
