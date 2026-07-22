@@ -6030,9 +6030,8 @@ async function evDlCsvById(eventId) {
   catch(e) { alert('Download failed: ' + e.message); }
 }
 
-async function evDlZipById(eventId) {
-  try { await _evDownloadFile(`/api/event/${eventId}/zip`, 'event-reports.zip'); }
-  catch(e) { alert('Download failed: ' + e.message); }
+function evDlZipById(eventId) {
+  window.location.href = `/api/event/${eventId}/zip?token=${encodeURIComponent(_token)}`;
 }
 
 async function evUploadFile(eventId, type, input) {

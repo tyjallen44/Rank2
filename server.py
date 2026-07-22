@@ -1844,10 +1844,16 @@ async def event_zip_download(event_id: str, _: str = Depends(require_auth)):
     zip_path = Path(ev["zip_path"])
     if not zip_path.exists():
         raise HTTPException(404, "ZIP file not found on disk")
-    return FileResponse(
-        str(zip_path),
+
+    def _iter_zip():
+        with open(str(zip_path), "rb") as fh:
+            while chunk := fh.read(65536):
+                yield chunk
+
+    return StreamingResponse(
+        _iter_zip(),
         media_type="application/zip",
-        filename=zip_path.name,
+        headers={"Content-Disposition": f'attachment; filename="{zip_path.name}"'},
     )
 
 
