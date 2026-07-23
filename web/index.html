@@ -4435,6 +4435,9 @@ function showSingleDone(r) {
   if (isComparison) {
     subText = 'Comparison report ready';
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`;
+  } else if (r.entity_type === 'community_health') {
+    subText = '1 health center analyzed';
+    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">1</div><div class="stat-lbl">Health Center Analyzed</div></div></div>`;
   } else {
     subText = `${r.provider_count || 0} providers analyzed`;
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Providers Ranked</div></div></div>`;
