@@ -48,6 +48,24 @@ from .analyzer import (
 
 _RUBRIC_VERSION = "community-health-v1.0"
 
+from .strings import AIVS_DISCLAIMER as _AIVS_DISCLAIMER_SENTENCE
+_FQHC_DISCLAIMER = (
+    "Scores are derived from publicly available signals collected at the time of this report. "
+    "Ratings, review counts, accreditation statuses, and quality designations change over time; "
+    "verify current standings directly with the primary sources: HRSA Find a Health Center "
+    "(findahealthcenter.hrsa.gov), HRSA Uniform Data System (UDS), NCQA (ncqa.org), "
+    "Medicaid managed care organization (MCO) directories, Google Business Profile, "
+    "and each center's own website.\n\n"
+    "No quotes, patient statements, or clinical outcomes in this report have been fabricated. "
+    "All quoted or paraphrased language is attributed to publicly available sources. "
+    "Any unverifiable signal is rendered as ✗ Not established rather than estimated.\n\n"
+    "This report is not a substitute for the judgment of a licensed clinician, benefits "
+    "administrator, or public health official. Before making coverage, referral, or care "
+    "decisions, confirm provider credentials, network participation, and current eligibility "
+    "policies with the relevant insurer and health center directly.\n\n"
+    + _AIVS_DISCLAIMER_SENTENCE
+)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Structured extraction tool schema
 # ─────────────────────────────────────────────────────────────────────────────
@@ -606,7 +624,7 @@ def analyze_fqhc(
 
     console.print(f"[green]✓[/green] Scored FQHC ({entity_name})")
 
-    disclaimer = _FULL_DISCLAIMER
+    disclaimer = _FQHC_DISCLAIMER
     _verdict = _clean(structured_data.get("ai_visibility_verdict", ""))
     _warn_snake_case(_verdict, context="fqhc/ai_visibility_verdict")
 
