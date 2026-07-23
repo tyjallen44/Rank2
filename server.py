@@ -798,6 +798,15 @@ async def search_entity(req: EntitySearchRequest, _: str = Depends(require_auth)
         raise HTTPException(500, f"Search error: {type(exc).__name__}: {exc}")
 
 
+@app.get("/api/hrsa-prefill")
+async def hrsa_prefill(entity_name: str, city: str = "", state: str = "", _: str = Depends(require_auth)):
+    try:
+        from perception.data.hrsa import lookup
+        return lookup(entity_name, city, state)
+    except Exception as exc:
+        raise HTTPException(500, f"HRSA lookup error: {type(exc).__name__}: {exc}")
+
+
 @app.post("/api/upload")
 async def upload_csv(file: UploadFile = File(...), _: str = Depends(require_auth)):
     from perception.loader import load

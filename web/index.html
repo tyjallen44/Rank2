@@ -3632,11 +3632,59 @@ function irConfirmOrg() {
   document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function showFqhcIntake() {
+async function showFqhcIntake() {
   document.getElementById('ir-step2b').classList.add('hidden');
   const el = document.getElementById('ir-step-fqhc-intake');
   el.classList.remove('hidden');
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Remove any prior prefill notice
+  const prior = document.getElementById('fqhc-hrsa-notice');
+  if (prior) prior.remove();
+
+  // Attempt HRSA prefill
+  const name  = _irSelected?.name || '';
+  const city  = _irResolvedCity  || '';
+  const state = _irResolvedState || '';
+  if (!name) return;
+
+  try {
+    const qs = new URLSearchParams({ entity_name: name, city, state });
+    const data = await api(`/api/hrsa-prefill?${qs}`).then(r => r.json());
+    if (!data?.found) return;
+
+    // Prefill checkboxes
+    if (data.is_330) {
+      document.getElementById('fqhc-is-330').checked = true;
+      // 330 grantees are federally required to have sliding fee + no-one-turned-away
+      document.getElementById('fqhc-sliding-fee').checked = true;
+      document.getElementById('fqhc-no-turned-away').checked = true;
+    }
+    if (data.is_lookalike) document.getElementById('fqhc-is-lookalike').checked = true;
+
+    // Prefill numeric / text fields (only if currently empty)
+    const siteCountEl = document.getElementById('fqhc-site-count');
+    if (data.site_count && !siteCountEl.value) siteCountEl.value = data.site_count;
+
+    const langsEl = document.getElementById('fqhc-languages');
+    if (data.languages?.length && !langsEl.value)
+      langsEl.value = data.languages.join(', ');
+
+    const svcsEl = document.getElementById('fqhc-service-lines');
+    if (data.service_lines?.length && !svcsEl.value)
+      svcsEl.value = data.service_lines.join(', ');
+
+    // Show prefill notice
+    const notice = document.createElement('div');
+    notice.id = 'fqhc-hrsa-notice';
+    notice.style.cssText = 'font-size:12px;color:var(--teal);font-weight:600;margin-bottom:16px;padding:8px 12px;background:#e8f4f6;border-radius:6px;border:1px solid var(--teal)';
+    const hcName = data.health_center_name || name;
+    notice.innerHTML = `&#10003; Prefilled from HRSA Find a Health Center — <em>${hcName}</em>. Review and confirm before running.`;
+    const anchor = el.querySelector('p') || el.firstElementChild;
+    el.insertBefore(notice, anchor);
+  } catch (_) {
+    // HRSA lookup failed silently — user fills in manually
+  }
 }
 
 function irConfirmIntake() {
