@@ -7,7 +7,6 @@ color tokens, and HTML helpers.
 from __future__ import annotations
 
 import html as _html_lib
-import re
 from pathlib import Path
 from typing import Optional
 
@@ -255,17 +254,6 @@ def _cover_block(
             f'</div>'
         )
 
-    # ── Verdict excerpt (first 1–2 sentences) ────────────────────────────
-    verdict_raw = result.ai_visibility_verdict or (
-        result.rankings[0].recommendation_summary if result.rankings else ""
-    )
-    sentences = re.split(r'(?<=[.!?])\s+', verdict_raw.strip())
-    cover_verdict = " ".join(sentences[:2]) if sentences else ""
-    verdict_strip = (
-        f'<div class="cover-verdict-strip"><p>{_e(cover_verdict)}</p></div>'
-        if cover_verdict else ""
-    )
-
     # ── Focus areas (top 3 improvement section titles) ───────────────────
     focus_items_html = ""
     if result.improvement_sections:
@@ -329,7 +317,6 @@ def _cover_block(
     {mqcr_block_html}
   </div>
   <div class="cover-pillar-strip">{pillar_items}</div>
-  {verdict_strip}
   {focus_block}
   {kf_block}
   <div class="cover-meta">
