@@ -195,6 +195,10 @@ def _format_hrsa(hrsa_data: Optional[dict]) -> str:
         lines.append(f"- Look-alike designation: {'Yes' if hrsa_data['is_lookalike'] else 'No'}")
     if hrsa_data.get("site_count") is not None:
         lines.append(f"- Site count (HRSA): {hrsa_data['site_count']}")
+    if hrsa_data.get("site_names"):
+        lines.append(f"- Sites: {', '.join(hrsa_data['site_names'])}")
+    if hrsa_data.get("website"):
+        lines.append(f"- Website: {hrsa_data['website']}")
     if hrsa_data.get("service_lines"):
         lines.append(f"- Service lines: {', '.join(hrsa_data['service_lines'])}")
     if hrsa_data.get("languages"):

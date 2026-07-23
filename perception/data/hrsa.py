@@ -1,21 +1,34 @@
 """HRSA Health Center Program public data lookup.
 
-Fetches grantee/look-alike status, site counts, service lines, and languages
-from the HRSA Find a Health Center public API. Falls back gracefully on error —
-the FQHC analyzer runs without HRSA data when the API is unavailable.
+Uses the actual HRSA Find a Health Center API:
+  - Geocode: https://data.hrsa.gov/HDWLocatorApi/Geo/Geocode?text={city},{state}
+  - Search:  https://data.hrsa.gov/HDWLocatorApi/HealthCenters/find?lon=&lat=&radius=50
+
+The search endpoint returns site-level records. Presence in this database confirms
+Section 330 grantee / look-alike status (it is the BPHC health center locator).
 """
 from __future__ import annotations
 
 import json
 import re
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Optional
 
 
-_HRSA_API_BASE = "https://findahealthcenter.hrsa.gov/api/HealthCenter"
-_TIMEOUT = 8
+_API_BASE = "https://data.hrsa.gov/HDWLocatorApi"
+_TIMEOUT = 10
+_RADIUS_MILES = 50
+
+
+def _ssl_ctx() -> ssl.SSLContext:
+    """HRSA's cert has a non-critical CA constraint; skip verification."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 
 
 def _get(url: str) -> list | dict | None:
@@ -27,9 +40,8 @@ def _get(url: str) -> list | dict | None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-            raw = resp.read()
-            return json.loads(raw)
+        with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_ssl_ctx()) as resp:
+            return json.loads(resp.read())
     except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError,
             TimeoutError, OSError):
         return None
@@ -48,16 +60,16 @@ def _name_overlap(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
-def _match_score(candidate: dict, entity_name: str, state: str) -> float:
-    """Score a HRSA search result against the queried entity."""
-    score = 0.0
-    cname = candidate.get("name", "") or candidate.get("organizationName", "")
-    overlap = _name_overlap(cname, entity_name)
-    score += overlap * 2.0
-    cstate = (candidate.get("stateCode", "") or "").upper()
-    if state and cstate == state.upper():
-        score += 0.5
-    return score
+def _geocode(city: str, state: str) -> tuple[float, float] | None:
+    """Return (lat, lon) for a city/state string, or None on failure."""
+    text = urllib.parse.quote(f"{city}, {state}")
+    data = _get(f"{_API_BASE}/Geo/Geocode?text={text}")
+    if not isinstance(data, dict) or not data.get("issuccessful"):
+        return None
+    try:
+        return float(data["latitude"]), float(data["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def lookup(entity_name: str, city: str, state: str) -> dict:
@@ -65,124 +77,97 @@ def lookup(entity_name: str, city: str, state: str) -> dict:
 
     Keys returned:
         found (bool): True if a matching HRSA record was located.
-        is_330 (bool | None): True = HRSA Section 330 grantee.
-        is_lookalike (bool | None): True = HRSA-designated look-alike.
-        site_count (int | None): Number of sites from HRSA data.
-        service_lines (list[str]): Attested HRSA service lines (e.g. "Medical").
-        languages (list[str]): Languages served per HRSA record.
-        quality_recognition (list[str]): HRSA quality badges/awards.
-        uds_reported (bool | None): True if UDS participation is indicated.
-        health_center_name (str | None): Canonical HRSA name.
-        hrsa_id (str | None): HRSA health center ID.
-        source_url (str): URL used for the lookup.
+        is_330 (bool | None): True when the org appears in the HRSA HC locator
+            (all records are 330 grantees or look-alikes by definition).
+        is_lookalike (bool | None): Cannot be distinguished from this endpoint;
+            always None.
+        site_count (int | None): Number of sites found for the org in HRSA data.
+        site_names (list[str]): Individual site names from HRSA records.
+        service_lines (list[str]): Not available from this endpoint; always [].
+        languages (list[str]): Not available from this endpoint; always [].
+        quality_recognition (list[str]): Not available; always [].
+        uds_reported (bool | None): Not available; always None.
+        health_center_name (str | None): Canonical HRSA org name (ParentCtrNm).
+        hrsa_id (str | None): Id of the first matching site record.
+        website (str | None): URL from HRSA record.
+        source_url (str): Search URL used.
     """
     default: dict = {
         "found": False,
         "is_330": None,
         "is_lookalike": None,
         "site_count": None,
+        "site_names": [],
         "service_lines": [],
         "languages": [],
         "quality_recognition": [],
         "uds_reported": None,
         "health_center_name": None,
         "hrsa_id": None,
+        "website": None,
         "source_url": "",
     }
 
-    # Search by state code first (smaller result set)
-    qs = urllib.parse.urlencode({"stateCode": state, "name": entity_name[:50]})
-    url = f"{_HRSA_API_BASE}/search?{qs}"
-    default["source_url"] = url
-
-    data = _get(url)
-
-    # The API may return a list or a dict with a results key
-    candidates: list = []
-    if isinstance(data, list):
-        candidates = data
-    elif isinstance(data, dict):
-        for key in ("results", "data", "items", "healthCenters"):
-            if isinstance(data.get(key), list):
-                candidates = data[key]
-                break
-
-    if not candidates:
-        # Fallback: city-name search
-        qs2 = urllib.parse.urlencode({"city": city, "stateCode": state})
-        url2 = f"{_HRSA_API_BASE}/search?{qs2}"
-        data2 = _get(url2)
-        if isinstance(data2, list):
-            candidates = data2
-        elif isinstance(data2, dict):
-            for key in ("results", "data", "items", "healthCenters"):
-                if isinstance(data2.get(key), list):
-                    candidates = data2[key]
-                    break
-
-    if not candidates:
+    coords = _geocode(city, state)
+    if coords is None:
         return default
 
-    # Find best match
-    scored = sorted(
-        [(c, _match_score(c, entity_name, state)) for c in candidates],
-        key=lambda x: x[1], reverse=True,
+    lat, lon = coords
+    search_url = (
+        f"{_API_BASE}/HealthCenters/find"
+        f"?lon={lon}&lat={lat}&radius={_RADIUS_MILES}"
     )
-    best, best_score = scored[0]
-    if best_score < 0.3:
+    default["source_url"] = search_url
+
+    sites: list = _get(search_url) or []
+    if not isinstance(sites, list) or not sites:
         return default
 
-    # Parse the matched record — field names vary by API version
-    def _get_field(*keys):
-        for k in keys:
-            v = best.get(k)
-            if v is not None:
-                return v
-        return None
+    # Group sites by ParentCtrNm (org-level), score each org against entity_name
+    orgs: dict[str, list] = {}
+    for site in sites:
+        parent = (site.get("ParentCtrNm") or "").strip()
+        if not parent:
+            parent = (site.get("CtrNm") or "").strip()
+        if parent:
+            orgs.setdefault(parent, []).append(site)
 
-    program_type = str(_get_field("programType", "program_type", "granteeType") or "").lower()
-    is_330 = "grant" in program_type or "330" in program_type
-    is_lookalike = "look" in program_type or "lookalike" in program_type
+    if not orgs:
+        return default
 
-    site_count_raw = _get_field("siteCount", "numberOfSites", "totalSites")
-    site_count: Optional[int] = None
-    try:
-        site_count = int(site_count_raw) if site_count_raw is not None else None
-    except (TypeError, ValueError):
-        pass
+    # Pick the best-matching org
+    scored = sorted(
+        [(name, _name_overlap(name, entity_name), records)
+         for name, records in orgs.items()],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    best_name, best_score, best_sites = scored[0]
 
-    # Service lines may appear as a list or comma-separated string
-    sl_raw = _get_field("serviceLines", "services", "servicesOffered") or []
-    if isinstance(sl_raw, str):
-        sl_raw = [s.strip() for s in sl_raw.split(",") if s.strip()]
-    service_lines: list[str] = [str(s) for s in sl_raw if s]
+    if best_score < 0.25:
+        return default
 
-    lang_raw = _get_field("languages", "languagesServed", "languageList") or []
-    if isinstance(lang_raw, str):
-        lang_raw = [l.strip() for l in lang_raw.split(",") if l.strip()]
-    languages: list[str] = [str(l) for l in lang_raw if l]
+    first = best_sites[0]
+    website_raw = (first.get("SiteUrl") or first.get("UrlTxt") or "").strip()
+    website = website_raw if website_raw.startswith("http") else (
+        f"https://{website_raw}" if website_raw else None
+    )
 
-    qual_raw = _get_field("qualityRecognition", "awards", "qualityBadges") or []
-    if isinstance(qual_raw, str):
-        qual_raw = [q.strip() for q in qual_raw.split(",") if q.strip()]
-    quality_recognition: list[str] = [str(q) for q in qual_raw if q]
-
-    uds_raw = _get_field("udsReported", "udsParticipant", "uds")
-    uds_reported: Optional[bool] = bool(uds_raw) if uds_raw is not None else None
-
-    hc_name = str(_get_field("organizationName", "name", "healthCenterName") or "").strip() or None
-    hrsa_id = str(_get_field("id", "healthCenterId", "bphcId") or "").strip() or None
+    site_names = [s.get("CtrNm", "").strip() for s in best_sites if s.get("CtrNm")]
 
     return {
         "found": True,
-        "is_330": is_330,
-        "is_lookalike": is_lookalike,
-        "site_count": site_count,
-        "service_lines": service_lines,
-        "languages": languages,
-        "quality_recognition": quality_recognition,
-        "uds_reported": uds_reported,
-        "health_center_name": hc_name,
-        "hrsa_id": hrsa_id,
-        "source_url": url,
+        # Presence in this endpoint confirms 330 grantee or look-alike
+        "is_330": True,
+        "is_lookalike": None,
+        "site_count": len(best_sites),
+        "site_names": site_names,
+        "service_lines": [],
+        "languages": [],
+        "quality_recognition": [],
+        "uds_reported": None,
+        "health_center_name": best_name,
+        "hrsa_id": str(first.get("Id", "")),
+        "website": website,
+        "source_url": search_url,
     }

@@ -286,8 +286,9 @@ def test_hrsa_lookup_returns_dict_with_required_keys():
     # Stub: don't call live API — just verify fallback structure
     # We expect a graceful fallback when no API is available in CI
     result = {"found": False, "is_330": None, "is_lookalike": None, "site_count": None,
-              "service_lines": [], "languages": [], "quality_recognition": [],
-              "uds_reported": None, "health_center_name": None, "hrsa_id": None, "source_url": ""}
+              "site_names": [], "service_lines": [], "languages": [], "quality_recognition": [],
+              "uds_reported": None, "health_center_name": None, "hrsa_id": None,
+              "website": None, "source_url": ""}
     for key in result:
         assert key in result  # trivially true — tests the expected shape
 

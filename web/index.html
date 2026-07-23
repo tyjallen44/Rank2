@@ -3666,6 +3666,10 @@ async function showFqhcIntake() {
     const siteCountEl = document.getElementById('fqhc-site-count');
     if (data.site_count && !siteCountEl.value) siteCountEl.value = data.site_count;
 
+    const siteNamesEl = document.getElementById('fqhc-site-names');
+    if (data.site_names?.length && !siteNamesEl.value)
+      siteNamesEl.value = data.site_names.join('\n');
+
     const langsEl = document.getElementById('fqhc-languages');
     if (data.languages?.length && !langsEl.value)
       langsEl.value = data.languages.join(', ');
