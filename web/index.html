@@ -3638,9 +3638,9 @@ async function showFqhcIntake() {
   el.classList.remove('hidden');
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-  // Remove any prior prefill notice
-  const prior = document.getElementById('fqhc-hrsa-notice');
-  if (prior) prior.remove();
+  // Remove any prior prefill notice or loading indicator
+  document.getElementById('fqhc-hrsa-notice')?.remove();
+  document.getElementById('fqhc-prefill-loading')?.remove();
 
   // Attempt HRSA prefill
   const name  = _irSelected?.name || '';
@@ -3648,9 +3648,18 @@ async function showFqhcIntake() {
   const state = _irResolvedState || '';
   if (!name) return;
 
+  // Show loading notice while the web research runs (30–60s)
+  const loading = document.createElement('div');
+  loading.id = 'fqhc-prefill-loading';
+  loading.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:12px;color:var(--teal);font-weight:600;margin-bottom:16px;padding:10px 14px;background:#e8f4f6;border-radius:6px;border:1px solid var(--teal)';
+  loading.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(0,140,155,0.25);border-top-color:var(--teal);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0"></span>Researching ${name} — prefilling details may take 30–60 seconds…`;
+  const anchor = el.querySelector('p') || el.firstElementChild;
+  el.insertBefore(loading, anchor);
+
   try {
     const qs = new URLSearchParams({ entity_name: name, city, state });
     const data = await api(`/api/hrsa-prefill?${qs}`).then(r => r.json());
+    loading.remove();
     if (!data?.found) return;
 
     // Prefill checkboxes — HRSA status
@@ -3694,6 +3703,7 @@ async function showFqhcIntake() {
     const anchor = el.querySelector('p') || el.firstElementChild;
     el.insertBefore(notice, anchor);
   } catch (_) {
+    loading.remove();
     // HRSA lookup failed silently — user fills in manually
   }
 }
