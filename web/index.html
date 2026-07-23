@@ -3472,6 +3472,8 @@ function selectIrCandidate(idx) {
   if (_irType === 'specialty') {
     showIrProfileStep();
   } else if (_irType === 'community_health') {
+    // For FQHC, the report title is the org name the user typed — not the Google-resolved site name
+    _irReportTitle = document.getElementById('ir-name').value.trim() || _irSelected.name;
     showFqhcIntake();
   } else {
     document.getElementById('ir-step2b').classList.add('hidden');
@@ -4013,7 +4015,9 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     specialty,
     aggregate,
     individual_report: true,
-    entity_name: _irSelected.name,
+    entity_name: _irType === 'community_health'
+      ? (document.getElementById('ir-name').value.trim() || _irSelected.name)
+      : _irSelected.name,
     report_title: _irReportTitle || undefined,
     confirmed_siblings: _irType === 'specialty' ? _irConfirmedSiblings : undefined,
     org_name: _irType === 'specialty' ? _irOrgName : undefined,

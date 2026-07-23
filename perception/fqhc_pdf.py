@@ -156,6 +156,9 @@ def _fqhc_css(primary: str, pale: str, accent: str) -> str:
     .cover-focus-item {{ display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }}
     .cover-focus-bullet {{ width: 6px; height: 6px; border-radius: 50%; background: {accent}; margin-top: 4px; flex-shrink: 0; }}
     .cover-focus-text {{ font-size: 9.5pt; color: rgba(255,255,255,0.75); line-height: 1.45; }}
+    .cover-kf {{ margin-top: 32px; display: flex; gap: 12px; flex-wrap: wrap; }}
+    .cover-kf-pill {{ background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 6px 14px; font-size: 8.5pt; color: rgba(255,255,255,0.7); white-space: nowrap; }}
+    .cover-kf-val {{ color: {accent}; font-weight: bold; }}
     .cover-meta {{ margin-top: auto; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 8.5pt; color: rgba(255,255,255,0.5); display: flex; justify-content: space-between; }}
     .report-body {{ padding: 36px 48px; }}
     h2 {{ font-size: 13pt; color: {primary}; margin: 28px 0 10px; border-bottom: 2px solid {primary}; padding-bottom: 4px; }}
@@ -290,6 +293,28 @@ def _cover_block(
         if focus_items_html else ""
     )
 
+    # ── Key-facts pills (fills whitespace before footer) ─────────────────
+    prov_for_cover = result.rankings[0] if result.rankings else None
+    kf_pills = []
+    site_count = len(prov_for_cover.consolidated_locations) if prov_for_cover else 0
+    if site_count:
+        kf_pills.append(f'<span class="cover-kf-pill"><span class="cover-kf-val">{site_count}</span> HRSA sites</span>')
+    if prov_for_cover and prov_for_cover.google_footprint.front_door.rating is not None:
+        rating = prov_for_cover.google_footprint.front_door.rating
+        count  = prov_for_cover.google_footprint.front_door.count or 0
+        kf_pills.append(f'<span class="cover-kf-pill"><span class="cover-kf-val">{rating:.1f}★</span> Google ({count} reviews)</span>')
+    intake = result.fqhc_intake or {}
+    if intake.get("is_330"):
+        kf_pills.append('<span class="cover-kf-pill"><span class="cover-kf-val">✓</span> Section 330 Grantee</span>')
+    if intake.get("sliding_fee_scale"):
+        kf_pills.append('<span class="cover-kf-pill"><span class="cover-kf-val">✓</span> Sliding-Fee Scale</span>')
+    if intake.get("accepts_uninsured"):
+        kf_pills.append('<span class="cover-kf-pill"><span class="cover-kf-val">✓</span> Uninsured Welcome</span>')
+    kf_block = (
+        f'<div class="cover-kf">{"".join(kf_pills)}</div>'
+        if kf_pills else ""
+    )
+
     return f"""
 <div class="cover">
   <div class="cover-edition">Pulse — Community Health Edition v1.0</div>
@@ -306,6 +331,7 @@ def _cover_block(
   <div class="cover-pillar-strip">{pillar_items}</div>
   {verdict_strip}
   {focus_block}
+  {kf_block}
   <div class="cover-meta">
     <span>Generated {generated} &nbsp;·&nbsp; Community Health Center</span>
     <span>Pulse AI Visibility Report &nbsp;·&nbsp; Community Health Edition v1.0</span>

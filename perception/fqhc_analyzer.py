@@ -7,6 +7,7 @@ Neither the hospital nor practice path is modified.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -340,7 +341,10 @@ def _build_fqhc_provider(r: dict) -> RankedProvider:
             if isinstance(loc, dict) and loc.get("name")
         ],
         patient_voice_summary=r.get("patient_voice_summary") or "",
-        accreditations=[a for a in r.get("accreditations", []) if isinstance(a, str)],
+        accreditations=[
+            re.sub(r'\s*\(HRSA ID\s+[\w-]+\)', '', a).strip()
+            for a in r.get("accreditations", []) if isinstance(a, str)
+        ],
         ai_says=r.get("ai_says") or "",
         report_type="community_health",
     )
@@ -607,6 +611,18 @@ def analyze_fqhc(
         _build_fqhc_provider(r)
         for r in structured_data.get("rankings", [])
     ]
+
+    # Supplement consolidated_locations with HRSA-known and intake-confirmed sites
+    # so the Pillar 3 table reflects the full site roster, not just what the LLM mentioned.
+    if rankings:
+        known = {loc.name.lower() for loc in rankings[0].consolidated_locations}
+        authoritative_sites = list(hrsa_data.get("site_names") or []) + list(site_roster or [])
+        for site_name in authoritative_sites:
+            if site_name and site_name.lower() not in known:
+                rankings[0].consolidated_locations.append(
+                    ConsolidatedLocation(name=site_name)
+                )
+                known.add(site_name.lower())
 
     # ── Phase 3: Verify Google + score ───────────────────────────────────────
     emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})
