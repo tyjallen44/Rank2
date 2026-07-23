@@ -144,6 +144,18 @@ def _fqhc_css(primary: str, pale: str, accent: str) -> str:
     .cover-mqcr-num {{ font-size: 34pt; font-weight: bold; color: #fff; line-height: 1; }}
     .cover-mqcr-pending {{ font-size: 12pt; color: rgba(255,255,255,0.55); font-style: italic; margin: 10px 0; }}
     .cover-mqcr-caption {{ font-size: 8.5pt; color: rgba(255,255,255,0.7); margin-top: 6px; line-height: 1.4; max-width: 200px; }}
+    .cover-pillar-strip {{ display: flex; gap: 10px; margin-top: 40px; }}
+    .cover-pillar-item {{ flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 14px 8px; text-align: center; }}
+    .cover-pillar-score {{ font-size: 20pt; font-weight: bold; color: {accent}; line-height: 1; }}
+    .cover-pillar-name {{ font-size: 7.5pt; color: rgba(255,255,255,0.65); margin-top: 5px; line-height: 1.3; }}
+    .cover-pillar-pts {{ font-size: 7pt; color: rgba(255,255,255,0.35); margin-top: 3px; }}
+    .cover-verdict-strip {{ margin-top: 24px; padding: 16px 20px; background: rgba(255,255,255,0.06); border-left: 3px solid {accent}; border-radius: 0 6px 6px 0; }}
+    .cover-verdict-strip p {{ font-size: 9.5pt; color: rgba(255,255,255,0.8); line-height: 1.55; }}
+    .cover-focus {{ margin-top: 28px; }}
+    .cover-focus-label {{ font-size: 8pt; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.45); margin-bottom: 12px; }}
+    .cover-focus-item {{ display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }}
+    .cover-focus-bullet {{ width: 6px; height: 6px; border-radius: 50%; background: {accent}; margin-top: 4px; flex-shrink: 0; }}
+    .cover-focus-text {{ font-size: 9.5pt; color: rgba(255,255,255,0.75); line-height: 1.45; }}
     .cover-meta {{ margin-top: auto; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 8.5pt; color: rgba(255,255,255,0.5); display: flex; justify-content: space-between; }}
     .report-body {{ padding: 36px 48px; }}
     h2 {{ font-size: 13pt; color: {primary}; margin: 28px 0 10px; border-bottom: 2px solid {primary}; padding-bottom: 4px; }}
@@ -217,6 +229,67 @@ def _cover_block(
           <div class="cover-mqcr-caption">Requires battery run — this will be the leading metric at re-assessment.</div>
         </div>"""
 
+    # ── 5-pillar strip ────────────────────────────────────────────────────
+    from .fqhc_scoring import pillar1_score as _p1_score
+    ps = result.fqhc_pillar_scores or FqhcPillarScores()
+    sub = ps.as_dict()
+    pillar_defs = [
+        ("Access &\nFindability",          _p1_score(sub),                          "25 pts"),
+        ("Eligibility &\nCost Accuracy",   sub.get("eligibility_cost_accuracy"),    "25 pts"),
+        ("Site & Service\nCompleteness",   sub.get("site_service_completeness"),    "20 pts"),
+        ("Experience &\nReputation",       sub.get("experience_reputation"),        "20 pts"),
+        ("Institutional\nSignals",         sub.get("institutional_signals"),        "10 pts"),
+    ]
+    pillar_items = ""
+    for name, val, pts in pillar_defs:
+        val_html = str(val) if val is not None else "—"
+        name_html = _e(name).replace("\n", "<br>")
+        pillar_items += (
+            f'<div class="cover-pillar-item">'
+            f'<div class="cover-pillar-score">{val_html}</div>'
+            f'<div class="cover-pillar-name">{name_html}</div>'
+            f'<div class="cover-pillar-pts">{pts}</div>'
+            f'</div>'
+        )
+
+    # ── Verdict excerpt (first 1–2 sentences) ────────────────────────────
+    verdict_raw = result.ai_visibility_verdict or (
+        result.rankings[0].recommendation_summary if result.rankings else ""
+    )
+    sentences = re.split(r'(?<=[.!?])\s+', verdict_raw.strip())
+    cover_verdict = " ".join(sentences[:2]) if sentences else ""
+    verdict_strip = (
+        f'<div class="cover-verdict-strip"><p>{_e(cover_verdict)}</p></div>'
+        if cover_verdict else ""
+    )
+
+    # ── Focus areas (top 3 improvement section titles) ───────────────────
+    focus_items_html = ""
+    if result.improvement_sections:
+        for sec in result.improvement_sections[:3]:
+            title = _e(sec.title)
+            desc  = _e(sec.description) if sec.description else ""
+            focus_items_html += (
+                f'<div class="cover-focus-item">'
+                f'<div class="cover-focus-bullet"></div>'
+                f'<div class="cover-focus-text"><strong>{title}</strong>'
+                + (f' — {desc}' if desc else '') +
+                f'</div></div>'
+            )
+    elif result.practical_advice:
+        for advice in result.practical_advice[:3]:
+            focus_items_html += (
+                f'<div class="cover-focus-item">'
+                f'<div class="cover-focus-bullet"></div>'
+                f'<div class="cover-focus-text">{_e(advice)}</div></div>'
+            )
+    focus_block = (
+        f'<div class="cover-focus">'
+        f'<div class="cover-focus-label">Priority focus areas</div>'
+        f'{focus_items_html}</div>'
+        if focus_items_html else ""
+    )
+
     return f"""
 <div class="cover">
   <div class="cover-edition">Pulse — Community Health Edition v1.0</div>
@@ -230,6 +303,9 @@ def _cover_block(
     </div>
     {mqcr_block_html}
   </div>
+  <div class="cover-pillar-strip">{pillar_items}</div>
+  {verdict_strip}
+  {focus_block}
   <div class="cover-meta">
     <span>Generated {generated} &nbsp;·&nbsp; Community Health Center</span>
     <span>Pulse AI Visibility Report &nbsp;·&nbsp; Community Health Edition v1.0</span>
