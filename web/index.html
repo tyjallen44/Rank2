@@ -4603,6 +4603,7 @@ let _historySortField = 'date';
 let _historySortDir = 'desc';
 let _historySearch = '';
 let _cachedEvents = [];
+let _evHistExpanded = localStorage.getItem('evHistExpanded') === 'true';
 
 async function loadHistory() {
   const el = document.getElementById('history-body');
@@ -4707,18 +4708,25 @@ function renderHistory(events) {
         ${_role === 'admin' ? `<td>${adminBtns}</td>` : ''}
       </tr>${editRow}`;
     }).join('');
+    const _evCount = events.length;
     evHtml = `
       <div style="margin-bottom:24px">
-        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Event Runs</div>
-        <div class="card" style="padding:0;overflow:hidden">
-          <table class="tbl">
-            <thead><tr>
-              <th>Date</th><th>Event Name</th><th>Event Date</th><th>Type</th>
-              <th>Entities</th><th>Status</th><th>CSV</th><th>All Reports (ZIP)</th>
-              ${_role === 'admin' ? '<th></th>' : ''}
-            </tr></thead>
-            <tbody>${evRows}</tbody>
-          </table>
+        <div onclick="evToggleHistory()" style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;margin-bottom:10px;padding:2px 0">
+          <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em">Event Runs</div>
+          <span id="ev-hist-badge" style="font-size:12px;color:var(--muted);background:var(--pale);border-radius:10px;padding:1px 8px">${_evCount} run${_evCount === 1 ? '' : 's'}</span>
+          <span id="ev-hist-chevron" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+        </div>
+        <div id="ev-hist-body">
+          <div class="card" style="padding:0;overflow:hidden">
+            <table class="tbl">
+              <thead><tr>
+                <th>Date</th><th>Event Name</th><th>Event Date</th><th>Type</th>
+                <th>Entities</th><th>Status</th><th>CSV</th><th>All Reports (ZIP)</th>
+                ${_role === 'admin' ? '<th></th>' : ''}
+              </tr></thead>
+              <tbody>${evRows}</tbody>
+            </table>
+          </div>
         </div>
       </div>`;
   }
@@ -4797,10 +4805,25 @@ function renderHistory(events) {
         </tbody>
       </table>
     </div>`;
+  _applyEvHistState();
   if (searchWasFocused) {
     const inp = document.getElementById('history-search');
     if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
   }
+}
+
+function evToggleHistory() {
+  _evHistExpanded = !_evHistExpanded;
+  localStorage.setItem('evHistExpanded', _evHistExpanded);
+  _applyEvHistState();
+}
+
+function _applyEvHistState() {
+  const body    = document.getElementById('ev-hist-body');
+  const chevron = document.getElementById('ev-hist-chevron');
+  if (!body) return;
+  body.style.display = _evHistExpanded ? '' : 'none';
+  if (chevron) chevron.textContent = _evHistExpanded ? '▼' : '▶';
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
