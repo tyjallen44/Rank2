@@ -376,9 +376,15 @@ def _save_fqhc_extras(
     if result.fqhc_intake:
         intake_id = str(uuid.uuid4())
         con.execute(
-            """INSERT OR REPLACE INTO fqhc_intake
+            """INSERT INTO fqhc_intake
                (id, run_id, entity_name, city, state, intake_json, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (run_id) DO UPDATE SET
+                   entity_name = excluded.entity_name,
+                   city        = excluded.city,
+                   state       = excluded.state,
+                   intake_json = excluded.intake_json,
+                   created_at  = excluded.created_at""",
             [
                 intake_id, result.run_id, result.entity_name,
                 result.location.split(",")[0].strip(),
