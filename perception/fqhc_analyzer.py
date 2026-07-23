@@ -107,9 +107,9 @@ _FACT_AUDIT_ROW_SCHEMA = {
         "ai_representation": {"type": "string", "description": "What AI assistants say about this"},
         "flag":              {"type": "string", "enum": ["✓", "◐", "✗"]},
         "severity":          {"type": "string", "enum": ["MISSION-CRITICAL", "notable", "minor"]},
-        "points":            {"type": ["number", "null"], "description": "Points at stake from rubric"},
+        "points":            {"type": "number", "description": "Points from rubric this fact affects: sliding fee 5, NTAFA 4, Medicaid/Medicare/insurance 5 combined, free-clinic 4, new-patient 4, framing 3. Assign the value for this specific fact."},
     },
-    "required": ["claim", "ai_representation", "flag", "severity"],
+    "required": ["claim", "ai_representation", "flag", "severity", "points"],
     "additionalProperties": False,
 }
 
@@ -545,7 +545,8 @@ def analyze_fqhc(
         "- fqhc_pillar_scores.mqcr_score = null (Round 1, no battery data)\n"
         "- fqhc_pillar_scores.multilingual_score = null (Round 1, no multilingual battery)\n"
         "- fqhc_pillar_scores.service_adjacent_score = required (AI-assessed)\n"
-        "- fact_audit_rows: one row per attested fact; any ✗ must be MISSION-CRITICAL\n"
+        "- fact_audit_rows: one row per attested fact; any ✗ must be MISSION-CRITICAL; "
+        "points field is REQUIRED — use rubric values: sliding fee=5, NTAFA=4, Medicaid/Medicare/insurance=5 split across rows, free-clinic=4, new-patient=4, framing=3\n"
         "- missed_queries: up to 8 rows; prioritize eligibility-frame, then service-adjacent\n"
         "- rankings: single element, rank=1, with the health center\n\n"
         "--- REPORT ---\n"

@@ -193,6 +193,9 @@ def _fqhc_css(primary: str, pale: str, accent: str) -> str:
     .site-table th {{ background: {primary}; color: #fff; padding: 8px 10px; text-align: left; font-size: 8.5pt; }}
     .site-table td {{ padding: 8px 10px; border-bottom: 1px solid #d0e4e7; }}
     .site-table tr:nth-child(even) td {{ background: {pale}; }}
+    /* Repeat table headers across page breaks */
+    thead {{ display: table-header-group; }}
+    tfoot {{ display: table-footer-group; }}
     .improvement-section {{ margin: 16px 0; }}
     .improvement-section h3 {{ font-size: 10.5pt; color: {primary}; margin-bottom: 6px; }}
     .improvement-section ul {{ margin-left: 20px; }}
