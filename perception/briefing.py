@@ -133,6 +133,12 @@ def validate_briefing_inputs(result: "AnalysisResult") -> list[str]:
                     missing.append("practice_composite_rows anchor: avg_rating")
                 if anchor.get("total_reviews") is None:
                     missing.append("practice_composite_rows anchor: total_reviews")
+    # Community Health edition: use fqhc_pillar_scores instead of tier_scores
+    elif result.entity_type == "community_health":
+        if result.fqhc_pillar_scores is None:
+            missing.append("fqhc_pillar_scores (required for community_health briefing)")
+        # Override: do NOT require tier_scores for FQHC (already appended above — remove them)
+        missing = [m for m in missing if not m.startswith("rankings[0].tier_scores.")]
     # Hospital edition (entity_type=None or "hospital"): composite rows optional
 
     return missing
@@ -1035,7 +1041,9 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
         raise ValueError(f"variant must be 'sales' or 'cs', got {variant!r}")
 
     # Edition assertion: rubric must match entity_type from registry
-    entity_type = result.entity_type  # "practice" | "hospital" | None (= hospital)
+    entity_type = result.entity_type  # "practice" | "hospital" | "community_health" | None
+    if entity_type == "community_health":
+        return _extract_fqhc(result, variant)
     edition = "practice" if entity_type == "practice" else "hospital"
 
     missing = validate_briefing_inputs(result)
@@ -1106,4 +1114,258 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
         prior_score=prior_score,
         prior_date=prior_date,
         strong_posture=strong_posture,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FQHC Community Health Edition briefing path
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _extract_fqhc(result: "AnalysisResult", variant: str) -> BriefingResult:
+    """Build a BriefingResult for Community Health Edition reports.
+
+    MQCR-first rule (spec §6):
+      1. MQCR sentence (or not-yet-computed framing)
+      2. Up to 3 missed queries verbatim
+      3. Top mission-critical Pillar 2 finding if present
+      4. Service-alignment items
+
+    Both role variants (sales and CS) carry the MQCR block.
+    CS variant adds MQCR delta sentence when a prior run exists.
+    """
+    from .scoring import grade_from_score, WEIGHTS
+    cfg = _cfg()
+    p = result.rankings[0] if result.rankings else None
+    score = (p.ai_visibility_score if p else None) or 0
+    grade, _ = grade_from_score(score)
+    band = cfg["band_descriptors"].get(grade, "moderate AI visibility")
+
+    entity_name = result.entity_name or ""
+    city = result.location.split(",")[0].strip() if result.location else ""
+    ps = result.fqhc_pillar_scores
+
+    # ── MQCR block (always first) ─────────────────────────────────────────────
+    mqcr = result.fqhc_mqcr
+    if mqcr is not None:
+        pct = int(round(mqcr * 100))
+        mqcr_sentence = (
+            f"When patients ask AI assistants where they can afford to be seen, "
+            f"{entity_name} appears in {pct}% of tested queries."
+        )
+        re_run_line = (
+            "This number is recomputed from the same logged query battery at re-assessment "
+            "— it is the before/after that demonstrates engagement value."
+        )
+    else:
+        mqcr_sentence = (
+            f"The Mission Query Capture Rate for {entity_name} has not yet been measured "
+            f"— this will be the leading metric when the battery run is completed."
+        )
+        re_run_line = (
+            "MQCR is recomputed from the same logged query battery at re-assessment "
+            "— it is the before/after that demonstrates engagement value."
+        )
+
+    # Missed queries (capped at 3 for briefing)
+    missed_verbatim = [
+        f'"{q["query"]}"' for q in (result.fqhc_missed_queries or [])[:3]
+        if q.get("query")
+    ]
+
+    # Mission-critical Pillar 2 finding
+    mc_finding: Optional[str] = None
+    for row in (result.fqhc_fact_audit or []):
+        if row.get("severity") == "MISSION-CRITICAL" and row.get("flag") == "✗":
+            mc_finding = (
+                f"AI is misrepresenting '{row['claim']}' — "
+                f"this is a barrier-to-care finding that should be the lead conversation."
+            )
+            break
+
+    # ── Hook ─────────────────────────────────────────────────────────────────
+    hook_parts = [mqcr_sentence]
+    if missed_verbatim:
+        hook_parts.append(f"Representative missed queries: {'; '.join(missed_verbatim)}.")
+    if mc_finding:
+        hook_parts.append(mc_finding)
+    hook = " ".join(hook_parts)
+
+    # ── Findings (3 items) ───────────────────────────────────────────────────
+    findings: list[BriefingFinding] = []
+
+    # Finding 1: MQCR / Access & Findability
+    p1_score = ps.service_adjacent_score if ps else None
+    say_1 = mqcr_sentence + " " + re_run_line if not mqcr else mqcr_sentence
+    findings.append(BriefingFinding(
+        candidate_id="fqhc:mqcr",
+        finding_type="fqhc:access_findability:gap" if (not mqcr or (mqcr and mqcr < 0.5)) else "fqhc:access_findability:strength",
+        candidate_type="gap" if not mqcr or (mqcr and mqcr < 0.5) else "strength",
+        source_ref="Pillar 1: Access & Findability (MQCR)",
+        what=mqcr_sentence,
+        why=(
+            "Patients navigating cost and insurance barriers rely on AI to find care. "
+            "When AI doesn't surface this center for mission-frame queries, those patients go elsewhere."
+        ),
+        say=say_1,
+    ))
+
+    # Finding 2: Mission-Critical Pillar 2 finding (if exists) or weakest pillar
+    if mc_finding:
+        mc_row = next(
+            (r for r in (result.fqhc_fact_audit or [])
+             if r.get("severity") == "MISSION-CRITICAL" and r.get("flag") == "✗"),
+            None,
+        )
+        claim = (mc_row or {}).get("claim", "eligibility fact")
+        ai_rep = (mc_row or {}).get("ai_representation", "")
+        findings.append(BriefingFinding(
+            candidate_id="fqhc:p2_mc",
+            finding_type="fqhc:eligibility_cost_accuracy:gap",
+            candidate_type="gap",
+            source_ref="Pillar 2: Eligibility & Cost Accuracy (MISSION-CRITICAL)",
+            what=f"AI is misrepresenting '{claim}' — {ai_rep}",
+            why=(
+                "Incorrect eligibility information creates a direct barrier to care. "
+                "Patients who can't afford care don't self-advocate — AI telling them "
+                "they can't come here means they won't call."
+            ),
+            say=(
+                f"When a patient asks AI about {entity_name}'s cost or coverage, "
+                f"it is getting '{claim}' wrong. That is the barrier-to-care conversation. "
+                f"This is also the highest-ROI fix: one correction, every patient query."
+            ),
+        ))
+    else:
+        # Use weakest scored pillar
+        sub = ps.as_dict() if ps else {}
+        scored = {k: v for k, v in sub.items() if v is not None}
+        if scored:
+            weakest_key = min(scored, key=lambda k: scored[k])
+            weakest_val = scored[weakest_key]
+            from .fqhc_scoring import FQHC_PILLAR_LABELS
+            weakest_label = FQHC_PILLAR_LABELS.get(weakest_key, weakest_key.replace("_", " ").title())
+            findings.append(BriefingFinding(
+                candidate_id=f"fqhc:{weakest_key}",
+                finding_type=f"fqhc:{weakest_key}:gap",
+                candidate_type="gap",
+                source_ref=f"Weakest Pillar: {weakest_label}",
+                what=f"{weakest_label} scored {weakest_val}/100 — the lowest-performing pillar.",
+                why=(
+                    f"{weakest_label} is a critical gap because it directly affects patient access and trust."
+                ),
+                say=(
+                    f"{entity_name}'s weakest area is {weakest_label} at {weakest_val}/100. "
+                    f"This is where we'd start the remediation conversation."
+                ),
+            ))
+        else:
+            findings.append(BriefingFinding(
+                candidate_id="fqhc:p2_baseline",
+                finding_type="fqhc:eligibility_cost_accuracy:gap",
+                candidate_type="gap",
+                source_ref="Pillar 2: Eligibility & Cost Accuracy",
+                what="Eligibility and cost accuracy could not be fully assessed without intake data.",
+                why="Patients rely on accurate eligibility information to decide whether to seek care.",
+                say=f"To fully assess {entity_name}'s eligibility accuracy, we need the intake form completed.",
+            ))
+
+    # Finding 3: Experience & Reputation or Institutional Signals
+    p4_score = ps.experience_reputation if ps else None
+    p5_score = ps.institutional_signals if ps else None
+    if p4_score is not None and p4_score < 70 and p is not None:
+        fd = p.google_footprint.front_door
+        rating_str = f"{fd.rating:.1f}★ ({fd.count} reviews)" if fd.rating is not None else "not established"
+        findings.append(BriefingFinding(
+            candidate_id="fqhc:experience_reputation",
+            finding_type="fqhc:experience_reputation:gap",
+            candidate_type="gap",
+            source_ref="Pillar 4: Experience & Reputation",
+            what=f"Experience & Reputation scored {p4_score}/100. Google front door: {rating_str}.",
+            why=(
+                "Review volume and recency across sites drives both AI recommendation and patient trust. "
+                "CHCs typically have thinner review profiles than private practices — this is a recoverable gap."
+            ),
+            say=(
+                f"{entity_name}'s review profile ({rating_str}) leaves points on the table "
+                f"for AI assistants ranking by reputation. A site-by-site review program is the fix."
+            ),
+        ))
+    else:
+        p3_score = ps.site_service_completeness if ps else None
+        site_count = len(p.consolidated_locations) if p else 0
+        findings.append(BriefingFinding(
+            candidate_id="fqhc:site_service_completeness",
+            finding_type="fqhc:site_service_completeness:gap" if (p3_score is None or p3_score < 70) else "fqhc:site_service_completeness:strength",
+            candidate_type="gap" if (p3_score is None or p3_score < 70) else "strength",
+            source_ref="Pillar 3: Site & Service Completeness",
+            what=f"Site & Service Completeness: {site_count} site(s) enumerated. Score: {p3_score}/100." if p3_score is not None else "Site completeness not fully assessed.",
+            why="Directory consistency across Google, HRSA, and MCO directories determines whether patients — and AI — can find each site.",
+            say=(
+                f"Listings management across {site_count} site(s) — Google, HRSA directory, "
+                f"and Medicaid MCO directories — is exactly what we do at scale."
+            ),
+        ))
+
+    # Trim to 3 findings
+    findings = findings[:3]
+
+    # ── CS delta ─────────────────────────────────────────────────────────────
+    prior_info = _get_prior(result)
+    prior_score: Optional[int] = prior_info.get("prior_score")
+    prior_date: Optional[str] = prior_info.get("prior_date")
+
+    # ── Re-run framing line (always appended for FQHC) ───────────────────────
+    ask_parts = [
+        f"The next step for {entity_name} is a battery run to establish MQCR. "
+        f"We run the full mission-frame query battery and compute MQCR and Multilingual Capture Rate — "
+        f"these are the numbers that anchor the re-assessment ROI conversation."
+    ]
+    if variant == "cs" and prior_score is not None and prior_date and mqcr is not None:
+        ask_parts.append(
+            f"MQCR at last assessment ({prior_date}): prior score {prior_score}. "
+            f"Current MQCR: {int(round(mqcr * 100))}%."
+        )
+    ask = " ".join(ask_parts)
+
+    # ── Demo / gap conversation ───────────────────────────────────────────────
+    demo = _select_demo(result, cfg)
+    gap_conv: Optional[str] = None
+    if demo is None:
+        if missed_verbatim:
+            gap_conv = (
+                f"Ask your prospect to try this on their phone right now: {missed_verbatim[0]}. "
+                f"If {entity_name} doesn't appear, that's the conversation."
+            )
+        else:
+            gap_conv = (
+                f"Ask the prospect: 'If a patient with Medicaid asked their phone where to get care in {city}, "
+                f"would they find {entity_name}?' That question opens the MQCR conversation."
+            )
+
+    # ── Objections ───────────────────────────────────────────────────────────
+    obj_ctx = {
+        "entity_name": entity_name,
+        "gap_label": "Mission Query Capture",
+        "ceiling_value": 74,
+        "score_ceiling_reason_plain": "",
+    }
+    objections = _select_objections(findings, variant, cfg, obj_ctx)
+
+    return BriefingResult(
+        entity_name=entity_name,
+        variant=variant,
+        report_date=result.generated_at.isoformat() if result.generated_at else "",
+        run_id=result.run_id,
+        score=score,
+        grade=grade,
+        band_descriptor=band,
+        hook=hook,
+        findings=findings,
+        demo=demo,
+        gap_conversation_prompt=gap_conv,
+        objections=objections,
+        ask=ask,
+        prior_score=prior_score,
+        prior_date=prior_date,
+        strong_posture=False,
     )

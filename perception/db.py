@@ -525,6 +525,45 @@ def init_db() -> None:
         )
     """)
 
+    # ── FQHC Community Health Edition tables ─────────────────────────────────
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS fqhc_intake (
+            id           VARCHAR PRIMARY KEY,
+            run_id       VARCHAR NOT NULL UNIQUE,
+            entity_name  VARCHAR NOT NULL,
+            city         VARCHAR,
+            state        VARCHAR,
+            intake_json  VARCHAR NOT NULL,
+            created_at   TIMESTAMP
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS fqhc_fact_audit (
+            id                VARCHAR PRIMARY KEY,
+            run_id            VARCHAR NOT NULL,
+            row_order         INTEGER,
+            claim             VARCHAR,
+            ai_representation VARCHAR,
+            flag              VARCHAR,
+            severity          VARCHAR,
+            points            DOUBLE,
+            created_at        TIMESTAMP
+        )
+    """)
+    try:
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fqhc_fact_run "
+            "ON fqhc_fact_audit (run_id)"
+        )
+    except Exception:
+        pass
+    # Add edition column to analysis_runs (community_health | practice | hospital)
+    _ar_cols2 = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='analysis_runs'"
+    ).fetchall()}
+    if "edition" not in _ar_cols2:
+        con.execute("ALTER TABLE analysis_runs ADD COLUMN edition VARCHAR")
+
     # ── Events Pulse tables ───────────────────────────────────────────────────
     con.execute("""
         CREATE TABLE IF NOT EXISTS event_runs (

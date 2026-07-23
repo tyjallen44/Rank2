@@ -1297,6 +1297,7 @@ html, body {
           <div class="tg-group">
             <button class="tg-opt on" id="ir-tg-hospital"  onclick="setIrType('hospital')">Hospital / Health System</button>
             <button class="tg-opt"    id="ir-tg-specialty" onclick="setIrType('specialty')">Specialty Practice</button>
+            <button class="tg-opt"    id="ir-tg-community" onclick="setIrType('community_health')">Community Health (FQHC)</button>
           </div>
         </div>
         <div id="ir-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
@@ -1466,6 +1467,95 @@ html, body {
             Confirm &amp; Run →
           </button>
           <button class="btn btn-ghost btn-sm" onclick="irBackFromPracticeDiscovery()">← Back</button>
+        </div>
+      </div>
+
+      <!-- ── FQHC Intake step (community health only) ───────────────────── -->
+      <div id="ir-step-fqhc-intake" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Community Health — Client Attestation</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
+          Provide your organization's attested facts. These are used to audit how AI represents your eligibility and cost policies.
+        </p>
+
+        <!-- Access & Eligibility -->
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px">Access &amp; Eligibility</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-sliding-fee" style="width:16px;height:16px">
+            Sliding-fee scale offered
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-no-turned-away" style="width:16px;height:16px">
+            No one turned away for inability to pay
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-medicaid" style="width:16px;height:16px">
+            Accepts Medicaid
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-medicare" style="width:16px;height:16px">
+            Accepts Medicare
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-uninsured" style="width:16px;height:16px">
+            Accepts uninsured patients
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-enrollment-assist" style="width:16px;height:16px">
+            Enrollment assistance available
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-new-patients" style="width:16px;height:16px">
+            Accepting new patients
+          </label>
+        </div>
+
+        <!-- HRSA Status -->
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px">HRSA Status</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-is-330" style="width:16px;height:16px">
+            Section 330 grantee (FQHC)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="fqhc-is-lookalike" style="width:16px;height:16px">
+            FQHC Look-Alike
+          </label>
+        </div>
+
+        <!-- Sites & Languages -->
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px">Sites &amp; Languages</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+          <div class="fg" style="margin:0">
+            <label class="fl">Number of sites</label>
+            <input id="fqhc-site-count" class="fi" type="number" min="1" placeholder="e.g. 6">
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fl">Languages served (comma-separated)</label>
+            <input id="fqhc-languages" class="fi" type="text" placeholder="e.g. Spanish, Somali, Hmong">
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:16px">
+          <label class="fl">Site names (one per line)</label>
+          <textarea id="fqhc-site-names" class="fi" rows="4" style="font-family:inherit;resize:vertical" placeholder="Main Street Health Center&#10;Eastside Clinic&#10;…"></textarea>
+        </div>
+
+        <!-- Service Lines -->
+        <div class="fg" style="margin-bottom:20px">
+          <label class="fl">Service lines (comma-separated)</label>
+          <input id="fqhc-service-lines" class="fi" type="text" placeholder="e.g. Primary Care, Dental, Behavioral Health, WIC">
+        </div>
+
+        <!-- Notes -->
+        <div class="fg" style="margin-bottom:20px">
+          <label class="fl">Additional notes (optional)</label>
+          <textarea id="fqhc-notes" class="fi" rows="2" style="font-family:inherit;resize:vertical" placeholder="Any other attested facts the AI audit should verify…"></textarea>
+        </div>
+
+        <div id="ir-fqhc-intake-err" class="err hidden mt8"></div>
+        <div class="mt16 row-actions">
+          <button class="btn btn-primary" id="ir-fqhc-intake-btn" onclick="irConfirmIntake()">Confirm &amp; Run →</button>
+          <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
         </div>
       </div>
     </div>
@@ -2993,7 +3083,7 @@ function resetPage(p) {
     document.getElementById('ir-zip').value = '';
     const irSpecEl = document.getElementById('ir-specialty');
     if (irSpecEl) irSpecEl.value = '';
-    ['ir-step2','ir-step2b','ir-step3','ir-step-practice-discovery'].forEach(id => {
+    ['ir-step2','ir-step2b','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake'].forEach(id => {
       document.getElementById(id).classList.add('hidden');
     });
     const irSearchErr = document.getElementById('ir-search-err');
@@ -3228,6 +3318,8 @@ let _irOrgName             = null;  // parent org brand name from discovery
 let _irResolvedCity        = null;
 let _irResolvedState  = null;
 let _irPracticeProfile = null;
+let _fqhcIntake        = {};
+let _fqhcSiteRoster    = [];
 
 function setIrLocMode(m) {
   _irLocMode = m;
@@ -3239,10 +3331,11 @@ function setIrLocMode(m) {
 
 function setIrType(t) {
   _irType = t;
-  document.getElementById('ir-tg-hospital').classList.toggle('on',  t === 'hospital');
-  document.getElementById('ir-tg-specialty').classList.toggle('on', t === 'specialty');
+  document.getElementById('ir-tg-hospital').classList.toggle('on',   t === 'hospital');
+  document.getElementById('ir-tg-specialty').classList.toggle('on',  t === 'specialty');
+  document.getElementById('ir-tg-community').classList.toggle('on',  t === 'community_health');
   document.getElementById('ir-specialty-wrap').classList.toggle('hidden', t !== 'specialty');
-  // agg toggle is hospital-only; specialty practice always aggregates via the discovery step
+  // agg toggle is hospital-only; specialty and community_health do not use it
   document.getElementById('ir-composite-opts').style.display = t === 'hospital' ? '' : 'none';
   if (t !== 'hospital') {
     document.getElementById('ir-agg-toggle').checked = false;
@@ -3378,6 +3471,8 @@ function selectIrCandidate(idx) {
 
   if (_irType === 'specialty') {
     showIrProfileStep();
+  } else if (_irType === 'community_health') {
+    showFqhcIntake();
   } else {
     document.getElementById('ir-step2b').classList.add('hidden');
     document.getElementById('ir-step3').classList.remove('hidden');
@@ -3537,6 +3632,47 @@ function irConfirmOrg() {
   document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+function showFqhcIntake() {
+  document.getElementById('ir-step2b').classList.add('hidden');
+  const el = document.getElementById('ir-step-fqhc-intake');
+  el.classList.remove('hidden');
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function irConfirmIntake() {
+  const errEl = document.getElementById('ir-fqhc-intake-err');
+  errEl.classList.add('hidden');
+
+  const siteNamesRaw = document.getElementById('fqhc-site-names').value.trim();
+  _fqhcSiteRoster = siteNamesRaw ? siteNamesRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
+
+  const langRaw = document.getElementById('fqhc-languages').value.trim();
+  const langs = langRaw ? langRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  const svcRaw = document.getElementById('fqhc-service-lines').value.trim();
+  const svcs = svcRaw ? svcRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  _fqhcIntake = {
+    sliding_fee_scale:      document.getElementById('fqhc-sliding-fee').checked,
+    no_one_turned_away:     document.getElementById('fqhc-no-turned-away').checked,
+    accepts_medicaid:       document.getElementById('fqhc-medicaid').checked,
+    accepts_medicare:       document.getElementById('fqhc-medicare').checked,
+    accepts_uninsured:      document.getElementById('fqhc-uninsured').checked,
+    enrollment_assistance:  document.getElementById('fqhc-enrollment-assist').checked,
+    new_patients_accepted:  document.getElementById('fqhc-new-patients').checked,
+    is_330:                 document.getElementById('fqhc-is-330').checked,
+    is_lookalike:           document.getElementById('fqhc-is-lookalike').checked,
+    site_count:             parseInt(document.getElementById('fqhc-site-count').value) || null,
+    languages_served:       langs,
+    service_lines:          svcs,
+    notes:                  document.getElementById('fqhc-notes').value.trim() || null,
+  };
+
+  document.getElementById('ir-step-fqhc-intake').classList.add('hidden');
+  document.getElementById('ir-step3').classList.remove('hidden');
+  document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function irResetSearch() {
   _irSelected = null;
   _irReportTitle = null;
@@ -3545,10 +3681,11 @@ function irResetSearch() {
   _irDiscoveredSiblings = [];
   _irConfirmedSiblings = [];
   _irOrgName = null;
-  document.getElementById('ir-step2').classList.add('hidden');
-  document.getElementById('ir-step2b').classList.add('hidden');
-  document.getElementById('ir-step2c').classList.add('hidden');
-  document.getElementById('ir-step3').classList.add('hidden');
+  _fqhcIntake = {};
+  _fqhcSiteRoster = [];
+  ['ir-step2','ir-step2b','ir-step2c','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake'].forEach(id => {
+    document.getElementById(id).classList.add('hidden');
+  });
   document.getElementById('ir-search-err').classList.add('hidden');
   document.getElementById('ir-run-err').classList.add('hidden');
 }
@@ -3789,8 +3926,8 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     ? (document.getElementById('ir-specialty').value.trim() || null) : null;
   if (_irType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
 
-  const aggregate = _irType === 'specialty'
-    ? true  // specialty always runs org-wide; location roster confirmed in step 2c
+  const aggregate = (_irType === 'specialty' || _irType === 'community_health')
+    ? true  // specialty always runs org-wide; community_health aggregates across sites
     : document.getElementById('ir-agg-toggle').checked;
   const skip_pdf           = document.getElementById('ir-skip-pdf-toggle').checked;
   const teaser_report      = document.getElementById('ir-teaser-toggle').checked;
@@ -3814,12 +3951,16 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     patient_perspective: false,
     teaser_report,
     skip_pdf,
-    entity_type: _irType === 'specialty' ? 'practice' : null,
+    entity_type: _irType === 'specialty' ? 'practice'
+               : _irType === 'community_health' ? 'community_health'
+               : null,
     practice_profile: _irType === 'specialty' ? (_irPracticeProfile || 'practice_procedural') : null,
-    practice_composite:   practiceComposite,
-    practice_roster:      practiceRoster,
-    physician_composite,
-    physician_roster:     physician_composite ? physicianRoster : {},
+    fqhc_intake:      _irType === 'community_health' ? _fqhcIntake : undefined,
+    fqhc_site_roster: _irType === 'community_health' ? _fqhcSiteRoster : undefined,
+    practice_composite:   _irType === 'community_health' ? false : practiceComposite,
+    practice_roster:      _irType === 'community_health' ? [] : practiceRoster,
+    physician_composite:  _irType === 'community_health' ? false : physician_composite,
+    physician_roster:     (_irType === 'community_health' || !physician_composite) ? {} : physicianRoster,
     override_today_lock,
     briefing_variant,
   };

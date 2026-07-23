@@ -205,6 +205,24 @@ class BatteryPromptResult(BaseModel):
     dominant_pct: float          # fraction of runs with dominant_outcome
 
 
+class FqhcPillarScores(BaseModel):
+    """FQHC Community Health Edition pillar sub-scores (0–100 each).
+
+    mqcr_score and multilingual_score are None in Round 1 (no battery runs logged).
+    The composite is computed by fqhc_scoring.composite() from these fields.
+    """
+    mqcr_score: Optional[int] = None                # Pillar 1a: Mission Query Capture Rate
+    multilingual_score: Optional[int] = None        # Pillar 1b: Multilingual capture
+    service_adjacent_score: Optional[int] = None    # Pillar 1c: Service-adjacent findability
+    eligibility_cost_accuracy: Optional[int] = None # Pillar 2
+    site_service_completeness: Optional[int] = None # Pillar 3
+    experience_reputation: Optional[int] = None     # Pillar 4
+    institutional_signals: Optional[int] = None     # Pillar 5
+
+    def as_dict(self) -> dict:
+        return self.model_dump()
+
+
 class AnalysisResult(BaseModel):
     """Structured result from a Claude-powered market analysis."""
     run_id: str
@@ -240,3 +258,9 @@ class AnalysisResult(BaseModel):
     briefing_pdf_path: Optional[str] = None         # path to companion briefing PDF
     briefing_skipped_reason: Optional[str] = None   # set when briefing was requested but failed
     battery_results: Optional[dict[str, BatteryPromptResult]] = None  # prompt_id → result
+    # ── FQHC Community Health Edition fields (None for hospital/practice runs) ──
+    fqhc_intake: Optional[dict] = None              # client-attested intake facts
+    fqhc_pillar_scores: Optional[FqhcPillarScores] = None  # 7-field sub-score record
+    fqhc_fact_audit: list[dict] = Field(default_factory=list)  # Pillar 2 audit rows
+    fqhc_missed_queries: list[dict] = Field(default_factory=list)  # Missed Queries exhibit
+    fqhc_mqcr: Optional[float] = None               # MQCR (0.0–1.0); None until battery run

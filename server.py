@@ -353,6 +353,56 @@ def _job_run_practice(
         _put(loop, queue, None)
 
 
+def _job_run_fqhc(
+    job_id: str, entity_name: str, city: str, state: str,
+    aggregate: bool = False,
+) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+
+    try:
+        from perception.db import init_db, set_run_role
+        from perception.fqhc_analyzer import analyze_fqhc
+
+        init_db()
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        result = analyze_fqhc(
+            entity_name=entity_name,
+            city=city,
+            state=state,
+            fqhc_intake=job.get("fqhc_intake"),
+            aggregate=aggregate,
+            site_roster=job.get("site_roster") or [],
+            teaser_report=job.get("teaser_report", False),
+            output_dir=REPORTS_DIR,
+            on_event=emit,
+            brand=job.get("brand", "original"),
+            skip_pdf=job.get("skip_pdf", False),
+            force_rerun=job.get("force_rerun", False),
+            override_today_lock=job.get("override_today_lock", False),
+            briefing_variant=job.get("briefing_variant"),
+            report_title=job.get("report_title"),
+        )
+        set_run_role(result.run_id, job["role"])
+        job["status"] = "done"
+        job["result"] = {
+            "run_id": result.run_id,
+            "location": result.location,
+            "specialty": result.specialty,
+            "provider_count": len(result.rankings),
+            "pdf_path": result.pdf_path,
+            "briefing_pdf_path": result.briefing_pdf_path,
+            "briefing_skipped_reason": result.briefing_skipped_reason,
+        }
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
 def _job_run_batch(job_id: str, groups: List[dict]) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
@@ -448,6 +498,9 @@ class AnalyzeRequest(BaseModel):
     force_rerun: bool = False               # bypass 90-day score cache
     override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
     briefing_variant: Optional[str] = None  # "sales" | "cs" | None — generates Pulse Briefing companion
+    # Community Health Edition fields
+    fqhc_intake: Optional[dict] = None     # client-attested intake facts
+    fqhc_site_roster: Optional[List[str]] = None  # confirmed site names for aggregate runs
 
 
 class BatchRequest(BaseModel):
@@ -519,7 +572,11 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["org_name"] = _normalize_input(req.org_name) if req.org_name else None
     _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list
 
-    if req.entity_type == "practice" and entity_name:
+    if req.entity_type == "community_health" and entity_name:
+        _jobs[job_id]["fqhc_intake"] = req.fqhc_intake
+        _jobs[job_id]["site_roster"] = req.fqhc_site_roster or []
+        _pool.submit(_job_run_fqhc, job_id, entity_name, city, state, req.aggregate)
+    elif req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)
     else:
         _pool.submit(_job_run_single, job_id, city, state, specialty, req.aggregate, radius, req.entity_type)
