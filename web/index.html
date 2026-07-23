@@ -4709,26 +4709,26 @@ function renderHistory(events) {
       </tr>${editRow}`;
     }).join('');
     const _evCount = events.length;
-    const _evLatest = events[0];
-    const _evLatestName  = _evLatest ? (_evLatest.event_name || 'Unnamed event') : '';
-    const _evLatestDate  = _evLatest ? ((_evLatest.created_at || '').slice(0, 10)) : '';
-    const _evLatestCount = _evLatest ? `${_evLatest.done_count} scored${_evLatest.skip_count ? ` · ${_evLatest.skip_count} skipped` : ''}` : '';
-    const _evLatestStatus = _evLatest && _evLatest.status === 'complete'
-      ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
-      : _evLatest ? `<span class="badge bg-muted" style="font-size:10px">Running</span>` : '';
+    const _evNewest = events[0];
+    const _evOldest = events[events.length - 1];
+    const _fmtMY = s => { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString('en-US', {month:'short', year:'numeric'}); };
+    const _evDateRange = _evCount > 1
+      ? `${_fmtMY(_evOldest.created_at)} – ${_fmtMY(_evNewest.created_at)}`
+      : _fmtMY((_evNewest || {}).created_at);
 
     evHtml = `
       <div style="margin-bottom:24px">
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Event Runs</div>
 
-        <!-- Collapsed summary card -->
-        <div id="ev-hist-collapsed" class="card" onclick="evToggleHistory()" style="display:none;padding:12px 16px;cursor:pointer;border:1.5px solid var(--border);transition:background 0.15s" onmouseenter="this.style.background='#f4f7f7'" onmouseleave="this.style.background=''">
-          <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_evLatestName}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">${_evLatestDate}${_evLatestCount ? ' · ' + _evLatestCount : ''} &nbsp;${_evLatestStatus}${_evCount > 1 ? ` &nbsp;<span style="color:var(--muted)">+ ${_evCount - 1} more run${_evCount - 1 === 1 ? '' : 's'}</span>` : ''}</div>
+        <!-- Collapsed count banner -->
+        <div id="ev-hist-collapsed" onclick="evToggleHistory()" style="cursor:pointer;padding:14px 18px;border-radius:8px;border:1.5px solid var(--border);background:var(--pale);transition:background 0.15s" onmouseenter="this.style.background='#e8f0ee'" onmouseleave="this.style.background='var(--pale)'">
+          <div style="display:flex;align-items:center;gap:14px">
+            <span style="font-size:22px;color:var(--teal-mid);line-height:1">≡</span>
+            <div style="flex:1">
+              <div style="font-size:15px;font-weight:700;color:var(--body)">${_evCount} Event Run${_evCount === 1 ? '' : 's'}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${_evDateRange}</div>
             </div>
-            <button class="btn btn-ghost btn-sm" style="flex-shrink:0;pointer-events:none">Expand ▼</button>
+            <button class="btn btn-primary btn-sm" style="pointer-events:none;flex-shrink:0">View All ▼</button>
           </div>
         </div>
 
@@ -4736,7 +4736,7 @@ function renderHistory(events) {
         <div id="ev-hist-body">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <span style="font-size:12px;color:var(--muted)">${_evCount} run${_evCount === 1 ? '' : 's'}</span>
-            <button class="btn btn-ghost btn-sm" onclick="evToggleHistory()">Collapse ▲</button>
+            <button class="btn btn-ghost btn-sm" onclick="evToggleHistory()">Hide Event Runs ▲</button>
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
