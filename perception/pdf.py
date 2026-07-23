@@ -2671,6 +2671,13 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
     def _rating_cell(row: dict) -> str:
         if row.get("not_established"):
             return '<span style="color:#7a9095;font-style:italic">Not established</span>'
+        # Anchor row: use the single verified Google rating so it matches the
+        # report header and footprint line (one stored value per Item 2).
+        if row.get("is_anchor"):
+            g = row.get("google_rating")
+            if g is None:
+                return "&#8212;"
+            return f'<strong>{g:.1f}</strong>&#9733; Google'
         avg = row.get("avg_rating")
         if avg is None:
             return "&#8212;"

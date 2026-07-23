@@ -133,10 +133,11 @@ geriatrics, dental-general. Access+reviews dominate.
 nephrology, rheumatology, surgical subspecialties). Credentials dominate.
 - practice_hybrid: multi-specialty groups; blend of procedural and relationship.
 
-**Physician Capture Rate (headline metric):** % of physician-first discovery runs \
+**Physician Capture Rate (headline metric):** the % of physician-first discovery runs \
 (Category B) where ANY of the practice's physicians appear. A practice can have a \
-strong org profile and still be invisible where patients actually search. Always \
-report this explicitly.
+strong org profile and still be invisible where patients actually search. Describe \
+physician surfacing qualitatively — do NOT state or estimate a numeric percentage; \
+that figure is computed from logged battery runs and will be provided separately.
 
 **Key-person concentration flag:** Solo or two-physician practices where one \
 physician's profile IS the practice — no score deduction, but always flag it. \
@@ -258,8 +259,8 @@ with a 1–sentence summary of the panel's overall credential visibility strengt
 ### AI Visibility Verdict
 [2–3 sentences, neutral analyst voice: how {entity_name} and its physicians \
 currently surface to AI assistants, the weighting profile applied and why, and \
-where the most significant visibility gap exists. State Physician Capture Rate \
-explicitly. Reference the 0–100 scale.]
+where the most significant visibility gap exists. Describe physician-first discovery \
+performance qualitatively (do not state a numeric PCR estimate). Reference the 0–100 scale.]
 
 ### {entity_name} — AI Visibility Profile
 **AI Visibility Score: [NN]/100** *(Profile: {profile_label})*
@@ -274,7 +275,7 @@ explicitly. Reference the 0–100 scale.]
 - Patient Voice: [2–3 sentences on recurring patient themes — org AND physician-level if they diverge]
 - Entity Resolution: [% of AI runs correctly resolving the practice — estimate from evidence + known naming/identity risks]
 - Linkage Integrity: [% of physician-level runs correctly linking the physician to {entity_name}]
-- Physician Capture Rate: [% of physician-first discovery runs where any {entity_name} physician appears]
+- Physician-first discovery: [qualitative assessment — how readily do this practice's physicians surface when patients search by physician specialty + city; note specific surfacing gaps or strengths observed]
 - Board Certification: [panel summary — "All board certified and crawlably verifiable" / "Mixed — [detail]" / "Unverifiable for [N] of [M] sampled"]
 - Licensure: [panel summary — active/clean/findable for all, or detail exceptions]
 - MIPS / QPP: [score if surfaced, or "not found / not applicable"]
@@ -416,8 +417,8 @@ clearest pattern separating credential visibility from online reputation.]
 ### AI Visibility Verdict
 [2–3 sentences, neutral analyst voice: how this market surfaces to AI assistants, \
 the weighting profile used and why, and the single group whose AI visibility most \
-undersells its clinical quality. Reference the 0–100 scale. State the overall \
-Physician Capture Rate for the market.]
+undersells its clinical quality. Reference the 0–100 scale. Describe physician-first \
+discovery performance for the market qualitatively — do not state numeric PCR estimates.]
 
 ### Independent Practices (Privately Owned & Operated)
 Rank ALL independent {specialty} practices, strongest to weakest:
@@ -431,7 +432,7 @@ Rank ALL independent {specialty} practices, strongest to weakest:
 - Third-Party Aggregate (Healthgrades, Vitals, WebMD): [representative rating · one-line gap vs. Google]
 - Physician review profiles: [Healthgrades+Vitals+Google panel average ★ · volume summary]
 - Patient Voice: [2–3 sentences on recurring themes — org AND physician-level if they diverge]
-- Physician Capture Rate: [% of physician-first discovery runs where any physician from this practice appears — estimate from evidence]
+- Physician-first discovery: [qualitative — how readily do this practice's physicians surface in physician-first queries; note specific gaps or strengths]
 - Entity Resolution: [% of AI runs correctly resolving this practice — note naming or identity risks]
 - Board Certification: [panel summary — verifiable/gated/unverifiable for sampled physicians]
 - Practice Accreditation: [AAAHC / AAAASF / NCQA PCMH / specialty certs, or "none confirmed"]

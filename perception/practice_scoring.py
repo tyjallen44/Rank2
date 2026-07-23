@@ -71,6 +71,8 @@ def composite(
 
     if weight_used == 0:
         return None, False, ""
+    if weight_used < 0.5:
+        return None, False, ""
 
     raw = round(total / weight_used)
 

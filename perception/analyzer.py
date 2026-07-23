@@ -886,16 +886,31 @@ def analyze_location(
             roster = discover_practices(entity_name, city, state, on_event=emit,
                                         force_rerun=force_rerun)
 
-        # Hospital-anchored table: the anchor hospital itself must NOT appear as a
-        # row.  Exact-name guard: remove only the entry whose name is the hospital's
-        # own name.  Token-overlap (_nmatch) is too broad — every affiliated clinic
-        # with the brand token (e.g. "Intermountain Cardiology") would be incorrectly
-        # filtered, leaving an empty roster.
+        # Hospital-anchored table: remove the anchor itself and canonicalize
+        # brand-prefixed sibling names ("Nevada Health Centers - Cambridge Family
+        # Health Center" → "Cambridge Family Health Center") to prevent the same
+        # clinic appearing twice under its long and short form.
         _anchor_lc = entity_name.strip().lower()
-        roster = [
-            r for r in roster
-            if r.get("name", "").strip().lower() != _anchor_lc
-        ]
+        _anchor_prefix = entity_name.strip() + " - "
+        _anchor_prefix_lc = _anchor_prefix.lower()
+
+        def _strip_anchor_prefix(name: str) -> str:
+            if name.strip().lower().startswith(_anchor_prefix_lc):
+                return name.strip()[len(_anchor_prefix):]
+            return name.strip()
+
+        _seen_roster_names: set[str] = set()
+        _deduped_roster: list[dict] = []
+        for _r in roster:
+            _canonical = _strip_anchor_prefix(_r.get("name", ""))
+            _cn_lc = _canonical.lower()
+            if _cn_lc == _anchor_lc or _cn_lc in _seen_roster_names:
+                continue
+            _seen_roster_names.add(_cn_lc)
+            _deduped_roster.append(
+                {**_r, "name": _canonical} if _canonical != _r.get("name", "").strip() else _r
+            )
+        roster = _deduped_roster
 
         result.practice_composite_rows = collect_platform_data(
             roster, entity_name, city, state, on_event=emit, run_id=result.run_id
@@ -942,6 +957,17 @@ def analyze_location(
     report_path = output_dir / f"{_stem}.md"
     report_path.write_text(report_markdown, encoding="utf-8")
     console.print(f"[green]✓[/green] Report saved → [dim]{report_path}[/dim]")
+
+    # Block PDF when individual report has insufficient pillar coverage.
+    if individual_report and rankings and all(p.ai_visibility_score is None for p in rankings):
+        _failure_msg = (
+            "Collection was too incomplete to score this entity — "
+            "fewer than half the pillar weights were populated. "
+            "No prospect-facing PDF was produced. Review the markdown report and rerun."
+        )
+        emit({"type": "error", "text": _failure_msg})
+        console.print(f"[yellow]⚠[/yellow] {_failure_msg}")
+        skip_pdf = True
 
     if skip_pdf:
         console.print("[dim]skip_pdf=True — PDF rendering skipped[/dim]")

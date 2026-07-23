@@ -424,12 +424,18 @@ def search_entity_candidates(
         raw = resp.json().get("places", [])
     except (httpx.HTTPError, ValueError):
         return []
+    def _state_from_address(addr: str) -> str:
+        import re as _re
+        m = _re.search(r",\s+([A-Z]{2})\s+\d{5}", addr)
+        return m.group(1) if m else ""
+
     return [
         {
             "name": (p.get("displayName") or {}).get("text", ""),
             "address": p.get("formattedAddress", ""),
             "rating": p.get("rating"),
             "review_count": p.get("userRatingCount"),
+            "resolved_state": _state_from_address(p.get("formattedAddress", "")),
         }
         for p in raw
     ]

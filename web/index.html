@@ -1834,6 +1834,13 @@ html, body {
             </div>
             <div id="ev-confirm-rows"></div>
 
+            <div id="ev-state-mismatch-warning" class="hidden" style="margin-top:14px;padding:10px 14px;background:#fff8e6;border:1px solid #f0c040;border-radius:6px;font-size:13px;color:#7a5a00">
+              <strong>City/State discrepancy detected.</strong> One or more entities have a CSV state that differs from the Google Places–resolved state. Verify the entries above, then check the box below to proceed.
+              <label style="display:block;margin-top:8px;cursor:pointer">
+                <input type="checkbox" id="ev-state-override" onchange="evUpdateCounts()">
+                &nbsp;I have reviewed the discrepancies and confirm the entries are correct
+              </label>
+            </div>
             <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--pale);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
               <div id="ev-confirm-counts" style="font-size:13px;color:var(--muted);flex:1"></div>
               <button class="btn btn-primary" onclick="evSubmitRun()" id="ev-run-btn">Run Analysis →</button>
@@ -5789,6 +5796,8 @@ function evShowConfirmation() {
   const container = document.getElementById('ev-confirm-rows');
   container.innerHTML = '';
 
+  let _hasMismatch = false;
+
   _evRows.forEach((row, idx) => {
     const div = document.createElement('div');
     div.style.cssText = 'display:grid;grid-template-columns:28px 1fr 140px 60px 80px;gap:0;align-items:center;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:2px';
@@ -5796,8 +5805,17 @@ function evShowConfirmation() {
 
     let statusIcon, resolvedHtml;
     if (row.status === 'resolved') {
-      statusIcon   = `<span style="color:var(--teal);font-size:15px">✓</span>`;
-      resolvedHtml = `<div style="font-weight:600;color:var(--teal)">${row.candidates[0].name}</div>
+      const resolvedState = (row.candidates[0].resolved_state || '').toUpperCase();
+      const inputState    = (row.input_state || '').trim().toUpperCase();
+      const stateMismatch = resolvedState && inputState && resolvedState !== inputState;
+      if (stateMismatch) _hasMismatch = true;
+      const mismatchBadge = stateMismatch
+        ? `<span style="margin-left:6px;font-size:10px;background:#fff3cd;border:1px solid #f0c040;color:#7a5a00;border-radius:3px;padding:1px 5px" title="CSV state (${inputState}) differs from Google Places state (${resolvedState})">CSV: ${inputState} / GBP: ${resolvedState}</span>`
+        : '';
+      statusIcon   = stateMismatch
+        ? `<span style="color:#e67e22;font-size:15px">⚠</span>`
+        : `<span style="color:var(--teal);font-size:15px">✓</span>`;
+      resolvedHtml = `<div style="font-weight:600;color:${stateMismatch ? '#e67e22' : 'var(--teal)'}">${row.candidates[0].name}${mismatchBadge}</div>
                       <div style="font-size:11px;color:var(--muted)">${row.candidates[0].address || ''}</div>`;
     } else if (row.status === 'ambiguous') {
       statusIcon = `<span style="color:#e67e22;font-size:15px">⚠</span>`;
@@ -5822,23 +5840,50 @@ function evShowConfirmation() {
     container.appendChild(div);
   });
 
+  const mismatchEl = document.getElementById('ev-state-mismatch-warning');
+  if (_hasMismatch) mismatchEl.classList.remove('hidden');
+  else mismatchEl.classList.add('hidden');
+
   evUpdateCounts();
 }
 
 function evUpdateCounts() {
-  let included = 0, skipped = 0;
+  let included = 0, skipped = 0, includedMismatch = 0;
   _evRows.forEach((row, idx) => {
     const cb = document.getElementById(`ev-inc-${idx}`);
-    if (cb && cb.checked) included++; else skipped++;
+    if (!cb || !cb.checked) { skipped++; return; }
+    included++;
+    if (row.status === 'resolved') {
+      const rs = (row.candidates[0].resolved_state || '').toUpperCase();
+      const is = (row.input_state || '').trim().toUpperCase();
+      if (rs && is && rs !== is) includedMismatch++;
+    }
   });
   document.getElementById('ev-confirm-counts').textContent =
     `${included} entities will be analyzed · ${skipped} will be skipped`;
   document.getElementById('ev-run-btn').textContent = `Run Analysis (${included}) →`;
+  // Disable run button if there are included mismatches without override confirmation
+  const overrideChecked = document.getElementById('ev-state-override')?.checked;
+  document.getElementById('ev-run-btn').disabled = includedMismatch > 0 && !overrideChecked;
 }
 
 async function evSubmitRun() {
   const errEl = document.getElementById('ev-step2-err');
   errEl.classList.add('hidden');
+
+  // Guard: block if any included entity has a state mismatch and override not checked
+  const overrideChecked = document.getElementById('ev-state-override')?.checked;
+  const hasMismatch = _evRows.some((row, idx) => {
+    const cb = document.getElementById(`ev-inc-${idx}`);
+    if (!cb || !cb.checked || row.status !== 'resolved') return false;
+    const rs = (row.candidates[0].resolved_state || '').toUpperCase();
+    const is = (row.input_state || '').trim().toUpperCase();
+    return rs && is && rs !== is;
+  });
+  if (hasMismatch && !overrideChecked) {
+    showErr(errEl, 'City/state discrepancy detected. Please review the highlighted entries and check the confirmation box before proceeding.');
+    return;
+  }
 
   const eventName    = document.getElementById('ev-name').value.trim();
   const eventDate    = document.getElementById('ev-date').value || null;

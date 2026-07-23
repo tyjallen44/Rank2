@@ -232,13 +232,6 @@ _PRACTICE_TOOL = {
                     "Triggers score ceiling if <70. Null if unassessable."
                 ),
             },
-            "physician_capture_rate": {
-                "type": ["number", "null"],
-                "description": (
-                    "Estimated % of physician-first discovery queries (Category B) where "
-                    "any of this practice's physicians appear. Headline metric. Null if unassessable."
-                ),
-            },
             "board_cert_unverifiable": {
                 "type": "boolean",
                 "description": (
@@ -379,7 +372,7 @@ _PRACTICE_TOOL = {
         "required": [
             "market_overview", "ai_visibility_verdict", "weighting_profile",
             "top_recommendation", "practical_advice", "disclaimer", "rankings",
-            "entity_resolution_pct", "linkage_integrity_pct", "physician_capture_rate",
+            "entity_resolution_pct", "linkage_integrity_pct",
             "board_cert_unverifiable", "key_person_flag",
         ],
         "additionalProperties": False,
@@ -710,7 +703,6 @@ def analyze_practice(
         "  access_fit                 = Access & Fit score\n\n"
         "DERIVED METRICS: Set entity_resolution_pct and linkage_integrity_pct based on "
         "your analysis of naming/identity risks and physician attribution risks observed. "
-        "Set physician_capture_rate from physician-first discovery assessment. "
         "Set board_cert_unverifiable=true if ANY sampled physician's ABMS/AOA cert "
         "could not be confirmed from crawlable sources. "
         "Set key_person_flag=true for solo or two-physician practices.\n\n"
@@ -755,7 +747,7 @@ def analyze_practice(
     # Extract derived metrics from tool output
     entity_resolution_pct   = structured_data.get("entity_resolution_pct")
     linkage_integrity_pct   = structured_data.get("linkage_integrity_pct")
-    physician_capture_rate  = structured_data.get("physician_capture_rate")
+    physician_capture_rate  = None  # not AI-generated; computed from battery logs when available
     board_cert_unverifiable = bool(structured_data.get("board_cert_unverifiable", False))
     key_person_flag         = bool(structured_data.get("key_person_flag", False))
 
@@ -899,6 +891,16 @@ def analyze_practice(
                         return True
             return False
 
+        # Brand-prefix canonicalization: "AnchorName - X" → "X", so a sibling
+        # named with and without the parent brand prefix deduplicates to one row.
+        _brand_prefix = entity_name.strip() + " - "
+        _brand_prefix_lc = _brand_prefix.lower()
+
+        def _canon_sibling(name: str) -> str:
+            if name.strip().lower().startswith(_brand_prefix_lc):
+                return name.strip()[len(_brand_prefix):]
+            return name.strip()
+
         deduped: list[dict] = []
         seen_names: set[str] = set()
         for s in sibling_roster:
@@ -906,10 +908,11 @@ def analyze_practice(
             sa = s.get("address", "")
             if _is_anchor_duplicate(sn, sa):
                 continue
-            k = sn.strip().lower()
+            canonical = _canon_sibling(sn)
+            k = canonical.lower()
             if k not in seen_names:
                 seen_names.add(k)
-                deduped.append(s)
+                deduped.append({**s, "name": canonical} if canonical != sn else s)
         sibling_roster = deduped
 
         roster = [anchor_entry] + sibling_roster
@@ -917,6 +920,18 @@ def analyze_practice(
         result.practice_composite_rows = collect_platform_data(
             roster, entity_name, city, state, on_event=emit, run_id=result.run_id
         )
+
+        # Bind the anchor row's google_rating to the same Places read used for
+        # the main analysis score so the header star value and composite table
+        # star value are always identical (Item 2).
+        if rankings and result.practice_composite_rows:
+            _fd_rating = rankings[0].google_footprint.front_door.rating
+            _fd_verified = rankings[0].google_footprint.front_door.verified
+            for _cr in result.practice_composite_rows:
+                if _cr.get("is_anchor") and _fd_rating is not None:
+                    _cr["google_rating"] = _fd_rating
+                    if not _fd_verified:
+                        _cr["google_rating"] = None
 
         if physician_composite and result.practice_composite_rows:
             emit({"type": "phase", "name": "physician_reputation", "text": "Collecting physician reputation"})
@@ -953,6 +968,17 @@ def analyze_practice(
     console.print(f"[green]✓[/green] Practice report → [dim]{report_path}[/dim]")
 
     # ── Render PDF ────────────────────────────────────────────────────────────
+    # Block PDF when pillar coverage is too thin to produce a credible score.
+    if rankings and all(p.ai_visibility_score is None for p in rankings):
+        _failure_msg = (
+            "Collection was too incomplete to score this practice — "
+            "fewer than half the pillar weights were populated. "
+            "No prospect-facing PDF was produced. Review the markdown report and rerun."
+        )
+        emit({"type": "error", "text": _failure_msg})
+        console.print(f"[yellow]⚠[/yellow] {_failure_msg}")
+        skip_pdf = True
+
     if skip_pdf:
         console.print("[dim]skip_pdf=True — PDF rendering skipped[/dim]")
         result.md_path = str(report_path)

@@ -107,8 +107,10 @@ def composite_score(tier_scores: dict[str, float], profile: str) -> Optional[int
         weight_used += w
     if weight_used == 0:
         return None
-    # Renormalize if some tiers were unscored, so a missing tier doesn't deflate
-    # the composite toward zero.
+    if weight_used < 0.5:
+        # More than half the total weight is unscored — collection was too thin
+        # to produce a credible composite. Caller must treat None as a failed run.
+        return None
     return round(total / weight_used)
 
 
