@@ -801,10 +801,30 @@ async def search_entity(req: EntitySearchRequest, _: str = Depends(require_auth)
 @app.get("/api/hrsa-prefill")
 async def hrsa_prefill(entity_name: str, city: str = "", state: str = "", _: str = Depends(require_auth)):
     try:
+        import asyncio
         from perception.data.hrsa import lookup
-        return lookup(entity_name, city, state)
+        from perception.data.fqhc_web_facts import fetch as web_fetch
+
+        loop = asyncio.get_event_loop()
+        hrsa_task = loop.run_in_executor(None, lookup, entity_name, city, state)
+        web_task  = loop.run_in_executor(None, web_fetch, entity_name, city, state)
+        hrsa_data, web_data = await asyncio.gather(hrsa_task, web_task)
+
+        # Merge: HRSA data is authoritative for what it carries;
+        # web_data fills in service_lines, languages, and policy fields.
+        merged = {**hrsa_data}
+        if web_data.get("service_lines"):
+            merged["service_lines"] = web_data["service_lines"]
+        if web_data.get("languages_served"):
+            merged["languages"] = web_data["languages_served"]
+        for key in ("accepts_medicaid", "accepts_medicare", "accepts_uninsured",
+                    "enrollment_assistance", "new_patients_accepted"):
+            if web_data.get(key) is not None:
+                merged[key] = web_data[key]
+
+        return merged
     except Exception as exc:
-        raise HTTPException(500, f"HRSA lookup error: {type(exc).__name__}: {exc}")
+        raise HTTPException(500, f"HRSA prefill error: {type(exc).__name__}: {exc}")
 
 
 @app.post("/api/upload")

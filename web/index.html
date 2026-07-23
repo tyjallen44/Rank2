@@ -3653,7 +3653,7 @@ async function showFqhcIntake() {
     const data = await api(`/api/hrsa-prefill?${qs}`).then(r => r.json());
     if (!data?.found) return;
 
-    // Prefill checkboxes
+    // Prefill checkboxes — HRSA status
     if (data.is_330) {
       document.getElementById('fqhc-is-330').checked = true;
       // 330 grantees are federally required to have sliding fee + no-one-turned-away
@@ -3661,6 +3661,13 @@ async function showFqhcIntake() {
       document.getElementById('fqhc-no-turned-away').checked = true;
     }
     if (data.is_lookalike) document.getElementById('fqhc-is-lookalike').checked = true;
+
+    // Prefill checkboxes — web-searched policy fields
+    if (data.accepts_medicaid   != null) document.getElementById('fqhc-medicaid').checked          = data.accepts_medicaid;
+    if (data.accepts_medicare   != null) document.getElementById('fqhc-medicare').checked          = data.accepts_medicare;
+    if (data.accepts_uninsured  != null) document.getElementById('fqhc-uninsured').checked         = data.accepts_uninsured;
+    if (data.enrollment_assistance  != null) document.getElementById('fqhc-enrollment-assist').checked = data.enrollment_assistance;
+    if (data.new_patients_accepted  != null) document.getElementById('fqhc-new-patients').checked  = data.new_patients_accepted;
 
     // Prefill numeric / text fields (only if currently empty)
     const siteCountEl = document.getElementById('fqhc-site-count');
