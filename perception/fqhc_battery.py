@@ -84,9 +84,9 @@ STANDARD_BATTERY: list[dict] = [
     },
     {
         "n": 9,
-        "category": "affordable_dental",
+        "category": "low_income_healthcare",
         "language": "en",
-        "template": "Where can I find affordable dental care in {city}, {state}?",
+        "template": "What healthcare options are available for low-income residents in {city}, {state}?",
     },
     {
         "n": 10,
@@ -137,29 +137,43 @@ def _significant_tokens(entity_name: str) -> list[str]:
     return [w for w in words if len(w) >= 4 and w not in _STOP]
 
 
-def is_surfaced(response_text: str, entity_name: str) -> bool:
-    """Return True if response_text appears to mention entity_name."""
+def is_surfaced(response_text: str, entity_name: str,
+                aliases: list[str] | None = None) -> bool:
+    """Return True if response_text appears to mention entity_name or any alias.
+
+    Detection is intentionally broad: a facility counts as surfaced if ANY
+    distinctive word from its name (or an alias) appears in the response.
+    FQHCs often have a public brand name that differs from the HRSA canonical
+    name; passing both as aliases catches either form.
+    """
     text = response_text.lower()
-    name_lower = entity_name.lower()
 
-    # Exact substring match
-    if name_lower in text:
-        return True
+    def _check_name(name: str) -> bool:
+        name_lower = name.lower()
 
-    # Acronym match (e.g. "NHC" for "Nevada Health Centers")
-    words = re.findall(r"[a-z]+", name_lower)
-    if len(words) >= 2:
-        acronym = "".join(w[0] for w in words)
-        if len(acronym) >= 2 and acronym in re.findall(r"\b[a-z]{2,6}\b", text):
+        # Exact substring
+        if name_lower in text:
             return True
 
-    # Significant token overlap: require at least 1 distinctive word
-    tokens = _significant_tokens(entity_name)
-    if tokens and all(tok in text for tok in tokens[:2]):
-        return True
-    if len(tokens) == 1 and tokens[0] in text:
-        return True
+        # Any distinctive token (>= 4 chars, not generic) present in response
+        tokens = _significant_tokens(name)
+        if tokens and any(tok in text for tok in tokens):
+            return True
 
+        # Acronym match (e.g. "NHC" for "Nevada Health Centers")
+        words = re.findall(r"[a-z]+", name_lower)
+        if len(words) >= 3:
+            acronym = "".join(w[0] for w in words)
+            if len(acronym) >= 3 and re.search(rf"\b{re.escape(acronym)}\b", text):
+                return True
+
+        return False
+
+    if _check_name(entity_name):
+        return True
+    for alias in (aliases or []):
+        if alias and _check_name(alias):
+            return True
     return False
 
 
@@ -216,8 +230,12 @@ def run_battery(
     city: str,
     state: str,
     on_event: Optional[Callable[[dict], None]] = None,
+    aliases: list[str] | None = None,
 ) -> BatteryResult:
     """Run the 10-query MQCR battery and persist results.
+
+    aliases: additional name forms to check for surfacing (e.g. HRSA canonical
+    name, common abbreviations, site-level names). Any match counts.
 
     Emits events via on_event:
       {"type": "battery_query", "n": 1, "total": 10, "query": "...", "surfaced": bool}
@@ -249,7 +267,7 @@ def run_battery(
         emit({"type": "battery_query_start", "n": n, "total": total, "query": query})
 
         response_text = _run_query(client, query)
-        surfaced = is_surfaced(response_text, entity_name)
+        surfaced = is_surfaced(response_text, entity_name, aliases=aliases)
         if surfaced:
             surfaced_count += 1
 

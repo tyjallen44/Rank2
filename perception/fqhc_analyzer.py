@@ -710,12 +710,23 @@ def analyze_fqhc(
     emit({"type": "phase", "name": "battery", "text": "Running MQCR battery (10 queries)"})
     try:
         from .fqhc_battery import run_battery as _run_battery
+        # Build alias list: HRSA canonical name + known site names so
+        # is_surfaced() recognises any naming variant in AI responses.
+        _aliases: list[str] = []
+        _hrsa_canonical = hrsa_data.get("health_center_name") or ""
+        if _hrsa_canonical and _hrsa_canonical.lower() != entity_name.lower():
+            _aliases.append(_hrsa_canonical)
+        if rankings:
+            for _loc in rankings[0].consolidated_locations:
+                if _loc.name and _loc.name.lower() != entity_name.lower():
+                    _aliases.append(_loc.name)
         _battery = _run_battery(
             fqhc_run_id=run_id,
             entity_name=entity_name,
             city=city,
             state=state,
             on_event=emit,
+            aliases=_aliases or None,
         )
         result.fqhc_mqcr = _battery.mqcr
         console.print(f"[green]✓[/green] MQCR: {int(round(_battery.mqcr * 100))}% "
