@@ -139,7 +139,7 @@ Key requirements:
 - Set mqcr_score to null (Round 1 — no battery data available yet).
 - Set multilingual_score to null (Round 1 — no multilingual battery data available yet).
 - Score service_adjacent_score based on evidence of findability for service-adjacent queries.
-- The site census in consolidated_locations must represent {entity_name}'s OWN sites only — not affiliated practices.
+- The site census in consolidated_locations must represent {entity_name}'s OWN sites only — not affiliated practices. Find as many sites as the evidence supports; do not limit to the HRSA site count or the number of site names provided in the intake.
 - Follow the Mission-Critical severity rule for any ✗ in Pillar 2.
 """
     return _FQHC_SYSTEM, user
@@ -161,8 +161,7 @@ def _format_intake(intake: Optional[dict]) -> str:
         "enrollment_assistance": "Enrollment assistance services",
         "service_lines": "Service lines offered",
         "languages_served": "Languages served",
-        "site_count": "Number of sites",
-        "site_names": "Site names",
+        "site_names": "Site names (find all sites, including any beyond this list)",
         "is_330": "HRSA Section 330 grantee",
         "is_lookalike": "HRSA look-alike designation",
         "new_patients_accepted": "Accepting new patients",
@@ -194,7 +193,11 @@ def _format_hrsa(hrsa_data: Optional[dict]) -> str:
     if hrsa_data.get("is_lookalike") is not None:
         lines.append(f"- Look-alike designation: {'Yes' if hrsa_data['is_lookalike'] else 'No'}")
     if hrsa_data.get("site_count") is not None:
-        lines.append(f"- Site count (HRSA): {hrsa_data['site_count']}")
+        lines.append(
+            f"- Sites found in HRSA locator (within search radius): {hrsa_data['site_count']} "
+            f"— this is a floor, not a ceiling; the organization may operate additional sites "
+            f"not captured in this radius or not yet in the HRSA database."
+        )
     if hrsa_data.get("site_names"):
         lines.append(f"- Sites: {', '.join(hrsa_data['site_names'])}")
     if hrsa_data.get("website"):

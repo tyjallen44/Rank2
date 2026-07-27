@@ -1525,11 +1525,8 @@ html, body {
 
         <!-- Sites & Languages -->
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px">Sites &amp; Languages</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
-          <div class="fg" style="margin:0">
-            <label class="fl">Number of sites</label>
-            <input id="fqhc-site-count" class="fi" type="number" min="1" placeholder="e.g. 6">
-          </div>
+        <input id="fqhc-site-count" type="hidden" value="">
+        <div style="margin-bottom:16px">
           <div class="fg" style="margin:0">
             <label class="fl">Languages served (comma-separated)</label>
             <input id="fqhc-languages" class="fi" type="text" placeholder="e.g. Spanish, Somali, Hmong">
