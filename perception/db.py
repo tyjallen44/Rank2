@@ -1120,6 +1120,9 @@ def get_recent_run(
     elif entity_type == "hospital":
         type_clause = "AND (entity_type = 'hospital' OR entity_type IS NULL)"
         params = [entity_name, location, cutoff]
+    elif entity_type == "community_health":
+        type_clause = "AND entity_type = 'community_health'"
+        params = [entity_name, location, cutoff]
     else:
         type_clause = ""
         params = [entity_name, location, cutoff]

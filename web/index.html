@@ -4458,7 +4458,7 @@ function showSingleDone(r) {
   if (isComparison) {
     subText = 'Comparison report ready';
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`;
-  } else if (r.entity_type === 'community_health') {
+  } else if (r.entity_type === 'community_health' || (_lastPage === 'individual' && r.provider_count <= 1 && r.mqcr != null)) {
     subText = '1 health center analyzed';
     const mqcrPct = r.mqcr != null ? Math.round(r.mqcr * 100) : null;
     const mqcrLine = mqcrPct != null
@@ -4466,8 +4466,9 @@ function showSingleDone(r) {
       : '';
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">1</div><div class="stat-lbl">Health Center Analyzed</div></div>${mqcrLine}</div>`;
   } else {
-    subText = `${r.provider_count || 0} providers analyzed`;
-    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Providers Ranked</div></div></div>`;
+    const cnt = r.provider_count || 0;
+    subText = `${cnt} provider${cnt !== 1 ? 's' : ''} analyzed`;
+    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">${cnt}</div><div class="stat-lbl">Providers Analyzed</div></div></div>`;
   }
   document.getElementById('done-sub').textContent = subText;
   document.getElementById('done-body').innerHTML = bodyHtml;
@@ -5154,7 +5155,7 @@ function renderHistory(events) {
           ${th('Location', 'location')}
           ${th('Name', 'name')}
           ${th('Type', 'type')}
-          ${th('Providers', 'providers', 'right')}
+          ${th('Analyzed', 'providers', 'right')}
           <th>Report</th>
           <th>Briefing</th>
           <th>Battery</th>
