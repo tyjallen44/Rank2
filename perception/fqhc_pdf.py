@@ -427,7 +427,7 @@ def _pillar1_block(result: AnalysisResult, ps: FqhcPillarScores, primary: str) -
 
     svc_adj = sub.get("service_adjacent_score")
     lines.append(f"<h3>Service-Adjacent Findability — sub-score: {svc_adj if svc_adj is not None else '—'}/100 (5 pts)</h3>")
-    lines.append("<p>Measures surfacing for service-adjacent queries: dental no insurance, MAT, behavioral health sliding scale, WIC-adjacent, mobile clinics.</p>")
+    lines.append("<p>Measures surfacing for service-adjacent queries: MAT, behavioral health sliding scale, WIC-adjacent, mobile clinics.</p>")
 
     mqcr = result.fqhc_mqcr
     if mqcr is not None:
@@ -449,8 +449,16 @@ def _pillar1_block(result: AnalysisResult, ps: FqhcPillarScores, primary: str) -
         lines.append("<h3>Mission Query Capture (MQCR) — 12 pts — Requires Battery Run</h3>")
         lines.append("<p>MQCR will be computed from logged mission-frame battery runs. See the Missed Queries exhibit below for representative queries where this center should appear.</p>")
 
-    lines.append("<h3>Multilingual Capture — 8 pts — Requires Battery Run</h3>")
-    lines.append("<p>Multilingual capture rate will be assessed in a future battery run using queries in configured languages.</p>")
+    multi_score = ps.multilingual_score
+    if multi_score is not None:
+        lines.append(f"<h3>Multilingual Capture — sub-score: {multi_score}/100 (8 pts)</h3>")
+        lines.append(
+            "<p>Spanish-language battery result: see Query Results Exhibit for the three Spanish "
+            "queries and whether this center surfaced in AI responses to Spanish-speaking patients.</p>"
+        )
+    else:
+        lines.append("<h3>Multilingual Capture — 8 pts — Requires Battery Run</h3>")
+        lines.append("<p>Multilingual capture rate will be assessed when the MQCR battery runs (Spanish-language queries included).</p>")
 
     return f"<h2>Pillar 1 — Access &amp; Findability (25 pts)</h2>\n" + "\n".join(lines)
 
@@ -458,29 +466,47 @@ def _pillar1_block(result: AnalysisResult, ps: FqhcPillarScores, primary: str) -
 def _query_results_block(result: AnalysisResult, battery_rows: list, primary: str) -> str:
     """Query Results Exhibit when battery has been run; Missed Queries Exhibit otherwise."""
     if battery_rows:
-        surfaced_count = sum(1 for r in battery_rows if r.get("surfaced"))
-        total = len(battery_rows)
-        pct = int(round(surfaced_count / total * 100)) if total else 0
-        rows_html = []
-        for r in battery_rows:
+        en_rows = [r for r in battery_rows if r.get("language", "en") == "en"]
+        es_rows = [r for r in battery_rows if r.get("language") == "es"]
+        en_surfaced = sum(1 for r in en_rows if r.get("surfaced"))
+        es_surfaced = sum(1 for r in es_rows if r.get("surfaced"))
+        en_total = len(en_rows)
+        es_total = len(es_rows)
+        en_pct = int(round(en_surfaced / en_total * 100)) if en_total else 0
+
+        def _row_html(r: dict) -> str:
             surfaced = r.get("surfaced")
             icon = '<span style="color:#1a8f4a;font-weight:bold">✓ Surfaced</span>' if surfaced \
                    else '<span style="color:#c0392b;font-weight:bold">✗ Not found</span>'
             cat = r.get("category", "general").replace("_", " ").title()
-            rows_html.append(
+            return (
                 f"<tr>"
                 f'<td><span class="missed-query-text">"{_e(r.get("query", ""))}"</span></td>'
                 f"<td>{_e(cat)}</td>"
                 f"<td>{icon}</td>"
                 f"</tr>"
             )
+
+        en_rows_html = "".join(_row_html(r) for r in en_rows)
+        es_section = ""
+        if es_rows:
+            es_pct = int(round(es_surfaced / es_total * 100)) if es_total else 0
+            es_rows_html = "".join(_row_html(r) for r in es_rows)
+            es_section = f"""
+<h3 style="margin-top:14px">Spanish-Language Queries (Multilingual Capture)</h3>
+<p>{es_surfaced} of {es_total} Spanish queries surfaced this center ({es_pct}%).</p>
+<table class="missed-table">
+  <thead><tr><th>Query (Spanish)</th><th>Category</th><th>Result</th></tr></thead>
+  <tbody>{es_rows_html}</tbody>
+</table>"""
+
         return f"""
 <h2>Query Results Exhibit</h2>
-<p>Results from the MQCR battery: {surfaced_count} of {total} queries surfaced this center ({pct}%).</p>
+<p>Results from the MQCR battery. English MQCR: {en_surfaced} of {en_total} queries surfaced this center ({en_pct}%).</p>
 <table class="missed-table">
-  <thead><tr><th>Query</th><th>Category</th><th>Result</th></tr></thead>
-  <tbody>{"".join(rows_html)}</tbody>
-</table>"""
+  <thead><tr><th>Query (English)</th><th>Category</th><th>Result</th></tr></thead>
+  <tbody>{en_rows_html}</tbody>
+</table>{es_section}"""
 
     # Fall back to Missed Queries Exhibit (Round 1, no battery)
     queries = result.fqhc_missed_queries
@@ -529,8 +555,21 @@ def _pillar2_block(result: AnalysisResult, ps: FqhcPillarScores, primary: str) -
   <ul style="margin-left:16px;margin-top:6px">{mc_items}</ul>
 </div>"""
 
+    methodology_note = (
+        "<p style='font-size:8.5pt;color:#4a6a70;margin-bottom:8px'>"
+        "<strong>Methodology:</strong> Each row tests whether this center's client-attested facts are "
+        "visible and accurately represented in AI-searchable public content. "
+        "The AI Representation column reflects what Claude with web search actually found when "
+        "researching this center online — it is not based on the center's internal records. "
+        "<strong>✗ Not surfaced</strong> means the fact was absent from AI-accessible public content, "
+        "creating a potential barrier for patients relying on AI assistants. "
+        "This audit is distinct from the MQCR battery (Pillar 1), which measures whether the center "
+        "appears when patients ask mission-frame queries."
+        "</p>"
+    )
+
     if not audit_rows:
-        audit_html = "<p>No intake provided — Pillar 2 items cannot be assessed. Provide client-attested intake to enable full Eligibility &amp; Cost Accuracy audit.</p>"
+        audit_html = methodology_note + "<p>No intake provided — Pillar 2 items cannot be assessed. Provide client-attested intake to enable full Eligibility &amp; Cost Accuracy audit.</p>"
     else:
         def _flag_span(flag: str) -> str:
             if flag == "✓":
@@ -560,7 +599,7 @@ def _pillar2_block(result: AnalysisResult, ps: FqhcPillarScores, primary: str) -
                 f"</tr>"
             )
 
-        audit_html = f"""
+        audit_html = methodology_note + f"""
 <table class="fact-audit-table">
   <thead><tr>
     <th style="width:30%">Attested Fact (CLIENT-ATTESTED)</th>

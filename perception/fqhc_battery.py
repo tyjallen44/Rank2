@@ -1,13 +1,15 @@
 """FQHC Mission Query Capture Rate (MQCR) battery engine.
 
-Runs a 10-query standard battery through Claude + web_search to measure what
-fraction of mission-frame patient queries surface the health center.
+Runs a 13-query standard battery (10 English + 3 Spanish) through Claude +
+web_search to measure what fraction of mission-frame patient queries surface
+the health center.
 
-MQCR = surfaced_count / total_queries  (0.0–1.0)
+MQCR            = surfaced_count / total_english_queries  (0.0–1.0)
+multilingual_mqcr = es_surfaced / total_spanish_queries   (0.0–1.0)
 
 Usage:
     result = run_battery(fqhc_run_id, entity_name, city, state, on_event=emit)
-    # result.mqcr, result.surfaced_count, result.rows
+    # result.mqcr, result.surfaced_count, result.multilingual_mqcr, result.rows
 """
 from __future__ import annotations
 
@@ -94,6 +96,25 @@ STANDARD_BATTERY: list[dict] = [
         "language": "en",
         "template": "What are low-cost mental health services available in {city}, {state}?",
     },
+    # ── Spanish-language queries (multilingual capture sub-score) ─────────────
+    {
+        "n": 11,
+        "category": "general_affordable",
+        "language": "es",
+        "template": "¿Dónde puedo encontrar atención médica económica en {city}, {state}?",
+    },
+    {
+        "n": 12,
+        "category": "uninsured",
+        "language": "es",
+        "template": "No tengo seguro médico. ¿Dónde puedo recibir atención médica en {city}?",
+    },
+    {
+        "n": 13,
+        "category": "low_cost",
+        "language": "es",
+        "template": "¿Hay clínicas de bajo costo o gratuitas en {city}, {state}?",
+    },
 ]
 
 _SYSTEM = (
@@ -101,6 +122,13 @@ _SYSTEM = (
     "Search the web and provide a specific, helpful answer listing real healthcare "
     "providers or clinics in the patient's area that match their needs. "
     "Include names, brief descriptions, and any relevant details about cost or eligibility."
+)
+
+_SYSTEM_ES = (
+    "Eres un asistente útil respondiendo la pregunta de un paciente sobre atención médica. "
+    "Busca en la web y proporciona una respuesta específica y útil indicando proveedores de "
+    "salud reales o clínicas en el área del paciente que satisfagan sus necesidades. "
+    "Incluye nombres, breves descripciones y cualquier detalle relevante sobre costos o elegibilidad."
 )
 
 # ── Result types ──────────────────────────────────────────────────────────────
@@ -125,6 +153,9 @@ class BatteryResult:
     mqcr: float
     surfaced_count: int
     total: int
+    multilingual_mqcr: Optional[float] = None
+    multilingual_surfaced_count: int = 0
+    multilingual_total: int = 0
     rows: list[BatteryRow] = field(default_factory=list)
 
 
@@ -180,7 +211,7 @@ def is_surfaced(response_text: str, entity_name: str,
 # ── Query runner ──────────────────────────────────────────────────────────────
 
 
-def _run_query(client, query: str) -> str:
+def _run_query(client, query: str, language: str = "en") -> str:
     """Run a single patient query through Claude + web_search. Returns response text."""
     from anthropic import APIError
 
@@ -190,6 +221,7 @@ def _run_query(client, query: str) -> str:
         "max_uses": _MAX_SEARCH_USES,
     }
 
+    system_prompt = _SYSTEM_ES if language == "es" else _SYSTEM
     messages = [{"role": "user", "content": query}]
 
     for _ in range(_MAX_TURNS):
@@ -197,7 +229,7 @@ def _run_query(client, query: str) -> str:
             resp = client.messages.create(
                 model=_MODEL,
                 max_tokens=_MAX_TOKENS,
-                system=_SYSTEM,
+                system=system_prompt,
                 tools=[search_tool],
                 messages=messages,
             )
@@ -214,7 +246,7 @@ def _run_query(client, query: str) -> str:
         if resp.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": resp.content})
             # web_search is handled server-side; just continue
-            messages.append({"role": "user", "content": "Continue."})
+            messages.append({"role": "user", "content": "Continue." if language != "es" else "Continúa."})
         else:
             return "\n".join(text_parts)
 
@@ -238,10 +270,12 @@ def run_battery(
     name, common abbreviations, site-level names). Any match counts.
 
     Emits events via on_event:
-      {"type": "battery_query", "n": 1, "total": 10, "query": "...", "surfaced": bool}
-      {"type": "battery_done",  "mqcr": 0.7, "surfaced_count": 7, "total": 10}
+      {"type": "battery_query", "n": 1, "total": 13, "query": "...", "surfaced": bool, "language": "en"}
+      {"type": "battery_done",  "mqcr": 0.7, "surfaced_count": 7, "total": 10,
+                                "multilingual_mqcr": 0.67, "multilingual_total": 3}
 
-    Returns BatteryResult with mqcr, surfaced_count, total, and rows.
+    Returns BatteryResult with mqcr, surfaced_count, total, multilingual_mqcr, and rows.
+    MQCR is computed from English-language queries only; multilingual_mqcr from Spanish.
     """
     from .config import settings
     from .db import get_connection, init_db
@@ -257,25 +291,23 @@ def run_battery(
     assistant_label = "claude-haiku+web_search"
 
     rows: list[BatteryRow] = []
-    surfaced_count = 0
-    total = len(STANDARD_BATTERY)
+    total_all = len(STANDARD_BATTERY)
 
     for spec in STANDARD_BATTERY:
+        lang = spec["language"]
         query = spec["template"].format(city=city, state=state)
         n = spec["n"]
 
-        emit({"type": "battery_query_start", "n": n, "total": total, "query": query})
+        emit({"type": "battery_query_start", "n": n, "total": total_all, "query": query, "language": lang})
 
-        response_text = _run_query(client, query)
+        response_text = _run_query(client, query, language=lang)
         surfaced = is_surfaced(response_text, entity_name, aliases=aliases)
-        if surfaced:
-            surfaced_count += 1
 
         row = BatteryRow(
             id=str(uuid.uuid4()),
             fqhc_run_id=fqhc_run_id,
             query=query,
-            language=spec["language"],
+            language=lang,
             category=spec["category"],
             assistant=assistant_label,
             response_text=response_text,
@@ -307,13 +339,22 @@ def run_battery(
         emit({
             "type": "battery_query",
             "n": n,
-            "total": total,
+            "total": total_all,
             "query": query,
             "surfaced": surfaced,
             "category": spec["category"],
+            "language": lang,
         })
 
-    mqcr = surfaced_count / total if total > 0 else 0.0
+    # MQCR: English queries only
+    en_rows = [r for r in rows if r.language == "en"]
+    es_rows = [r for r in rows if r.language == "es"]
+    en_surfaced = sum(1 for r in en_rows if r.surfaced)
+    es_surfaced = sum(1 for r in es_rows if r.surfaced)
+    total_en = len(en_rows)
+    total_es = len(es_rows)
+    mqcr = en_surfaced / total_en if total_en > 0 else 0.0
+    multilingual_mqcr: Optional[float] = (es_surfaced / total_es) if total_es > 0 else None
 
     # Persist MQCR back to analysis_runs
     with get_connection() as con:
@@ -325,14 +366,20 @@ def run_battery(
     emit({
         "type": "battery_done",
         "mqcr": mqcr,
-        "surfaced_count": surfaced_count,
-        "total": total,
+        "surfaced_count": en_surfaced,
+        "total": total_en,
+        "multilingual_mqcr": multilingual_mqcr,
+        "multilingual_surfaced_count": es_surfaced,
+        "multilingual_total": total_es,
     })
 
     return BatteryResult(
         fqhc_run_id=fqhc_run_id,
         mqcr=mqcr,
-        surfaced_count=surfaced_count,
-        total=total,
+        surfaced_count=en_surfaced,
+        total=total_en,
+        multilingual_mqcr=multilingual_mqcr,
+        multilingual_surfaced_count=es_surfaced,
+        multilingual_total=total_es,
         rows=rows,
     )

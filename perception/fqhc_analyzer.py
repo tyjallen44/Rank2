@@ -634,13 +634,13 @@ def analyze_fqhc(
         for loc in existing_locs:
             existing_geo |= _geo_words(loc.name)
 
-        authoritative_sites = list(hrsa_data.get("site_names") or []) + list(site_roster or [])
-        for site_name in authoritative_sites:
+        # HRSA site names: dedup against LLM-extracted locations (they're often
+        # reformatted versions of what the LLM found).
+        for site_name in (hrsa_data.get("site_names") or []):
             if not site_name:
                 continue
             if site_name.lower() in known_exact:
                 continue
-            # Skip if any geographic word from this HRSA name already covered
             candidate_geo = _geo_words(site_name)
             if candidate_geo and candidate_geo & existing_geo:
                 continue
@@ -649,6 +649,18 @@ def analyze_fqhc(
             )
             known_exact.add(site_name.lower())
             existing_geo |= candidate_geo
+
+        # User-confirmed roster entries: always include (skip only exact duplicates).
+        # The user explicitly approved these sites in the intake form.
+        for site_name in (site_roster or []):
+            if not site_name:
+                continue
+            if site_name.lower() in known_exact:
+                continue
+            rankings[0].consolidated_locations.append(
+                ConsolidatedLocation(name=site_name)
+            )
+            known_exact.add(site_name.lower())
 
     # ── Phase 3: Verify Google + score ───────────────────────────────────────
     emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})
@@ -707,7 +719,7 @@ def analyze_fqhc(
     )
 
     # ── Phase 4: MQCR Battery ────────────────────────────────────────────────
-    emit({"type": "phase", "name": "battery", "text": "Running MQCR battery (10 queries)"})
+    emit({"type": "phase", "name": "battery", "text": "Running MQCR battery (13 queries: 10 English + 3 Spanish)"})
     try:
         from .fqhc_battery import run_battery as _run_battery
         # Build alias list: HRSA canonical name + known site names so
@@ -731,6 +743,15 @@ def analyze_fqhc(
         result.fqhc_mqcr = _battery.mqcr
         console.print(f"[green]✓[/green] MQCR: {int(round(_battery.mqcr * 100))}% "
                       f"({_battery.surfaced_count}/{_battery.total})")
+        # Update multilingual score in pillar_scores so PDF has it immediately
+        if _battery.multilingual_mqcr is not None and result.fqhc_pillar_scores is not None:
+            from .fqhc_scoring import mqcr_to_score as _m2s
+            result.fqhc_pillar_scores.multilingual_score = _m2s(_battery.multilingual_mqcr)
+            console.print(
+                f"[green]✓[/green] Multilingual MQCR: "
+                f"{int(round(_battery.multilingual_mqcr * 100))}% "
+                f"({_battery.multilingual_surfaced_count}/{_battery.multilingual_total})"
+            )
     except Exception as _bat_exc:
         console.print(f"[yellow]⚠[/yellow] Battery failed: {_bat_exc}")
         emit({"type": "text", "text": f"\n⚠ MQCR battery error: {_bat_exc}\n"})

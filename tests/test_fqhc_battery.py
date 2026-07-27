@@ -33,9 +33,18 @@ def test_standard_battery_importable():
 # 2. STANDARD_BATTERY structure
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_standard_battery_has_10_queries():
+def test_standard_battery_has_13_queries():
     from perception.fqhc_battery import STANDARD_BATTERY
-    assert len(STANDARD_BATTERY) == 10, f"Expected 10 queries, got {len(STANDARD_BATTERY)}"
+    # 10 English + 3 Spanish
+    assert len(STANDARD_BATTERY) == 13, f"Expected 13 queries, got {len(STANDARD_BATTERY)}"
+
+
+def test_standard_battery_language_split():
+    from perception.fqhc_battery import STANDARD_BATTERY
+    en = [s for s in STANDARD_BATTERY if s["language"] == "en"]
+    es = [s for s in STANDARD_BATTERY if s["language"] == "es"]
+    assert len(en) == 10, f"Expected 10 English queries, got {len(en)}"
+    assert len(es) == 3, f"Expected 3 Spanish queries, got {len(es)}"
 
 
 def test_standard_battery_required_fields():
@@ -50,7 +59,7 @@ def test_standard_battery_required_fields():
 def test_standard_battery_sequential_numbering():
     from perception.fqhc_battery import STANDARD_BATTERY
     ns = [spec["n"] for spec in STANDARD_BATTERY]
-    assert ns == list(range(1, 11)), f"Query numbers not sequential 1-10: {ns}"
+    assert ns == list(range(1, 14)), f"Query numbers not sequential 1-13: {ns}"
 
 
 def test_standard_battery_templates_have_city_placeholder():
@@ -70,8 +79,9 @@ def test_standard_battery_template_format():
 
 def test_standard_battery_unique_categories():
     from perception.fqhc_battery import STANDARD_BATTERY
-    cats = [spec["category"] for spec in STANDARD_BATTERY]
-    assert len(set(cats)) == len(cats), f"Duplicate categories found: {cats}"
+    # English queries must have unique categories; Spanish may repeat (same use-case in another language)
+    en_cats = [spec["category"] for spec in STANDARD_BATTERY if spec["language"] == "en"]
+    assert len(set(en_cats)) == len(en_cats), f"Duplicate English categories: {en_cats}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -209,11 +219,17 @@ def test_battery_result_structure():
         mqcr=0.7,
         surfaced_count=7,
         total=10,
+        multilingual_mqcr=0.67,
+        multilingual_surfaced_count=2,
+        multilingual_total=3,
     )
     assert r.fqhc_run_id == "test-run-123"
     assert r.mqcr == pytest.approx(0.7)
     assert r.surfaced_count == 7
     assert r.total == 10
+    assert r.multilingual_mqcr == pytest.approx(0.67)
+    assert r.multilingual_surfaced_count == 2
+    assert r.multilingual_total == 3
     assert r.rows == []
 
 
