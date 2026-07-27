@@ -1533,8 +1533,8 @@ html, body {
           </div>
         </div>
         <div class="fg" style="margin-bottom:16px">
-          <label class="fl">Site names (one per line)</label>
-          <textarea id="fqhc-site-names" class="fi" rows="4" style="font-family:inherit;resize:vertical" placeholder="Main Street Health Center&#10;Eastside Clinic&#10;…"></textarea>
+          <label class="fl">Additional sites not in HRSA data (optional)</label>
+          <textarea id="fqhc-site-names" class="fi" rows="3" style="font-family:inherit;resize:vertical" placeholder="Add any sites not already captured by the HRSA locator…"></textarea>
         </div>
 
         <!-- Service Lines -->
@@ -3686,9 +3686,8 @@ async function showFqhcIntake() {
     const siteCountEl = document.getElementById('fqhc-site-count');
     if (data.site_count && !siteCountEl.value) siteCountEl.value = data.site_count;
 
-    const siteNamesEl = document.getElementById('fqhc-site-names');
-    if (data.site_names?.length && !siteNamesEl.value)
-      siteNamesEl.value = data.site_names.join('\n');
+    // fqhc-site-names is for user-supplied additions only; HRSA sites reach the LLM
+    // through the HRSA data block, so we do not pre-fill them here.
 
     const langsEl = document.getElementById('fqhc-languages');
     if (data.languages?.length && !langsEl.value)
