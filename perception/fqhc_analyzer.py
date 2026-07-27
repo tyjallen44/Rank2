@@ -743,15 +743,23 @@ def analyze_fqhc(
         result.fqhc_mqcr = _battery.mqcr
         console.print(f"[green]✓[/green] MQCR: {int(round(_battery.mqcr * 100))}% "
                       f"({_battery.surfaced_count}/{_battery.total})")
-        # Update multilingual score in pillar_scores so PDF has it immediately
-        if _battery.multilingual_mqcr is not None and result.fqhc_pillar_scores is not None:
+        # Update all battery-derived sub-scores so the composite is correct
+        if result.fqhc_pillar_scores is not None:
             from .fqhc_scoring import mqcr_to_score as _m2s
-            result.fqhc_pillar_scores.multilingual_score = _m2s(_battery.multilingual_mqcr)
-            console.print(
-                f"[green]✓[/green] Multilingual MQCR: "
-                f"{int(round(_battery.multilingual_mqcr * 100))}% "
-                f"({_battery.multilingual_surfaced_count}/{_battery.multilingual_total})"
-            )
+            result.fqhc_pillar_scores.mqcr_score = _m2s(_battery.mqcr)
+            if _battery.multilingual_mqcr is not None:
+                result.fqhc_pillar_scores.multilingual_score = _m2s(_battery.multilingual_mqcr)
+                console.print(
+                    f"[green]✓[/green] Multilingual MQCR: "
+                    f"{int(round(_battery.multilingual_mqcr * 100))}% "
+                    f"({_battery.multilingual_surfaced_count}/{_battery.multilingual_total})"
+                )
+            # Recompute composite with all 7 sub-scores now available
+            from . import fqhc_scoring as _fqhc_scoring
+            new_score = _fqhc_scoring.composite(result.fqhc_pillar_scores.as_dict())
+            if result.rankings and new_score is not None:
+                result.rankings[0].ai_visibility_score = new_score
+                result.rankings[0].overall_rating, _ = scoring.grade_from_score(new_score)
     except Exception as _bat_exc:
         console.print(f"[yellow]⚠[/yellow] Battery failed: {_bat_exc}")
         emit({"type": "text", "text": f"\n⚠ MQCR battery error: {_bat_exc}\n"})

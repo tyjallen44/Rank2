@@ -437,6 +437,17 @@ def _job_run_battery(job_id: str, fqhc_run_id: str, entity_name: str, city: str,
             if row and row[0]:
                 ar = AnalysisResult.model_validate_json(row[0])
                 ar.fqhc_mqcr = battery.mqcr
+                # Update battery-derived sub-scores and recompute composite
+                if ar.fqhc_pillar_scores is not None:
+                    from perception.fqhc_scoring import mqcr_to_score as _m2s, composite as _fqhc_composite
+                    from perception.scoring import grade_from_score as _gfs
+                    ar.fqhc_pillar_scores.mqcr_score = _m2s(battery.mqcr)
+                    if battery.multilingual_mqcr is not None:
+                        ar.fqhc_pillar_scores.multilingual_score = _m2s(battery.multilingual_mqcr)
+                    new_score = _fqhc_composite(ar.fqhc_pillar_scores.as_dict())
+                    if ar.rankings and new_score is not None:
+                        ar.rankings[0].ai_visibility_score = new_score
+                        ar.rankings[0].overall_rating, _ = _gfs(new_score)
                 old_pdf = row[1] or ""
                 from pathlib import Path as _Path
                 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -450,8 +461,8 @@ def _job_run_battery(job_id: str, fqhc_run_id: str, entity_name: str, city: str,
                 render_fqhc_pdf(ar, new_pdf_path)
                 with get_connection() as con:
                     con.execute(
-                        "UPDATE analysis_runs SET pdf_path = ? WHERE run_id = ?",
-                        [new_pdf_path, fqhc_run_id],
+                        "UPDATE analysis_runs SET pdf_path = ?, result_json = ? WHERE run_id = ?",
+                        [new_pdf_path, ar.model_dump_json(), fqhc_run_id],
                     )
         except Exception:
             pass  # PDF re-render failure is non-fatal
