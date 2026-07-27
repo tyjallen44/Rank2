@@ -557,12 +557,34 @@ def init_db() -> None:
         )
     except Exception:
         pass
-    # Add edition column to analysis_runs (community_health | practice | hospital)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS fqhc_battery_runs (
+            id            VARCHAR PRIMARY KEY,
+            fqhc_run_id   VARCHAR NOT NULL,
+            query         TEXT,
+            language      VARCHAR,
+            category      VARCHAR,
+            assistant     VARCHAR,
+            response_text TEXT,
+            surfaced      BOOLEAN,
+            created_at    TIMESTAMP
+        )
+    """)
+    try:
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_battery_fqhc_run "
+            "ON fqhc_battery_runs (fqhc_run_id)"
+        )
+    except Exception:
+        pass
+    # Add edition and mqcr columns to analysis_runs
     _ar_cols2 = {r[0] for r in con.execute(
         "SELECT column_name FROM information_schema.columns WHERE table_name='analysis_runs'"
     ).fetchall()}
     if "edition" not in _ar_cols2:
         con.execute("ALTER TABLE analysis_runs ADD COLUMN edition VARCHAR")
+    if "mqcr" not in _ar_cols2:
+        con.execute("ALTER TABLE analysis_runs ADD COLUMN mqcr DOUBLE")
 
     # ── Events Pulse tables ───────────────────────────────────────────────────
     con.execute("""
@@ -801,11 +823,14 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.md_path,
                 a.briefing_pdf_path,
                 a.event_id,
+                a.entity_type,
+                a.mqcr,
                 COUNT(p.rank) AS provider_count
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
-                     a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id
+                     a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
+                     a.entity_type, a.mqcr
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
     else:
@@ -819,16 +844,20 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.md_path,
                 a.briefing_pdf_path,
                 a.event_id,
+                a.entity_type,
+                a.mqcr,
                 COUNT(p.rank) AS provider_count
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             WHERE a.user_role = ?
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
-                     a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id
+                     a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
+                     a.entity_type, a.mqcr
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()
     cols = ["run_id", "location", "specialty", "generated_at",
-            "pdf_path", "md_path", "briefing_pdf_path", "event_id", "provider_count"]
+            "pdf_path", "md_path", "briefing_pdf_path", "event_id",
+            "entity_type", "mqcr", "provider_count"]
     con.close()
     return [dict(zip(cols, row)) for row in rows]
 

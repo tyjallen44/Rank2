@@ -69,13 +69,32 @@ def _build_fqhc_html(result: AnalysisResult, brand_cfg: dict) -> str:
     generated = str(result.generated_at or "")
     ps = result.fqhc_pillar_scores or FqhcPillarScores()
 
+    # Load battery rows from DB if the battery has been run
+    battery_rows: list[dict] = []
+    if result.fqhc_mqcr is not None and result.run_id:
+        try:
+            from .db import get_connection
+            with get_connection() as _con:
+                _rows = _con.execute(
+                    "SELECT query, category, language, assistant, surfaced "
+                    "FROM fqhc_battery_runs WHERE fqhc_run_id = ? ORDER BY rowid",
+                    [result.run_id],
+                ).fetchall()
+                battery_rows = [
+                    {"query": r[0], "category": r[1], "language": r[2],
+                     "assistant": r[3], "surfaced": r[4]}
+                    for r in _rows
+                ]
+        except Exception:
+            pass
+
     css = _fqhc_css(primary, pale, accent)
     cover = _cover_block(entity, location, generated, score, grade, band, result, primary, pale, accent)
     scorecard = _pillar_scorecard(ps, primary, pale)
     mqcr_block = _mqcr_block(result, primary, accent)
     verdict = _verdict_block(result)
     pillar1 = _pillar1_block(result, ps, primary)
-    missed_queries = _missed_queries_block(result, primary)
+    missed_queries = _query_results_block(result, battery_rows, primary)
     pillar2 = _pillar2_block(result, ps, primary)
     pillar3 = _pillar3_block(result, ps, prov, primary)
     pillar4 = _pillar4_block(result, ps, prov, primary)
@@ -410,16 +429,60 @@ def _pillar1_block(result: AnalysisResult, ps: FqhcPillarScores, primary: str) -
     lines.append(f"<h3>Service-Adjacent Findability — sub-score: {svc_adj if svc_adj is not None else '—'}/100 (5 pts)</h3>")
     lines.append("<p>Measures surfacing for service-adjacent queries: dental no insurance, MAT, behavioral health sliding scale, WIC-adjacent, mobile clinics.</p>")
 
-    lines.append("<h3>Mission Query Capture (MQCR) — 12 pts — Requires Battery Run</h3>")
-    lines.append("<p>MQCR will be computed from logged mission-frame battery runs in Round 2. See the Missed Queries exhibit below for representative queries where this center should appear.</p>")
+    mqcr = result.fqhc_mqcr
+    if mqcr is not None:
+        from .fqhc_scoring import mqcr_to_score
+        mqcr_sub = mqcr_to_score(mqcr)
+        pct = int(round(mqcr * 100))
+        city = (result.location or "").split(",")[0].strip()
+        not_directed = 10 - int(round(mqcr * 10))
+        lines.append(
+            f"<h3>Mission Query Capture (MQCR) — sub-score: {mqcr_sub}/100 (12 pts)</h3>"
+        )
+        lines.append(
+            f"<p>Battery result: <strong>{pct}%</strong> ({int(round(mqcr * 10))}/10 queries surfaced). "
+            f"<strong>{not_directed} of 10 patients</strong> asking an AI assistant for affordable care "
+            f"in {_e(city) if city else 'this area'} were not directed here.</p>"
+        )
+        lines.append("<p>See the Query Results Exhibit below for the full query-by-query breakdown.</p>")
+    else:
+        lines.append("<h3>Mission Query Capture (MQCR) — 12 pts — Requires Battery Run</h3>")
+        lines.append("<p>MQCR will be computed from logged mission-frame battery runs. See the Missed Queries exhibit below for representative queries where this center should appear.</p>")
 
     lines.append("<h3>Multilingual Capture — 8 pts — Requires Battery Run</h3>")
-    lines.append("<p>Multilingual capture rate will be assessed in Round 2 using battery runs in configured languages.</p>")
+    lines.append("<p>Multilingual capture rate will be assessed in a future battery run using queries in configured languages.</p>")
 
     return f"<h2>Pillar 1 — Access &amp; Findability (25 pts)</h2>\n" + "\n".join(lines)
 
 
-def _missed_queries_block(result: AnalysisResult, primary: str) -> str:
+def _query_results_block(result: AnalysisResult, battery_rows: list, primary: str) -> str:
+    """Query Results Exhibit when battery has been run; Missed Queries Exhibit otherwise."""
+    if battery_rows:
+        surfaced_count = sum(1 for r in battery_rows if r.get("surfaced"))
+        total = len(battery_rows)
+        pct = int(round(surfaced_count / total * 100)) if total else 0
+        rows_html = []
+        for r in battery_rows:
+            surfaced = r.get("surfaced")
+            icon = '<span style="color:#1a8f4a;font-weight:bold">✓ Surfaced</span>' if surfaced \
+                   else '<span style="color:#c0392b;font-weight:bold">✗ Not found</span>'
+            cat = r.get("category", "general").replace("_", " ").title()
+            rows_html.append(
+                f"<tr>"
+                f'<td><span class="missed-query-text">"{_e(r.get("query", ""))}"</span></td>'
+                f"<td>{_e(cat)}</td>"
+                f"<td>{icon}</td>"
+                f"</tr>"
+            )
+        return f"""
+<h2>Query Results Exhibit</h2>
+<p>Results from the MQCR battery: {surfaced_count} of {total} queries surfaced this center ({pct}%).</p>
+<table class="missed-table">
+  <thead><tr><th>Query</th><th>Category</th><th>Result</th></tr></thead>
+  <tbody>{"".join(rows_html)}</tbody>
+</table>"""
+
+    # Fall back to Missed Queries Exhibit (Round 1, no battery)
     queries = result.fqhc_missed_queries
     if not queries:
         return ""

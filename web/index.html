@@ -4441,7 +4441,8 @@ function showSingleDone(r) {
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`;
   } else if (r.entity_type === 'community_health') {
     subText = '1 health center analyzed';
-    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">1</div><div class="stat-lbl">Health Center Analyzed</div></div></div>`;
+    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">1</div><div class="stat-lbl">Health Center Analyzed</div></div></div>
+      <div id="battery-progress" style="margin-top:16px"></div>`;
   } else {
     subText = `${r.provider_count || 0} providers analyzed`;
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Providers Ranked</div></div></div>`;
@@ -4464,12 +4465,125 @@ function showSingleDone(r) {
       ? `<div style="font-size:12px;color:#c07a30;margin-top:4px">Briefing skipped: ${r.briefing_skipped_reason}</div>`
       : '';
 
+  const batteryBtn = (r.entity_type === 'community_health' && !isComparison)
+    ? `<button class="btn btn-secondary" id="run-battery-btn" onclick="startBattery('${r.run_id}')">Run MQCR Battery</button>`
+    : '';
+
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
     ${briefingBtn}
+    ${batteryBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${isComparison ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
   document.getElementById('prog-done').classList.remove('hidden');
+}
+
+async function startBatteryFromHistory(runId, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  const td = btn.closest('td');
+
+  let jobId;
+  try {
+    const res = await fetch(`/api/fqhc-battery/${encodeURIComponent(runId)}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_token}` },
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    jobId = data.job_id;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Run Battery';
+    return;
+  }
+
+  if (td) td.innerHTML = `<span style="font-size:12px;color:var(--muted)">Running…</span>`;
+
+  const es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
+  es.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'battery_query_start' && td) {
+      td.innerHTML = `<span style="font-size:12px;color:var(--muted)">${msg.n}/${msg.total}</span>`;
+    } else if (msg.type === 'battery_done' || msg.type === 'done') {
+      es.close();
+      const pct = Math.round((msg.mqcr || 0) * 100);
+      if (td) td.innerHTML = `<span style="font-size:12px;font-weight:600;color:#1a8f4a">${pct}%</span>`;
+    } else if (msg.type === 'error') {
+      es.close();
+      if (td) td.innerHTML = `<span style="font-size:12px;color:#c0392b">Error</span>`;
+    }
+  };
+  es.onerror = () => {
+    es.close();
+    if (td) td.innerHTML = `<span style="font-size:12px;color:#c0392b">Failed</span>`;
+  };
+}
+
+async function startBattery(runId) {
+  const btn = document.getElementById('run-battery-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Starting battery…'; }
+  const prog = document.getElementById('battery-progress');
+  if (prog) prog.innerHTML = '<div style="font-size:13px;color:var(--muted)">Initializing MQCR battery…</div>';
+
+  let jobId;
+  try {
+    const res = await fetch(`/api/fqhc-battery/${encodeURIComponent(runId)}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_token}` },
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    jobId = data.job_id;
+  } catch (e) {
+    if (prog) prog.innerHTML = `<div style="color:#c0392b;font-size:13px">Battery start failed: ${e.message}</div>`;
+    if (btn) { btn.disabled = false; btn.textContent = 'Run MQCR Battery'; }
+    return;
+  }
+
+  const es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
+  const queryResults = [];
+
+  es.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'battery_query_start') {
+      if (btn) btn.textContent = `Running battery (${msg.n}/${msg.total})…`;
+      if (prog) prog.innerHTML = `<div style="font-size:13px;color:var(--muted)">Query ${msg.n} of ${msg.total}: <em>${msg.query}</em></div>`;
+    } else if (msg.type === 'battery_query') {
+      queryResults.push(msg);
+      const icon = msg.surfaced ? '✓' : '✗';
+      const color = msg.surfaced ? '#1a8f4a' : '#c0392b';
+      if (prog) prog.innerHTML = `<div style="font-size:13px;color:var(--muted)">
+        Query ${msg.n}/${msg.total} — <span style="color:${color};font-weight:600">${icon} ${msg.surfaced ? 'Surfaced' : 'Not found'}</span><br>
+        <em style="font-size:12px">${msg.query}</em>
+      </div>`;
+    } else if (msg.type === 'battery_done' || msg.type === 'done') {
+      es.close();
+      const mqcr = msg.mqcr !== undefined ? msg.mqcr : (msg.surfaced_count / msg.total);
+      const pct = Math.round(mqcr * 100);
+      const surfaced = msg.surfaced_count;
+      const total = msg.total;
+      const notFound = total - surfaced;
+      if (prog) prog.innerHTML = `
+        <div style="margin-top:8px;padding:14px 16px;background:#eef7f1;border-radius:8px;border:1px solid #b2dfc7">
+          <div style="font-size:15px;font-weight:700;color:#0F4146">MQCR: ${pct}%</div>
+          <div style="font-size:13px;color:#2a5a40;margin-top:4px">${surfaced} of ${total} queries surfaced this center.</div>
+          ${notFound > 0 ? `<div style="font-size:12px;color:#c0392b;margin-top:2px">${notFound} of ${total} patients asking an AI assistant for affordable care were not directed here.</div>` : ''}
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">Re-download the report to see the updated Query Results Exhibit.</div>
+        </div>`;
+      if (btn) btn.remove();
+    } else if (msg.type === 'error') {
+      es.close();
+      if (prog) prog.innerHTML = `<div style="color:#c0392b;font-size:13px">Battery error: ${msg.message || 'Unknown error'}</div>`;
+      if (btn) { btn.disabled = false; btn.textContent = 'Run MQCR Battery'; }
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    if (prog) prog.innerHTML = `<div style="color:#c0392b;font-size:13px">Battery stream disconnected.</div>`;
+    if (btn) { btn.disabled = false; btn.textContent = 'Run MQCR Battery'; }
+  };
 }
 
 function showBatchDone(results) {
@@ -5019,6 +5133,7 @@ function renderHistory(events) {
           ${th('Providers', 'providers', 'right')}
           <th>Report</th>
           <th>Briefing</th>
+          <th>Battery</th>
         </tr></thead>
         <tbody>
           ${runs.length ? runs.map(run => `
@@ -5028,15 +5143,22 @@ function renderHistory(events) {
               <td style="font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_historyFilename(run)}">${_historyFilename(run)}</td>
               <td>${run.event_id
                 ? `<span class="badge bg-teal">Event</span>`
-                : run.specialty
-                  ? `<span class="badge bg-gold">${run.specialty}</span>`
-                  : `<span class="badge bg-muted">Hospitals</span>`}</td>
-              <td style="text-align:right">${run.provider_count}</td>
+                : run.entity_type === 'community_health'
+                  ? `<span class="badge bg-teal">FQHC</span>`
+                  : run.specialty
+                    ? `<span class="badge bg-gold">${run.specialty}</span>`
+                    : `<span class="badge bg-muted">Hospitals</span>`}</td>
+              <td style="text-align:right">${run.entity_type === 'community_health' ? '1' : run.provider_count}</td>
               <td>${run.has_pdf
                 ? `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`
                 : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
               <td>${run.has_briefing_pdf
                 ? `<button class="btn btn-ghost btn-sm" onclick="dlBriefingPdf('${run.run_id}')">⬇ Briefing</button>`
+                : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
+              <td>${run.entity_type === 'community_health'
+                ? (run.mqcr != null
+                    ? `<span style="font-size:12px;font-weight:600;color:#1a8f4a">${Math.round(run.mqcr * 100)}%</span>`
+                    : `<button class="btn btn-secondary btn-sm" onclick="startBatteryFromHistory('${run.run_id}', this)">Run Battery</button>`)
                 : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
             </tr>`).join('')
           : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}

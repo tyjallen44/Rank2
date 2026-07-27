@@ -404,6 +404,37 @@ def _job_run_fqhc(
         _put(loop, queue, None)
 
 
+def _job_run_battery(job_id: str, fqhc_run_id: str, entity_name: str, city: str, state: str) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+
+    try:
+        from perception.db import init_db
+        from perception.fqhc_battery import run_battery
+
+        init_db()
+        result = run_battery(
+            fqhc_run_id=fqhc_run_id,
+            entity_name=entity_name,
+            city=city,
+            state=state,
+            on_event=emit,
+        )
+        job["status"] = "done"
+        job["result"] = {
+            "run_id": fqhc_run_id,
+            "mqcr": result.mqcr,
+            "surfaced_count": result.surfaced_count,
+            "total": result.total,
+        }
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
 def _job_run_batch(job_id: str, groups: List[dict]) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
@@ -713,6 +744,45 @@ async def stream_job(job_id: str, _: str = Depends(require_auth)):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/fqhc-battery/{run_id}")
+async def start_fqhc_battery(run_id: str, role: str = Depends(require_auth)):
+    """Start the MQCR battery for an existing FQHC run. Returns a job_id for SSE streaming."""
+    from perception.db import init_db, get_connection
+
+    init_db()
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT entity_name, location, entity_type FROM analysis_runs WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(404, "Run not found")
+    if row[2] != "community_health":
+        raise HTTPException(400, "Battery only available for Community Health Edition runs")
+
+    entity_name: str = row[0] or ""
+    location: str = row[1] or ""
+    # location is stored as "City, ST" — split on last comma
+    parts = [p.strip() for p in location.rsplit(",", 1)]
+    city = parts[0] if parts else location
+    state = parts[1] if len(parts) > 1 else ""
+
+    loop = asyncio.get_event_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {
+        "status": "running",
+        "role": role,
+        "loop": loop,
+        "queue": queue,
+        "result": None,
+        "error": None,
+    }
+    _pool.submit(_job_run_battery, job_id, run_id, entity_name, city, state)
+    return {"job_id": job_id}
 
 
 @app.get("/api/history")

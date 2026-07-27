@@ -102,6 +102,20 @@ def weight_used_pct(sub_scores: dict[str, Optional[float]]) -> float:
     return used
 
 
+def mqcr_to_score(mqcr: float) -> int:
+    """Convert raw MQCR fraction (0.0–1.0) to 0–100 sub-score.
+
+    Anchor points:
+      1.0  → 100  (all 10 queries surfaced the center)
+      0.7  →  75  (7/10 — good visibility)
+      0.5  →  50  (5/10 — marginal)
+      0.0  →   0  (no queries surfaced the center)
+
+    Linear interpolation between anchors.
+    """
+    return round(max(0.0, min(1.0, float(mqcr))) * 100)
+
+
 def experience_band(rating: Optional[float], review_count: Optional[int]) -> Optional[int]:
     """Derive Experience & Reputation sub-score from Google front-door read.
 
