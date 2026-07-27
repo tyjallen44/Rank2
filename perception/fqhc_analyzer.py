@@ -616,14 +616,39 @@ def analyze_fqhc(
     # Supplement consolidated_locations with HRSA-known and intake-confirmed sites
     # so the Pillar 3 table reflects the full site roster, not just what the LLM mentioned.
     if rankings:
-        known = {loc.name.lower() for loc in rankings[0].consolidated_locations}
+        existing_locs = rankings[0].consolidated_locations
+        known_exact = {loc.name.lower() for loc in existing_locs}
+        # Words from all existing names for fuzzy overlap check
+        _stop_geo = {"health", "center", "centers", "clinic", "clinics", "care",
+                     "medical", "community", "family", "primary", "services",
+                     "service", "outpatient", "behavioral", "dental"}
+
+        def _geo_words(name: str) -> set[str]:
+            """Extract geographic/distinctive words from a site name."""
+            # HRSA names often end in " - City" — prefer words after the last " - "
+            part = name.rsplit(" - ", 1)[-1]
+            words = re.findall(r"[a-z]+", part.lower())
+            return {w for w in words if len(w) >= 4 and w not in _stop_geo}
+
+        existing_geo: set[str] = set()
+        for loc in existing_locs:
+            existing_geo |= _geo_words(loc.name)
+
         authoritative_sites = list(hrsa_data.get("site_names") or []) + list(site_roster or [])
         for site_name in authoritative_sites:
-            if site_name and site_name.lower() not in known:
-                rankings[0].consolidated_locations.append(
-                    ConsolidatedLocation(name=site_name)
-                )
-                known.add(site_name.lower())
+            if not site_name:
+                continue
+            if site_name.lower() in known_exact:
+                continue
+            # Skip if any geographic word from this HRSA name already covered
+            candidate_geo = _geo_words(site_name)
+            if candidate_geo and candidate_geo & existing_geo:
+                continue
+            rankings[0].consolidated_locations.append(
+                ConsolidatedLocation(name=site_name)
+            )
+            known_exact.add(site_name.lower())
+            existing_geo |= candidate_geo
 
     # ── Phase 3: Verify Google + score ───────────────────────────────────────
     emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})

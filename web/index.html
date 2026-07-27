@@ -4557,8 +4557,7 @@ async function startBattery(runId) {
         Query ${msg.n}/${msg.total} — <span style="color:${color};font-weight:600">${icon} ${msg.surfaced ? 'Surfaced' : 'Not found'}</span><br>
         <em style="font-size:12px">${msg.query}</em>
       </div>`;
-    } else if (msg.type === 'battery_done' || msg.type === 'done') {
-      es.close();
+    } else if (msg.type === 'battery_done') {
       const mqcr = msg.mqcr !== undefined ? msg.mqcr : (msg.surfaced_count / msg.total);
       const pct = Math.round(mqcr * 100);
       const surfaced = msg.surfaced_count;
@@ -4569,9 +4568,17 @@ async function startBattery(runId) {
           <div style="font-size:15px;font-weight:700;color:#0F4146">MQCR: ${pct}%</div>
           <div style="font-size:13px;color:#2a5a40;margin-top:4px">${surfaced} of ${total} queries surfaced this center.</div>
           ${notFound > 0 ? `<div style="font-size:12px;color:#c0392b;margin-top:2px">${notFound} of ${total} patients asking an AI assistant for affordable care were not directed here.</div>` : ''}
-          <div style="font-size:12px;color:var(--muted);margin-top:6px">Re-download the report to see the updated Query Results Exhibit.</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px" id="battery-pdf-status">Generating updated report…</div>
         </div>`;
       if (btn) btn.remove();
+    } else if (msg.type === 'done') {
+      es.close();
+      const statusEl = document.getElementById('battery-pdf-status');
+      if (statusEl && msg.run_id) {
+        statusEl.innerHTML = `<a href="/api/reports/${msg.run_id}/pdf?token=${encodeURIComponent(_token)}" style="color:#0F4146;font-weight:600">⬇ Download Updated Report (with MQCR)</a>`;
+      } else if (statusEl) {
+        statusEl.textContent = 'Report ready — re-download from History.';
+      }
     } else if (msg.type === 'error') {
       es.close();
       if (prog) prog.innerHTML = `<div style="color:#c0392b;font-size:13px">Battery error: ${msg.message || 'Unknown error'}</div>`;

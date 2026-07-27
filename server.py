@@ -21,6 +21,7 @@ import hashlib
 import hmac as _hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import tempfile
@@ -410,23 +411,57 @@ def _job_run_battery(job_id: str, fqhc_run_id: str, entity_name: str, city: str,
     emit = lambda e: _put(loop, queue, e)
 
     try:
-        from perception.db import init_db
+        from perception.db import init_db, get_connection
         from perception.fqhc_battery import run_battery
+        from perception.models import AnalysisResult
 
         init_db()
-        result = run_battery(
+        battery = run_battery(
             fqhc_run_id=fqhc_run_id,
             entity_name=entity_name,
             city=city,
             state=state,
             on_event=emit,
         )
+
+        # Re-render PDF with MQCR populated
+        new_pdf_path = None
+        try:
+            emit({"type": "phase", "name": "pdf", "text": "Re-rendering PDF with MQCR results"})
+            with get_connection() as con:
+                row = con.execute(
+                    "SELECT result_json, pdf_path FROM analysis_runs WHERE run_id = ?",
+                    [fqhc_run_id],
+                ).fetchone()
+            if row and row[0]:
+                ar = AnalysisResult.model_validate_json(row[0])
+                ar.fqhc_mqcr = battery.mqcr
+                old_pdf = row[1] or ""
+                from pathlib import Path as _Path
+                REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+                # Reuse same filename stem so download links stay valid
+                if old_pdf and _Path(old_pdf).exists():
+                    new_pdf_path = old_pdf
+                else:
+                    slug = re.sub(r"[^a-z0-9]+", "-", (entity_name or "report").lower()).strip("-")
+                    new_pdf_path = str(REPORTS_DIR / f"{slug}-community-health-mqcr.pdf")
+                from perception.fqhc_pdf import render_fqhc_pdf
+                render_fqhc_pdf(ar, new_pdf_path)
+                with get_connection() as con:
+                    con.execute(
+                        "UPDATE analysis_runs SET pdf_path = ? WHERE run_id = ?",
+                        [new_pdf_path, fqhc_run_id],
+                    )
+        except Exception:
+            pass  # PDF re-render failure is non-fatal
+
         job["status"] = "done"
         job["result"] = {
             "run_id": fqhc_run_id,
-            "mqcr": result.mqcr,
-            "surfaced_count": result.surfaced_count,
-            "total": result.total,
+            "mqcr": battery.mqcr,
+            "surfaced_count": battery.surfaced_count,
+            "total": battery.total,
+            "pdf_path": new_pdf_path,
         }
     except Exception as exc:
         job["status"] = "error"
