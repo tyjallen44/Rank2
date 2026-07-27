@@ -7,6 +7,7 @@ color tokens, and HTML helpers.
 from __future__ import annotations
 
 import html as _html_lib
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -416,6 +417,24 @@ def _verdict_block(result: AnalysisResult) -> str:
     verdict = _strip_md(result.ai_visibility_verdict or "")
     if not verdict:
         return ""
+
+    if result.fqhc_mqcr is not None:
+        pct = int(round(result.fqhc_mqcr * 100))
+        entity = result.entity_name or "this center"
+        # Remove the boilerplate Round-1 sentence the LLM was instructed to write
+        verdict = re.sub(
+            r"The Mission Query Capture Rate for [^.—]+(?:—[^.]+)?\.?\s*",
+            "",
+            verdict,
+            count=1,
+            flags=re.IGNORECASE,
+        ).lstrip()
+        # Prepend the actual measured MQCR as the new opening sentence
+        verdict = (
+            f"The Mission Query Capture Rate for {entity} is {pct}% — "
+            f"it appeared in {pct}% of tested mission-frame queries. "
+        ) + verdict
+
     return f"""
 <h2>AI Visibility Verdict</h2>
 <div class="verdict-box"><p>{_e(verdict)}</p></div>"""
@@ -700,14 +719,22 @@ def _pillar5_block(result: AnalysisResult, ps: FqhcPillarScores, prov, primary: 
 <p><small style="color:#7a9095">Stakeholder perception (Category S) observations are reported unscored in Community Health Edition v1.0.</small></p>"""
 
 
+_BATTERY_STALE_RE = re.compile(
+    r"(run|complete|conduct|launch|schedule|initiate)\s+(the\s+)?(mission[- ]query|mqcr|battery)",
+    re.IGNORECASE,
+)
+
+
 def _assessment_block(result: AnalysisResult, primary: str) -> str:
     sections = result.improvement_sections
     if not sections:
         return ""
 
+    battery_ran = result.fqhc_mqcr is not None
     html_parts = [f"<h2>AI Visibility Assessment &amp; Improvement Opportunities</h2>"]
+
     top_rec = result.top_recommendation
-    if top_rec:
+    if top_rec and not (battery_ran and _BATTERY_STALE_RE.search(top_rec)):
         html_parts.append(
             f'<div class="verdict-box" style="margin-bottom:16px">'
             f'<strong>Priority recommendation:</strong> {_e(_strip_md(top_rec))}'
@@ -715,12 +742,25 @@ def _assessment_block(result: AnalysisResult, primary: str) -> str:
         )
 
     for sec in sections:
+        # Skip entire section if its title tells the user to run the battery and it already ran
+        if battery_ran and _BATTERY_STALE_RE.search(sec.title or ""):
+            continue
+
+        # Filter individual items that tell the user to run the battery
+        items = sec.items or []
+        if battery_ran:
+            items = [i for i in items if not _BATTERY_STALE_RE.search(i)]
+
+        # Skip section if title + description + items are all empty after filtering
+        if not sec.title and not sec.description and not items:
+            continue
+
         html_parts.append(f'<div class="improvement-section">')
         html_parts.append(f'<h3>{_e(sec.title)}</h3>')
         if sec.description:
             html_parts.append(f'<p style="font-size:9.5pt;color:#4a6a70">{_e(_strip_md(sec.description))}</p>')
-        if sec.items:
-            items_html = "".join(f"<li>{_e(_strip_md(i))}</li>" for i in sec.items)
+        if items:
+            items_html = "".join(f"<li>{_e(_strip_md(i))}</li>" for i in items)
             html_parts.append(f"<ul>{items_html}</ul>")
         html_parts.append("</div>")
 
