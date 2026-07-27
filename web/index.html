@@ -1732,6 +1732,9 @@ html, body {
             <li class="ph-item" id="ph-structured">
               <div class="ph-dot"></div><span>Extracting data</span>
             </li>
+            <li class="ph-item" id="ph-battery">
+              <div class="ph-dot"></div><span>MQCR Battery</span>
+            </li>
             <li class="ph-item" id="ph-pdf">
               <div class="ph-dot"></div><span>Rendering PDF</span>
             </li>
@@ -2687,16 +2690,18 @@ let _es          = null;     // EventSource
 let _lastPage    = 'new';    // page that launched the current analysis
 const _completedPages = new Set(); // pages that have finished a run and need reset on return
 
-const PHASES = ['starting', 'generating', 'structured', 'pdf'];
+const PHASES = ['starting', 'generating', 'structured', 'battery', 'pdf'];
 const PHASE_MAP = {
-  starting:    'starting',
-  generating:  'generating',
-  structured:  'structured',
-  pdf:         'pdf',
-  done_item:   'pdf',
-  entity_a:    'starting',
-  entity_b:    'generating',
-  comparison:  'structured',
+  starting:        'starting',
+  generating:      'generating',
+  structured:      'structured',
+  battery:         'battery',
+  battery_query:   'battery',
+  pdf:             'pdf',
+  done_item:       'pdf',
+  entity_a:        'starting',
+  entity_b:        'generating',
+  comparison:      'structured',
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────
@@ -4394,6 +4399,20 @@ function onSSE(ev) {
     return;
   }
 
+  if (ev.type === 'battery_query') {
+    const icon = ev.surfaced ? '✓' : '✗';
+    box.textContent += `  ${icon}  Q${ev.n}/${ev.total}: ${ev.query}\n`;
+    box.scrollTop = box.scrollHeight;
+    return;
+  }
+
+  if (ev.type === 'battery_done') {
+    const pct = Math.round((ev.mqcr || 0) * 100);
+    box.textContent += `\nMQCR: ${pct}%  (${ev.surfaced_count}/${ev.total} queries surfaced)\n`;
+    box.scrollTop = box.scrollHeight;
+    return;
+  }
+
   if (ev.type === 'text') {
     box.textContent += ev.text;
     box.scrollTop = box.scrollHeight;
@@ -4441,8 +4460,11 @@ function showSingleDone(r) {
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`;
   } else if (r.entity_type === 'community_health') {
     subText = '1 health center analyzed';
-    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">1</div><div class="stat-lbl">Health Center Analyzed</div></div></div>
-      <div id="battery-progress" style="margin-top:16px"></div>`;
+    const mqcrPct = r.mqcr != null ? Math.round(r.mqcr * 100) : null;
+    const mqcrLine = mqcrPct != null
+      ? `<div class="stat-box"><div class="stat-val">${mqcrPct}%</div><div class="stat-lbl">Mission Query Capture</div></div>`
+      : '';
+    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">1</div><div class="stat-lbl">Health Center Analyzed</div></div>${mqcrLine}</div>`;
   } else {
     subText = `${r.provider_count || 0} providers analyzed`;
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">${r.provider_count || 0}</div><div class="stat-lbl">Providers Ranked</div></div></div>`;
@@ -4465,14 +4487,9 @@ function showSingleDone(r) {
       ? `<div style="font-size:12px;color:#c07a30;margin-top:4px">Briefing skipped: ${r.briefing_skipped_reason}</div>`
       : '';
 
-  const batteryBtn = (r.entity_type === 'community_health' && !isComparison)
-    ? `<button class="btn btn-secondary" id="run-battery-btn" onclick="startBattery('${r.run_id}')">Run MQCR Battery</button>`
-    : '';
-
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
     ${briefingBtn}
-    ${batteryBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${isComparison ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
   document.getElementById('prog-done').classList.remove('hidden');

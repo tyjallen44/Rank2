@@ -394,6 +394,7 @@ def _job_run_fqhc(
             "specialty": result.specialty,
             "provider_count": 1,  # FQHC is always a single-entity report
             "entity_type": "community_health",
+            "mqcr": result.fqhc_mqcr,
             "pdf_path": result.pdf_path,
             "briefing_pdf_path": result.briefing_pdf_path,
             "briefing_skipped_reason": result.briefing_skipped_reason,

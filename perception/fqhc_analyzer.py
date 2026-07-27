@@ -702,11 +702,28 @@ def analyze_fqhc(
         fqhc_pillar_scores=pillar_scores,
         fqhc_fact_audit=fact_audit_rows,
         fqhc_missed_queries=missed_queries,
-        fqhc_mqcr=None,  # Round 1: not yet computed
+        fqhc_mqcr=None,  # populated by battery below
         briefing_variant=briefing_variant,
     )
 
-    # ── Phase 4: Render PDF ───────────────────────────────────────────────────
+    # ── Phase 4: MQCR Battery ────────────────────────────────────────────────
+    emit({"type": "phase", "name": "battery", "text": "Running MQCR battery (10 queries)"})
+    try:
+        from .fqhc_battery import run_battery as _run_battery
+        _battery = _run_battery(
+            fqhc_run_id=run_id,
+            entity_name=entity_name,
+            city=city,
+            state=state,
+            on_event=emit,
+        )
+        result.fqhc_mqcr = _battery.mqcr
+        console.print(f"[green]✓[/green] MQCR: {int(round(_battery.mqcr * 100))}% "
+                      f"({_battery.surfaced_count}/{_battery.total})")
+    except Exception as _bat_exc:
+        console.print(f"[yellow]⚠[/yellow] Battery failed: {_bat_exc}")
+
+    # ── Phase 5: Render PDF ───────────────────────────────────────────────────
     if not skip_pdf_flag:
         emit({"type": "phase", "name": "pdf", "text": "Rendering Community Health PDF"})
         try:
