@@ -722,6 +722,7 @@ def analyze_fqhc(
                       f"({_battery.surfaced_count}/{_battery.total})")
     except Exception as _bat_exc:
         console.print(f"[yellow]⚠[/yellow] Battery failed: {_bat_exc}")
+        emit({"type": "text", "text": f"\n⚠ MQCR battery error: {_bat_exc}\n"})
 
     # ── Phase 5: Render PDF ───────────────────────────────────────────────────
     if not skip_pdf_flag:

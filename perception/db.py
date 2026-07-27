@@ -78,6 +78,13 @@ class _StaleHandleConnection:
     def fetchone(self):
         return self._con.fetchone()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
     def close(self) -> None:
         try:
             self._con.close()
