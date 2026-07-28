@@ -564,7 +564,8 @@ def _score_breakdown_block(
          _strip_md(result.brand_visibility_narrative or "")),
         ("Market Coverage",       "35% weight", result.market_coverage_score,
          _strip_md(result.market_coverage_narrative or "")),
-        ("Information Accuracy",  "25% weight", result.information_accuracy_score, ""),
+        ("Information Accuracy",  "25% weight", result.information_accuracy_score,
+         _strip_md(result.information_accuracy_narrative or "")),
     ]
 
     bars_html = ""
