@@ -299,6 +299,7 @@ def analyze_network(
         executive_summary=raw.get("executive_summary", ""),
         brand_visibility_narrative=raw.get("brand_visibility_narrative", ""),
         market_coverage_narrative=raw.get("market_coverage_narrative", ""),
+        information_accuracy_narrative=raw.get("information_accuracy_narrative", ""),
         strategic_recommendations=[
             r for r in raw.get("strategic_recommendations", [])
             if isinstance(r, str)

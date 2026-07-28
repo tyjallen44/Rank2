@@ -305,6 +305,7 @@ class NetworkResult(BaseModel):
     executive_summary: str = ""
     brand_visibility_narrative: str = ""
     market_coverage_narrative: str = ""
+    information_accuracy_narrative: str = ""
     strategic_recommendations: list[str] = Field(default_factory=list)
     top_markets: list[str] = Field(default_factory=list)   # best-performing markets
     gap_markets: list[str] = Field(default_factory=list)   # worst-performing markets
