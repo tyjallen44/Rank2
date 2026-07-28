@@ -951,14 +951,15 @@ async def hrsa_prefill(entity_name: str, city: str = "", state: str = "", _: str
 async def network_discover(
     network_name: str,
     hq_location: str = "",
+    facility_type: str = "hospital",
     _: str = Depends(require_auth),
 ):
-    """Ask Claude to enumerate all hospitals owned by a named health system."""
+    """Ask Claude + Gemini to enumerate all facilities owned by a named healthcare network."""
     try:
         loop = asyncio.get_event_loop()
         from perception.network_analyzer import discover_hospitals_by_name
         data = await loop.run_in_executor(
-            None, discover_hospitals_by_name, network_name, hq_location
+            None, discover_hospitals_by_name, network_name, hq_location, facility_type
         )
         return data
     except Exception as exc:
@@ -982,6 +983,7 @@ class NetworkAnalyzeRequest(BaseModel):
     hq_location: str = ""
     source_url: str = ""
     facilities: list[dict]
+    facility_type: str = "hospital"
     brand: str = "original"
     ignore_cache: bool = False   # admin only: bypass same-day cache and regenerate
 
@@ -994,12 +996,14 @@ async def network_analyze(req: NetworkAnalyzeRequest, payload: dict = Depends(ge
     ignore_cache = req.ignore_cache and (role == "admin")
     job_id = _new_job(role, brand)
     _pool.submit(_job_network_analyze, job_id, req.network_name, req.hq_location,
-                 req.source_url, req.facilities, brand, ignore_cache)
+                 req.source_url, req.facilities, req.facility_type, brand, ignore_cache)
     return {"job_id": job_id}
 
 
 def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
-                          source_url: str, facilities: list[dict], brand: str,
+                          source_url: str, facilities: list[dict],
+                          facility_type: str = "hospital",
+                          brand: str = "original",
                           ignore_cache: bool = False) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
@@ -1013,6 +1017,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             hq_location=hq_location,
             source_url=source_url,
             facilities=facilities,
+            facility_type=facility_type,
             brand=brand,
             on_event=emit,
             ignore_cache=ignore_cache,

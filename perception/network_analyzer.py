@@ -86,8 +86,12 @@ def extract_roster_from_url(url: str) -> dict:
     return {"facilities": [], "network_name": "", "total_found": 0}
 
 
-def discover_hospitals_by_name(network_name: str, hq_location: str = "") -> dict:
-    """Enumerate all inpatient hospitals owned by a named health system.
+def discover_hospitals_by_name(
+    network_name: str,
+    hq_location: str = "",
+    facility_type: str = "hospital",
+) -> dict:
+    """Enumerate all facilities owned by a named healthcare network.
 
     Runs Claude and Gemini in parallel, then blends the results for maximum
     completeness. Falls back to Claude-only if GEMINI_API_KEY is not set.
@@ -102,7 +106,7 @@ def discover_hospitals_by_name(network_name: str, hq_location: str = "") -> dict
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    system_prompt, user_prompt = build_discovery_prompt(network_name, hq_location)
+    system_prompt, user_prompt = build_discovery_prompt(network_name, hq_location, facility_type)
 
     def _ask_claude() -> dict:
         response = client.messages.create(
@@ -155,25 +159,27 @@ def analyze_network(
     hq_location: str,
     source_url: str,
     facilities: list[dict],
+    facility_type: str = "hospital",
     brand: str = "original",
     on_event: Optional[Callable] = None,
     ignore_cache: bool = False,
 ) -> NetworkResult:
-    """Run a Network AI Visibility analysis for a multi-state hospital network.
+    """Run a Network AI Visibility analysis for a multi-state healthcare network.
 
     Args:
-        network_name:  Network display name (e.g. "Atrium Health").
-        hq_location:   Headquarters city/state (e.g. "Charlotte, NC").
-        source_url:    URL of the roster source page.
-        facilities:    List of facility dicts: {name, city, state, beds?}.
-        brand:         Brand config key (passed to PDF renderer).
-        on_event:      Optional callback receiving event dicts:
-                         {"type": "phase", "name": str, "text": str}
-                         {"type": "text",  "text": str}
+        network_name:   Network display name (e.g. "Atrium Health" or "SCA Health").
+        hq_location:    Headquarters city/state (e.g. "Charlotte, NC").
+        source_url:     URL of the roster source page.
+        facilities:     List of facility dicts: {name, city, state, beds?}.
+        facility_type:  "hospital"|"asc"|"urgent_care"|"imaging"|"behavioral_health"|"other"
+        brand:          Brand config key (passed to PDF renderer).
+        on_event:       Optional callback receiving event dicts.
 
     Returns:
         NetworkResult with all fields populated and pdf_path set.
     """
+    from .network_prompts import get_facility_config
+    cfg = get_facility_config(facility_type)
     init_db()
 
     def emit(event: dict) -> None:
@@ -193,9 +199,14 @@ def analyze_network(
     run_id = str(uuid.uuid4())
 
     # ── Phase: external quality data ─────────────────────────────────────────
+    quality_cols = cfg.get("quality_cols", ["google"])
+    if len(quality_cols) > 1:
+        data_desc = "Google ratings, CMS stars, and Leapfrog grades"
+    else:
+        data_desc = "Google ratings"
     emit({"type": "phase", "name": "extracting",
-          "text": f"Fetching Google ratings, CMS stars, and Leapfrog grades for {len(facilities)} facilities"})
-    facility_data = _fetch_facility_data(facilities)
+          "text": f"Fetching {data_desc} for {len(facilities)} {cfg['plural']}"})
+    facility_data = _fetch_facility_data(facilities, facility_type=facility_type)
 
     # ── Phase: analyzing ─────────────────────────────────────────────────────
     emit({"type": "phase", "name": "analyzing",
@@ -207,6 +218,7 @@ def analyze_network(
         facilities=facilities,
         source_url=source_url,
         facility_data=facility_data,
+        facility_type=facility_type,
     )
 
     response = client.messages.create(
@@ -274,6 +286,7 @@ def analyze_network(
         network_canonical_name=raw.get("network_canonical_name") or network_name,
         hq_location=hq_location,
         source_url=source_url,
+        facility_type=facility_type,
         total_hospitals=len(facilities),
         states_covered=states_covered,
         generated_at=date.today(),
@@ -466,28 +479,25 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
-def _fetch_facility_data(facilities: list[dict]) -> dict[str, dict]:
-    """Fetch Google ratings, CMS star ratings, and Leapfrog grades for all facilities.
+def _fetch_facility_data(
+    facilities: list[dict],
+    facility_type: str = "hospital",
+) -> dict[str, dict]:
+    """Fetch external quality data for all facilities.
 
-    Runs three data sources in parallel at the batch level:
-      - Google Places API (per-facility, parallelised)
-      - CMS Care Compare API (batched by state, no per-facility calls)
-      - Leapfrog Hospital Safety Grade (per-facility Playwright scrape, parallelised)
+    Always fetches Google ratings.
+    CMS star ratings and Leapfrog grades are fetched only for hospital-type networks.
 
-    Returns dict keyed by lowercase facility name:
-        {
-          "google_rating": float|None,
-          "google_review_count": int|None,
-          "cms_star_rating": int|None,
-          "leapfrog_grade": str|None,
-        }
+    Returns dict keyed by lowercase facility name.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from .data.places import fetch_google_rating
-    from .data.cms import fetch_star_ratings_for_network
-    from .data.leapfrog import fetch_leapfrog_grade
+    from .network_prompts import get_facility_config
 
-    # ── Google ratings (per-facility, parallel) ───────────────────────────────
+    cfg = get_facility_config(facility_type)
+    fetch_cms = "cms" in cfg.get("quality_cols", [])
+    fetch_lf  = "leapfrog" in cfg.get("quality_cols", [])
+
     def _google_one(fac: dict) -> tuple[str, float | None, int | None]:
         key = fac.get("name", "").lower()
         try:
@@ -498,16 +508,6 @@ def _fetch_facility_data(facilities: list[dict]) -> dict[str, dict]:
             pass
         return key, None, None
 
-    # ── Leapfrog grades (per-facility, parallel Playwright) ───────────────────
-    def _leapfrog_one(fac: dict) -> tuple[str, str | None]:
-        key = fac.get("name", "").lower()
-        try:
-            grade = fetch_leapfrog_grade(fac.get("name", ""), fac.get("city", ""), fac.get("state", ""))
-            return key, grade
-        except Exception:
-            return key, None
-
-    # Initialise result dict
     results: dict[str, dict] = {
         fac.get("name", "").lower(): {
             "google_rating": None, "google_review_count": None,
@@ -516,25 +516,43 @@ def _fetch_facility_data(facilities: list[dict]) -> dict[str, dict]:
         for fac in facilities
     }
 
-    # Run Google + Leapfrog per-facility in parallel; CMS batched separately
     with ThreadPoolExecutor(max_workers=12) as pool:
-        g_futures  = {pool.submit(_google_one,   f): f for f in facilities}
-        lf_futures = {pool.submit(_leapfrog_one, f): f for f in facilities}
-        cms_future = pool.submit(fetch_star_ratings_for_network, facilities)
+        g_futures = {pool.submit(_google_one, f): f for f in facilities}
+
+        if fetch_lf:
+            from .data.leapfrog import fetch_leapfrog_grade
+            def _leapfrog_one(fac: dict) -> tuple[str, str | None]:
+                key = fac.get("name", "").lower()
+                try:
+                    grade = fetch_leapfrog_grade(fac.get("name", ""), fac.get("city", ""), fac.get("state", ""))
+                    return key, grade
+                except Exception:
+                    return key, None
+            lf_futures = {pool.submit(_leapfrog_one, f): f for f in facilities}
+        else:
+            lf_futures = {}
+
+        if fetch_cms:
+            from .data.cms import fetch_star_ratings_for_network
+            cms_future = pool.submit(fetch_star_ratings_for_network, facilities)
+        else:
+            cms_future = None
 
         for fut in as_completed(g_futures):
             key, rating, count = fut.result()
             results[key]["google_rating"]       = rating
             results[key]["google_review_count"] = count
 
-        for fut in as_completed(lf_futures):
-            key, grade = fut.result()
-            results[key]["leapfrog_grade"] = grade
+        if lf_futures:
+            for fut in as_completed(lf_futures):
+                key, grade = fut.result()
+                results[key]["leapfrog_grade"] = grade
 
-        cms_map = cms_future.result()
-        for key, star in cms_map.items():
-            if key in results:
-                results[key]["cms_star_rating"] = star
+        if cms_future is not None:
+            cms_map = cms_future.result()
+            for key, star in cms_map.items():
+                if key in results:
+                    results[key]["cms_star_rating"] = star
 
     return results
 

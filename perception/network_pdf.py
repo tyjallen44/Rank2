@@ -67,6 +67,7 @@ def render_network_pdf(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _build_network_html(result: NetworkResult, cfg: dict) -> str:
+    from .network_prompts import get_facility_config
     primary = cfg.get("primary", _NETWORK_PRIMARY)
     accent  = cfg.get("accent",  _NETWORK_ACCENT)
     pale    = cfg.get("pale",    _NETWORK_PALE)
@@ -75,12 +76,14 @@ def _build_network_html(result: NetworkResult, cfg: dict) -> str:
     css_overrides = cfg.get("css_overrides", "")
     logo_html    = cfg.get("logo_html") or _default_logo_html()
 
-    cover       = _cover_block(result, primary, accent, pale, logo_html)
+    ftype_cfg    = get_facility_config(result.facility_type or "hospital")
+
+    cover       = _cover_block(result, primary, accent, pale, logo_html, ftype_cfg)
     exec_sum    = _exec_summary_block(result)
     score_bkdn  = _score_breakdown_block(result, primary, accent, pale)
-    facility_sc = _facility_scorecard_block(result, primary, pale)
+    facility_sc = _facility_scorecard_block(result, primary, pale, ftype_cfg)
     recs        = _recommendations_block(result, primary, accent)
-    appendix    = _methodology_appendix(primary, pale)
+    appendix    = _methodology_appendix(primary, pale, ftype_cfg)
 
     title = _e(result.network_canonical_name or result.network_name)
 
@@ -477,7 +480,12 @@ tfoot {{ display: table-footer-group; }}
 # Section builders
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _cover_block(result: NetworkResult, primary: str, accent: str, pale: str, logo_html: str = "") -> str:
+def _cover_block(
+    result: NetworkResult, primary: str, accent: str, pale: str,
+    logo_html: str = "", ftype_cfg: dict | None = None,
+) -> str:
+    ftype_cfg  = ftype_cfg or {}
+    plural_cap = ftype_cfg.get("plural", "hospitals").capitalize()
     name      = _e(result.network_canonical_name or result.network_name)
     score_str = str(result.ai_visibility_score) if result.ai_visibility_score is not None else "—"
     grade     = result.grade or "—"
@@ -504,7 +512,7 @@ def _cover_block(result: NetworkResult, primary: str, accent: str, pale: str, lo
 
   <div class="cover-edition">Network AI Visibility</div>
   <div class="cover-network-name">{name}</div>
-  <div class="cover-subtitle">{hq if hq else 'Multi-State Hospital Network'}</div>
+  <div class="cover-subtitle">{hq if hq else ftype_cfg.get('label', 'Multi-State Healthcare Network')}</div>
   <div class="cover-confidential">Confidential &nbsp;·&nbsp; Prepared exclusively for {name}</div>
 
   <div class="cover-score-center">
@@ -516,7 +524,7 @@ def _cover_block(result: NetworkResult, primary: str, accent: str, pale: str, lo
   <div class="cover-stat-boxes">
     <div class="cover-stat-box">
       <div class="cover-stat-val">{hospitals}</div>
-      <div class="cover-stat-lbl">Hospitals<br>Assessed</div>
+      <div class="cover-stat-lbl">{plural_cap}<br>Assessed</div>
     </div>
     <div class="cover-stat-box">
       <div class="cover-stat-val">{states}</div>
@@ -590,9 +598,17 @@ def _score_breakdown_block(
 </div>"""
 
 
-def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) -> str:
+def _facility_scorecard_block(
+    result: NetworkResult, primary: str, pale: str, ftype_cfg: dict | None = None
+) -> str:
     if not result.facilities:
         return ""
+    ftype_cfg = ftype_cfg or {}
+    singular_cap = ftype_cfg.get("singular", "hospital").capitalize()
+    plural       = ftype_cfg.get("plural", "hospitals")
+    quality_cols = ftype_cfg.get("quality_cols", ["google", "cms", "leapfrog"])
+    show_cms = "cms" in quality_cols
+    show_lf  = "leapfrog" in quality_cols
 
     # Market callouts
     top_html = ""
@@ -646,21 +662,30 @@ def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) ->
         else:
             google_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
 
-        # CMS star rating
-        cms = fac.cms_star_rating
-        if cms is not None:
-            cms_cell = "★" * cms + '<span style="color:#ccc">' + "★" * (5 - cms) + "</span>"
+        # CMS star rating (hospitals only)
+        if show_cms:
+            cms = fac.cms_star_rating
+            if cms is not None:
+                cms_cell = "★" * cms + '<span style="color:#ccc">' + "★" * (5 - cms) + "</span>"
+            else:
+                cms_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
         else:
-            cms_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
+            cms_cell = None
 
-        # Leapfrog grade
-        lf = fac.leapfrog_grade
-        if lf:
-            lf_color = {"A": "#1a7a3c", "B": "#2e7d9a", "C": "#b87a00",
-                        "D": "#c05020", "F": "#8b1c1c"}.get(lf, "#666")
-            lf_cell = (f'<span style="font-weight:700;color:{lf_color};font-size:11pt">{_e(lf)}</span>')
+        # Leapfrog grade (hospitals only)
+        if show_lf:
+            lf = fac.leapfrog_grade
+            if lf:
+                lf_color = {"A": "#1a7a3c", "B": "#2e7d9a", "C": "#b87a00",
+                            "D": "#c05020", "F": "#8b1c1c"}.get(lf, "#666")
+                lf_cell = f'<span style="font-weight:700;color:{lf_color};font-size:11pt">{_e(lf)}</span>'
+            else:
+                lf_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
         else:
-            lf_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
+            lf_cell = None
+
+        cms_td = f'<td style="text-align:center;font-size:9pt">{cms_cell}</td>' if cms_cell is not None else ""
+        lf_td  = f'<td style="text-align:center;font-size:10pt">{lf_cell}</td>' if lf_cell is not None else ""
 
         rows_html += f"""<tr class="{row_cls}">
   <td>{_e(fac.name)}</td>
@@ -668,17 +693,19 @@ def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) ->
   <td style="text-align:center"><strong>{score_str}</strong></td>
   <td style="text-align:center"><span class="grade-badge {grade_css}">{_e(grade)}</span></td>
   <td style="text-align:center">{google_cell}</td>
-  <td style="text-align:center;font-size:9pt">{cms_cell}</td>
-  <td style="text-align:center;font-size:10pt">{lf_cell}</td>
+  {cms_td}{lf_td}
   <td style="text-align:center;font-size:9pt">{surfaced}</td>
   <td style="text-align:center;font-size:9pt">{attributed}</td>
   <td style="font-size:8.5pt;color:#4a5a6a">{key_gap}</td>
 </tr>"""
 
+    cms_th = '<th style="text-align:center">CMS Stars</th>' if show_cms else ""
+    lf_th  = '<th style="text-align:center">Leapfrog</th>' if show_lf else ""
+
     return f"""
 <h2>Facility Scorecard</h2>
 <p style="font-size:9pt;color:#4a5a6a">
-  {len(result.facilities)} hospitals assessed, sorted by AI Visibility Score (lowest first).
+  {len(result.facilities)} {plural} assessed, sorted by AI Visibility Score (lowest first).
   <span style="color:#c0392b">■</span> Score &lt;50 &nbsp;
   <span style="color:#b87a00">■</span> 50–74 &nbsp;
   <span style="color:#1a7a3c">■</span> 75+
@@ -687,13 +714,12 @@ def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) ->
 <table class="facility-table">
   <thead>
     <tr>
-      <th>Hospital</th>
+      <th>{singular_cap}</th>
       <th>City, State</th>
       <th style="text-align:center">AI Score</th>
       <th style="text-align:center">Grade</th>
       <th style="text-align:center">Google Rating</th>
-      <th style="text-align:center">CMS Stars</th>
-      <th style="text-align:center">Leapfrog</th>
+      {cms_th}{lf_th}
       <th style="text-align:center">Local Surface</th>
       <th style="text-align:center">Network Attribution</th>
       <th>Key Gap</th>
@@ -727,15 +753,19 @@ def _recommendations_block(result: NetworkResult, primary: str, accent: str) -> 
 {cards_html}"""
 
 
-def _methodology_appendix(primary: str, pale: str) -> str:
+def _methodology_appendix(primary: str, pale: str, ftype_cfg: dict | None = None) -> str:
+    ftype_cfg = ftype_cfg or {}
+    plural    = ftype_cfg.get("plural", "hospitals")
+    local_q   = ftype_cfg.get("local_query", "[city] hospital")
+    quality_note = ftype_cfg.get("methodology_quality", "Google Rating — verified via Google Places API.")
     return f"""
 <div class="appendix">
 <h3>Methodology — Network Pulse AI Visibility Scoring</h3>
 <p>
   The Network AI Visibility Score is a composite of three dimensions, each scored 0–100.
   The composite is a weighted average: Brand Visibility (40%) + Market Coverage (35%) + Information Accuracy (25%).
-  Scoring reflects how well this network and its member hospitals are represented in AI assistants
-  when patients and referring physicians ask network-level and local discovery queries.
+  Scoring reflects how well this network and its member {plural} are represented in AI assistants
+  when patients and referring professionals ask network-level and local discovery queries.
 </p>
 <table>
   <thead><tr><th>Dimension</th><th>Weight</th><th>What it measures</th></tr></thead>
@@ -743,17 +773,17 @@ def _methodology_appendix(primary: str, pale: str) -> str:
     <tr>
       <td><strong>Brand Visibility</strong></td>
       <td>40%</td>
-      <td>How accurately and completely AI assistants represent the network when queried by name — roster, geography, and capabilities. Also incorporates verified Google Business Profile ratings and review volumes: review count signals digital brand presence, and rating level reflects patient-perceived quality surfaced in AI responses. Hospitals with Leapfrog A grades or CMS 4–5★ ratings represent quality achievements that should appear when AI is asked about the network; failure to surface these credentials is treated as a brand visibility gap.</td>
+      <td>How accurately and completely AI assistants represent the network when queried by name — roster, geography, and capabilities. Incorporates Google review volume and ratings as a signal of digital brand presence.</td>
     </tr>
     <tr>
       <td><strong>Market Coverage</strong></td>
       <td>35%</td>
-      <td>Whether member hospitals surface in local "[city] hospital" and "hospital near me" queries and are correctly attributed to the network</td>
+      <td>Whether member {plural} surface in local "{local_q}" queries and are correctly attributed to the network</td>
     </tr>
     <tr>
       <td><strong>Information Accuracy</strong></td>
       <td>25%</td>
-      <td>Correctness of key facts in AI responses: service lines, bed counts, trauma levels, teaching status, and accreditations</td>
+      <td>Correctness of key facts in AI responses: service lines, capabilities, and correct network attribution</td>
     </tr>
   </tbody>
 </table>
@@ -761,9 +791,6 @@ def _methodology_appendix(primary: str, pale: str) -> str:
   Grade bands: A (80+, Top Quartile) · B (65–79, Above Average) · C (50–64, Industry Average) · D (35–49, Below Average) · F (&lt;35, Bottom Quartile).
   Facility table is sorted worst → best to prioritize remediation effort.
   <strong>External quality columns:</strong>
-  Google Rating — verified via Google Places API (review count in parentheses).
-  CMS Stars — CMS Overall Hospital Quality Star Rating (1–5★) from CMS Care Compare, fetched live via the public CMS Provider Data API.
-  Leapfrog — Hospital Safety Grade (A–F) from The Leapfrog Group, published semi-annually; "—" indicates the facility did not participate in the current survey cycle.
-  A facility with strong quality credentials (Leapfrog A, CMS 5★) but a low AI Score represents a high-priority visibility opportunity.
+  {quality_note}
 </p>
 </div>"""

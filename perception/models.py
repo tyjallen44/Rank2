@@ -290,7 +290,8 @@ class NetworkResult(BaseModel):
     network_canonical_name: Optional[str] = None
     hq_location: Optional[str] = None           # "Charlotte, NC"
     source_url: Optional[str] = None            # locations page URL used for roster extraction
-    total_hospitals: int = 0
+    facility_type: str = "hospital"             # "hospital"|"asc"|"urgent_care"|"imaging"|"behavioral_health"|"other"
+    total_hospitals: int = 0                    # count of assessed facilities (name kept for DB compat)
     states_covered: list[str] = Field(default_factory=list)
     generated_at: date
     # Scores (0–100 each)

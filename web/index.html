@@ -1564,37 +1564,48 @@ html, body {
     <!-- ── Network Pulse ──────────────────────────────────────────────────── -->
     <div id="page-network" class="page">
       <div class="page-title">Network Pulse</div>
-      <div class="page-sub">AI Visibility report for multi-state hospital networks. Designed for C-suite audiences and industry benchmarking.</div>
+      <div class="page-sub">AI Visibility report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
 
       <!-- Step 1: Network identity -->
       <div id="np-step1" class="card">
+        <div class="fg" style="margin-bottom:14px">
+          <label class="fl">Facility Type</label>
+          <select id="np-type" class="fi" onchange="npUpdateType()">
+            <option value="hospital">Hospital Network</option>
+            <option value="asc">Ambulatory Surgery Centers (ASCs)</option>
+            <option value="urgent_care">Urgent Care Centers</option>
+            <option value="imaging">Imaging / Radiology Centers</option>
+            <option value="behavioral_health">Behavioral Health</option>
+            <option value="other">Other Healthcare Network</option>
+          </select>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div class="fg" style="margin:0">
-            <label class="fl">Health System Name</label>
+            <label class="fl" id="np-name-label">Organization Name</label>
             <input id="np-name" class="fi" type="text" placeholder="Atrium Health"
               oninput="this.value=this.value.toUpperCase()"
-              onkeydown="if(event.key==='Enter')npFindHospitals()">
+              onkeydown="if(event.key==='Enter')npFindFacilities()">
           </div>
           <div class="fg" style="margin:0">
             <label class="fl">Headquarters (City, State)</label>
             <input id="np-hq" class="fi" type="text" placeholder="Charlotte, NC"
               oninput="this.value=this.value.toUpperCase()"
-              onkeydown="if(event.key==='Enter')npFindHospitals()">
+              onkeydown="if(event.key==='Enter')npFindFacilities()">
           </div>
         </div>
         <div class="fg" style="margin-bottom:16px">
-          <label class="fl">Website URL <span style="font-weight:400;color:var(--muted)">(optional — helps Claude find recently acquired hospitals)</span></label>
-          <input id="np-url" class="fi" type="url" placeholder="https://atriumhealth.org/about">
+          <label class="fl">Website URL <span style="font-weight:400;color:var(--muted)">(optional — helps AI find recently added locations)</span></label>
+          <input id="np-url" class="fi" type="url" placeholder="https://example.com/locations">
         </div>
         <div id="np-step1-err" class="err hidden mt8"></div>
-        <button class="btn btn-primary" id="np-find-btn" onclick="npFindHospitals()">Find Hospitals via AI →</button>
+        <button class="btn btn-primary" id="np-find-btn" onclick="npFindFacilities()">Find Hospitals via AI →</button>
       </div>
 
       <!-- Step 2: Roster confirmation -->
       <div id="np-step2" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Confirm Hospital Roster</div>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
-          Review the hospitals extracted from the locations page. Uncheck any non-hospital facilities. Only acute care hospitals will be analyzed.
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px" id="np-step2-title">Confirm Roster</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px" id="np-step2-desc">
+          Review the facilities found by AI. Uncheck any that should be excluded from the analysis.
         </p>
         <div id="np-roster-summary" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
         <div id="np-roster-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
@@ -3197,7 +3208,31 @@ function resetPage(p) {
 }
 
 // ── Network Pulse ──────────────────────────────────────────────────────────
-let _npRoster = [];   // confirmed hospital roster [{name,city,state,beds?}]
+let _npRoster = [];
+
+const NP_TYPE_LABELS = {
+  hospital:         { singular: 'hospital',               plural: 'hospitals',               findBtn: 'Find Hospitals via AI →',       step2Title: 'Confirm Hospital Roster',  step2Desc: 'Review the hospitals found by AI. Uncheck any that should be excluded. Only acute care hospitals will be analyzed.' },
+  asc:              { singular: 'ASC',                    plural: 'ASCs',                    findBtn: 'Find ASCs via AI →',            step2Title: 'Confirm ASC Roster',        step2Desc: 'Review the ambulatory surgery centers found by AI. Uncheck any that should be excluded.' },
+  urgent_care:      { singular: 'urgent care location',   plural: 'urgent care locations',   findBtn: 'Find Locations via AI →',       step2Title: 'Confirm Urgent Care Roster',step2Desc: 'Review the urgent care locations found by AI. Uncheck any that should be excluded.' },
+  imaging:          { singular: 'imaging center',         plural: 'imaging centers',         findBtn: 'Find Centers via AI →',         step2Title: 'Confirm Imaging Roster',    step2Desc: 'Review the imaging and radiology centers found by AI. Uncheck any that should be excluded.' },
+  behavioral_health:{ singular: 'location',               plural: 'locations',               findBtn: 'Find Locations via AI →',       step2Title: 'Confirm Facility Roster',   step2Desc: 'Review the behavioral health locations found by AI. Uncheck any that should be excluded.' },
+  other:            { singular: 'location',               plural: 'locations',               findBtn: 'Find Locations via AI →',       step2Title: 'Confirm Facility Roster',   step2Desc: 'Review the locations found by AI. Uncheck any that should be excluded.' },
+};
+
+function _npTypeCfg() {
+  const t = (document.getElementById('np-type') || {}).value || 'hospital';
+  return NP_TYPE_LABELS[t] || NP_TYPE_LABELS.hospital;
+}
+
+function npUpdateType() {
+  const cfg    = _npTypeCfg();
+  const findBtn = document.getElementById('np-find-btn');
+  if (findBtn && !findBtn.disabled) findBtn.textContent = cfg.findBtn;
+  const s2title = document.getElementById('np-step2-title');
+  if (s2title) s2title.textContent = cfg.step2Title;
+  const s2desc = document.getElementById('np-step2-desc');
+  if (s2desc) s2desc.textContent = cfg.step2Desc;
+}
 
 function npReset() {
   const nameEl = document.getElementById('np-name');
@@ -3213,26 +3248,29 @@ function npReset() {
   const e2 = document.getElementById('np-step2-err');
   if (e1) e1.classList.add('hidden');
   if (e2) e2.classList.add('hidden');
+  const cfg = _npTypeCfg();
   const findBtn = document.getElementById('np-find-btn');
-  if (findBtn) { findBtn.disabled = false; findBtn.textContent = 'Find Hospitals via AI →'; }
+  if (findBtn) { findBtn.disabled = false; findBtn.textContent = cfg.findBtn; }
   const runBtn = document.getElementById('np-run-btn');
   if (runBtn)  { runBtn.disabled  = false; runBtn.textContent  = 'Run Network Pulse →'; }
 }
 
-async function npFindHospitals() {
+async function npFindFacilities() {
   const name = document.getElementById('np-name').value.trim();
   const hq   = document.getElementById('np-hq').value.trim();
+  const facilityType = document.getElementById('np-type').value || 'hospital';
+  const cfg   = _npTypeCfg();
   const errEl = document.getElementById('np-step1-err');
   errEl.classList.add('hidden');
 
-  if (!name) { errEl.textContent = 'Please enter the health system name.'; errEl.classList.remove('hidden'); return; }
+  if (!name) { errEl.textContent = 'Please enter the organization name.'; errEl.classList.remove('hidden'); return; }
 
   const btn = document.getElementById('np-find-btn');
   btn.disabled = true;
-  btn.textContent = 'Asking AI to find hospitals…';
+  btn.textContent = `Asking AI to find ${cfg.plural}…`;
 
   try {
-    const params = new URLSearchParams({ network_name: name });
+    const params = new URLSearchParams({ network_name: name, facility_type: facilityType });
     if (hq) params.set('hq_location', hq);
     const res = await fetch(`/api/network-discover?${params}`, {
       headers: { 'Authorization': `Bearer ${_token}` }
@@ -3242,44 +3280,53 @@ async function npFindHospitals() {
     const facilities = data.facilities || [];
 
     if (!facilities.length) {
-      errEl.textContent = 'No hospitals found. Try entering the full official name of the health system (e.g. "Atrium Health" not "Atrium").';
+      errEl.textContent = `No ${cfg.plural} found. Try entering the full official name of the organization.`;
       errEl.classList.remove('hidden');
       btn.disabled = false;
-      btn.textContent = 'Find Hospitals via AI →';
+      btn.textContent = cfg.findBtn;
       return;
     }
 
-    // Use canonical name returned by AI if input name was informal
     const canonicalName = (data.network_canonical_name || name).toUpperCase();
     if (canonicalName && canonicalName !== name.toUpperCase()) {
       document.getElementById('np-name').value = canonicalName;
     }
 
     _npRoster = facilities;
-    npShowRoster(facilities, canonicalName, data.confidence_note);
+    npShowRoster(facilities, canonicalName, data.confidence_note, cfg);
     document.getElementById('np-step2').classList.remove('hidden');
     document.getElementById('np-step2').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     btn.disabled = false;
-    btn.textContent = 'Find Hospitals via AI →';
+    btn.textContent = cfg.findBtn;
 
   } catch (err) {
     errEl.textContent = 'Error: ' + (err.message || err);
     errEl.classList.remove('hidden');
     btn.disabled = false;
-    btn.textContent = 'Find Hospitals via AI →';
+    btn.textContent = cfg.findBtn;
   }
 }
 
-function npShowRoster(facilities, networkName, confidenceNote) {
+// Keep old name as alias so any other references still work
+const npFindHospitals = npFindFacilities;
+
+function npShowRoster(facilities, networkName, confidenceNote, cfg) {
+  cfg = cfg || _npTypeCfg();
   const summaryEl = document.getElementById('np-roster-summary');
   const listEl    = document.getElementById('np-roster-list');
   const states    = [...new Set(facilities.map(f => f.state).filter(Boolean))].sort();
 
-  let summaryHtml = `<strong>${facilities.length} hospitals</strong> found across ${states.length} state${states.length !== 1 ? 's' : ''}: ${states.join(', ')}`;
+  let summaryHtml = `<strong>${facilities.length} ${cfg.plural}</strong> found across ${states.length} state${states.length !== 1 ? 's' : ''}: ${states.join(', ')}`;
   if (confidenceNote) {
     summaryHtml += `<div style="font-size:11px;color:var(--muted);margin-top:4px;font-weight:400">ℹ ${confidenceNote}</div>`;
   }
   summaryEl.innerHTML = summaryHtml;
+
+  // Update step 2 labels
+  const s2title = document.getElementById('np-step2-title');
+  if (s2title) s2title.textContent = cfg.step2Title;
+  const s2desc = document.getElementById('np-step2-desc');
+  if (s2desc) s2desc.textContent = cfg.step2Desc;
 
   // Group by state for display
   const byState = {};
@@ -3322,8 +3369,11 @@ async function npRunAnalysis() {
     });
   });
 
+  const facilityType = document.getElementById('np-type')?.value || 'hospital';
+  const cfg = _npTypeCfg();
+
   if (!checked.length) {
-    errEl.textContent = 'Please select at least one hospital.';
+    errEl.textContent = `Please select at least one ${cfg.singular}.`;
     errEl.classList.remove('hidden');
     return;
   }
@@ -3337,7 +3387,7 @@ async function npRunAnalysis() {
     const res = await fetch('/api/network/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
-      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, ignore_cache: ignoreCache }),
+      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache }),
     });
     if (!res.ok) throw new Error(await res.text());
     const { job_id } = await res.json();
