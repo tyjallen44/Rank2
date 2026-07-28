@@ -3225,7 +3225,7 @@ async function npFindHospitals() {
 
   try {
     const res = await fetch(`/api/network-prefill?url=${encodeURIComponent(url)}`, {
-      headers: { 'X-Auth-Token': _token }
+      headers: { 'Authorization': `Bearer ${_token}` }
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
@@ -3318,7 +3318,7 @@ async function npRunAnalysis() {
   try {
     const res = await fetch('/api/network/analyze', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Auth-Token': _token },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
       body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked }),
     });
     if (!res.ok) throw new Error(await res.text());
