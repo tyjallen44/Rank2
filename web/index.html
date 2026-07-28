@@ -4937,6 +4937,15 @@ function dlPdf(runId) {
   document.body.removeChild(a);
 }
 
+function dlNetworkPdf(runId) {
+  const a = document.createElement('a');
+  a.href = `/api/network/${runId}/pdf?token=${encodeURIComponent(_token)}`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 function dlBriefingPdf(runId) {
   const a = document.createElement('a');
   a.href = `/api/reports/${runId}/briefing-pdf?token=${encodeURIComponent(_token)}`;
@@ -5453,22 +5462,36 @@ function renderHistory(events) {
           <th>Battery</th>
         </tr></thead>
         <tbody>
-          ${runs.length ? runs.map(run => `
-            <tr>
+          ${runs.length ? runs.map(run => {
+            const isNetwork = run.report_type === 'network' || run.entity_type === 'hospital_network';
+            const NP_TYPE_BADGE = {
+              hospital: 'Network Pulse', asc: 'ASC Network', urgent_care: 'Urgent Care',
+              imaging: 'Imaging', behavioral_health: 'Behavioral', other: 'Network Pulse',
+            };
+            const typeBadge = run.event_id
+              ? `<span class="badge bg-teal">Event</span>`
+              : run.entity_type === 'community_health'
+                ? `<span class="badge bg-teal">FQHC</span>`
+                : isNetwork
+                  ? `<span class="badge bg-teal">${NP_TYPE_BADGE[run.specialty] || 'Network Pulse'}</span>`
+                  : run.specialty
+                    ? `<span class="badge bg-gold">${run.specialty}</span>`
+                    : `<span class="badge bg-muted">Hospitals</span>`;
+            const pdfBtn = run.has_pdf
+              ? (isNetwork
+                  ? `<button class="btn btn-gold btn-sm" onclick="dlNetworkPdf('${run.run_id}')">⬇ PDF</button>`
+                  : `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`)
+              : `<span style="color:var(--muted);font-size:13px">—</span>`;
+            const analyzedCount = run.entity_type === 'community_health' ? '1'
+              : isNetwork ? `${run.provider_count} loc.`
+              : run.provider_count;
+            return `<tr>
               <td style="color:var(--muted);font-size:13px;white-space:nowrap">${run.generated_at}</td>
               <td style="font-weight:500">${run.location}</td>
               <td style="font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_historyFilename(run)}">${_historyFilename(run)}</td>
-              <td>${run.event_id
-                ? `<span class="badge bg-teal">Event</span>`
-                : run.entity_type === 'community_health'
-                  ? `<span class="badge bg-teal">FQHC</span>`
-                  : run.specialty
-                    ? `<span class="badge bg-gold">${run.specialty}</span>`
-                    : `<span class="badge bg-muted">Hospitals</span>`}</td>
-              <td style="text-align:right">${run.entity_type === 'community_health' ? '1' : run.provider_count}</td>
-              <td>${run.has_pdf
-                ? `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`
-                : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
+              <td>${typeBadge}</td>
+              <td style="text-align:right">${analyzedCount}</td>
+              <td>${pdfBtn}</td>
               <td>${run.has_briefing_pdf
                 ? `<button class="btn btn-ghost btn-sm" onclick="dlBriefingPdf('${run.run_id}')">⬇ Briefing</button>`
                 : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
@@ -5477,7 +5500,8 @@ function renderHistory(events) {
                     ? `<span style="font-size:12px;font-weight:600;color:#1a8f4a">${Math.round(run.mqcr * 100)}%</span>`
                     : `<button class="btn btn-secondary btn-sm" onclick="startBatteryFromHistory('${run.run_id}', this)">Run Battery</button>`)
                 : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
-            </tr>`).join('')
+            </tr>`;
+          }).join('')
           : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
         </tbody>
       </table>

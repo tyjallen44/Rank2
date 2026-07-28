@@ -667,6 +667,7 @@ def init_network_db(con=None) -> None:
             network_name        VARCHAR NOT NULL,
             hq_location         VARCHAR,
             source_url          VARCHAR,
+            facility_type       VARCHAR DEFAULT 'hospital',
             total_hospitals     INTEGER,
             ai_visibility_score INTEGER,
             grade               VARCHAR,
@@ -685,6 +686,7 @@ def init_network_db(con=None) -> None:
     for _col, _def in [
         ("hq_location",         "VARCHAR"),
         ("source_url",          "VARCHAR"),
+        ("facility_type",       "VARCHAR DEFAULT 'hospital'"),
         ("total_hospitals",     "INTEGER"),
         ("ai_visibility_score", "INTEGER"),
         ("grade",               "VARCHAR"),
@@ -872,10 +874,15 @@ def set_run_role(run_id: str, role: str) -> None:
 
 
 def query_history(role: str) -> list[dict[str, Any]]:
-    """Return analysis runs for the given role, newest first. Admin sees all roles."""
+    """Return analysis runs + network runs for the given role, newest first."""
     con = get_connection()
+
+    analysis_cols = ["run_id", "location", "specialty", "generated_at",
+                     "pdf_path", "md_path", "briefing_pdf_path", "event_id",
+                     "entity_type", "mqcr", "provider_count"]
+
     if role == "admin":
-        rows = con.execute("""
+        analysis_rows = con.execute("""
             SELECT
                 a.run_id,
                 a.location,
@@ -895,8 +902,14 @@ def query_history(role: str) -> list[dict[str, Any]]:
                      a.entity_type, a.mqcr
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
+        network_rows = con.execute("""
+            SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
+                   generated_at, pdf_path, total_hospitals
+            FROM network_runs
+            ORDER BY generated_at DESC, run_id DESC
+        """).fetchall()
     else:
-        rows = con.execute("""
+        analysis_rows = con.execute("""
             SELECT
                 a.run_id,
                 a.location,
@@ -917,11 +930,37 @@ def query_history(role: str) -> list[dict[str, Any]]:
                      a.entity_type, a.mqcr
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()
-    cols = ["run_id", "location", "specialty", "generated_at",
-            "pdf_path", "md_path", "briefing_pdf_path", "event_id",
-            "entity_type", "mqcr", "provider_count"]
+        network_rows = con.execute("""
+            SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
+                   generated_at, pdf_path, total_hospitals
+            FROM network_runs
+            WHERE COALESCE(user_role, 'admin') = ?
+            ORDER BY generated_at DESC, run_id DESC
+        """, [role]).fetchall()
+
     con.close()
-    return [dict(zip(cols, row)) for row in rows]
+
+    results = [dict(zip(analysis_cols, row)) for row in analysis_rows]
+
+    for row in network_rows:
+        run_id, network_name, facility_type, generated_at, pdf_path, total = row
+        results.append({
+            "run_id":            run_id,
+            "location":          network_name,
+            "specialty":         facility_type,
+            "generated_at":      generated_at,
+            "pdf_path":          pdf_path,
+            "md_path":           None,
+            "briefing_pdf_path": None,
+            "event_id":          None,
+            "entity_type":       "hospital_network",
+            "mqcr":              None,
+            "provider_count":    total or 0,
+            "report_type":       "network",
+        })
+
+    results.sort(key=lambda r: (str(r.get("generated_at") or ""), r["run_id"]), reverse=True)
+    return results
 
 
 def update_briefing_pdf_path(run_id: str, path: str) -> None:

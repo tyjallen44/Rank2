@@ -582,9 +582,9 @@ def _save_network_run(result: NetworkResult) -> None:
     with get_connection() as con:
         con.execute(
             """INSERT INTO network_runs
-               (run_id, network_name, hq_location, source_url, total_hospitals,
+               (run_id, network_name, hq_location, source_url, facility_type, total_hospitals,
                 ai_visibility_score, grade, generated_at, result_json, pdf_path, user_role)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (run_id) DO UPDATE SET
                    ai_visibility_score = excluded.ai_visibility_score,
                    grade               = excluded.grade,
@@ -595,6 +595,7 @@ def _save_network_run(result: NetworkResult) -> None:
                 result.network_name,
                 result.hq_location,
                 result.source_url,
+                result.facility_type or "hospital",
                 result.total_hospitals,
                 result.ai_visibility_score,
                 result.grade,
