@@ -4659,14 +4659,29 @@ function showSingleDone(r) {
     const hosp = r.total_hospitals || 0;
     const states = (r.states_covered || []).length;
     const scoreVal = r.ai_visibility_score != null ? r.ai_visibility_score : '—';
-    const gradeVal = r.grade || '';
-    subText = `${hosp} hospitals across ${states} state${states !== 1 ? 's' : ''}`;
-    bodyHtml = `<div class="stat-row">
-      <div class="stat-box"><div class="stat-val">${scoreVal}</div><div class="stat-lbl">AI Visibility Score</div></div>
-      <div class="stat-box"><div class="stat-val">${gradeVal}</div><div class="stat-lbl">Grade</div></div>
-      <div class="stat-box"><div class="stat-val">${hosp}</div><div class="stat-lbl">Hospitals</div></div>
-      <div class="stat-box"><div class="stat-val">${states}</div><div class="stat-lbl">States</div></div>
-    </div>`;
+    const gradeVal = r.grade || '—';
+    const bandVal  = r.grade_band || '';
+    const netName  = r.network_canonical_name || r.network_name || '';
+    subText = `${hosp} hospital${hosp !== 1 ? 's' : ''} across ${states} state${states !== 1 ? 's' : ''}`;
+    bodyHtml = `
+      <div style="display:flex;gap:12px;align-items:stretch;margin-bottom:12px">
+        <div style="flex:0 0 auto;background:#0B1F3A;color:#fff;border-radius:10px;padding:20px 28px;text-align:center;min-width:120px">
+          <div style="font-size:36px;font-weight:700;color:#C9A84C;line-height:1">${scoreVal}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.55);margin-top:6px">Network Score</div>
+          <div style="font-size:22px;font-weight:700;color:#fff;margin-top:8px;line-height:1">${gradeVal}</div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.45);margin-top:3px">${bandVal}</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+          <div style="background:#f4f7f9;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#5a7080;font-weight:600">Hospitals Assessed</span>
+            <span style="font-size:22px;font-weight:700;color:#0B1F3A">${hosp}</span>
+          </div>
+          <div style="background:#f4f7f9;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#5a7080;font-weight:600">States Covered</span>
+            <span style="font-size:22px;font-weight:700;color:#0B1F3A">${states}</span>
+          </div>
+        </div>
+      </div>`;
   } else if (r.entity_type === 'community_health' || (_lastPage === 'individual' && r.provider_count <= 1 && r.mqcr != null)) {
     subText = '1 health center analyzed';
     const mqcrPct = r.mqcr != null ? Math.round(r.mqcr * 100) : null;

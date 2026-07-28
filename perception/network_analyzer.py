@@ -271,7 +271,6 @@ def analyze_network(
     emit({"type": "phase", "name": "saving", "text": "Saving to database"})
     _save_network_run(result)
 
-    emit({"type": "done", "run_id": run_id})
     return result
 
 

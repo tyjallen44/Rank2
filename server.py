@@ -1014,7 +1014,9 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
         job["status"] = "done"
         job["result"] = {
             "run_id": result.run_id,
+            "entity_type": "hospital_network",
             "network_name": result.network_name,
+            "network_canonical_name": result.network_canonical_name,
             "ai_visibility_score": result.ai_visibility_score,
             "grade": result.grade,
             "grade_band": result.grade_band,
