@@ -100,6 +100,100 @@ Apply the inclusion/exclusion criteria strictly. When in doubt, exclude.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# AI-based hospital discovery (primary roster method)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DISCOVERY_SYSTEM = """You are a healthcare industry expert with comprehensive knowledge of U.S. hospital networks and health systems.
+
+Your task is to produce a complete, accurate roster of inpatient hospitals owned and operated by a named hospital network or health system.
+
+## Inclusion criteria — include ONLY:
+- Acute care hospitals with inpatient beds currently owned or operated by this network
+- Critical access hospitals owned by this network
+- Children's hospitals that are inpatient facilities within this network
+- Specialty hospitals (cardiac, orthopedic, cancer) with inpatient beds if owned by this network
+
+## Exclusion criteria — exclude ALL of the following:
+- Physician offices and medical group practices
+- Urgent care centers
+- Imaging / radiology centers
+- Home health agencies
+- Ambulatory surgery centers
+- Outpatient behavioral health clinics
+- Outpatient clinics and community health centers
+- Long-term care / skilled nursing facilities (unless part of an acute care hospital campus)
+- Affiliated or partner hospitals that are NOT owned/operated by this network
+- Former hospitals now divested or closed
+
+Use your training knowledge plus web search to compile the most complete and current list possible.
+If you are uncertain whether a facility qualifies, exclude it.
+Be thorough — large health systems often have 20–100+ hospitals across multiple states.
+"""
+
+_DISCOVERY_TOOL = {
+    "name": "submit_hospital_roster",
+    "description": (
+        "Submit the complete roster of inpatient hospitals owned and operated by the named network. "
+        "Include only acute care facilities with inpatient beds. "
+        "Call exactly once after compiling the full list."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "facilities": {
+                "type": "array",
+                "description": "Complete list of acute care hospitals owned/operated by this network.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name":  {"type": "string", "description": "Hospital name"},
+                        "city":  {"type": "string", "description": "City"},
+                        "state": {"type": "string", "description": "Two-letter state abbreviation"},
+                        "beds":  {"type": ["integer", "null"], "description": "Approximate licensed bed count if known, else null"},
+                    },
+                    "required": ["name", "city", "state", "beds"],
+                    "additionalProperties": False,
+                },
+            },
+            "network_canonical_name": {
+                "type": "string",
+                "description": "The network's official/canonical name (e.g. 'Atrium Health')",
+            },
+            "total_found": {
+                "type": "integer",
+                "description": "Total hospital count in the facilities array.",
+            },
+            "confidence_note": {
+                "type": "string",
+                "description": "Brief note on data confidence — e.g. 'Based on training data as of early 2025; verify current ownership for recent acquisitions.'",
+            },
+        },
+        "required": ["facilities", "network_canonical_name", "total_found"],
+        "additionalProperties": False,
+    },
+}
+
+
+def build_discovery_prompt(network_name: str, hq_location: str = "") -> tuple[str, str]:
+    """Build the system + user prompt to discover hospitals by network name via AI knowledge.
+
+    Returns:
+        (system_prompt, user_prompt)
+    """
+    hq_line = f" headquartered in {hq_location}" if hq_location else ""
+    user = f"""List all inpatient hospitals currently owned and operated by **{network_name}**{hq_line}.
+
+Apply the inclusion and exclusion criteria from your instructions strictly.
+
+Be thorough and complete — include all states and regions where {network_name} operates hospitals.
+If {network_name} has recently made acquisitions or divestitures, include your best current knowledge and note any uncertainty in the confidence_note.
+
+Call submit_hospital_roster with the complete roster.
+"""
+    return _DISCOVERY_SYSTEM, user
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Network analysis
 # ─────────────────────────────────────────────────────────────────────────────
 

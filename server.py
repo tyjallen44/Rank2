@@ -947,9 +947,27 @@ async def hrsa_prefill(entity_name: str, city: str = "", state: str = "", _: str
 
 # ── Network Pulse ─────────────────────────────────────────────────────────────
 
+@app.get("/api/network-discover")
+async def network_discover(
+    network_name: str,
+    hq_location: str = "",
+    _: str = Depends(require_auth),
+):
+    """Ask Claude to enumerate all hospitals owned by a named health system."""
+    try:
+        loop = asyncio.get_event_loop()
+        from perception.network_analyzer import discover_hospitals_by_name
+        data = await loop.run_in_executor(
+            None, discover_hospitals_by_name, network_name, hq_location
+        )
+        return data
+    except Exception as exc:
+        raise HTTPException(500, f"Network discover error: {type(exc).__name__}: {exc}")
+
+
 @app.get("/api/network-prefill")
 async def network_prefill(url: str, _: str = Depends(require_auth)):
-    """Extract hospital roster from a network locations page URL."""
+    """Extract hospital roster from a network locations page URL (supplementary)."""
     try:
         loop = asyncio.get_event_loop()
         from perception.network_analyzer import extract_roster_from_url

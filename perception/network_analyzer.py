@@ -19,8 +19,10 @@ from . import network_scoring
 from .network_prompts import (
     build_roster_extraction_prompt,
     build_network_analysis_prompt,
+    build_discovery_prompt,
     _ROSTER_TOOL,
     _ANALYSIS_TOOL,
+    _DISCOVERY_TOOL,
 )
 from .db import get_connection, init_db
 
@@ -82,6 +84,46 @@ def extract_roster_from_url(url: str) -> dict:
             }
 
     return {"facilities": [], "network_name": "", "total_found": 0}
+
+
+def discover_hospitals_by_name(network_name: str, hq_location: str = "") -> dict:
+    """Ask Claude to enumerate all inpatient hospitals owned by a named health system.
+
+    This is the primary roster discovery method. Unlike URL scraping, it works for
+    any major U.S. health system because Claude has comprehensive training-data
+    knowledge of hospital network ownership.
+
+    Returns:
+        {
+            "facilities": [{"name": str, "city": str, "state": str, "beds": int|None}, ...],
+            "network_canonical_name": str,
+            "total_found": int,
+            "confidence_note": str,
+        }
+    """
+    system_prompt, user_prompt = build_discovery_prompt(network_name, hq_location)
+
+    response = client.messages.create(
+        model=_MODEL,
+        max_tokens=8192,
+        tools=[_DISCOVERY_TOOL],
+        tool_choice={"type": "tool", "name": "submit_hospital_roster"},
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "submit_hospital_roster":
+            data = block.input if isinstance(block.input, dict) else json.loads(block.input)
+            return {
+                "facilities": data.get("facilities", []),
+                "network_canonical_name": data.get("network_canonical_name", network_name),
+                "total_found": data.get("total_found", 0),
+                "confidence_note": data.get("confidence_note", ""),
+            }
+
+    return {"facilities": [], "network_canonical_name": network_name,
+            "total_found": 0, "confidence_note": ""}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
