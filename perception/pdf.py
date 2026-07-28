@@ -1491,11 +1491,11 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
             return f'<p style="font-size:9pt;line-height:1.6;color:#444">{_MARKET_ADVICE_CTA}</p>'
         if result.improvement_sections:
             parts = []
-            for i, sec in enumerate(result.improvement_sections, 1):
+            for sec in result.improvement_sections:
                 items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
                 parts.append(
                     f'<div class="advice-group">'
-                    f'<div class="advice-group-title">{i}. {_e(_strip_md(sec.title))}</div>'
+                    f'<div class="advice-group-title">{_e(_strip_md(sec.title))}</div>'
                     f'<div class="advice-group-desc">{_e(_strip_md(sec.description))}</div>'
                     f'<ol>{items_li}</ol>'
                     f'</div>'
@@ -2473,11 +2473,11 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True) -> s
     if include_roadmap:
         if result.improvement_sections:
             parts = []
-            for i, sec in enumerate(result.improvement_sections, 1):
+            for sec in result.improvement_sections:
                 items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
                 parts.append(
                     f'<div class="advice-group">'
-                    f'<div class="advice-group-title">{i}. {_e(_strip_md(sec.title))}</div>'
+                    f'<div class="advice-group-title">{_e(_strip_md(sec.title))}</div>'
                     f'<div class="advice-group-desc">{_e(_strip_md(sec.description))}</div>'
                     f'<ol>{items_li}</ol>'
                     f'</div>'
