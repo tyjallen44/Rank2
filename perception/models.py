@@ -264,3 +264,47 @@ class AnalysisResult(BaseModel):
     fqhc_fact_audit: list[dict] = Field(default_factory=list)  # Pillar 2 audit rows
     fqhc_missed_queries: list[dict] = Field(default_factory=list)  # Missed Queries exhibit
     fqhc_mqcr: Optional[float] = None               # MQCR (0.0–1.0); None until battery run
+
+
+# ── Network Pulse — multi-state hospital network models ──────────────────────
+
+class NetworkFacility(BaseModel):
+    name: str
+    city: str
+    state: str
+    beds: Optional[int] = None
+    ai_visibility_score: Optional[int] = None   # 0–100
+    grade: Optional[str] = None
+    surfaced_for_local: Optional[bool] = None   # found when patients search "[city] hospital"
+    attributed_to_network: Optional[bool] = None  # correctly linked to parent network
+    key_gap: Optional[str] = None               # single most important gap
+
+
+class NetworkResult(BaseModel):
+    run_id: str
+    network_name: str
+    network_canonical_name: Optional[str] = None
+    hq_location: Optional[str] = None           # "Charlotte, NC"
+    source_url: Optional[str] = None            # locations page URL used for roster extraction
+    total_hospitals: int = 0
+    states_covered: list[str] = Field(default_factory=list)
+    generated_at: date
+    # Scores (0–100 each)
+    ai_visibility_score: Optional[int] = None   # overall composite
+    brand_visibility_score: Optional[int] = None  # 40% weight
+    market_coverage_score: Optional[int] = None   # 35% weight
+    information_accuracy_score: Optional[int] = None  # 25% weight
+    grade: Optional[str] = None
+    grade_band: Optional[str] = None            # "Top Quartile" etc.
+    # Narrative (written for C-suite)
+    executive_summary: str = ""
+    brand_visibility_narrative: str = ""
+    market_coverage_narrative: str = ""
+    strategic_recommendations: list[str] = Field(default_factory=list)
+    top_markets: list[str] = Field(default_factory=list)   # best-performing markets
+    gap_markets: list[str] = Field(default_factory=list)   # worst-performing markets
+    # Facility-level data
+    facilities: list[NetworkFacility] = Field(default_factory=list)
+    # Meta
+    pdf_path: Optional[str] = None
+    entity_type: str = "hospital_network"

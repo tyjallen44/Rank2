@@ -945,6 +945,94 @@ async def hrsa_prefill(entity_name: str, city: str = "", state: str = "", _: str
         raise HTTPException(500, f"HRSA prefill error: {type(exc).__name__}: {exc}")
 
 
+# ── Network Pulse ─────────────────────────────────────────────────────────────
+
+@app.get("/api/network-prefill")
+async def network_prefill(url: str, _: str = Depends(require_auth)):
+    """Extract hospital roster from a network locations page URL."""
+    try:
+        loop = asyncio.get_event_loop()
+        from perception.network_analyzer import extract_roster_from_url
+        data = await loop.run_in_executor(None, extract_roster_from_url, url)
+        return data
+    except Exception as exc:
+        raise HTTPException(500, f"Network prefill error: {type(exc).__name__}: {exc}")
+
+
+class NetworkAnalyzeRequest(BaseModel):
+    network_name: str
+    hq_location: str = ""
+    source_url: str = ""
+    facilities: list[dict]
+    brand: str = "original"
+
+
+@app.post("/api/network/analyze")
+async def network_analyze(req: NetworkAnalyzeRequest, _: str = Depends(require_auth)):
+    """Start a Network Pulse analysis job. Returns job_id for SSE streaming."""
+    job_id = _new_job("admin")
+    _pool.submit(_job_network_analyze, job_id, req.network_name, req.hq_location,
+                 req.source_url, req.facilities, req.brand)
+    return {"job_id": job_id}
+
+
+def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
+                          source_url: str, facilities: list[dict], brand: str) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+    try:
+        from perception.db import init_db
+        from perception.network_analyzer import analyze_network
+        init_db()
+        result = analyze_network(
+            network_name=network_name,
+            hq_location=hq_location,
+            source_url=source_url,
+            facilities=facilities,
+            brand=brand,
+            on_event=emit,
+        )
+        job["status"] = "done"
+        job["result"] = {
+            "run_id": result.run_id,
+            "network_name": result.network_name,
+            "ai_visibility_score": result.ai_visibility_score,
+            "grade": result.grade,
+            "grade_band": result.grade_band,
+            "total_hospitals": result.total_hospitals,
+            "states_covered": result.states_covered,
+            "pdf_path": result.pdf_path,
+        }
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
+@app.get("/api/network/{run_id}/pdf")
+async def network_pdf(run_id: str, _: str = Depends(require_auth)):
+    """Download a Network Pulse PDF by run_id."""
+    from perception.db import get_connection
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT pdf_path, network_name FROM network_runs WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+    if not row or not row[0]:
+        raise HTTPException(404, "Network Pulse PDF not found")
+    pdf_path = Path(row[0])
+    if not pdf_path.exists():
+        raise HTTPException(404, "Network Pulse PDF file missing")
+    slug = re.sub(r"[^a-z0-9]+", "-", (row[1] or "network").lower()).strip("-")
+    return FileResponse(
+        str(pdf_path),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{slug}-network-pulse.pdf"'},
+    )
+
+
 @app.post("/api/upload")
 async def upload_csv(file: UploadFile = File(...), _: str = Depends(require_auth)):
     from perception.loader import load

@@ -617,6 +617,9 @@ def init_db() -> None:
     ).fetchall()}
     if "zip_path" not in _er_cols:
         con.execute("ALTER TABLE event_runs ADD COLUMN zip_path VARCHAR")
+    # ── Network Pulse tables ──────────────────────────────────────────────────
+    init_network_db(con)
+
     con.execute("""
         CREATE TABLE IF NOT EXISTS event_entities (
             id             VARCHAR PRIMARY KEY,
@@ -645,6 +648,58 @@ def init_db() -> None:
         if _col not in _ee_cols:
             con.execute(f"ALTER TABLE event_entities ADD COLUMN {_col} VARCHAR")
     con.close()
+
+
+# ── Network Pulse helpers ─────────────────────────────────────────────────────
+
+def init_network_db(con=None) -> None:
+    """Create the network_runs table if it does not already exist.
+
+    Can be called with an existing connection (during init_db) or standalone.
+    """
+    _own_con = con is None
+    if _own_con:
+        con = get_connection()
+
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS network_runs (
+            run_id              VARCHAR PRIMARY KEY,
+            network_name        VARCHAR NOT NULL,
+            hq_location         VARCHAR,
+            source_url          VARCHAR,
+            total_hospitals     INTEGER,
+            ai_visibility_score INTEGER,
+            grade               VARCHAR,
+            generated_at        DATE NOT NULL,
+            result_json         VARCHAR,
+            pdf_path            VARCHAR,
+            user_role           VARCHAR DEFAULT 'admin'
+        )
+    """)
+
+    # Migrate older DBs that may be missing columns
+    _nr_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name='network_runs'"
+    ).fetchall()}
+    for _col, _def in [
+        ("hq_location",         "VARCHAR"),
+        ("source_url",          "VARCHAR"),
+        ("total_hospitals",     "INTEGER"),
+        ("ai_visibility_score", "INTEGER"),
+        ("grade",               "VARCHAR"),
+        ("result_json",         "VARCHAR"),
+        ("pdf_path",            "VARCHAR"),
+        ("user_role",           "VARCHAR DEFAULT 'admin'"),
+    ]:
+        if _col not in _nr_cols:
+            try:
+                con.execute(f"ALTER TABLE network_runs ADD COLUMN {_col} {_def}")
+            except Exception:
+                pass
+
+    if _own_con:
+        con.close()
 
 
 # ── Event Pulse helpers ───────────────────────────────────────────────────────

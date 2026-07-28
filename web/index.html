@@ -885,6 +885,9 @@ html, body {
     </div>
     <div class="sb-nav">
       <div class="nav-section-label">Report Creation</div>
+      <button class="nav-btn" id="nav-network" onclick="navigate('network')" title="AI Visibility report for a multi-state hospital network">
+        <span class="ni">⬡</span><span class="nb-lbl">Network Pulse</span>
+      </button>
       <button class="nav-btn" id="nav-individual" onclick="navigate('individual')" title="Run a focused Pulse Diagnostic for a single hospital or practice">
         <span class="ni">◎</span><span class="nb-lbl">Pulse Diagnostic</span>
       </button>
@@ -897,7 +900,7 @@ html, body {
       <button class="nav-btn" id="nav-compare" onclick="navigate('compare')" title="Compare two organizations head-to-head on Pulse Score">
         <span class="ni">⇄</span><span class="nb-lbl">Pulse Comparison</span>
       </button>
-      <button class="nav-btn active" id="nav-new" onclick="navigate('new')" title="Analysis Tools for Internal RLDatix Teams">
+      <button class="nav-btn active" id="nav-new" onclick="navigate('new')" title="Analysis Tools for Internal RLDatix Teams" style="display:none">
         <span class="ni">✦</span><span class="nb-lbl">Market Pulse</span>
       </button>
 
@@ -1558,6 +1561,51 @@ html, body {
     </div>
 
     <!-- ── Comparison Report ─────────────────────────────────────────────── -->
+    <!-- ── Network Pulse ──────────────────────────────────────────────────── -->
+    <div id="page-network" class="page">
+      <div class="page-title">Network Pulse</div>
+      <div class="page-sub">AI Visibility report for multi-state hospital networks. Designed for C-suite audiences and industry benchmarking.</div>
+
+      <!-- Step 1: Network identity + URL -->
+      <div id="np-step1" class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+          <div class="fg" style="margin:0">
+            <label class="fl">Health System Name</label>
+            <input id="np-name" class="fi" type="text" placeholder="Atrium Health"
+              onkeydown="if(event.key==='Enter')npFindHospitals()">
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fl">Headquarters (City, State)</label>
+            <input id="np-hq" class="fi" type="text" placeholder="Charlotte, NC"
+              onkeydown="if(event.key==='Enter')npFindHospitals()">
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:14px">
+          <label class="fl">Locations Page URL</label>
+          <input id="np-url" class="fi" type="url" placeholder="https://atriumhealth.org/locations"
+            onkeydown="if(event.key==='Enter')npFindHospitals()">
+          <div style="font-size:11px;color:var(--muted);margin-top:5px">Paste the health system's "Find a Location" or "Our Hospitals" page. The system will extract acute care hospitals automatically.</div>
+        </div>
+        <div id="np-step1-err" class="err hidden mt8"></div>
+        <button class="btn btn-primary" id="np-find-btn" onclick="npFindHospitals()">Find Hospitals →</button>
+      </div>
+
+      <!-- Step 2: Roster confirmation -->
+      <div id="np-step2" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Confirm Hospital Roster</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          Review the hospitals extracted from the locations page. Uncheck any non-hospital facilities. Only acute care hospitals will be analyzed.
+        </p>
+        <div id="np-roster-summary" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
+        <div id="np-roster-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+        <div id="np-step2-err" class="err hidden mt8"></div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button class="btn btn-secondary" onclick="npReset()">← Back</button>
+          <button class="btn btn-primary" id="np-run-btn" onclick="npRunAnalysis()">Run Network Pulse →</button>
+        </div>
+      </div>
+    </div>
+
     <div id="page-compare" class="page">
       <div class="page-title">Pulse Comparison</div>
       <div class="page-sub">Compare two organizations head-to-head on Pulse Score, with the same depth as a full diagnostic for each.</div>
@@ -3135,6 +3183,155 @@ function resetPage(p) {
     if (cmpTeaserEl) cmpTeaserEl.checked = false;
     const cmpErrEl = document.getElementById('cmp-run-err');
     if (cmpErrEl) cmpErrEl.classList.add('hidden');
+
+  } else if (p === 'network') {
+    npReset();
+  }
+}
+
+// ── Network Pulse ──────────────────────────────────────────────────────────
+let _npRoster = [];   // confirmed hospital roster [{name,city,state,beds?}]
+
+function npReset() {
+  const nameEl = document.getElementById('np-name');
+  const hqEl   = document.getElementById('np-hq');
+  const urlEl  = document.getElementById('np-url');
+  if (nameEl) nameEl.value = '';
+  if (hqEl)   hqEl.value   = '';
+  if (urlEl)  urlEl.value  = '';
+  _npRoster = [];
+  document.getElementById('np-step2').classList.add('hidden');
+  document.getElementById('np-step1').classList.remove('hidden');
+  const e1 = document.getElementById('np-step1-err');
+  const e2 = document.getElementById('np-step2-err');
+  if (e1) e1.classList.add('hidden');
+  if (e2) e2.classList.add('hidden');
+  const btn = document.getElementById('np-find-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Find Hospitals →'; }
+}
+
+async function npFindHospitals() {
+  const name = document.getElementById('np-name').value.trim();
+  const url  = document.getElementById('np-url').value.trim();
+  const errEl = document.getElementById('np-step1-err');
+  errEl.classList.add('hidden');
+
+  if (!name) { errEl.textContent = 'Please enter the health system name.'; errEl.classList.remove('hidden'); return; }
+  if (!url)  { errEl.textContent = 'Please enter the locations page URL.'; errEl.classList.remove('hidden'); return; }
+
+  const btn = document.getElementById('np-find-btn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning locations page…';
+
+  try {
+    const res = await fetch(`/api/network-prefill?url=${encodeURIComponent(url)}`, {
+      headers: { 'X-Auth-Token': _token }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const facilities = data.facilities || [];
+    if (!facilities.length) {
+      errEl.textContent = 'No hospitals found on that page. Try a different URL or check that the page lists hospital locations.';
+      errEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = 'Find Hospitals →';
+      return;
+    }
+
+    // Infer network name from page if not already entered
+    if (data.network_name && !document.getElementById('np-name').value.trim()) {
+      document.getElementById('np-name').value = data.network_name;
+    }
+
+    // Show roster confirmation step
+    _npRoster = facilities;
+    npShowRoster(facilities, name || data.network_name || '');
+    document.getElementById('np-step2').classList.remove('hidden');
+    document.getElementById('np-step2').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  } catch (err) {
+    errEl.textContent = 'Error scanning page: ' + (err.message || err);
+    errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Find Hospitals →';
+  }
+}
+
+function npShowRoster(facilities, networkName) {
+  const summaryEl = document.getElementById('np-roster-summary');
+  const listEl    = document.getElementById('np-roster-list');
+  const states    = [...new Set(facilities.map(f => f.state).filter(Boolean))].sort();
+
+  summaryEl.textContent = `${facilities.length} hospitals found across ${states.length} state${states.length !== 1 ? 's' : ''}: ${states.join(', ')}`;
+
+  // Group by state for display
+  const byState = {};
+  for (const f of facilities) {
+    const st = f.state || 'Unknown';
+    (byState[st] = byState[st] || []).push(f);
+  }
+
+  let html = '';
+  for (const st of Object.keys(byState).sort()) {
+    html += `<div style="padding:6px 8px;background:var(--pale-bg,#eef7f1);border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:4px">${st}</div>`;
+    for (const f of byState[st]) {
+      const id = `np-fac-${f.name.replace(/\W+/g,'_')}`;
+      const bedsStr = f.beds ? ` <span style="color:var(--muted);font-size:11px">(${f.beds} beds)</span>` : '';
+      html += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:4px;font-size:13px" onmouseover="this.style.background='var(--hover-bg,#f5f5f5)'" onmouseout="this.style.background=''">
+        <input type="checkbox" id="${id}" checked style="width:15px;height:15px;flex-shrink:0" data-name="${f.name}" data-city="${f.city}" data-state="${f.state}" data-beds="${f.beds||''}">
+        ${f.name} — ${f.city}${bedsStr}
+      </label>`;
+    }
+    html += '<div style="height:8px"></div>';
+  }
+  listEl.innerHTML = html;
+}
+
+async function npRunAnalysis() {
+  const name  = document.getElementById('np-name').value.trim();
+  const hq    = document.getElementById('np-hq').value.trim();
+  const url   = document.getElementById('np-url').value.trim();
+  const errEl = document.getElementById('np-step2-err');
+  errEl.classList.add('hidden');
+
+  // Collect checked facilities
+  const checked = [];
+  document.querySelectorAll('#np-roster-list input[type=checkbox]:checked').forEach(cb => {
+    checked.push({
+      name:  cb.dataset.name,
+      city:  cb.dataset.city,
+      state: cb.dataset.state,
+      beds:  cb.dataset.beds ? parseInt(cb.dataset.beds) : null,
+    });
+  });
+
+  if (!checked.length) {
+    errEl.textContent = 'Please select at least one hospital.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('np-run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+
+  try {
+    const res = await fetch('/api/network/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Auth-Token': _token },
+      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const { job_id } = await res.json();
+
+    _lastPage = 'network';
+    startProgress(job_id, `${name} — Network Pulse`, false);
+
+  } catch (err) {
+    errEl.textContent = 'Error: ' + (err.message || err);
+    errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Run Network Pulse →';
   }
 }
 
@@ -4454,6 +4651,18 @@ function showSingleDone(r) {
   if (isComparison) {
     subText = 'Comparison report ready';
     bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">2</div><div class="stat-lbl">Entities Compared</div></div></div>`;
+  } else if (r.entity_type === 'hospital_network' || _lastPage === 'network') {
+    const hosp = r.total_hospitals || 0;
+    const states = (r.states_covered || []).length;
+    const scoreVal = r.ai_visibility_score != null ? r.ai_visibility_score : '—';
+    const gradeVal = r.grade || '';
+    subText = `${hosp} hospitals across ${states} state${states !== 1 ? 's' : ''}`;
+    bodyHtml = `<div class="stat-row">
+      <div class="stat-box"><div class="stat-val">${scoreVal}</div><div class="stat-lbl">AI Visibility Score</div></div>
+      <div class="stat-box"><div class="stat-val">${gradeVal}</div><div class="stat-lbl">Grade</div></div>
+      <div class="stat-box"><div class="stat-val">${hosp}</div><div class="stat-lbl">Hospitals</div></div>
+      <div class="stat-box"><div class="stat-val">${states}</div><div class="stat-lbl">States</div></div>
+    </div>`;
   } else if (r.entity_type === 'community_health' || (_lastPage === 'individual' && r.provider_count <= 1 && r.mqcr != null)) {
     subText = '1 health center analyzed';
     const mqcrPct = r.mqcr != null ? Math.round(r.mqcr * 100) : null;
@@ -4472,15 +4681,19 @@ function showSingleDone(r) {
   const backLabel = _lastPage === 'patient'   ? 'New Patient Pulse'
     : _lastPage === 'individual' ? 'New Pulse Diagnostic'
     : _lastPage === 'compare'   ? 'New Pulse Comparison'
+    : _lastPage === 'network'   ? 'New Network Pulse'
     : 'New Market Pulse';
 
+  const isNetwork = (_lastPage === 'network' || r.entity_type === 'hospital_network');
   const dlUrl = isComparison
     ? `/api/compare/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
-    : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
+    : isNetwork
+      ? `/api/network/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`
+      : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
 
-  const briefingBtn = (!isComparison && r.briefing_pdf_path)
+  const briefingBtn = (!isComparison && !isNetwork && r.briefing_pdf_path)
     ? `<button class="btn btn-ghost" onclick="window.location.href='/api/reports/${r.run_id}/briefing-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Briefing</button>`
-    : (!isComparison && r.briefing_skipped_reason)
+    : (!isComparison && !isNetwork && r.briefing_skipped_reason)
       ? `<div style="font-size:12px;color:#c07a30;margin-top:4px">Briefing skipped: ${r.briefing_skipped_reason}</div>`
       : '';
 
@@ -4488,7 +4701,7 @@ function showSingleDone(r) {
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
     ${briefingBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
-    ${isComparison ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
+    ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
   document.getElementById('prog-done').classList.remove('hidden');
 }
 
