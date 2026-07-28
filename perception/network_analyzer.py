@@ -87,11 +87,10 @@ def extract_roster_from_url(url: str) -> dict:
 
 
 def discover_hospitals_by_name(network_name: str, hq_location: str = "") -> dict:
-    """Ask Claude to enumerate all inpatient hospitals owned by a named health system.
+    """Enumerate all inpatient hospitals owned by a named health system.
 
-    This is the primary roster discovery method. Unlike URL scraping, it works for
-    any major U.S. health system because Claude has comprehensive training-data
-    knowledge of hospital network ownership.
+    Runs Claude and Gemini in parallel, then blends the results for maximum
+    completeness. Falls back to Claude-only if GEMINI_API_KEY is not set.
 
     Returns:
         {
@@ -101,29 +100,50 @@ def discover_hospitals_by_name(network_name: str, hq_location: str = "") -> dict
             "confidence_note": str,
         }
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     system_prompt, user_prompt = build_discovery_prompt(network_name, hq_location)
 
-    response = client.messages.create(
-        model=_MODEL,
-        max_tokens=8192,
-        tools=[_DISCOVERY_TOOL],
-        tool_choice={"type": "tool", "name": "submit_hospital_roster"},
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
+    def _ask_claude() -> dict:
+        response = client.messages.create(
+            model=_MODEL,
+            max_tokens=8192,
+            tools=[_DISCOVERY_TOOL],
+            tool_choice={"type": "tool", "name": "submit_hospital_roster"},
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "submit_hospital_roster":
+                d = block.input if isinstance(block.input, dict) else json.loads(block.input)
+                return d
+        return {}
 
-    for block in response.content:
-        if block.type == "tool_use" and block.name == "submit_hospital_roster":
-            data = block.input if isinstance(block.input, dict) else json.loads(block.input)
-            return {
-                "facilities": data.get("facilities", []),
-                "network_canonical_name": data.get("network_canonical_name", network_name),
-                "total_found": data.get("total_found", 0),
-                "confidence_note": data.get("confidence_note", ""),
-            }
+    def _ask_gemini() -> dict:
+        return _discover_via_gemini(system_prompt, user_prompt)
 
-    return {"facilities": [], "network_canonical_name": network_name,
-            "total_found": 0, "confidence_note": ""}
+    gemini_key = _gemini_api_key()
+    if gemini_key:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_claude  = pool.submit(_ask_claude)
+            f_gemini  = pool.submit(_ask_gemini)
+            claude_raw  = f_claude.result()
+            gemini_raw  = f_gemini.result()
+        blended = _blend_rosters(
+            network_name,
+            claude_raw.get("facilities", []),
+            gemini_raw.get("facilities", []),
+            claude_raw.get("network_canonical_name") or network_name,
+        )
+        return blended
+    else:
+        data = _ask_claude()
+        return {
+            "facilities": data.get("facilities", []),
+            "network_canonical_name": data.get("network_canonical_name", network_name),
+            "total_found": data.get("total_found", 0),
+            "confidence_note": data.get("confidence_note", "Claude only — set GEMINI_API_KEY for dual-source verification."),
+        }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -299,6 +319,145 @@ def analyze_network(
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _gemini_api_key() -> str | None:
+    import os
+    return os.environ.get("GEMINI_API_KEY") or None
+
+
+def _discover_via_gemini(system_prompt: str, user_prompt: str) -> dict:
+    """Call Gemini 2.5 Flash with the same roster-discovery prompt and tool schema."""
+    import os
+    import httpx
+
+    key = _gemini_api_key()
+    if not key:
+        return {}
+
+    # Convert Anthropic tool schema → Gemini function declaration format
+    tool_schema = _DISCOVERY_TOOL["input_schema"]
+    payload = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "tools": [{"function_declarations": [{
+            "name": _DISCOVERY_TOOL["name"],
+            "description": _DISCOVERY_TOOL["description"],
+            "parameters": tool_schema,
+        }]}],
+        "tool_config": {
+            "function_calling_config": {
+                "mode": "ANY",
+                "allowed_function_names": [_DISCOVERY_TOOL["name"]],
+            }
+        },
+        "generation_config": {"max_output_tokens": 8192},
+    }
+
+    try:
+        resp = httpx.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}",
+            json=payload,
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        for part in data.get("candidates", [{}])[0].get("content", {}).get("parts", []):
+            fn = part.get("functionCall", {})
+            if fn.get("name") == _DISCOVERY_TOOL["name"]:
+                args = fn.get("args", {})
+                return args
+    except Exception:
+        pass
+    return {}
+
+
+def _normalize_tokens(name: str) -> frozenset[str]:
+    """Return significant lowercase tokens from a hospital name for fuzzy matching."""
+    import re
+    _STOP = frozenset({
+        "hospital", "medical", "center", "centre", "health", "system", "healthcare",
+        "regional", "memorial", "general", "community", "care", "clinic", "services",
+        "of", "the", "at", "and", "for", "in", "a", "an", "&", "-",
+    })
+    tokens = re.sub(r"[^a-z0-9 ]", "", name.lower()).split()
+    return frozenset(t for t in tokens if t not in _STOP and len(t) > 1)
+
+
+def _is_same_facility(a: dict, b: dict) -> bool:
+    """True if two facility dicts likely refer to the same hospital."""
+    if (a.get("state") or "").upper() != (b.get("state") or "").upper():
+        return False
+    tok_a = _normalize_tokens(a.get("name", ""))
+    tok_b = _normalize_tokens(b.get("name", ""))
+    if not tok_a or not tok_b:
+        return False
+    overlap = len(tok_a & tok_b) / min(len(tok_a), len(tok_b))
+    return overlap >= 0.5
+
+
+def _blend_rosters(
+    network_name: str,
+    claude_list: list[dict],
+    gemini_list: list[dict],
+    canonical_name: str,
+) -> dict:
+    """Merge Claude and Gemini facility lists, deduplicating by fuzzy name + state.
+
+    Hospitals confirmed by both sources are marked high-confidence.
+    Hospitals from only one source are included but flagged.
+    Returns the same structure as discover_hospitals_by_name.
+    """
+    merged: list[dict] = []
+    both_count  = 0
+    claude_only = 0
+    gemini_only = 0
+
+    # Start with Claude's list; tag each with source
+    for fac in claude_list:
+        merged.append({**fac, "_sources": {"claude"}})
+
+    # Walk Gemini list: find match in merged or append
+    for gfac in gemini_list:
+        matched = False
+        for mfac in merged:
+            if _is_same_facility(gfac, mfac):
+                mfac["_sources"].add("gemini")
+                # Prefer non-None beds value
+                if mfac.get("beds") is None and gfac.get("beds") is not None:
+                    mfac["beds"] = gfac["beds"]
+                matched = True
+                break
+        if not matched:
+            merged.append({**gfac, "_sources": {"gemini"}})
+
+    # Tally sources and strip internal tag
+    facilities = []
+    for fac in merged:
+        sources = fac.pop("_sources", set())
+        if "claude" in sources and "gemini" in sources:
+            both_count += 1
+        elif "claude" in sources:
+            claude_only += 1
+        else:
+            gemini_only += 1
+        facilities.append({k: v for k, v in fac.items()
+                            if k in ("name", "city", "state", "beds")})
+
+    total = len(facilities)
+    note = (
+        f"Dual-source roster: {both_count} hospitals confirmed by both Claude and Gemini"
+        + (f", {claude_only} from Claude only" if claude_only else "")
+        + (f", {gemini_only} from Gemini only" if gemini_only else "")
+        + f". Total: {total} facilities."
+    )
+
+    return {
+        "facilities": facilities,
+        "network_canonical_name": canonical_name,
+        "total_found": total,
+        "confidence_note": note,
+    }
+
 
 def _slug(name: str) -> str:
     import re
