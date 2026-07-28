@@ -1559,10 +1559,10 @@ async def admin_invite_user(req: InviteUserRequest, payload: dict = Depends(requ
 async def admin_test_email(payload: dict = Depends(require_admin)):
     """Send a test email to the requesting admin to verify SMTP config."""
     import os
-    from perception.email_utils import _send, _wrap, _btn, APP_URL
-    to = payload.get("email") or payload.get("uid") or ""
+    from perception.email_utils import _send, _wrap, ADMIN_EMAIL, APP_URL
+    to = payload.get("email") or ADMIN_EMAIL
     if not to or "@" not in to:
-        raise HTTPException(400, "Cannot determine admin email address from session")
+        raise HTTPException(400, "Cannot determine destination email — set ADMIN_NOTIFICATION_EMAIL env var")
     gmail_user = os.environ.get("GMAIL_USER", "")
     gmail_pw   = os.environ.get("GMAIL_APP_PASSWORD", "")
     config_status = {

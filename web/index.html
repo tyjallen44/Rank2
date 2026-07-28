@@ -5675,14 +5675,18 @@ async function adminTestEmail() {
   try {
     const r = await api('/api/admin/test-email', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
     const d = await r.json();
-    if (d.status === 'sent') {
+    if (!r.ok) {
+      el.style.background = '#fdecea';
+      el.style.border = '1px solid #f5c6cb';
+      el.innerHTML = `<strong>✗ Error ${r.status}:</strong> ${d.detail || JSON.stringify(d)}`;
+    } else if (d.status === 'sent') {
       el.style.background = '#e8f5e9';
       el.style.border = '1px solid #a5d6a7';
       el.innerHTML = `<strong>✓ Email sent</strong> to ${d.to}<br><small>GMAIL_USER: ${d.config?.GMAIL_USER} &nbsp;|&nbsp; APP_URL: ${d.config?.APP_URL}</small>`;
     } else {
       el.style.background = '#fdecea';
       el.style.border = '1px solid #f5c6cb';
-      el.innerHTML = `<strong>✗ Failed:</strong> ${d.error}<br><small>GMAIL_USER: ${d.config?.GMAIL_USER} &nbsp;|&nbsp; GMAIL_APP_PASSWORD: ${d.config?.GMAIL_APP_PASSWORD}</small>`;
+      el.innerHTML = `<strong>✗ SMTP failed:</strong> ${d.error}<br><small>GMAIL_USER: ${d.config?.GMAIL_USER} &nbsp;|&nbsp; GMAIL_APP_PASSWORD: ${d.config?.GMAIL_APP_PASSWORD}</small>`;
     }
   } catch(e) {
     el.style.background = '#fdecea';
