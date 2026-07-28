@@ -836,12 +836,25 @@ async def start_fqhc_battery(run_id: str, role: str = Depends(require_auth)):
 async def get_history(role: str = Depends(require_auth)):
     from perception.db import init_db, query_history
     init_db()
-    return [
-        {**r, "generated_at": str(r["generated_at"]),
-         "has_pdf": bool(r.get("pdf_path") and Path(r["pdf_path"]).exists()),
-         "has_briefing_pdf": bool(r.get("briefing_pdf_path") and Path(r["briefing_pdf_path"]).exists())}
-        for r in query_history(role)
-    ]
+    result = []
+    for r in query_history(role):
+        pdf_path = r.get("pdf_path")
+        if r.get("report_type") == "network":
+            # Network PDFs are regenerated on-demand from result_json if missing.
+            # Show the download button whenever a pdf_path was recorded — the file
+            # existing on the current container's disk is not required.
+            has_pdf = bool(pdf_path)
+        else:
+            has_pdf = bool(pdf_path and Path(pdf_path).exists())
+        result.append({
+            **r,
+            "generated_at": str(r["generated_at"]),
+            "has_pdf": has_pdf,
+            "has_briefing_pdf": bool(
+                r.get("briefing_pdf_path") and Path(r["briefing_pdf_path"]).exists()
+            ),
+        })
+    return result
 
 
 @app.get("/api/reports/{run_id}/pdf")
@@ -1044,18 +1057,50 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
 
 @app.get("/api/network/{run_id}/pdf")
 async def network_pdf(run_id: str, _: str = Depends(require_auth)):
-    """Download a Network Pulse PDF by run_id."""
+    """Download a Network Pulse PDF by run_id.
+
+    If the PDF file no longer exists on disk (e.g. after a Cloud Run container
+    restart), it is regenerated from the stored result_json before being served.
+    """
+    import re as _re
+    from datetime import datetime as _dt
     from perception.db import get_connection
     with get_connection() as con:
         row = con.execute(
-            "SELECT pdf_path, network_name FROM network_runs WHERE run_id = ?",
+            "SELECT pdf_path, network_name, result_json FROM network_runs WHERE run_id = ?",
             [run_id],
         ).fetchone()
-    if not row or not row[0]:
-        raise HTTPException(404, "Network Pulse PDF not found")
-    pdf_path = Path(row[0])
-    if not pdf_path.exists():
-        raise HTTPException(404, "Network Pulse PDF file missing")
+    if not row:
+        raise HTTPException(404, "Network Pulse run not found")
+
+    pdf_path = Path(row[0]) if row[0] else None
+
+    if not pdf_path or not pdf_path.exists():
+        # PDF missing from disk — regenerate from stored result_json
+        result_json = row[2]
+        if not result_json:
+            raise HTTPException(404, "Network Pulse PDF missing and no stored result to regenerate from")
+        try:
+            from perception.models import NetworkResult
+            from perception.network_pdf import render_network_pdf
+            result = NetworkResult.model_validate_json(result_json)
+            output_dir = Path("reports")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            slug = _re.sub(r"[^a-z0-9]+", "-", (result.network_name or "network").lower()).strip("-")
+            _ts = _dt.utcnow().strftime("%y%m%d-%H%M")
+            pdf_filename = f"{slug}-network-pulse-{_ts}.pdf"
+            pdf_path = output_dir / pdf_filename
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, render_network_pdf, result, str(pdf_path))
+            # Persist regenerated path so next download skips regeneration
+            with get_connection() as con:
+                con.execute(
+                    "UPDATE network_runs SET pdf_path = ? WHERE run_id = ?",
+                    [str(pdf_path), run_id],
+                )
+        except Exception as exc:
+            raise HTTPException(500, f"PDF regeneration failed: {type(exc).__name__}: {exc}")
+
     return FileResponse(
         str(pdf_path),
         media_type="application/pdf",
