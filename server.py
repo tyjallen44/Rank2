@@ -983,19 +983,24 @@ class NetworkAnalyzeRequest(BaseModel):
     source_url: str = ""
     facilities: list[dict]
     brand: str = "original"
+    ignore_cache: bool = False   # admin only: bypass same-day cache and regenerate
 
 
 @app.post("/api/network/analyze")
-async def network_analyze(req: NetworkAnalyzeRequest, _: str = Depends(require_auth)):
+async def network_analyze(req: NetworkAnalyzeRequest, payload: dict = Depends(get_current_user_payload)):
     """Start a Network Pulse analysis job. Returns job_id for SSE streaming."""
-    job_id = _new_job("admin")
+    role  = payload["role"]
+    brand = payload.get("brand", req.brand)
+    ignore_cache = req.ignore_cache and (role == "admin")
+    job_id = _new_job(role, brand)
     _pool.submit(_job_network_analyze, job_id, req.network_name, req.hq_location,
-                 req.source_url, req.facilities, req.brand)
+                 req.source_url, req.facilities, brand, ignore_cache)
     return {"job_id": job_id}
 
 
 def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
-                          source_url: str, facilities: list[dict], brand: str) -> None:
+                          source_url: str, facilities: list[dict], brand: str,
+                          ignore_cache: bool = False) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
@@ -1010,6 +1015,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             facilities=facilities,
             brand=brand,
             on_event=emit,
+            ignore_cache=ignore_cache,
         )
         job["status"] = "done"
         job["result"] = {

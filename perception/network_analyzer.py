@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -24,7 +24,7 @@ from .network_prompts import (
     _ANALYSIS_TOOL,
     _DISCOVERY_TOOL,
 )
-from .db import get_connection, init_db
+from .db import get_connection, init_db, get_recent_network_run
 
 client = anthropic.Anthropic()
 
@@ -137,6 +137,7 @@ def analyze_network(
     facilities: list[dict],
     brand: str = "original",
     on_event: Optional[Callable] = None,
+    ignore_cache: bool = False,
 ) -> NetworkResult:
     """Run a Network AI Visibility analysis for a multi-state hospital network.
 
@@ -158,6 +159,16 @@ def analyze_network(
     def emit(event: dict) -> None:
         if on_event:
             on_event(event)
+
+    # ── Same-day cache ───────────────────────────────────────────────────────
+    if not ignore_cache:
+        cached = get_recent_network_run(network_name, days=0)
+        if cached:
+            emit({"type": "phase", "name": "analyzing",
+                  "text": f"Using today's cached result for {network_name}"})
+            emit({"type": "phase", "name": "pdf", "text": "Serving cached PDF"})
+            emit({"type": "phase", "name": "saving", "text": "Done"})
+            return NetworkResult.model_validate_json(cached["result_json"])
 
     run_id = str(uuid.uuid4())
 
@@ -260,7 +271,8 @@ def analyze_network(
         output_dir = Path("reports")
         output_dir.mkdir(parents=True, exist_ok=True)
         slug = _slug(network_name)
-        pdf_filename = f"{slug}-network-pulse-{run_id[:8]}.pdf"
+        _ts = datetime.utcnow().strftime("%y%m%d-%H%M")
+        pdf_filename = f"{slug}-network-pulse-{_ts}.pdf"
         pdf_path = output_dir / pdf_filename
         render_network_pdf(result, str(pdf_path), brand=brand)
         result.pdf_path = str(pdf_path)

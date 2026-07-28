@@ -1597,6 +1597,10 @@ html, body {
         <div id="np-roster-summary" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
         <div id="np-roster-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
         <div id="np-step2-err" class="err hidden mt8"></div>
+        <label class="aggregate-toggle mt10" style="display:none" id="np-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
+          <input type="checkbox" id="np-ignore-cache">
+          <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
+        </label>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-secondary" onclick="npReset()">← Back</button>
           <button class="btn btn-primary" id="np-run-btn" onclick="npRunAnalysis()">Run Network Pulse →</button>
@@ -3000,9 +3004,11 @@ function showApp() {
   const isAdmin = (_role === 'admin');
   const irLock    = document.getElementById('ir-override-lock-label');
   const cmpLock   = document.getElementById('cmp-override-lock-label');
+  const npLock    = document.getElementById('np-override-lock-label');
   const irSkipPdf = document.getElementById('ir-skip-pdf-label');
   if (irLock)    irLock.style.display    = isAdmin ? '' : 'none';
   if (cmpLock)   cmpLock.style.display   = isAdmin ? '' : 'none';
+  if (npLock)    npLock.style.display    = isAdmin ? '' : 'none';
   if (irSkipPdf) irSkipPdf.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
@@ -3315,6 +3321,7 @@ async function npRunAnalysis() {
     return;
   }
 
+  const ignoreCache = document.getElementById('np-ignore-cache')?.checked || false;
   const btn = document.getElementById('np-run-btn');
   btn.disabled = true;
   btn.textContent = 'Starting…';
@@ -3323,7 +3330,7 @@ async function npRunAnalysis() {
     const res = await fetch('/api/network/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
-      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked }),
+      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, ignore_cache: ignoreCache }),
     });
     if (!res.ok) throw new Error(await res.text());
     const { job_id } = await res.json();

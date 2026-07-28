@@ -1206,6 +1206,29 @@ def get_recent_run(
     return {"run_id": str(row[0]), "generated_at": str(row[1]), "result_json": row[2]}
 
 
+def get_recent_network_run(network_name: str, days: int = 0) -> dict | None:
+    """Return the most recent Network Pulse run for this network within `days` days.
+
+    Pass days=0 for same-day cache (today only).
+    Returns dict with keys run_id, generated_at, result_json, or None.
+    """
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    with get_connection() as con:
+        row = con.execute(
+            """SELECT run_id, generated_at, result_json
+               FROM network_runs
+               WHERE LOWER(network_name) = LOWER(?)
+                 AND generated_at >= ?
+                 AND result_json IS NOT NULL
+               ORDER BY generated_at DESC, run_id DESC
+               LIMIT 1""",
+            [network_name, cutoff],
+        ).fetchone()
+    if not row:
+        return None
+    return {"run_id": str(row[0]), "generated_at": str(row[1]), "result_json": row[2]}
+
+
 def get_gbp_identity(
     entity_name: str, city: str, state: str, days: int = 90
 ) -> dict | None:
