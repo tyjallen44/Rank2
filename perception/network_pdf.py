@@ -15,10 +15,10 @@ from .models import NetworkResult, NetworkFacility
 from .network_scoring import grade_band as _grade_band
 from .pdf import _BRAND_CONFIGS, _e, _strip_md
 
-# Network Pulse brand overrides — navy/gold regardless of caller's brand choice.
-_NETWORK_PRIMARY = "#0B1F3A"
-_NETWORK_ACCENT  = "#C9A84C"
-_NETWORK_PALE    = "#F4F1E8"
+# Network Pulse brand — uses the standard RLDatix teal palette.
+_NETWORK_PRIMARY = "#0F4146"
+_NETWORK_ACCENT  = "#80F8E4"
+_NETWORK_PALE    = "#EEF7F1"
 
 
 def render_network_pdf(
@@ -140,7 +140,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #1a
   align-items: center;
   padding-bottom: 20px;
   margin-bottom: 28px;
-  border-bottom: 1px solid rgba(201,168,76,0.35);
+  border-bottom: 1px solid rgba(128,248,228,0.30);
 }}
 .cover-logo-img {{
   height: 38px;
@@ -156,7 +156,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #1a
   font-size: 7pt;
   text-transform: uppercase;
   letter-spacing: 0.20em;
-  color: rgba(201,168,76,0.75);
+  color: rgba(128,248,228,0.75);
   text-align: right;
   font-weight: bold;
   line-height: 1.6;
