@@ -636,11 +636,21 @@ def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) ->
         attributed = "Yes" if fac.attributed_to_network else ("No" if fac.attributed_to_network is not None else "—")
         key_gap = _e(fac.key_gap or "")
 
+        g_rating = fac.google_rating
+        g_count  = fac.google_review_count
+        if g_rating is not None:
+            stars = f"{g_rating:.1f}★"
+            cnt   = f"({g_count:,})" if g_count else ""
+            google_cell = f'<span style="font-size:9pt">{stars}</span> <span style="font-size:8pt;color:#7a8a9a">{cnt}</span>'
+        else:
+            google_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
+
         rows_html += f"""<tr class="{row_cls}">
   <td>{_e(fac.name)}</td>
   <td>{_e(fac.city)}, {_e(fac.state)}</td>
   <td style="text-align:center"><strong>{score_str}</strong></td>
   <td style="text-align:center"><span class="grade-badge {grade_css}">{_e(grade)}</span></td>
+  <td style="text-align:center">{google_cell}</td>
   <td style="text-align:center;font-size:9pt">{surfaced}</td>
   <td style="text-align:center;font-size:9pt">{attributed}</td>
   <td style="font-size:8.5pt;color:#4a5a6a">{key_gap}</td>
@@ -662,6 +672,7 @@ def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) ->
       <th>City, State</th>
       <th style="text-align:center">AI Score</th>
       <th style="text-align:center">Grade</th>
+      <th style="text-align:center">Google Rating</th>
       <th style="text-align:center">Local Surface</th>
       <th style="text-align:center">Network Attribution</th>
       <th>Key Gap</th>
@@ -711,7 +722,7 @@ def _methodology_appendix(primary: str, pale: str) -> str:
     <tr>
       <td><strong>Brand Visibility</strong></td>
       <td>40%</td>
-      <td>How accurately and completely AI assistants represent the network when queried by name — roster, geography, and capabilities</td>
+      <td>How accurately and completely AI assistants represent the network when queried by name — roster, geography, and capabilities. Also incorporates verified Google Business Profile ratings and review volumes across all assessed facilities: review count signals digital brand presence, and rating level reflects patient-perceived quality that AI assistants surface in response to healthcare queries.</td>
     </tr>
     <tr>
       <td><strong>Market Coverage</strong></td>

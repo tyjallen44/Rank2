@@ -372,6 +372,7 @@ def build_network_analysis_prompt(
     hq_location: str,
     facilities: list[dict],
     source_url: str,
+    google_data: dict | None = None,
 ) -> tuple[str, str]:
     """Build the system + user prompt pair for network AI visibility analysis.
 
@@ -380,16 +381,24 @@ def build_network_analysis_prompt(
         hq_location:   HQ city/state (e.g. "Charlotte, NC").
         facilities:    List of dicts with keys: name, city, state, beds (optional).
         source_url:    URL of the locations page used for roster extraction.
+        google_data:   Dict keyed by lowercase facility name → {rating, review_count}.
 
     Returns:
         (system_prompt, user_prompt)
     """
-    # Build facilities block
+    google_data = google_data or {}
+
+    # Build facilities block (with Google ratings inline)
     if facilities:
         fac_lines = []
         for i, f in enumerate(facilities, 1):
             beds_str = f" ({f['beds']} beds)" if f.get("beds") else ""
-            fac_lines.append(f"  {i}. {f['name']} — {f['city']}, {f['state']}{beds_str}")
+            gd = google_data.get(f.get("name", "").lower(), {})
+            if gd.get("rating") is not None:
+                rating_str = f" | Google: {gd['rating']:.1f}★ ({gd.get('review_count') or 0} reviews)"
+            else:
+                rating_str = " | Google: no verified listing"
+            fac_lines.append(f"  {i}. {f['name']} — {f['city']}, {f['state']}{beds_str}{rating_str}")
         facilities_block = "\n".join(fac_lines)
         states = sorted({f["state"] for f in facilities if f.get("state")})
         states_str = ", ".join(states)
@@ -399,6 +408,19 @@ def build_network_analysis_prompt(
         states_str = "unknown"
         total = 0
 
+    # Compute network-level Google summary for the prompt header
+    rated = [gd for gd in google_data.values() if gd.get("rating") is not None]
+    if rated:
+        avg_rating = sum(gd["rating"] for gd in rated) / len(rated)
+        total_reviews = sum(gd.get("review_count") or 0 for gd in rated)
+        coverage_pct = round(100 * len(rated) / max(total, 1))
+        google_summary = (
+            f"{len(rated)}/{total} facilities ({coverage_pct}%) have verified Google listings — "
+            f"avg rating {avg_rating:.2f}★, {total_reviews:,} total reviews"
+        )
+    else:
+        google_summary = "No verified Google listings found for this network's facilities"
+
     user = f"""Conduct a Network AI Visibility analysis for **{network_name}**.
 
 ## Network Profile
@@ -407,8 +429,9 @@ def build_network_analysis_prompt(
 - Roster source: {source_url}
 - Total hospitals assessed: {total}
 - States in footprint: {states_str}
+- Google presence summary: {google_summary}
 
-## Hospital Roster
+## Hospital Roster (with verified Google ratings)
 {facilities_block}
 
 ## Analysis Instructions
@@ -420,6 +443,12 @@ Evaluate: when AI assistants are asked about {network_name} by name — "What ho
 - Does AI know the network's scale and geographic footprint?
 - Does it correctly enumerate key member hospitals?
 - Is the network's brand positioning accurately reflected?
+
+**Also factor in the verified Google ratings above.** Google reviews are a direct signal of brand visibility — hospitals with high review volumes and strong ratings are more likely to appear prominently in AI-assisted searches. Consider:
+- What percentage of facilities have verified Google listings?
+- Is the average rating strong (≥4.0★), adequate (3.5–3.9★), or weak (<3.5★)?
+- Are there facilities with very few reviews that represent brand visibility gaps?
+- Do ratings vary significantly across states or facility types within the network?
 
 ### 2. Market Coverage (35% weight)
 For each state in the footprint ({states_str}), evaluate whether {network_name}'s hospitals surface in local queries:

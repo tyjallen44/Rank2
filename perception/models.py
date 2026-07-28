@@ -278,6 +278,8 @@ class NetworkFacility(BaseModel):
     surfaced_for_local: Optional[bool] = None   # found when patients search "[city] hospital"
     attributed_to_network: Optional[bool] = None  # correctly linked to parent network
     key_gap: Optional[str] = None               # single most important gap
+    google_rating: Optional[float] = None       # verified Google rating (1–5)
+    google_review_count: Optional[int] = None   # number of Google reviews
 
 
 class NetworkResult(BaseModel):

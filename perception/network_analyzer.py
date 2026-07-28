@@ -172,6 +172,11 @@ def analyze_network(
 
     run_id = str(uuid.uuid4())
 
+    # ── Phase: Google ratings ─────────────────────────────────────────────────
+    emit({"type": "phase", "name": "extracting",
+          "text": f"Fetching Google ratings for {len(facilities)} facilities"})
+    google_data = _fetch_google_ratings(facilities)
+
     # ── Phase: analyzing ─────────────────────────────────────────────────────
     emit({"type": "phase", "name": "analyzing",
           "text": f"Analyzing AI visibility for {network_name}"})
@@ -181,6 +186,7 @@ def analyze_network(
         hq_location=hq_location,
         facilities=facilities,
         source_url=source_url,
+        google_data=google_data,
     )
 
     response = client.messages.create(
@@ -212,13 +218,15 @@ def analyze_network(
         if not isinstance(fa, dict):
             continue
         fac_score = fa.get("ai_visibility_score")
+        fac_name  = fa.get("name", "")
+        gd        = google_data.get(fac_name.lower(), {})
         facility_objects.append(NetworkFacility(
-            name=fa.get("name", ""),
+            name=fac_name,
             city=fa.get("city", ""),
             state=fa.get("state", ""),
             beds=next(
                 (f.get("beds") for f in facilities
-                 if f.get("name", "").lower() == fa.get("name", "").lower()),
+                 if f.get("name", "").lower() == fac_name.lower()),
                 None,
             ),
             ai_visibility_score=fac_score,
@@ -226,6 +234,8 @@ def analyze_network(
             surfaced_for_local=fa.get("surfaced_for_local"),
             attributed_to_network=fa.get("attributed_to_network"),
             key_gap=fa.get("key_gap"),
+            google_rating=gd.get("rating"),
+            google_review_count=gd.get("review_count"),
         ))
 
     # Sort worst → best (None scores go to the bottom)
@@ -293,6 +303,34 @@ def analyze_network(
 def _slug(name: str) -> str:
     import re
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def _fetch_google_ratings(facilities: list[dict]) -> dict[str, dict]:
+    """Fetch Google ratings for all facilities in parallel.
+
+    Returns a dict keyed by lowercase facility name:
+        {"rating": float|None, "review_count": int|None}
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from .data.places import fetch_google_rating
+
+    def _fetch_one(fac: dict) -> tuple[str, dict]:
+        key = fac.get("name", "").lower()
+        try:
+            read = fetch_google_rating(fac.get("name", ""), fac.get("city"), fac.get("state"))
+            if read.verified:
+                return key, {"rating": read.rating, "review_count": read.review_count}
+        except Exception:
+            pass
+        return key, {"rating": None, "review_count": None}
+
+    results: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futures = {pool.submit(_fetch_one, f): f for f in facilities}
+        for fut in as_completed(futures):
+            key, data = fut.result()
+            results[key] = data
+    return results
 
 
 def _save_network_run(result: NetworkResult) -> None:
