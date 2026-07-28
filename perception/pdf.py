@@ -138,11 +138,12 @@ def _e(text: str | None) -> str:
     return _html_lib.escape(str(text or ""))
 
 
-_MD_BOLD   = re.compile(r'\*\*(.+?)\*\*', re.DOTALL)
-_MD_ITALIC = re.compile(r'\*(.+?)\*|_(.+?)_', re.DOTALL)
-_MD_HEADER = re.compile(r'^#{1,6}\s+', re.MULTILINE)
-_MD_CODE   = re.compile(r'`(.+?)`', re.DOTALL)
-_MD_HR     = re.compile(r'^---+\s*$', re.MULTILINE)
+_MD_BOLD     = re.compile(r'\*\*(.+?)\*\*', re.DOTALL)
+_MD_ITALIC   = re.compile(r'\*(.+?)\*|_(.+?)_', re.DOTALL)
+_MD_HEADER   = re.compile(r'^#{1,6}\s+', re.MULTILINE)
+_MD_CODE     = re.compile(r'`(.+?)`', re.DOTALL)
+_MD_HR       = re.compile(r'^---+\s*$', re.MULTILINE)
+_MD_ITEM_NUM = re.compile(r'^#\d+\s*', re.MULTILINE)  # strips LLM global counters like #1, #5
 
 
 def _strip_md(text: str | None) -> str:
@@ -150,6 +151,7 @@ def _strip_md(text: str | None) -> str:
     if not text:
         return text or ""
     t = _MD_HEADER.sub("", text)
+    t = _MD_ITEM_NUM.sub("", t)
     t = _MD_BOLD.sub(r'\1', t)
     t = _MD_ITALIC.sub(lambda m: m.group(1) or m.group(2), t)
     t = _MD_CODE.sub(r'\1', t)
