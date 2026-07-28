@@ -1572,11 +1572,13 @@ html, body {
           <div class="fg" style="margin:0">
             <label class="fl">Health System Name</label>
             <input id="np-name" class="fi" type="text" placeholder="Atrium Health"
+              oninput="this.value=this.value.toUpperCase()"
               onkeydown="if(event.key==='Enter')npFindHospitals()">
           </div>
           <div class="fg" style="margin:0">
             <label class="fl">Headquarters (City, State)</label>
             <input id="np-hq" class="fi" type="text" placeholder="Charlotte, NC"
+              oninput="this.value=this.value.toUpperCase()"
               onkeydown="if(event.key==='Enter')npFindHospitals()">
           </div>
         </div>
@@ -3246,8 +3248,8 @@ async function npFindHospitals() {
     }
 
     // Use canonical name returned by AI if input name was informal
-    const canonicalName = data.network_canonical_name || name;
-    if (canonicalName && canonicalName !== name) {
+    const canonicalName = (data.network_canonical_name || name).toUpperCase();
+    if (canonicalName && canonicalName !== name.toUpperCase()) {
       document.getElementById('np-name').value = canonicalName;
     }
 
