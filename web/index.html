@@ -3213,8 +3213,10 @@ function npReset() {
   const e2 = document.getElementById('np-step2-err');
   if (e1) e1.classList.add('hidden');
   if (e2) e2.classList.add('hidden');
-  const btn = document.getElementById('np-find-btn');
-  if (btn) { btn.disabled = false; btn.textContent = 'Find Hospitals →'; }
+  const findBtn = document.getElementById('np-find-btn');
+  if (findBtn) { findBtn.disabled = false; findBtn.textContent = 'Find Hospitals via AI →'; }
+  const runBtn = document.getElementById('np-run-btn');
+  if (runBtn)  { runBtn.disabled  = false; runBtn.textContent  = 'Run Network Pulse →'; }
 }
 
 async function npFindHospitals() {
@@ -3257,6 +3259,8 @@ async function npFindHospitals() {
     npShowRoster(facilities, canonicalName, data.confidence_note);
     document.getElementById('np-step2').classList.remove('hidden');
     document.getElementById('np-step2').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    btn.disabled = false;
+    btn.textContent = 'Find Hospitals via AI →';
 
   } catch (err) {
     errEl.textContent = 'Error: ' + (err.message || err);
