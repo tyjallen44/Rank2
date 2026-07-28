@@ -1051,11 +1051,10 @@ async def network_pdf(run_id: str, _: str = Depends(require_auth)):
     pdf_path = Path(row[0])
     if not pdf_path.exists():
         raise HTTPException(404, "Network Pulse PDF file missing")
-    slug = re.sub(r"[^a-z0-9]+", "-", (row[1] or "network").lower()).strip("-")
     return FileResponse(
         str(pdf_path),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{slug}-network-pulse.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{pdf_path.name}"'},
     )
 
 
