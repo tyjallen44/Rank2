@@ -636,14 +636,31 @@ def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) ->
         attributed = "Yes" if fac.attributed_to_network else ("No" if fac.attributed_to_network is not None else "—")
         key_gap = _e(fac.key_gap or "")
 
+        # Google rating
         g_rating = fac.google_rating
         g_count  = fac.google_review_count
         if g_rating is not None:
-            stars = f"{g_rating:.1f}★"
-            cnt   = f"({g_count:,})" if g_count else ""
-            google_cell = f'<span style="font-size:9pt">{stars}</span> <span style="font-size:8pt;color:#7a8a9a">{cnt}</span>'
+            cnt_str     = f"({g_count:,})" if g_count else ""
+            google_cell = (f'<span style="font-size:9pt">{g_rating:.1f}★</span>'
+                           f' <span style="font-size:7.5pt;color:#7a8a9a">{cnt_str}</span>')
         else:
             google_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
+
+        # CMS star rating
+        cms = fac.cms_star_rating
+        if cms is not None:
+            cms_cell = "★" * cms + '<span style="color:#ccc">' + "★" * (5 - cms) + "</span>"
+        else:
+            cms_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
+
+        # Leapfrog grade
+        lf = fac.leapfrog_grade
+        if lf:
+            lf_color = {"A": "#1a7a3c", "B": "#2e7d9a", "C": "#b87a00",
+                        "D": "#c05020", "F": "#8b1c1c"}.get(lf, "#666")
+            lf_cell = (f'<span style="font-weight:700;color:{lf_color};font-size:11pt">{_e(lf)}</span>')
+        else:
+            lf_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
 
         rows_html += f"""<tr class="{row_cls}">
   <td>{_e(fac.name)}</td>
@@ -651,6 +668,8 @@ def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) ->
   <td style="text-align:center"><strong>{score_str}</strong></td>
   <td style="text-align:center"><span class="grade-badge {grade_css}">{_e(grade)}</span></td>
   <td style="text-align:center">{google_cell}</td>
+  <td style="text-align:center;font-size:9pt">{cms_cell}</td>
+  <td style="text-align:center;font-size:10pt">{lf_cell}</td>
   <td style="text-align:center;font-size:9pt">{surfaced}</td>
   <td style="text-align:center;font-size:9pt">{attributed}</td>
   <td style="font-size:8.5pt;color:#4a5a6a">{key_gap}</td>
@@ -673,6 +692,8 @@ def _facility_scorecard_block(result: NetworkResult, primary: str, pale: str) ->
       <th style="text-align:center">AI Score</th>
       <th style="text-align:center">Grade</th>
       <th style="text-align:center">Google Rating</th>
+      <th style="text-align:center">CMS Stars</th>
+      <th style="text-align:center">Leapfrog</th>
       <th style="text-align:center">Local Surface</th>
       <th style="text-align:center">Network Attribution</th>
       <th>Key Gap</th>
@@ -722,7 +743,7 @@ def _methodology_appendix(primary: str, pale: str) -> str:
     <tr>
       <td><strong>Brand Visibility</strong></td>
       <td>40%</td>
-      <td>How accurately and completely AI assistants represent the network when queried by name — roster, geography, and capabilities. Also incorporates verified Google Business Profile ratings and review volumes across all assessed facilities: review count signals digital brand presence, and rating level reflects patient-perceived quality that AI assistants surface in response to healthcare queries.</td>
+      <td>How accurately and completely AI assistants represent the network when queried by name — roster, geography, and capabilities. Also incorporates verified Google Business Profile ratings and review volumes: review count signals digital brand presence, and rating level reflects patient-perceived quality surfaced in AI responses. Hospitals with Leapfrog A grades or CMS 4–5★ ratings represent quality achievements that should appear when AI is asked about the network; failure to surface these credentials is treated as a brand visibility gap.</td>
     </tr>
     <tr>
       <td><strong>Market Coverage</strong></td>
@@ -738,6 +759,11 @@ def _methodology_appendix(primary: str, pale: str) -> str:
 </table>
 <p style="margin-top:8px">
   Grade bands: A (80+, Top Quartile) · B (65–79, Above Average) · C (50–64, Industry Average) · D (35–49, Below Average) · F (&lt;35, Bottom Quartile).
-  Facility scores use the same thresholds. Facility table is sorted worst → best to prioritize remediation effort.
+  Facility table is sorted worst → best to prioritize remediation effort.
+  <strong>External quality columns:</strong>
+  Google Rating — verified via Google Places API (review count in parentheses).
+  CMS Stars — CMS Overall Hospital Quality Star Rating (1–5★) from CMS Care Compare, fetched live via the public CMS Provider Data API.
+  Leapfrog — Hospital Safety Grade (A–F) from The Leapfrog Group, published semi-annually; "—" indicates the facility did not participate in the current survey cycle.
+  A facility with strong quality credentials (Leapfrog A, CMS 5★) but a low AI Score represents a high-priority visibility opportunity.
 </p>
 </div>"""

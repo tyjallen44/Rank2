@@ -192,10 +192,10 @@ def analyze_network(
 
     run_id = str(uuid.uuid4())
 
-    # ── Phase: Google ratings ─────────────────────────────────────────────────
+    # ── Phase: external quality data ─────────────────────────────────────────
     emit({"type": "phase", "name": "extracting",
-          "text": f"Fetching Google ratings for {len(facilities)} facilities"})
-    google_data = _fetch_google_ratings(facilities)
+          "text": f"Fetching Google ratings, CMS stars, and Leapfrog grades for {len(facilities)} facilities"})
+    facility_data = _fetch_facility_data(facilities)
 
     # ── Phase: analyzing ─────────────────────────────────────────────────────
     emit({"type": "phase", "name": "analyzing",
@@ -206,7 +206,7 @@ def analyze_network(
         hq_location=hq_location,
         facilities=facilities,
         source_url=source_url,
-        google_data=google_data,
+        facility_data=facility_data,
     )
 
     response = client.messages.create(
@@ -238,8 +238,8 @@ def analyze_network(
         if not isinstance(fa, dict):
             continue
         fac_score = fa.get("ai_visibility_score")
-        fac_name  = fa.get("name", "")
-        gd        = google_data.get(fac_name.lower(), {})
+        fac_name = fa.get("name", "")
+        fd       = facility_data.get(fac_name.lower(), {})
         facility_objects.append(NetworkFacility(
             name=fac_name,
             city=fa.get("city", ""),
@@ -254,8 +254,10 @@ def analyze_network(
             surfaced_for_local=fa.get("surfaced_for_local"),
             attributed_to_network=fa.get("attributed_to_network"),
             key_gap=fa.get("key_gap"),
-            google_rating=gd.get("rating"),
-            google_review_count=gd.get("review_count"),
+            google_rating=fd.get("google_rating"),
+            google_review_count=fd.get("google_review_count"),
+            cms_star_rating=fd.get("cms_star_rating"),
+            leapfrog_grade=fd.get("leapfrog_grade"),
         ))
 
     # Sort worst → best (None scores go to the bottom)
@@ -464,31 +466,76 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
-def _fetch_google_ratings(facilities: list[dict]) -> dict[str, dict]:
-    """Fetch Google ratings for all facilities in parallel.
+def _fetch_facility_data(facilities: list[dict]) -> dict[str, dict]:
+    """Fetch Google ratings, CMS star ratings, and Leapfrog grades for all facilities.
 
-    Returns a dict keyed by lowercase facility name:
-        {"rating": float|None, "review_count": int|None}
+    Runs three data sources in parallel at the batch level:
+      - Google Places API (per-facility, parallelised)
+      - CMS Care Compare API (batched by state, no per-facility calls)
+      - Leapfrog Hospital Safety Grade (per-facility Playwright scrape, parallelised)
+
+    Returns dict keyed by lowercase facility name:
+        {
+          "google_rating": float|None,
+          "google_review_count": int|None,
+          "cms_star_rating": int|None,
+          "leapfrog_grade": str|None,
+        }
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from .data.places import fetch_google_rating
+    from .data.cms import fetch_star_ratings_for_network
+    from .data.leapfrog import fetch_leapfrog_grade
 
-    def _fetch_one(fac: dict) -> tuple[str, dict]:
+    # ── Google ratings (per-facility, parallel) ───────────────────────────────
+    def _google_one(fac: dict) -> tuple[str, float | None, int | None]:
         key = fac.get("name", "").lower()
         try:
             read = fetch_google_rating(fac.get("name", ""), fac.get("city"), fac.get("state"))
             if read.verified:
-                return key, {"rating": read.rating, "review_count": read.review_count}
+                return key, read.rating, read.review_count
         except Exception:
             pass
-        return key, {"rating": None, "review_count": None}
+        return key, None, None
 
-    results: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        futures = {pool.submit(_fetch_one, f): f for f in facilities}
-        for fut in as_completed(futures):
-            key, data = fut.result()
-            results[key] = data
+    # ── Leapfrog grades (per-facility, parallel Playwright) ───────────────────
+    def _leapfrog_one(fac: dict) -> tuple[str, str | None]:
+        key = fac.get("name", "").lower()
+        try:
+            grade = fetch_leapfrog_grade(fac.get("name", ""), fac.get("city", ""), fac.get("state", ""))
+            return key, grade
+        except Exception:
+            return key, None
+
+    # Initialise result dict
+    results: dict[str, dict] = {
+        fac.get("name", "").lower(): {
+            "google_rating": None, "google_review_count": None,
+            "cms_star_rating": None, "leapfrog_grade": None,
+        }
+        for fac in facilities
+    }
+
+    # Run Google + Leapfrog per-facility in parallel; CMS batched separately
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        g_futures  = {pool.submit(_google_one,   f): f for f in facilities}
+        lf_futures = {pool.submit(_leapfrog_one, f): f for f in facilities}
+        cms_future = pool.submit(fetch_star_ratings_for_network, facilities)
+
+        for fut in as_completed(g_futures):
+            key, rating, count = fut.result()
+            results[key]["google_rating"]       = rating
+            results[key]["google_review_count"] = count
+
+        for fut in as_completed(lf_futures):
+            key, grade = fut.result()
+            results[key]["leapfrog_grade"] = grade
+
+        cms_map = cms_future.result()
+        for key, star in cms_map.items():
+            if key in results:
+                results[key]["cms_star_rating"] = star
+
     return results
 
 

@@ -119,3 +119,71 @@ def list_hospitals(
 
     hospitals.sort(key=lambda h: (h.overall_rating or 0), reverse=True)
     return hospitals
+
+
+# ── Token helpers for fuzzy name matching ────────────────────────────────────
+
+_STOP = frozenset({
+    "hospital", "medical", "center", "health", "system", "healthcare",
+    "regional", "memorial", "general", "community", "care", "services",
+    "of", "the", "at", "and", "for", "a", "an",
+})
+
+
+def _name_tokens(name: str) -> frozenset[str]:
+    import re
+    toks = re.sub(r"[^a-z0-9 ]", "", name.lower()).split()
+    return frozenset(t for t in toks if t not in _STOP and len(t) > 1)
+
+
+def _best_match(name: str, city: str, candidates: list[CmsHospital]) -> Optional[CmsHospital]:
+    """Return the CMS record that best matches name+city, or None if no good match."""
+    tok_q = _name_tokens(name)
+    city_l = city.lower().strip()
+    best: Optional[CmsHospital] = None
+    best_score = 0.0
+    for h in candidates:
+        tok_h = _name_tokens(h.name)
+        if not tok_q or not tok_h:
+            continue
+        overlap = len(tok_q & tok_h) / min(len(tok_q), len(tok_h))
+        city_bonus = 0.2 if h.city.lower() == city_l else 0.0
+        score = overlap + city_bonus
+        if score > best_score and overlap >= 0.45:
+            best_score = score
+            best = h
+    return best
+
+
+def fetch_star_ratings_for_network(
+    facilities: list[dict],
+    *,
+    timeout: float = 60.0,
+) -> dict[str, Optional[int]]:
+    """Batch-fetch CMS overall star ratings for a network facility roster.
+
+    Groups facilities by state, fetches the full CMS hospital list for each state
+    once (no per-hospital API calls), then fuzzy-matches each facility by name+city.
+
+    Returns a dict keyed by lowercase facility name → star rating (1–5) or None.
+    """
+    from collections import defaultdict
+
+    by_state: dict[str, list[dict]] = defaultdict(list)
+    for fac in facilities:
+        st = (fac.get("state") or "").strip().upper()
+        if st:
+            by_state[st].append(fac)
+
+    result: dict[str, Optional[int]] = {}
+    for state, facs in by_state.items():
+        try:
+            cms_list = list_hospitals(state, timeout=timeout)
+        except Exception:
+            cms_list = []
+        for fac in facs:
+            key = fac.get("name", "").lower()
+            matched = _best_match(fac.get("name", ""), fac.get("city", ""), cms_list)
+            result[key] = matched.overall_rating if matched else None
+
+    return result

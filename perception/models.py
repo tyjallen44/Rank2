@@ -280,6 +280,8 @@ class NetworkFacility(BaseModel):
     key_gap: Optional[str] = None               # single most important gap
     google_rating: Optional[float] = None       # verified Google rating (1–5)
     google_review_count: Optional[int] = None   # number of Google reviews
+    cms_star_rating: Optional[int] = None       # CMS Overall Hospital Quality Star Rating (1–5)
+    leapfrog_grade: Optional[str] = None        # Leapfrog Hospital Safety Grade (A/B/C/D/F)
 
 
 class NetworkResult(BaseModel):

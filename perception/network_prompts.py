@@ -372,33 +372,49 @@ def build_network_analysis_prompt(
     hq_location: str,
     facilities: list[dict],
     source_url: str,
-    google_data: dict | None = None,
+    facility_data: dict | None = None,
 ) -> tuple[str, str]:
     """Build the system + user prompt pair for network AI visibility analysis.
 
     Args:
-        network_name:  Network name (e.g. "Atrium Health").
-        hq_location:   HQ city/state (e.g. "Charlotte, NC").
-        facilities:    List of dicts with keys: name, city, state, beds (optional).
-        source_url:    URL of the locations page used for roster extraction.
-        google_data:   Dict keyed by lowercase facility name → {rating, review_count}.
+        network_name:   Network name (e.g. "Atrium Health").
+        hq_location:    HQ city/state (e.g. "Charlotte, NC").
+        facilities:     List of dicts with keys: name, city, state, beds (optional).
+        source_url:     URL of the locations page used for roster extraction.
+        facility_data:  Dict keyed by lowercase facility name →
+                        {google_rating, google_review_count, cms_star_rating, leapfrog_grade}.
 
     Returns:
         (system_prompt, user_prompt)
     """
-    google_data = google_data or {}
+    facility_data = facility_data or {}
 
-    # Build facilities block (with Google ratings inline)
     if facilities:
         fac_lines = []
         for i, f in enumerate(facilities, 1):
             beds_str = f" ({f['beds']} beds)" if f.get("beds") else ""
-            gd = google_data.get(f.get("name", "").lower(), {})
-            if gd.get("rating") is not None:
-                rating_str = f" | Google: {gd['rating']:.1f}★ ({gd.get('review_count') or 0} reviews)"
+            fd = facility_data.get(f.get("name", "").lower(), {})
+
+            # Google
+            g_rating = fd.get("google_rating")
+            g_count  = fd.get("google_review_count")
+            if g_rating is not None:
+                google_str = f"Google {g_rating:.1f}★ ({g_count or 0} reviews)"
             else:
-                rating_str = " | Google: no verified listing"
-            fac_lines.append(f"  {i}. {f['name']} — {f['city']}, {f['state']}{beds_str}{rating_str}")
+                google_str = "Google —"
+
+            # CMS
+            cms = fd.get("cms_star_rating")
+            cms_str = f"CMS {cms}★" if cms is not None else "CMS —"
+
+            # Leapfrog
+            lf = fd.get("leapfrog_grade")
+            lf_str = f"Leapfrog {lf}" if lf else "Leapfrog —"
+
+            fac_lines.append(
+                f"  {i}. {f['name']} — {f['city']}, {f['state']}{beds_str}"
+                f" | {google_str} | {cms_str} | {lf_str}"
+            )
         facilities_block = "\n".join(fac_lines)
         states = sorted({f["state"] for f in facilities if f.get("state")})
         states_str = ", ".join(states)
@@ -408,18 +424,34 @@ def build_network_analysis_prompt(
         states_str = "unknown"
         total = 0
 
-    # Compute network-level Google summary for the prompt header
-    rated = [gd for gd in google_data.values() if gd.get("rating") is not None]
-    if rated:
-        avg_rating = sum(gd["rating"] for gd in rated) / len(rated)
-        total_reviews = sum(gd.get("review_count") or 0 for gd in rated)
-        coverage_pct = round(100 * len(rated) / max(total, 1))
+    # Network-level summaries
+    rated_g  = [fd for fd in facility_data.values() if fd.get("google_rating") is not None]
+    rated_c  = [fd for fd in facility_data.values() if fd.get("cms_star_rating") is not None]
+    rated_lf = [fd for fd in facility_data.values() if fd.get("leapfrog_grade") is not None]
+
+    if rated_g:
+        avg_g     = sum(fd["google_rating"] for fd in rated_g) / len(rated_g)
+        total_rev = sum(fd.get("google_review_count") or 0 for fd in rated_g)
         google_summary = (
-            f"{len(rated)}/{total} facilities ({coverage_pct}%) have verified Google listings — "
-            f"avg rating {avg_rating:.2f}★, {total_reviews:,} total reviews"
+            f"{len(rated_g)}/{total} facilities have verified Google listings — "
+            f"avg {avg_g:.2f}★, {total_rev:,} total reviews"
         )
     else:
-        google_summary = "No verified Google listings found for this network's facilities"
+        google_summary = "No verified Google listings found"
+
+    if rated_c:
+        avg_c = sum(fd["cms_star_rating"] for fd in rated_c) / len(rated_c)
+        cms_summary = f"{len(rated_c)}/{total} facilities rated by CMS — avg {avg_c:.1f}★"
+    else:
+        cms_summary = "No CMS star ratings retrieved"
+
+    if rated_lf:
+        from collections import Counter
+        grade_counts = Counter(fd["leapfrog_grade"] for fd in rated_lf)
+        grade_str = ", ".join(f"{cnt}×{g}" for g, cnt in sorted(grade_counts.items()))
+        lf_summary = f"{len(rated_lf)}/{total} facilities rated by Leapfrog — {grade_str}"
+    else:
+        lf_summary = "No Leapfrog grades retrieved"
 
     user = f"""Conduct a Network AI Visibility analysis for **{network_name}**.
 
@@ -429,9 +461,12 @@ def build_network_analysis_prompt(
 - Roster source: {source_url}
 - Total hospitals assessed: {total}
 - States in footprint: {states_str}
-- Google presence summary: {google_summary}
+- Google presence: {google_summary}
+- CMS quality: {cms_summary}
+- Leapfrog safety: {lf_summary}
 
-## Hospital Roster (with verified Google ratings)
+## Hospital Roster (with verified external quality data)
+Each row shows: Google rating | CMS overall star rating | Leapfrog Hospital Safety Grade
 {facilities_block}
 
 ## Analysis Instructions
@@ -444,11 +479,10 @@ Evaluate: when AI assistants are asked about {network_name} by name — "What ho
 - Does it correctly enumerate key member hospitals?
 - Is the network's brand positioning accurately reflected?
 
-**Also factor in the verified Google ratings above.** Google reviews are a direct signal of brand visibility — hospitals with high review volumes and strong ratings are more likely to appear prominently in AI-assisted searches. Consider:
-- What percentage of facilities have verified Google listings?
-- Is the average rating strong (≥4.0★), adequate (3.5–3.9★), or weak (<3.5★)?
-- Are there facilities with very few reviews that represent brand visibility gaps?
-- Do ratings vary significantly across states or facility types within the network?
+**Factor in the external quality signals above.** Strong Google review volume signals digital brand presence. High CMS star ratings and Leapfrog A/B grades represent quality achievements that patients and referring physicians actively seek in AI queries — if AI isn't surfacing these credentials, it's a brand visibility gap. Consider:
+- Are quality-strong facilities (Leapfrog A, CMS 4–5★) well-represented in AI when queried?
+- Does AI proactively surface the network's quality achievements or omit them?
+- Which facilities have strong quality credentials but low digital visibility (high opportunity)?
 
 ### 2. Market Coverage (35% weight)
 For each state in the footprint ({states_str}), evaluate whether {network_name}'s hospitals surface in local queries:
@@ -461,7 +495,7 @@ Are key facts correct when AI discusses {network_name} or its hospitals?
 - Service lines and clinical capabilities
 - Hospital sizes and bed counts (where known)
 - Trauma levels and teaching status
-- Accreditations and quality designations
+- **CMS star ratings and Leapfrog safety grades** — does AI correctly state or omit these?
 - Correct affiliation (hospitals attributed to {network_name} vs. confused with other systems)
 
 ### 4. Facility Assessments
