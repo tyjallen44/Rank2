@@ -1839,10 +1839,14 @@ html, body {
       <div class="page-title">Admin</div>
       <div class="page-sub">Manage user accounts and access requests.</div>
 
-      <div class="admin-tabs">
-        <button class="admin-tab active" id="atab-users" onclick="switchAdminTab('users')">Users</button>
-        <button class="admin-tab" id="atab-requests" onclick="switchAdminTab('requests')">Access Requests</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div class="admin-tabs" style="margin-bottom:0">
+          <button class="admin-tab active" id="atab-users" onclick="switchAdminTab('users')">Users</button>
+          <button class="admin-tab" id="atab-requests" onclick="switchAdminTab('requests')">Access Requests</button>
+        </div>
+        <button class="btn" onclick="adminTestEmail()" style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#9993; Test Email</button>
       </div>
+      <div id="admin-email-test-result" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:6px;font-size:13px"></div>
 
       <!-- Users panel -->
       <div id="admin-users-panel">
@@ -5660,6 +5664,32 @@ function _drawZipMap(prefix, mapId, infoId, lat, lon, centerZip, radiusMiles, ra
 }
 
 // ── Admin page ────────────────────────────────────────────────────────────
+
+async function adminTestEmail() {
+  const el = document.getElementById('admin-email-test-result');
+  el.style.display = '';
+  el.style.background = '#f0f8ff';
+  el.style.border = '1px solid #b0d4f1';
+  el.style.color = '#0F4146';
+  el.textContent = 'Sending test email…';
+  try {
+    const r = await api('/api/admin/test-email', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const d = await r.json();
+    if (d.status === 'sent') {
+      el.style.background = '#e8f5e9';
+      el.style.border = '1px solid #a5d6a7';
+      el.innerHTML = `<strong>✓ Email sent</strong> to ${d.to}<br><small>GMAIL_USER: ${d.config?.GMAIL_USER} &nbsp;|&nbsp; APP_URL: ${d.config?.APP_URL}</small>`;
+    } else {
+      el.style.background = '#fdecea';
+      el.style.border = '1px solid #f5c6cb';
+      el.innerHTML = `<strong>✗ Failed:</strong> ${d.error}<br><small>GMAIL_USER: ${d.config?.GMAIL_USER} &nbsp;|&nbsp; GMAIL_APP_PASSWORD: ${d.config?.GMAIL_APP_PASSWORD}</small>`;
+    }
+  } catch(e) {
+    el.style.background = '#fdecea';
+    el.style.border = '1px solid #f5c6cb';
+    el.textContent = `Error: ${e.message}`;
+  }
+}
 
 function switchAdminTab(tab) {
   ['users','requests'].forEach(t => {

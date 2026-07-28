@@ -22,8 +22,9 @@ def _send(to: str, subject: str, html: str) -> None:
     gmail_pw   = os.environ.get("GMAIL_APP_PASSWORD", "")
     print(f"[email] Attempting send to={to} subject={subject!r} from={gmail_user or '(not set)'}")
     if not gmail_user or not gmail_pw:
-        print(f"[email] GMAIL_USER or GMAIL_APP_PASSWORD not set — skipping")
-        return
+        msg = "GMAIL_USER or GMAIL_APP_PASSWORD env vars not set"
+        print(f"[email] FAILED: {msg}")
+        raise RuntimeError(msg)
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"{_BRAND} — {subject}"
@@ -36,6 +37,7 @@ def _send(to: str, subject: str, html: str) -> None:
         print(f"[email] Sent OK to={to}")
     except Exception as exc:
         print(f"[email] FAILED to={to} error={type(exc).__name__}: {exc}")
+        raise
 
 
 def _btn(href: str, label: str) -> str:

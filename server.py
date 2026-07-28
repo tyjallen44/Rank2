@@ -1410,6 +1410,7 @@ async def admin_approve_request(req_id: str, payload: dict = Depends(require_adm
         raise HTTPException(404, "Request not found")
     by = payload.get("email") or payload.get("uid") or payload.get("role", "admin")
     handle_access_request(req_id, "approved", by)
+    email_error = None
     if req["request_type"] == "native":
         if not get_user_by_email(req["email"]):
             user = create_user(req["email"], req["name"], "user", "native")
@@ -1418,12 +1419,14 @@ async def admin_approve_request(req_id: str, payload: dict = Depends(require_adm
                 send_set_password_link(req["email"], req["name"], tok)
             except Exception as _e:
                 print(f"[email] approve native error: {_e}")
+                email_error = str(_e)
     else:
         try:
             send_google_access_approved(req["email"], req["name"])
         except Exception as _e:
             print(f"[email] approve google error: {_e}")
-    return {"status": "approved"}
+            email_error = str(_e)
+    return {"status": "approved", "email_error": email_error}
 
 
 @app.post("/api/admin/requests/{req_id}/deny")
@@ -1550,6 +1553,39 @@ async def admin_invite_user(req: InviteUserRequest, payload: dict = Depends(requ
         except Exception as _e:
             print(f"[email] invite google error: {_e}")
     return {"status": "invited", "user_id": user["id"]}
+
+
+@app.post("/api/admin/test-email")
+async def admin_test_email(payload: dict = Depends(require_admin)):
+    """Send a test email to the requesting admin to verify SMTP config."""
+    import os
+    from perception.email_utils import _send, _wrap, _btn, APP_URL
+    to = payload.get("email") or payload.get("uid") or ""
+    if not to or "@" not in to:
+        raise HTTPException(400, "Cannot determine admin email address from session")
+    gmail_user = os.environ.get("GMAIL_USER", "")
+    gmail_pw   = os.environ.get("GMAIL_APP_PASSWORD", "")
+    config_status = {
+        "GMAIL_USER": gmail_user or "(not set)",
+        "GMAIL_APP_PASSWORD": "set" if gmail_pw else "(not set)",
+        "APP_URL": APP_URL,
+    }
+    body = (
+        "<h2 style='margin:0 0 12px;font-size:20px;'>Email Config Test</h2>"
+        "<p>If you received this, SMTP is working correctly.</p>"
+        "<table style='font-size:13px;margin-top:12px;border-collapse:collapse'>"
+        + "".join(
+            f"<tr><td style='padding:4px 12px 4px 0;color:#7a9095'>{k}</td>"
+            f"<td style='padding:4px 0'>{v}</td></tr>"
+            for k, v in config_status.items()
+        )
+        + "</table>"
+    )
+    try:
+        _send(to, "SMTP Test", _wrap(body))
+        return {"status": "sent", "to": to, "config": config_status}
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc), "config": config_status}
 
 
 # ── Feedback ──────────────────────────────────────────────────────────────────
