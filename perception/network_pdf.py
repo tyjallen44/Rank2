@@ -46,15 +46,17 @@ def render_network_pdf(
             path=str(pdf_path),
             format="A4",
             landscape=landscape,
-            margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
+            margin={"top": "0", "bottom": "0.65in", "left": "0", "right": "0"},
             print_background=True,
             display_header_footer=True,
             header_template="<span></span>",
             footer_template=(
-                '<div style="width:100%;font-family:Arial,sans-serif;'
-                'font-size:9px;color:#7a8a9a;text-align:center;padding:0 0 8px 0">'
-                'Page <span class="pageNumber"></span> of <span class="totalPages"></span>'
-                "</div>"
+                '<div style="width:100%;font-family:Arial,Helvetica,sans-serif;'
+                'font-size:8px;color:#8a9aaa;display:flex;justify-content:space-between;'
+                'align-items:center;padding:0 48px 10px;box-sizing:border-box">'
+                '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
+                '</div>'
             ),
         )
         browser.close()
@@ -73,7 +75,7 @@ def _build_network_html(result: NetworkResult, cfg: dict) -> str:
     css_overrides = cfg.get("css_overrides", "")
     logo_html    = cfg.get("logo_html") or _default_logo_html()
 
-    cover       = _cover_block(result, primary, accent, pale)
+    cover       = _cover_block(result, primary, accent, pale, logo_html)
     exec_sum    = _exec_summary_block(result)
     score_bkdn  = _score_breakdown_block(result, primary, accent, pale)
     facility_sc = _facility_scorecard_block(result, primary, pale)
@@ -127,17 +129,44 @@ body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #1a
 .cover {{
   background: {primary};
   color: #fff;
-  padding: 56px 48px 48px;
+  padding: 40px 48px 48px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }}
+.cover-logo-header {{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid rgba(201,168,76,0.35);
+}}
+.cover-logo-img {{
+  height: 38px;
+  width: auto;
+}}
+.cover-logo-text {{
+  font-size: 16pt;
+  font-weight: bold;
+  color: #fff;
+  letter-spacing: 0.06em;
+}}
+.cover-report-type-label {{
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: 0.20em;
+  color: rgba(201,168,76,0.75);
+  text-align: right;
+  font-weight: bold;
+  line-height: 1.6;
+}}
 .cover-edition {{
-  font-size: 8.5pt;
-  letter-spacing: 0.14em;
+  font-size: 7.5pt;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: {accent};
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   font-weight: bold;
 }}
 .cover-network-name {{
@@ -145,11 +174,19 @@ body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #1a
   font-weight: bold;
   line-height: 1.1;
   margin-bottom: 6px;
+  letter-spacing: -0.01em;
 }}
 .cover-subtitle {{
-  font-size: 12pt;
-  color: rgba(255,255,255,0.65);
-  margin-bottom: 36px;
+  font-size: 11pt;
+  color: rgba(255,255,255,0.60);
+  margin-bottom: 8px;
+}}
+.cover-confidential {{
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: rgba(255,255,255,0.30);
+  margin-bottom: 32px;
 }}
 .cover-score-center {{
   text-align: center;
@@ -224,11 +261,14 @@ body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #1a
 /* ── Report body ────────────────────────────────────────────────────────── */
 .report-body {{ padding: 36px 48px; }}
 h2 {{
-  font-size: 13pt;
+  font-size: 11.5pt;
+  font-weight: bold;
   color: {primary};
-  margin: 28px 0 10px;
+  margin: 32px 0 10px;
+  padding-bottom: 6px;
   border-bottom: 2px solid {accent};
-  padding-bottom: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }}
 p {{ margin-bottom: 10px; line-height: 1.55; }}
 
@@ -437,7 +477,7 @@ tfoot {{ display: table-footer-group; }}
 # Section builders
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _cover_block(result: NetworkResult, primary: str, accent: str, pale: str) -> str:
+def _cover_block(result: NetworkResult, primary: str, accent: str, pale: str, logo_html: str = "") -> str:
     name      = _e(result.network_canonical_name or result.network_name)
     score_str = str(result.ai_visibility_score) if result.ai_visibility_score is not None else "—"
     grade     = result.grade or "—"
@@ -457,9 +497,15 @@ def _cover_block(result: NetworkResult, primary: str, accent: str, pale: str) ->
 
     return f"""
 <div class="cover">
-  <div class="cover-edition">Network Pulse — AI Visibility Report</div>
+  <div class="cover-logo-header">
+    {logo_html}
+    <div class="cover-report-type-label">Network Pulse<br>AI Visibility Report</div>
+  </div>
+
+  <div class="cover-edition">Network AI Visibility</div>
   <div class="cover-network-name">{name}</div>
-  <div class="cover-subtitle">Network AI Visibility Report{' · ' + hq if hq else ''}</div>
+  <div class="cover-subtitle">{hq if hq else 'Multi-State Hospital Network'}</div>
+  <div class="cover-confidential">Confidential &nbsp;·&nbsp; Prepared exclusively for {name}</div>
 
   <div class="cover-score-center">
     <span class="cover-score-num" style="color:{accent}">{score_str}</span>
@@ -487,7 +533,7 @@ def _cover_block(result: NetworkResult, primary: str, accent: str, pale: str) ->
   </div>
 
   <div class="cover-meta">
-    <span>Pulse — Network AI Visibility &nbsp;·&nbsp; {_e(name)}</span>
+    <span>Pulse | RLDatix &nbsp;·&nbsp; Network AI Visibility &nbsp;·&nbsp; {_e(name)}</span>
     <span>Generated {_e(generated)}</span>
   </div>
 </div>"""
