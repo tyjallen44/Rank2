@@ -489,8 +489,13 @@ def _fetch_facility_data(
     CMS star ratings and Leapfrog grades are fetched only for hospital-type networks.
 
     Returns dict keyed by lowercase facility name.
+
+    Cloud Run safety: each source uses its own pool with a hard timeout so that
+    a hung Playwright browser or slow API call never blocks the entire pipeline.
+    Leapfrog uses at most 2 concurrent Chromium instances to stay within Cloud Run
+    memory limits.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
     from .data.places import fetch_google_rating
     from .network_prompts import get_facility_config
 
@@ -498,6 +503,15 @@ def _fetch_facility_data(
     fetch_cms = "cms" in cfg.get("quality_cols", [])
     fetch_lf  = "leapfrog" in cfg.get("quality_cols", [])
 
+    results: dict[str, dict] = {
+        fac.get("name", "").lower(): {
+            "google_rating": None, "google_review_count": None,
+            "cms_star_rating": None, "leapfrog_grade": None,
+        }
+        for fac in facilities
+    }
+
+    # ── Google (fast; 8 workers; 60s total timeout) ───────────────────────────
     def _google_one(fac: dict) -> tuple[str, float | None, int | None]:
         key = fac.get("name", "").lower()
         try:
@@ -508,51 +522,57 @@ def _fetch_facility_data(
             pass
         return key, None, None
 
-    results: dict[str, dict] = {
-        fac.get("name", "").lower(): {
-            "google_rating": None, "google_review_count": None,
-            "cms_star_rating": None, "leapfrog_grade": None,
-        }
-        for fac in facilities
-    }
-
-    with ThreadPoolExecutor(max_workers=12) as pool:
+    with ThreadPoolExecutor(max_workers=8) as pool:
         g_futures = {pool.submit(_google_one, f): f for f in facilities}
-
-        if fetch_lf:
-            from .data.leapfrog import fetch_leapfrog_grade
-            def _leapfrog_one(fac: dict) -> tuple[str, str | None]:
-                key = fac.get("name", "").lower()
+        try:
+            for fut in as_completed(g_futures, timeout=60):
                 try:
-                    grade = fetch_leapfrog_grade(fac.get("name", ""), fac.get("city", ""), fac.get("state", ""))
-                    return key, grade
+                    key, rating, count = fut.result()
+                    results[key]["google_rating"]       = rating
+                    results[key]["google_review_count"] = count
                 except Exception:
-                    return key, None
-            lf_futures = {pool.submit(_leapfrog_one, f): f for f in facilities}
-        else:
-            lf_futures = {}
+                    pass
+        except FuturesTimeout:
+            pass  # collect whatever completed; missing ones stay None
 
-        if fetch_cms:
-            from .data.cms import fetch_star_ratings_for_network
-            cms_future = pool.submit(fetch_star_ratings_for_network, facilities)
-        else:
-            cms_future = None
+    # ── Leapfrog (Playwright; max 2 Chromium instances; 150s total timeout) ──
+    if fetch_lf:
+        from .data.leapfrog import fetch_leapfrog_grade
 
-        for fut in as_completed(g_futures):
-            key, rating, count = fut.result()
-            results[key]["google_rating"]       = rating
-            results[key]["google_review_count"] = count
+        def _leapfrog_one(fac: dict) -> tuple[str, str | None]:
+            key = fac.get("name", "").lower()
+            try:
+                grade = fetch_leapfrog_grade(
+                    fac.get("name", ""), fac.get("city", ""), fac.get("state", "")
+                )
+                return key, grade
+            except Exception:
+                return key, None
 
-        if lf_futures:
-            for fut in as_completed(lf_futures):
-                key, grade = fut.result()
-                results[key]["leapfrog_grade"] = grade
+        with ThreadPoolExecutor(max_workers=2) as lf_pool:
+            lf_futures = {lf_pool.submit(_leapfrog_one, f): f for f in facilities}
+            try:
+                for fut in as_completed(lf_futures, timeout=150):
+                    try:
+                        key, grade = fut.result()
+                        results[key]["leapfrog_grade"] = grade
+                    except Exception:
+                        pass
+            except FuturesTimeout:
+                pass  # partial grades are fine; missing ones stay None
 
-        if cms_future is not None:
-            cms_map = cms_future.result()
-            for key, star in cms_map.items():
-                if key in results:
-                    results[key]["cms_star_rating"] = star
+    # ── CMS (HTTP batched by state; 60s timeout) ─────────────────────────────
+    if fetch_cms:
+        from .data.cms import fetch_star_ratings_for_network
+        with ThreadPoolExecutor(max_workers=1) as cms_pool:
+            cms_future = cms_pool.submit(fetch_star_ratings_for_network, facilities)
+            try:
+                cms_map = cms_future.result(timeout=60)
+                for key, star in cms_map.items():
+                    if key in results:
+                        results[key]["cms_star_rating"] = star
+            except Exception:
+                pass
 
     return results
 
