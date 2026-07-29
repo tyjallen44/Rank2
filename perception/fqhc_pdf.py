@@ -18,7 +18,12 @@ from .fqhc_scoring import (
 )
 from .scoring import grade_from_score
 # Reuse brand configs and low-level helpers from pdf.py
-from .pdf import _BRAND_CONFIGS, _e, _strip_md
+from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL
+
+_BLUR_CTA_FQHC = (
+    "Access the complete Community Health Edition report — AI Visibility Verdict, "
+    "all five pillars, Missed Queries Exhibit, and personalized Improvement Opportunities."
+)
 
 
 def render_fqhc_pdf(
@@ -107,6 +112,40 @@ def _build_fqhc_html(result: AnalysisResult, brand_cfg: dict) -> str:
     logo_html = brand_cfg.get("logo_html") or _default_logo_html()
     css_overrides = brand_cfg.get("css_overrides", "")
 
+    if result.teaser_report:
+        main_body = f"""<div class="teaser-blur-wrapper">
+  <div class="teaser-blur-content">
+{verdict}
+{pillar1}
+{missed_queries}
+{pillar2}
+{pillar3}
+{pillar4}
+{pillar5}
+{assessment}
+  </div>
+  <div class="teaser-blur-overlay">
+    <div class="blur-lock">&#128274;</div>
+    <div class="blur-cta-heading">Full analysis available upon request</div>
+    <div class="blur-cta-sub">{_BLUR_CTA_FQHC}</div>
+    <div class="blur-cta-actions">
+      <span class="blur-phone">{_TEASER_PHONE}</span>
+      &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+      <a href="{_TEASER_DEMO_URL}" class="blur-demo-link">Book a Demo &rarr;</a>
+    </div>
+  </div>
+</div>"""
+    else:
+        main_body = f"""
+{verdict}
+{pillar1}
+{missed_queries}
+{pillar2}
+{pillar3}
+{pillar4}
+{pillar5}
+{assessment}"""
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -122,14 +161,7 @@ def _build_fqhc_html(result: AnalysisResult, brand_cfg: dict) -> str:
 <div class="report-body">
 {scorecard}
 {mqcr_block}
-{verdict}
-{pillar1}
-{missed_queries}
-{pillar2}
-{pillar3}
-{pillar4}
-{pillar5}
-{assessment}
+{main_body}
 {appendix}
 {disclaimer}
 </div>
@@ -229,6 +261,35 @@ def _fqhc_css(primary: str, pale: str, accent: str) -> str:
     .appendix td {{ padding: 6px 8px; border-bottom: 1px solid #d0e4e7; }}
     .disclaimer-text {{ font-size: 7.5pt; color: #7a9095; line-height: 1.5; margin-top: 24px; padding-top: 12px; border-top: 1px solid #d0e4e7; }}
     .mission-critical-banner {{ background: #fdf0f0; border: 1px solid #e0a0a0; border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 9pt; color: #8b1c1c; }}
+    .teaser-blur-wrapper {{ position: relative; overflow: hidden; border-radius: 6px; }}
+    .teaser-blur-content {{ filter: blur(2px); user-select: none; pointer-events: none; }}
+    .teaser-blur-overlay {{
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(238,247,241,0.26);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 14px 20px;
+      border-radius: 6px;
+      border: 1.5px dashed {accent};
+    }}
+    .teaser-blur-overlay .blur-lock,
+    .teaser-blur-overlay .blur-cta-heading,
+    .teaser-blur-overlay .blur-cta-sub,
+    .teaser-blur-overlay .blur-cta-actions {{
+      background: rgba(238,247,241,0.92);
+      border-radius: 4px;
+      padding: 2px 8px;
+    }}
+    .blur-lock {{ font-size: 18pt; margin-bottom: 5px; }}
+    .blur-cta-heading {{ font-size: 10pt; font-weight: 700; color: {primary}; margin-bottom: 5px; }}
+    .blur-cta-sub {{ font-size: 7.5pt; color: #3a5a60; line-height: 1.45; margin-bottom: 9px; max-width: 380px; }}
+    .blur-cta-actions {{ font-size: 9pt; font-weight: 600; color: {primary}; }}
+    .blur-phone {{ font-weight: 700; }}
+    .blur-demo-link {{ color: #0a5c70; font-weight: 700; text-decoration: underline; }}
     """
 
 
