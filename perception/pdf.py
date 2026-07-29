@@ -1878,12 +1878,12 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
       filter: blur(2px);
       user-select: none;
       pointer-events: none;
-      opacity: 0.07;
+      opacity: 0.40;
     }}
     .teaser-blur-overlay {{
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(238,247,241,0.92);
+      background: rgba(238,247,241,0.65);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -1995,7 +1995,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     }}
     .roadmap-blur-content {{
       filter: blur(2.1px);
-      opacity: 0.07;
+      opacity: 0.40;
       font-size: 7pt;
       color: {_TEAL};
       line-height: 1.4;
