@@ -885,7 +885,7 @@ html, body {
     </div>
     <div class="sb-nav">
       <div class="nav-section-label">Report Creation</div>
-      <button class="nav-btn" id="nav-individual" onclick="navigate('individual')" title="Run a focused Pulse Diagnostic for a single hospital or practice">
+      <button class="nav-btn active" id="nav-individual" onclick="navigate('individual')" title="Run a focused Pulse Diagnostic for a single hospital or practice">
         <span class="ni">◎</span><span class="nb-lbl">Pulse Diagnostic</span>
       </button>
       <button class="nav-btn" id="nav-events" onclick="navigate('events')" title="Generate Pulse Diagnostics for an event attendee list">
@@ -900,7 +900,7 @@ html, body {
       <button class="nav-btn" id="nav-compare" onclick="navigate('compare')" title="Compare two organizations head-to-head on Pulse Score">
         <span class="ni">⇄</span><span class="nb-lbl">Pulse Comparison</span>
       </button>
-      <button class="nav-btn active" id="nav-new" onclick="navigate('new')" title="Analysis Tools for Internal RLDatix Teams" style="display:none">
+      <button class="nav-btn" id="nav-new" onclick="navigate('new')" title="Analysis Tools for Internal RLDatix Teams" style="display:none">
         <span class="ni">✦</span><span class="nb-lbl">Market Pulse</span>
       </button>
 
@@ -3043,7 +3043,7 @@ function showApp() {
     }
     el.textContent = label;
   }).catch(() => {});
-  navigate('new');
+  navigate('individual');
 }
 
 function showSessionExpired() {
