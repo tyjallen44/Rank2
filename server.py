@@ -243,6 +243,44 @@ def _job_error(exc: Exception) -> str:
     return s
 
 
+def _backfill_teaser_pdf(result, job: dict) -> None:
+    """Re-render result as teaser PDF when cache returned a stale or missing PDF.
+
+    Covers two cases:
+    1. Cache returned an old non-teaser result (result.teaser_report is False).
+    2. The stored pdf_path refers to a file that no longer exists on this machine
+       (e.g., a path from a production container that differs from local REPORTS_DIR).
+    """
+    if not job.get("teaser_report") or job.get("skip_pdf"):
+        return
+    pdf_ok = bool(result.pdf_path and Path(result.pdf_path).exists())
+    if result.teaser_report and pdf_ok:
+        return  # already have a valid teaser PDF
+
+    import re as _re
+    from datetime import datetime as _dt
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    _ts = _dt.utcnow().strftime("%y%m%d-%H%M")
+    _safe = _re.sub(r"\W+", "_", result.entity_name or "entity")[:40]
+    t_pdf = REPORTS_DIR / f"{_safe}_Summary-Report-{_ts}.pdf"
+
+    result.teaser_report = True
+    if result.entity_type == "community_health":
+        from perception.fqhc_pdf import render_fqhc_pdf
+        render_fqhc_pdf(result, str(t_pdf), brand=job.get("brand", "original"))
+    else:
+        from perception.pdf import render_pdf
+        render_pdf(result, t_pdf, brand=job.get("brand", "original"))
+    result.pdf_path = str(t_pdf)
+
+    from perception.db import get_connection
+    with get_connection() as _con:
+        _con.execute(
+            "UPDATE analysis_runs SET pdf_path = ? WHERE run_id = ?",
+            [str(t_pdf), result.run_id],
+        )
+
+
 def _job_run_single(
     job_id: str, city: str, state: str, specialty: Optional[str],
     aggregate: bool = False, radius_miles: Optional[int] = None,
@@ -279,6 +317,7 @@ def _job_run_single(
             entity_type=entity_type,
             report_title=job.get("report_title"),
         )
+        _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
         job["result"] = {
@@ -336,6 +375,7 @@ def _job_run_practice(
             confirmed_siblings=job.get("confirmed_siblings"),
             org_name=job.get("org_name"),
         )
+        _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
         job["result"] = {
@@ -386,6 +426,7 @@ def _job_run_fqhc(
             briefing_variant=job.get("briefing_variant"),
             report_title=job.get("report_title"),
         )
+        _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
         job["result"] = {

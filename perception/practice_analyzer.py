@@ -975,7 +975,7 @@ def analyze_practice(
             "fewer than half the pillar weights were populated. "
             "No prospect-facing PDF was produced. Review the markdown report and rerun."
         )
-        emit({"type": "error", "text": _failure_msg})
+        emit({"type": "error", "message": _failure_msg})
         console.print(f"[yellow]⚠[/yellow] {_failure_msg}")
         skip_pdf = True
 
