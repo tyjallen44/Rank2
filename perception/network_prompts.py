@@ -369,6 +369,11 @@ A high AI Visibility score means:
 **Brand Visibility (40% weight)**
 How well does AI represent the network as a whole? When asked about [Network] by name, does AI give an accurate, complete answer? Does it know the network's geography, scale, and capabilities?
 
+Brand Visibility is not just about name recognition — it must reflect the quality and trustworthiness patients and referring physicians associate with the network. Patient safety and patient happiness are the two pillars of brand credibility:
+- **Patient safety** is measured by objective third-party ratings: Leapfrog Hospital Safety Grades (A–F) and CMS Overall Hospital Quality Star Ratings (1–5★). These grades are what patients and physicians consult when choosing where to receive care — and what AI assistants should be surfacing.
+- **Patient happiness** is measured by patient experience surveys (HCAHPS) and online reviews (Google ratings and review volume). High Google ratings with strong review volume signal that real patients endorse the experience — and AI assistants increasingly weight this signal when recommending facilities.
+
+{quality_guidance}
 **Market Coverage (35% weight)**
 For each state in the network's footprint, do the member {plural} surface in local queries? Score based on: (a) do {plural} appear when someone searches "{local_q}"? (b) are they correctly linked to the parent network in those local results?
 
