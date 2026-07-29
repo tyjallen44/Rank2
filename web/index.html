@@ -1907,7 +1907,7 @@ html, body {
     <!-- ── Events Pulse ─────────────────────────────────────────────────── -->
     <div id="page-events" class="page">
       <div class="page-title">Events Pulse</div>
-      <div class="page-sub">Upload an event attendee list to generate a Pulse Diagnostic for every practice or hospital — and download an enriched CSV with scores.</div>
+      <div class="page-sub">Upload an event attendee list to generate a Pulse Diagnostic for every hospital, practice, or community health center — and download an enriched CSV with scores.</div>
 
       <!-- Step 1: Setup -->
       <div id="ev-step1" style="max-width:680px">
@@ -1927,14 +1927,29 @@ html, body {
 
           <div style="margin-bottom:16px">
             <div class="field-label">Entity Type</div>
-            <div style="display:flex;gap:10px;margin-top:6px">
+            <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
               <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
-                <input type="radio" name="ev-type" value="hospital" id="ev-type-hospital" checked> Hospital / Health System
+                <input type="radio" name="ev-type" value="hospital" id="ev-type-hospital" checked onchange="evTypeChanged()"> Hospital / Health System
               </label>
               <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
-                <input type="radio" name="ev-type" value="practice" id="ev-type-practice"> Specialty Practice
+                <input type="radio" name="ev-type" value="practice" id="ev-type-practice" onchange="evTypeChanged()"> Specialty Practice
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
+                <input type="radio" name="ev-type" value="fqhc" id="ev-type-fqhc" onchange="evTypeChanged()"> Community Health (FQHC)
               </label>
             </div>
+          </div>
+
+          <!-- FQHC-specific options (shown only when Community Health selected) -->
+          <div id="ev-fqhc-options" style="display:none;margin-bottom:16px;padding:14px 16px;background:var(--pale);border-radius:8px;border:1px solid var(--border)">
+            <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:14px">
+              <input type="checkbox" id="ev-practice-composite" style="margin-top:2px">
+              <div>
+                Include Practice Composite
+                <span class="tooltip-anchor" style="margin-left:6px;cursor:help;color:var(--teal);font-size:12px;font-weight:600" title="When enabled, the app will automatically discover all clinic sites associated with each health center — including satellite locations, school-based sites, and mobile units in the area — and incorporate their online presence and reputation data into the report. This gives a fuller picture of the organization's AI visibility across its entire footprint, not just its main address.">ⓘ</span>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">Discovers all clinic sites for each health center and includes them in the AI visibility assessment.</div>
+              </div>
+            </label>
           </div>
 
           <div style="margin-bottom:20px">
@@ -5316,7 +5331,7 @@ function renderHistory(events) {
     const evRows = events.map(ev => {
       const date  = (ev.created_at || '').slice(0, 10);
       const count = `${ev.done_count} scored${ev.skip_count ? ` · ${ev.skip_count} skipped` : ''}`;
-      const type  = ev.entity_type === 'practice' ? 'Practice' : 'Hospital';
+      const type  = ev.entity_type === 'practice' ? 'Practice' : ev.entity_type === 'fqhc' ? 'Community Health' : 'Hospital';
       const statusBadge = ev.status === 'complete'
         ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
         : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
@@ -6477,6 +6492,11 @@ async function submitAddEntity() {
 
 // ── Events Pulse ──────────────────────────────────────────────────────────────
 
+function evTypeChanged() {
+  const type = document.querySelector('input[name="ev-type"]:checked')?.value;
+  document.getElementById('ev-fqhc-options').style.display = type === 'fqhc' ? '' : 'none';
+}
+
 let _evRows        = [];       // raw resolved rows from /api/event/upload
 let _evEventId     = null;     // current event_id after run starts
 let _evCsvFilename = null;     // original upload filename
@@ -6645,9 +6665,10 @@ async function evSubmitRun() {
 
   const eventName    = document.getElementById('ev-name').value.trim();
   const eventDate    = document.getElementById('ev-date').value || null;
-  const entityType   = document.querySelector('input[name="ev-type"]:checked').value;
-  const includeteaser   = document.getElementById('ev-include-teaser')?.checked || false;
-  const overrideCache   = document.getElementById('ev-override-cache')?.checked || false;
+  const entityType           = document.querySelector('input[name="ev-type"]:checked').value;
+  const includeteaser        = document.getElementById('ev-include-teaser')?.checked || false;
+  const overrideCache        = document.getElementById('ev-override-cache')?.checked || false;
+  const autoPracticeComposite = document.getElementById('ev-practice-composite')?.checked || false;
 
   const entities = [];
   _evRows.forEach((row, idx) => {
@@ -6695,6 +6716,7 @@ async function evSubmitRun() {
         csv_filename: _evCsvFilename,
         include_teaser:  includeteaser,
         override_cache:  overrideCache,
+        auto_practice_composite: autoPracticeComposite,
         entities,
       }),
     });
