@@ -784,7 +784,7 @@ def analyze_fqhc(
         try:
             from .fqhc_pdf import render_fqhc_pdf
             slug = _slug(entity_name)
-            _fqhc_infix = "community-health-summary" if teaser_report else "community-health"
+            _fqhc_infix = "community-health-teaser" if teaser_report else "community-health"
             pdf_filename = f"{slug}-{_fqhc_infix}-{run_id[:8]}.pdf"
             pdf_path = output_dir / pdf_filename
             render_fqhc_pdf(result, str(pdf_path), brand=brand)

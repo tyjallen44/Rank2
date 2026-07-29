@@ -262,11 +262,11 @@ def _fqhc_css(primary: str, pale: str, accent: str) -> str:
     .disclaimer-text {{ font-size: 7.5pt; color: #7a9095; line-height: 1.5; margin-top: 24px; padding-top: 12px; border-top: 1px solid #d0e4e7; }}
     .mission-critical-banner {{ background: #fdf0f0; border: 1px solid #e0a0a0; border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 9pt; color: #8b1c1c; }}
     .teaser-blur-wrapper {{ position: relative; overflow: hidden; border-radius: 6px; }}
-    .teaser-blur-content {{ filter: blur(2px); opacity: 0.40; user-select: none; pointer-events: none; }}
+    .teaser-blur-content {{ filter: blur(2px); user-select: none; pointer-events: none; }}
     .teaser-blur-overlay {{
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(238,247,241,0.65);
+      background: rgba(238,247,241,0.26);
       display: flex;
       flex-direction: column;
       align-items: center;
