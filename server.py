@@ -2222,13 +2222,17 @@ def _run_event_job(
                     if include_teaser:
                         try:
                             import copy as _copy
-                            from perception.pdf import render_pdf as _render_pdf
                             t_result = _copy.copy(result)
                             t_result.teaser_report  = True
                             t_result.individual_report = True
                             base_stem = Path(new_pdf_path).stem if new_pdf_path else resolved_name
                             t_pdf_path = event_dir / f"{base_stem}_Teaser.pdf"
-                            _render_pdf(t_result, t_pdf_path, brand=brand)
+                            if result.entity_type == "community_health":
+                                from perception.fqhc_pdf import render_fqhc_pdf as _render_teaser
+                                _render_teaser(t_result, str(t_pdf_path), brand=brand)
+                            else:
+                                from perception.pdf import render_pdf as _render_teaser
+                                _render_teaser(t_result, t_pdf_path, brand=brand)
                         except Exception as _te:
                             emit({"type": "log", "text":
                                   f"⚠ Teaser PDF failed for {resolved_name}: {_te}"})
