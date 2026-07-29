@@ -973,11 +973,15 @@ def analyze_location(
         console.print("[dim]skip_pdf=True — PDF rendering skipped[/dim]")
         result.md_path = str(report_path)
     else:
+        if result.teaser_report:
+            print(f"[TEASER DEBUG] analyzer.py: about to render_pdf with teaser_report={result.teaser_report} individual_report={result.individual_report} entity_name={result.entity_name!r}", flush=True)
         emit({"type": "phase", "name": "pdf", "text": "Rendering PDF"})
         with console.status("[bold dark_sea_green4]Rendering PDF…[/bold dark_sea_green4]"):
             from .pdf import render_pdf
             pdf_path = output_dir / f"{_stem}.pdf"
             render_pdf(result, pdf_path, brand=brand)
+        if result.teaser_report:
+            print(f"[TEASER DEBUG] analyzer.py: render_pdf completed, pdf_path={pdf_path}", flush=True)
         console.print(f"[green]✓[/green] PDF saved    → [dim]{pdf_path}[/dim]")
         result.pdf_path = str(pdf_path)
         result.md_path = str(report_path)

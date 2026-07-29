@@ -251,11 +251,15 @@ def _backfill_teaser_pdf(result, job: dict) -> None:
     2. The stored pdf_path refers to a file that no longer exists on this machine
        (e.g., a path from a production container that differs from local REPORTS_DIR).
     """
+    print(f"[TEASER DEBUG] _backfill_teaser_pdf: job.teaser_report={job.get('teaser_report')} job.skip_pdf={job.get('skip_pdf')} result.teaser_report={getattr(result,'teaser_report',None)} result.pdf_path={getattr(result,'pdf_path',None)}", flush=True)
     if not job.get("teaser_report") or job.get("skip_pdf"):
+        print("[TEASER DEBUG] _backfill_teaser_pdf: returning early — teaser not requested or skip_pdf", flush=True)
         return
     pdf_ok = bool(result.pdf_path and Path(result.pdf_path).exists())
     if result.teaser_report and pdf_ok:
+        print("[TEASER DEBUG] _backfill_teaser_pdf: already a valid teaser PDF — no action", flush=True)
         return  # already have a valid teaser PDF
+    print(f"[TEASER DEBUG] _backfill_teaser_pdf: will re-render as teaser (pdf_ok={pdf_ok} result.individual_report={getattr(result,'individual_report',None)})", flush=True)
 
     import re as _re
     from datetime import datetime as _dt
@@ -297,6 +301,9 @@ def _job_run_single(
         init_db()
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+        if job.get("teaser_report"):
+            print(f"[TEASER DEBUG] _job_run_single: starting teaser run for entity={job.get('entity_name')!r} individual_report={job.get('individual_report')} entity_type={entity_type}", flush=True)
+
         result = analyze_location(
             city=city, state=state, specialty=specialty, aggregate=aggregate,
             radius_miles=radius_miles, zip_code=job.get("zip_code"),
@@ -317,6 +324,10 @@ def _job_run_single(
             entity_type=entity_type,
             report_title=job.get("report_title"),
         )
+
+        if job.get("teaser_report"):
+            print(f"[TEASER DEBUG] _job_run_single: analyze_location returned result.teaser_report={result.teaser_report} result.individual_report={result.individual_report} result.pdf_path={result.pdf_path!r}", flush=True)
+
         _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
@@ -352,6 +363,9 @@ def _job_run_practice(
         init_db()
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+        if job.get("teaser_report"):
+            print(f"[TEASER DEBUG] _job_run_practice: starting teaser run for entity={entity_name!r}", flush=True)
+
         result = analyze_practice(
             entity_name=entity_name,
             city=city,
@@ -375,6 +389,10 @@ def _job_run_practice(
             confirmed_siblings=job.get("confirmed_siblings"),
             org_name=job.get("org_name"),
         )
+
+        if job.get("teaser_report"):
+            print(f"[TEASER DEBUG] _job_run_practice: analyze_practice returned result.teaser_report={result.teaser_report} result.individual_report={result.individual_report} result.pdf_path={result.pdf_path!r}", flush=True)
+
         _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"])
         job["status"] = "done"
