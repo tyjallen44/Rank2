@@ -1563,11 +1563,10 @@ async def admin_test_email(payload: dict = Depends(require_admin)):
     to = payload.get("email") or ADMIN_EMAIL
     if not to or "@" not in to:
         raise HTTPException(400, "Cannot determine destination email — set ADMIN_NOTIFICATION_EMAIL env var")
-    gmail_user = os.environ.get("GMAIL_USER", "")
-    gmail_pw   = os.environ.get("GMAIL_APP_PASSWORD", "")
+    api_key = os.environ.get("RESEND_API_KEY", "")
     config_status = {
-        "GMAIL_USER": gmail_user or "(not set)",
-        "GMAIL_APP_PASSWORD": "set" if gmail_pw else "(not set)",
+        "RESEND_API_KEY": "set" if api_key else "(not set)",
+        "RESEND_FROM_DOMAIN": os.environ.get("RESEND_FROM_DOMAIN", "careclimb.com"),
         "APP_URL": APP_URL,
     }
     body = (

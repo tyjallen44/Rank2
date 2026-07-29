@@ -15,7 +15,7 @@ SERVICE="rank2"
 
 # ── SSO / Email config (edit these before deploying) ─────────────────────────
 GOOGLE_CLIENT_ID="883710187036-ruiomm1h40c6947uo8qn06su95fci1uq.apps.googleusercontent.com"
-GMAIL_USER="careclimb.rank2@gmail.com"
+RESEND_FROM_DOMAIN="careclimb.com"
 APP_URL="https://careclimb.com"
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ if [[ "$1" == "setup" ]]; then
   echo "  gcloud secrets create GOOGLE_PLACES_API_KEY --data-file=- <<< 'your-places-key'"
   echo "  gcloud secrets create ACCESS_PASSWORD        --data-file=- <<< 'your-access-password'"
   echo "  gcloud secrets create GOOGLE_CLIENT_SECRET   --data-file=- <<< 'your-google-client-secret'"
-  echo "  gcloud secrets create GMAIL_APP_PASSWORD     --data-file=- <<< 'your-gmail-app-password'"
+  echo "  gcloud secrets create RESEND_API_KEY         --data-file=- <<< 'your-resend-api-key'"
   echo ""
   echo "Then re-run without 'setup' to build and deploy:"
   echo "  bash deploy.sh"
@@ -99,8 +99,8 @@ gcloud run deploy "$SERVICE" \
   --timeout=3600 \
   --min-instances=0 \
   --max-instances=2 \
-  --set-env-vars="REPORTS_DIR=/data/reports,DB_PATH=/data/rank2.duckdb,APP_URL=${APP_URL},GMAIL_USER=${GMAIL_USER},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
-  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,GMAIL_APP_PASSWORD=GMAIL_APP_PASSWORD:latest" \
+  --set-env-vars="REPORTS_DIR=/data/reports,DB_PATH=/data/rank2.duckdb,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
+  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest" \
   --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount="volume=rank2-data,mount-path=/data"
 

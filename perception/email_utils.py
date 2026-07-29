@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Optional
+
+import httpx
 
 ADMIN_EMAIL: str = os.environ.get("ADMIN_NOTIFICATION_EMAIL", "ty.allen@rldatix.com")
 APP_URL: str = os.environ.get("APP_URL", "https://careclimb.com")
 
 from .strings import EMAIL_BRAND as _BRAND
+_FROM_NAME = _BRAND
+_FROM_DOMAIN = os.environ.get("RESEND_FROM_DOMAIN", "careclimb.com")
+
 _CARD_CSS = (
     "font-family:'Inter',-apple-system,sans-serif;"
     "color:#0F4146;max-width:480px;margin:0 auto;padding:32px 24px;"
@@ -18,23 +20,23 @@ _CARD_CSS = (
 
 
 def _send(to: str, subject: str, html: str) -> None:
-    gmail_user = os.environ.get("GMAIL_USER", "")
-    gmail_pw   = os.environ.get("GMAIL_APP_PASSWORD", "")
-    print(f"[email] Attempting send to={to} subject={subject!r} from={gmail_user or '(not set)'}")
-    if not gmail_user or not gmail_pw:
-        msg = "GMAIL_USER or GMAIL_APP_PASSWORD env vars not set"
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    from_addr = f"{_FROM_NAME} <noreply@{_FROM_DOMAIN}>"
+    print(f"[email] Attempting send to={to} subject={subject!r} from={from_addr}")
+    if not api_key:
+        msg = "RESEND_API_KEY env var not set"
         print(f"[email] FAILED: {msg}")
         raise RuntimeError(msg)
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"{_BRAND} — {subject}"
-        msg["From"]    = f"{_BRAND} <{gmail_user}>"
-        msg["To"]      = to
-        msg.attach(MIMEText(html, "html"))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(gmail_user, gmail_pw)
-            smtp.sendmail(gmail_user, to, msg.as_string())
-        print(f"[email] Sent OK to={to}")
+        resp = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"from": from_addr, "to": [to], "subject": f"{_BRAND} — {subject}", "html": html},
+            timeout=15,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Resend API error {resp.status_code}: {resp.text}")
+        print(f"[email] Sent OK to={to} id={resp.json().get('id')}")
     except Exception as exc:
         print(f"[email] FAILED to={to} error={type(exc).__name__}: {exc}")
         raise
