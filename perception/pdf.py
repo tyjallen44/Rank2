@@ -1443,9 +1443,6 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     _has_custom_logo = brand_cfg.get("logo_html") or brand_cfg.get("logo_path")
     logo_uri         = None if _has_custom_logo else _logo_data_uri()
 
-    if result.teaser_report or result.individual_report:
-        print(f"[TEASER DEBUG] _build_html: individual_report={result.individual_report} teaser_report={result.teaser_report} entity_name={result.entity_name!r} rankings_count={len(result.rankings)}", flush=True)
-
     if result.individual_report and result.teaser_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
         rankings_html = _individual_teaser_section(all_ranked)
@@ -1881,12 +1878,12 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
       filter: blur(2px);
       user-select: none;
       pointer-events: none;
-      opacity: 1;
+      opacity: 0.07;
     }}
     .teaser-blur-overlay {{
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(238,247,241,0.26);
+      background: rgba(238,247,241,0.92);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -1998,6 +1995,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     }}
     .roadmap-blur-content {{
       filter: blur(2.1px);
+      opacity: 0.07;
       font-size: 7pt;
       color: {_TEAL};
       line-height: 1.4;
