@@ -517,6 +517,20 @@ def analyze_fqhc(
     else:
         console.print(f"[yellow]⚠[/yellow] No HRSA match found — proceeding with public sources")
 
+    # When no intake form was submitted, build a minimal one from facts that apply
+    # to every Section 330 grantee by law so Pillar 2 can be assessed rather than
+    # defaulting to zero for every entity in batch/events runs.
+    if fqhc_intake is None:
+        fqhc_intake = {
+            "sliding_fee_scale":  True,
+            "no_one_turned_away": True,
+            "accepts_medicaid":   True,
+            "accepts_medicare":   True,
+            "accepts_uninsured":  True,
+            "is_330":             hrsa_data.get("is_330") if hrsa_data.get("found") else None,
+            "site_names":         hrsa_data.get("site_names", []),
+        }
+
     console.print(f"[green]✓[/green] FQHC evidence: {entity_name}")
 
     system_prompt, user_prompt = build_fqhc_prompt(
