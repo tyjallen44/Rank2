@@ -2257,11 +2257,26 @@ html, body {
 
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
           <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.4</div>
-          <div style="font-size:13px;color:var(--muted)">Released July 19, 2026</div>
+          <div style="font-size:13px;color:var(--muted)">Released July 19, 2026 · Updated August 3, 2026</div>
         </div>
 
         <div class="rn-section">
           <div class="rn-heading new">New Features</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Community Health Edition — FQHC AI Visibility Reports</div>
+            <div class="rn-body">A new report type purpose-built for Federally Qualified Health Centers and HRSA Section 330 grantees. Community Health Edition scores organizations across five pillars calibrated to FQHC sector norms: Access &amp; Findability (including Mission Query Capture Rate), Eligibility &amp; Cost Accuracy, Site &amp; Service Completeness, Experience &amp; Reputation, and Institutional Signals. The analysis integrates live HRSA Find-a-Health-Center data and a client-attested intake form covering sliding-fee scale, insurance acceptance, service lines, languages, and site roster. A dedicated PDF template includes a cover page, 5-pillar scorecard, MQCR exhibit, missed-queries table, and fact-audit table for eligibility claims. Available from the Pulse Diagnostic under the Community Health entity type.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">MQCR Battery — Mission Query Capture Rate</div>
+            <div class="rn-body">After an initial Community Health Edition report is generated, a battery of mission-frame queries (e.g., "sliding scale clinic near me," "where can I see a doctor without insurance") can be run against AI assistants to compute the Mission Query Capture Rate — the percentage of queries where the health center surfaces in AI responses. The battery runs asynchronously and updates Pillar 1 scores, the cover page, scorecard, and MQCR exhibit in the PDF automatically. Battery runs are accessible from the History page for any Community Health report. Once run, the MQCR percentage replaces the Run Battery button in History.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Network Pulse — AI Visibility for Hospital Systems &amp; Facility Networks</div>
+            <div class="rn-body">A new report type for analyzing AI visibility across multi-state hospital networks and facility groups. Enter the network name and headquarters state; Pulse discovers the full facility roster using AI-assisted discovery and scores Brand Visibility, Information Accuracy, Patient Experience, and Quality Signals across the portfolio. The output is a branded executive-summary PDF with a network scorecard, facility-level score breakdown with CMS star ratings and Leapfrog grades, and Google rating integration. Network Pulse supports hospital systems and non-hospital facility networks (surgery centers, imaging groups, urgent care chains). Reports are cached same-day with an admin override, appear in History, and are accessible from the left navigation.</div>
+          </div>
 
           <div class="rn-item">
             <div class="rn-title">Organization-Level Pulse Diagnostics for Specialty Practices</div>
@@ -2285,7 +2300,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">Events Pulse</div>
-            <div class="rn-body">A new report type for generating batch Pulse Diagnostics from a CSV list of event attendees. Upload a CSV with name, city, state, and optional URL columns using the provided template; the app resolves each entity via Google Places, auto-confirming single matches and presenting a dropdown for ambiguous results. After confirmation, analyses run five at a time. Each entity receives an individual Pulse Diagnostic PDF (named with an <em>EventReport</em> suffix) and the run produces an enriched CSV appending Pulse Score, letter grade, and band label to the original data, plus a ZIP bundle of all PDFs. Event runs are shared across all logged-in users and appear in the History section. Events Pulse is accessible from the left navigation.</div>
+            <div class="rn-body">A new report type for generating batch Pulse Diagnostics from a CSV list of event attendees. Upload a CSV with name, city, state, and optional URL columns using the provided template; the app resolves each entity via Google Places, auto-confirming single matches and presenting a dropdown for ambiguous results. After confirmation, analyses run five at a time. Each entity receives an individual Pulse Diagnostic PDF (named with an <em>EventReport</em> suffix) and the run produces an enriched CSV appending Pulse Score, letter grade, and band label to the original data, plus a ZIP bundle of all PDFs. Community Health entities are fully supported — FQHC reports run through the Community Health Edition pipeline including optional teaser PDFs using the correct template. Event runs are shared across all logged-in users and appear in the History section.</div>
           </div>
 
           <div class="rn-item">
@@ -2297,6 +2312,31 @@ html, body {
 
         <div class="rn-section">
           <div class="rn-heading improved">Improvements</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Teaser PDFs for Community Health Edition</div>
+            <div class="rn-body">The teaser checkbox in Pulse Diagnostic now produces a properly formatted Community Health Edition teaser when the entity type is Community Health. The teaser shows the cover page, scorecard, and MQCR block in full, then applies the standard blur treatment to the Verdict through Assessment sections. Teaser filenames include a <em>community-health-teaser</em> infix to distinguish them from full reports. Events Pulse teaser generation for FQHC entities also uses the Community Health Edition template rather than the hospital/practice layout.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Auto-Populate FQHC Intake from HRSA Section 330 Defaults</div>
+            <div class="rn-body">When no client intake form is provided for a Community Health Edition run, the system now auto-populates a baseline intake from universal HRSA Section 330 grantee requirements — sliding-fee scale, no-one-turned-away policy, Medicaid and Medicare acceptance, and uninsured/self-pay acceptance. This ensures Pillar 2 fact-audit rows are always populated with the federally mandated minimums rather than rendering as "not established."</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Pulse Diagnostic as Default Landing Page</div>
+            <div class="rn-body">After login, the app now lands on Pulse Diagnostic rather than the previous default. This places the most frequently used report type one less click away for all users.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">History Page Widened to Fill Content Area</div>
+            <div class="rn-body">The History page no longer applies the global 920px content width cap. It now fills the full available panel width, allowing the Event Runs and All Reports tables to display all columns without horizontal overflow or cutoff.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Email Delivery via Resend API</div>
+            <div class="rn-body">Transactional email (password reset, invitations) has been switched from Gmail SMTP to the Resend API. Email failures are now surfaced visibly in the admin panel rather than failing silently. An admin test-email endpoint allows delivery verification without triggering a real reset flow.</div>
+          </div>
 
           <div class="rn-item">
             <div class="rn-title">Editable Report Title with Live Preview</div>
@@ -2325,7 +2365,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">Live Analysis Progress on Events Pulse</div>
-            <div class="rn-body">The Events Pulse progress screen now shows the same phase list and live output stream used on other report pages. Three phases — <em>Starting</em>, <em>Analyzing entities</em>, and <em>Finalizing reports</em> — advance in real time as the job runs. Each entity's result is logged to the stream with a status prefix: <em>▶</em> when started, <em>✓</em> with score and grade when complete, and <em>✗</em> when skipped. The phase panel and stream appear above the existing progress bar and entity row list.</div>
+            <div class="rn-body">The Events Pulse progress screen now shows the same phase list and live output stream used on other report pages. Three phases — <em>Starting</em>, <em>Analyzing entities</em>, and <em>Finalizing reports</em> — advance in real time as the job runs. Each entity's result is logged to the stream with a status prefix: <em>▶</em> when started, <em>✓</em> with score and grade when complete, and <em>✗</em> when skipped.</div>
           </div>
 
           <div class="rn-item">
@@ -2338,16 +2378,23 @@ html, body {
         <div class="rn-section">
           <div class="rn-heading fixed">Bug Fixes</div>
           <ul class="rn-fixes">
-            <li><strong>Report cover title showing search anchor instead of organization name</strong> — The PDF cover page was using the Google Places search anchor location (e.g., "IBJI Doctors' Office - Chicago-Avondale") as the title even when a parent org name or custom title was set. The cover now correctly uses the report title field, falling back to entity name only when no override is present.</li>
-            <li><strong>Custom report title not carried to PDF</strong> — A guard condition in the run request was silently dropping the report title when it differed from the entity name in an unexpected way. The condition has been removed; the report title is now always sent when set.</li>
-            <li><strong>Practice Composite PDF download returning 404</strong> — The composite PDF was not stored under the standard report history path, causing the download link to return 404. A dedicated <code>/api/composite/{job_id}/pdf</code> endpoint now serves the file directly from the completed job.</li>
-            <li><strong>Duplicate practices in composite for same-name multi-location groups</strong> — Practices with multiple locations registered under the same name were appearing as duplicate entries in the composite table. A post-processing deduplication step now collapses same-name records into a single entry.</li>
-            <li><strong>Sibling discovery failing for specialty practices</strong> — The sibling-location discovery step was using name comparison instead of object identity for filtering, causing specialty practices to incorrectly exclude themselves from their own sibling list. Fixed by switching to identity comparison.</li>
-            <li><strong>Events Pulse producing 0 reports</strong> — All entities in an event run were silently marked as skipped because <code>individual_report</code> was passed as a keyword argument to <code>analyze_practice</code>, which does not accept that parameter. The argument has been removed; <code>analyze_practice</code> handles individual report generation internally.</li>
-            <li><strong>Individual report runs showing [object Object]</strong> — A serialization error was causing the run payload to render as <em>[object Object]</em> in the live output stream instead of the report content. Fixed by ensuring the payload is correctly stringified before dispatch.</li>
-            <li><strong>PAs and Nurse Practitioners included in physician rosters</strong> — Some mid-level providers (PAs, NPs, CRNAs) who self-register a physician taxonomy code alongside their actual credential in NPPES were being included in physician discovery results. Fixed by adding an explicit exclusion check — any record with a PA/NP/CRNA taxonomy code is excluded even when it also carries a physician taxonomy.</li>
-            <li><strong>Co-located non-specialty physicians contaminating rosters</strong> — At shared medical buildings, physicians from unrelated practices (urologists, ENTs, ophthalmologists) were being seeded into orthopedic clinic rosters because the NPPES postal-code search returns all providers at a given address. Fixed by applying a specialty taxonomy filter in the NPPES seed search whenever the practice name implies a specialty, restricting results to providers whose taxonomy matches the practice type.</li>
-            <li><strong>Practices with no NPI-2 entity returning zero physicians</strong> — Practices that have not registered a group NPI-2 in NPPES (common for smaller independent groups) previously returned no physicians. A Google Places fallback now resolves the building postal code and clusters physicians by building prefix, recovering discovery for these practices.</li>
+            <li><strong>Community Health Edition teaser using hospital/practice PDF template in Events Pulse</strong> — Teaser PDFs generated during Events Pulse batch runs for FQHC entities were rendering with the hospital/practice layout. Fixed by routing FQHC entities (entity_type = community_health) to the Community Health Edition PDF renderer.</li>
+            <li><strong>Teaser PDF not generated when cache returned a previous non-teaser result</strong> — When an entity had been analyzed previously without teaser mode, the cached result was returned directly with teaser_report=False and a pdf_path pointing to the non-teaser file. A backfill step now re-renders the cached data as a teaser PDF when the teaser checkbox is checked, updating the stored path.</li>
+            <li><strong>Network Pulse PDF download returning 500</strong> — A missing information_accuracy_narrative field on the result model caused a server error when downloading Network Pulse PDFs. The field is now always populated before PDF rendering.</li>
+            <li><strong>Network Pulse hanging at Extracting data stage on Cloud Run</strong> — The database connection used during network analysis was not properly managed as a context manager, causing it to hold open indefinitely in the Cloud Run environment. Fixed by converting the stale-handle wrapper to a proper context manager.</li>
+            <li><strong>Network Pulse PDF buttons missing in History on Cloud Run</strong> — Network Pulse reports were not being written to the analysis_runs table under a reportable path, so the History page found no PDF to link. Fixed by ensuring the run is persisted with the correct pdf_path after generation.</li>
+            <li><strong>Network Pulse completion card showing zeros</strong> — The job result dict was missing the hospital/facility count and score fields, causing the completion screen to display zeros. Fixed by including all summary fields in the job result payload.</li>
+            <li><strong>Error message blank when PDF generation blocked by insufficient data</strong> — When a report had too few scored pillars to produce a PDF, an error event was emitted with a <code>text</code> key but the frontend expected a <code>message</code> key, leaving the error div empty. Fixed to use the correct key in both the hospital and practice analyzers.</li>
+            <li><strong>Report cover title showing search anchor instead of organization name</strong> — The PDF cover page was using the Google Places search anchor location as the title even when a parent org name or custom title was set. The cover now correctly uses the report title field.</li>
+            <li><strong>Custom report title not carried to PDF</strong> — A guard condition was silently dropping the report title when it differed from the entity name. The condition has been removed; the report title is now always sent when set.</li>
+            <li><strong>Practice Composite PDF download returning 404</strong> — The composite PDF was not stored under the standard report history path. A dedicated endpoint now serves the file directly from the completed job.</li>
+            <li><strong>Duplicate practices in composite for same-name multi-location groups</strong> — Practices with multiple locations under the same name appeared as duplicate entries. A deduplication step now collapses same-name records into a single entry.</li>
+            <li><strong>Sibling discovery failing for specialty practices</strong> — The sibling-location discovery step used name comparison instead of object identity, causing specialty practices to exclude themselves from their own sibling list. Fixed by switching to identity comparison.</li>
+            <li><strong>Events Pulse producing 0 reports</strong> — All entities were silently skipped because <code>individual_report</code> was passed to <code>analyze_practice</code>, which does not accept that parameter. The argument has been removed.</li>
+            <li><strong>Individual report runs showing [object Object]</strong> — A serialization error caused the run payload to render as <em>[object Object]</em> in the live output stream. Fixed by ensuring the payload is correctly stringified before dispatch.</li>
+            <li><strong>PAs and Nurse Practitioners included in physician rosters</strong> — Mid-level providers who self-register a physician taxonomy code in NPPES were included in discovery results. Fixed by explicitly excluding any record carrying a PA/NP/CRNA taxonomy.</li>
+            <li><strong>Co-located non-specialty physicians contaminating rosters</strong> — At shared medical buildings, physicians from unrelated specialties were seeded into clinic rosters. Fixed by applying a specialty taxonomy filter in the NPPES search.</li>
+            <li><strong>Practices with no NPI-2 entity returning zero physicians</strong> — Practices without a group NPI-2 in NPPES previously returned no physicians. A Google Places fallback now recovers discovery for these practices.</li>
           </ul>
         </div>
 
