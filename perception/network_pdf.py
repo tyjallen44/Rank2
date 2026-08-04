@@ -641,9 +641,11 @@ def _facility_scorecard_block(
     if top_html or gap_html:
         callouts = f'<div class="market-callouts">{top_html}{gap_html}</div>'
 
-    # Facility table rows (already sorted worst→best in analyzer)
+    # Facility table rows — sorted best→worst for display
     rows_html = ""
-    for fac in result.facilities:
+    for fac in sorted(result.facilities,
+                      key=lambda f: f.ai_visibility_score if f.ai_visibility_score is not None else -1,
+                      reverse=True):
         score = fac.ai_visibility_score
         if score is not None and score < 50:
             row_cls = "row-red"
@@ -714,7 +716,7 @@ def _facility_scorecard_block(
     return f"""
 <h2>Facility Scorecard</h2>
 <p style="font-size:9pt;color:#4a5a6a">
-  {len(result.facilities)} {plural} assessed, sorted by AI Visibility Score (lowest first).
+  {len(result.facilities)} {plural} assessed, sorted by AI Visibility Score (highest first).
   <span style="color:#c0392b">■</span> Score &lt;50 &nbsp;
   <span style="color:#b87a00">■</span> 50–74 &nbsp;
   <span style="color:#1a7a3c">■</span> 75+
