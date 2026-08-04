@@ -387,9 +387,10 @@ p {{ margin-bottom: 10px; line-height: 1.55; }}
   border-bottom: 1px solid #dde3ea;
   vertical-align: middle;
 }}
-.facility-table tr.row-red td    {{ background: #fdf0f0; }}
-.facility-table tr.row-yellow td {{ background: #fffbea; }}
-.facility-table tr.row-green td  {{ background: #eaf7ee; }}
+.facility-table tr.row-Q1 td   {{ background: #eaf7ef; }}
+.facility-table tr.row-Q2 td   {{ background: #e6f2f7; }}
+.facility-table tr.row-Q3 td   {{ background: #fdf6e3; }}
+.facility-table tr.row-Q4 td   {{ background: #fdf0f0; }}
 thead {{ display: table-header-group; }}
 tfoot {{ display: table-footer-group; }}
 .quartile-badge {{
@@ -645,17 +646,9 @@ def _facility_scorecard_block(
                       key=lambda f: f.ai_visibility_score if f.ai_visibility_score is not None else -1,
                       reverse=True):
         score = fac.ai_visibility_score
-        if score is not None and score < 50:
-            row_cls = "row-red"
-        elif score is not None and score < 75:
-            row_cls = "row-yellow"
-        elif score is not None:
-            row_cls = "row-green"
-        else:
-            row_cls = ""
-
         quartile, _ = _grade_from_score(score)
         quartile_css = "q-" + (quartile if quartile in ("Q1", "Q2", "Q3", "Q4") else "dash")
+        row_cls = "row-" + quartile if quartile in ("Q1", "Q2", "Q3", "Q4") else ""
         score_str = str(score) if score is not None else "—"
         surfaced = "Yes" if fac.surfaced_for_local else ("No" if fac.surfaced_for_local is not None else "—")
         attributed = "Yes" if fac.attributed_to_network else ("No" if fac.attributed_to_network is not None else "—")
@@ -715,9 +708,10 @@ def _facility_scorecard_block(
 <h2>Facility Scorecard</h2>
 <p style="font-size:9pt;color:#4a5a6a">
   {len(result.facilities)} {plural} assessed, sorted by AI Visibility Score (highest first).
-  <span style="color:#c0392b">■</span> Score &lt;50 &nbsp;
-  <span style="color:#b87a00">■</span> 50–74 &nbsp;
-  <span style="color:#1a7a3c">■</span> 75+
+  <span style="color:#2e9e5b">■</span> Q1 Top Quartile (&#8805;75) &nbsp;
+  <span style="color:#2e7d9a">■</span> Q2 Upper Middle (68–74) &nbsp;
+  <span style="color:#e09b2a">■</span> Q3 Lower Middle (58–67) &nbsp;
+  <span style="color:#d94f4f">■</span> Q4 Bottom Quartile (&lt;58)
 </p>
 {callouts}
 <table class="facility-table">
