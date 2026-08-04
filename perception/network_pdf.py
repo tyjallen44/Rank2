@@ -568,10 +568,18 @@ def _score_breakdown_block(
          _strip_md(result.information_accuracy_narrative or "")),
     ]
 
+    def _bar_color(s: int | None) -> str:
+        if s is None or s < 35:
+            return "#d94f4f"   # red  — Bottom Quartile
+        if s < 65:
+            return "#e09b2a"   # amber — Below Avg / Industry Avg
+        return "#2e9e5b"       # green — Above Average or better
+
     bars_html = ""
     for label, weight, score, narrative in dims:
-        pct  = score if score is not None else 0
-        num  = str(score) if score is not None else "—"
+        pct   = score if score is not None else 0
+        num   = str(score) if score is not None else "—"
+        color = _bar_color(score)
         bars_html += f"""
 <div class="score-bar-row">
   <div class="score-bar-label">
@@ -579,9 +587,9 @@ def _score_breakdown_block(
     <span class="weight">{_e(weight)}</span>
   </div>
   <div class="score-bar-track">
-    <div class="score-bar-fill" style="width:{pct}%"></div>
+    <div class="score-bar-fill" style="width:{pct}%;background:{color}"></div>
   </div>
-  <div class="score-bar-num">{num}</div>
+  <div class="score-bar-num" style="color:{color}">{num}</div>
 </div>"""
         if narrative:
             bars_html += f'<p style="font-size:9pt;color:#4a5a6a;margin:0 0 10px 234px">{_e(narrative)}</p>'
