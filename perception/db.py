@@ -73,10 +73,24 @@ class _StaleHandleConnection:
         return self._con.description
 
     def fetchall(self):
-        return self._con.fetchall()
+        for attempt in range(3):
+            try:
+                return self._con.fetchall()
+            except Exception as exc:
+                if self._is_stale(exc) and attempt < 2:
+                    self._handle_stale(attempt)
+                    continue
+                raise
 
     def fetchone(self):
-        return self._con.fetchone()
+        for attempt in range(3):
+            try:
+                return self._con.fetchone()
+            except Exception as exc:
+                if self._is_stale(exc) and attempt < 2:
+                    self._handle_stale(attempt)
+                    continue
+                raise
 
     def __enter__(self):
         return self

@@ -2182,12 +2182,11 @@ def _run_event_job(
                     set_run_role(result.run_id, role)
 
                     # Tag the run with this event; make it visible to all users
-                    _con = get_connection()
-                    _con.execute(
-                        "UPDATE analysis_runs SET event_id=?, user_role='admin' WHERE run_id=?",
-                        [event_id, result.run_id],
-                    )
-                    _con.close()
+                    with get_connection() as _con:
+                        _con.execute(
+                            "UPDATE analysis_runs SET event_id=?, user_role='admin' WHERE run_id=?",
+                            [event_id, result.run_id],
+                        )
 
                     # Extract score
                     pulse_score = None
@@ -2208,12 +2207,11 @@ def _run_event_job(
                         try:
                             old.rename(new_p)
                             new_pdf_path = str(new_p)
-                            _con2 = get_connection()
-                            _con2.execute(
-                                "UPDATE analysis_runs SET pdf_path=? WHERE run_id=?",
-                                [new_pdf_path, result.run_id],
-                            )
-                            _con2.close()
+                            with get_connection() as _con2:
+                                _con2.execute(
+                                    "UPDATE analysis_runs SET pdf_path=? WHERE run_id=?",
+                                    [new_pdf_path, result.run_id],
+                                )
                         except Exception:
                             pass
 
