@@ -189,8 +189,11 @@ def _fqhc_css(primary: str, pale: str, accent: str) -> str:
     .cover-score-row {{ display: flex; gap: 32px; align-items: flex-start; margin-top: 24px; }}
     .cover-score-box {{ background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 20px 28px; text-align: center; min-width: 140px; }}
     .cover-score-num {{ font-size: 48pt; font-weight: bold; color: {accent}; line-height: 1; }}
-    .cover-score-lbl {{ font-size: 8pt; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.65); margin-top: 4px; }}
-    .cover-score-grade {{ font-size: 18pt; font-weight: bold; color: {accent}; }}
+    .cover-score-out-of {{ font-size: 20pt; font-weight: 700; color: rgba(255,255,255,0.32); vertical-align: top; display: inline-block; padding-top: 10px; margin-left: 2px; }}
+    .cover-score-lbl {{ font-size: 8pt; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.55); margin-top: 4px; margin-bottom: 12px; }}
+    .cover-quartile-badge {{ border-radius: 0 6px 6px 0; padding: 9px 16px 9px 12px; background: rgba(255,255,255,0.07); text-align: left; }}
+    .cover-quartile-badge-lbl {{ font-size: 6pt; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255,255,255,0.45); font-weight: 700; margin-bottom: 3px; }}
+    .cover-quartile-badge-val {{ font-size: 16pt; font-weight: 800; line-height: 1; }}
     .cover-mqcr-box {{ background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 20px 28px; text-align: center; min-width: 180px; }}
     .cover-mqcr-num {{ font-size: 34pt; font-weight: bold; color: #fff; line-height: 1; }}
     .cover-mqcr-pending {{ font-size: 12pt; color: rgba(255,255,255,0.55); font-style: italic; margin: 10px 0; }}
@@ -299,6 +302,9 @@ def _cover_block(
     result: AnalysisResult, primary: str, pale: str, accent: str,
 ) -> str:
     score_display = str(score) if score is not None else "—"
+    q_color = {
+        "Q1": "#6fcf97", "Q2": "#56b8d9", "Q3": "#f2994a", "Q4": "#eb5757",
+    }.get(grade, accent)
     mqcr = result.fqhc_mqcr
     if mqcr is not None:
         mqcr_block_html = f"""
@@ -394,11 +400,14 @@ def _cover_block(
   <div class="cover-location">{location}</div>
   <div class="cover-score-row">
     <div class="cover-score-box">
-      <div class="cover-score-num">{score_display}</div>
+      <div style="line-height:1">
+        <span class="cover-score-num">{score_display}</span><span class="cover-score-out-of">/100</span>
+      </div>
       <div class="cover-score-lbl">AI Visibility Score</div>
-      <div style="font-size:6.5pt;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:rgba(255,255,255,0.65);margin-top:10px;margin-bottom:2px">National Quartile</div>
-      <div class="cover-score-grade">{grade}</div>
-      <div style="font-size:8pt;color:rgba(255,255,255,0.7);margin-top:2px">{band}</div>
+      <div class="cover-quartile-badge" style="border-left:3px solid {q_color}">
+        <div class="cover-quartile-badge-lbl">National Quartile</div>
+        <div class="cover-quartile-badge-val" style="color:{q_color}">{grade} <span style="font-size:9pt;font-weight:500;color:rgba(255,255,255,0.7)">&middot;&nbsp;{band}</span></div>
+      </div>
     </div>
     {mqcr_block_html}
   </div>

@@ -202,18 +202,44 @@ body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #1a
   font-weight: bold;
   color: {accent};
   line-height: 1;
-  display: block;
 }}
-.cover-grade {{
-  font-size: 22pt;
-  font-weight: bold;
-  color: #fff;
-  margin-top: 4px;
+.cover-score-out-of {{
+  font-size: 26pt;
+  font-weight: 700;
+  color: rgba(255,255,255,0.32);
+  vertical-align: top;
+  display: inline-block;
+  padding-top: 14px;
+  margin-left: 3px;
 }}
-.cover-grade-band {{
-  font-size: 11pt;
-  color: rgba(255,255,255,0.6);
-  margin-top: 2px;
+.cover-score-lbl {{
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.45);
+  font-weight: 600;
+  margin-top: 6px;
+  margin-bottom: 14px;
+}}
+.cover-quartile-badge {{
+  display: inline-block;
+  border-radius: 0 8px 8px 0;
+  padding: 10px 20px 10px 14px;
+  background: rgba(255,255,255,0.07);
+  text-align: left;
+}}
+.cover-quartile-badge-lbl {{
+  font-size: 6.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.45);
+  font-weight: 700;
+  margin-bottom: 4px;
+}}
+.cover-quartile-badge-val {{
+  font-size: 19pt;
+  font-weight: 800;
+  line-height: 1;
 }}
 .cover-stat-boxes {{
   display: flex;
@@ -534,12 +560,12 @@ def _cover_block(
     generated = str(result.generated_at or "")
     hq        = _e(result.hq_location or "")
 
-    quartile_css = {
-        "Q1": "color:#6fcf97",
-        "Q2": "color:#56b8d9",
-        "Q3": "color:#f2994a",
-        "Q4": "color:#eb5757",
-    }.get(quartile, "color:rgba(255,255,255,0.7)")
+    q_color = {
+        "Q1": "#6fcf97",
+        "Q2": "#56b8d9",
+        "Q3": "#f2994a",
+        "Q4": "#eb5757",
+    }.get(quartile, "rgba(255,255,255,0.7)")
 
     return f"""
 <div class="cover">
@@ -554,10 +580,14 @@ def _cover_block(
   <div class="cover-confidential">Confidential &nbsp;·&nbsp; Prepared exclusively for {name}</div>
 
   <div class="cover-score-center">
-    <span class="cover-score-num" style="color:{accent}">{score_str}</span>
-    <div style="font-size:8pt;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.65);margin-top:8px">National Quartile</div>
-    <div class="cover-grade" style="{quartile_css}">{_e(quartile)}</div>
-    <div class="cover-grade-band">{_e(q_band)}</div>
+    <div style="line-height:1">
+      <span class="cover-score-num" style="color:{accent}">{score_str}</span><span class="cover-score-out-of">/100</span>
+    </div>
+    <div class="cover-score-lbl">AI Visibility Score</div>
+    <div class="cover-quartile-badge" style="border-left:4px solid {q_color}">
+      <div class="cover-quartile-badge-lbl">National Quartile</div>
+      <div class="cover-quartile-badge-val" style="color:{q_color}">{_e(quartile)} <span style="font-size:11pt;font-weight:500;color:rgba(255,255,255,0.7)">&middot;&nbsp;{_e(q_band)}</span></div>
+    </div>
   </div>
 
   <div class="cover-stat-boxes">

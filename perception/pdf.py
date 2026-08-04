@@ -2385,9 +2385,14 @@ def _comparison_overview_block(result: AnalysisResult, label: str, mixed_rubric_
         quartile, band_label = grade_from_score(p.ai_visibility_score)
         q_color = _QUARTILE_COLORS.get(quartile, _TEAL)
         score_html = (
+            f'<div style="line-height:1">'
             f'<span style="font-size:24pt;font-weight:800;color:{_TEAL}">{p.ai_visibility_score}</span>'
-            f'<div style="font-size:5.5pt;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:#5a8090;margin-top:6px">National Quartile</div>'
-            f'<div style="font-size:10pt;font-weight:800;color:{q_color}">{_e(quartile)} &middot; {_e(band_label)}</div>'
+            f'<span style="font-size:10pt;font-weight:700;color:#aabcc0;vertical-align:top;display:inline-block;padding-top:5px;margin-left:2px">/100</span>'
+            f'</div>'
+            f'<div style="margin-top:10px;border-left:3px solid {q_color};background:#f5f8fa;border-radius:0 5px 5px 0;padding:7px 12px 7px 10px">'
+            f'<div style="font-size:5.5pt;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:#7a9095;margin-bottom:3px">National Quartile</div>'
+            f'<div style="font-size:10pt;font-weight:800;color:{q_color}">{_e(quartile)} <span style="font-size:7.5pt;font-weight:500;color:#5a7880">&middot;&nbsp;{_e(band_label)}</span></div>'
+            f'</div>'
         )
     tier_html = ""
     if p:
