@@ -14,6 +14,7 @@ from typing import Optional
 from .models import NetworkResult, NetworkFacility
 from .network_scoring import grade_band as _grade_band
 from .pdf import _BRAND_CONFIGS, _e, _strip_md
+from .scoring import grade_from_score as _grade_from_score
 
 # Network Pulse brand — uses the standard RLDatix teal palette.
 _NETWORK_PRIMARY = "#0F4146"
@@ -391,23 +392,20 @@ p {{ margin-bottom: 10px; line-height: 1.55; }}
 .facility-table tr.row-green td  {{ background: #eaf7ee; }}
 thead {{ display: table-header-group; }}
 tfoot {{ display: table-footer-group; }}
-.grade-badge {{
+.quartile-badge {{
   display: inline-block;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  text-align: center;
-  line-height: 24px;
-  font-weight: bold;
-  font-size: 9pt;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 8.5pt;
   color: #fff;
+  letter-spacing: 0.03em;
 }}
-.grade-A {{ background: #1a7a3c; }}
-.grade-B {{ background: #2e7d9a; }}
-.grade-C {{ background: #b87a00; }}
-.grade-D {{ background: #c05020; }}
-.grade-F {{ background: #8b1c1c; }}
-.grade-dash {{ background: #999; }}
+.q-Q1 {{ background: #2e9e5b; }}
+.q-Q2 {{ background: #2e7d9a; }}
+.q-Q3 {{ background: #e09b2a; }}
+.q-Q4 {{ background: #d94f4f; }}
+.q-dash {{ background: #999; }}
 
 /* ── Strategic Recommendations ──────────────────────────────────────────── */
 .rec-card {{
@@ -656,8 +654,8 @@ def _facility_scorecard_block(
         else:
             row_cls = ""
 
-        grade = fac.grade or "—"
-        grade_css = "grade-" + (grade if grade in ("A", "B", "C", "D", "F") else "dash")
+        quartile, _ = _grade_from_score(score)
+        quartile_css = "q-" + (quartile if quartile in ("Q1", "Q2", "Q3", "Q4") else "dash")
         score_str = str(score) if score is not None else "—"
         surfaced = "Yes" if fac.surfaced_for_local else ("No" if fac.surfaced_for_local is not None else "—")
         attributed = "Yes" if fac.attributed_to_network else ("No" if fac.attributed_to_network is not None else "—")
@@ -702,7 +700,7 @@ def _facility_scorecard_block(
   <td>{_e(fac.name)}</td>
   <td>{_e(fac.city)}, {_e(fac.state)}</td>
   <td style="text-align:center"><strong>{score_str}</strong></td>
-  <td style="text-align:center"><span class="grade-badge {grade_css}">{_e(grade)}</span></td>
+  <td style="text-align:center"><span class="quartile-badge {quartile_css}">{_e(quartile)}</span></td>
   <td style="text-align:center">{google_cell}</td>
   {cms_td}{lf_td}
   <td style="text-align:center;font-size:9pt">{surfaced}</td>
@@ -728,7 +726,7 @@ def _facility_scorecard_block(
       <th>{singular_cap}</th>
       <th>City, State</th>
       <th style="text-align:center">AI Score</th>
-      <th style="text-align:center">Grade</th>
+      <th style="text-align:center">Quartile</th>
       <th style="text-align:center">Google Rating</th>
       {cms_th}{lf_th}
       <th style="text-align:center">Local Surface</th>
