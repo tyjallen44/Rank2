@@ -487,20 +487,18 @@ def _cover_block(
     plural_cap = ftype_cfg.get("plural", "hospitals").capitalize()
     name      = _e(result.network_canonical_name or result.network_name)
     score_str = str(result.ai_visibility_score) if result.ai_visibility_score is not None else "—"
-    grade     = result.grade or "—"
-    band      = result.grade_band or ""
+    quartile, q_band = _grade_from_score(result.ai_visibility_score)
     hospitals = result.total_hospitals or len(result.facilities)
     states    = len(result.states_covered) if result.states_covered else "—"
     generated = str(result.generated_at or "")
     hq        = _e(result.hq_location or "")
 
-    grade_css = {
-        "A": "color:#6fcf97",
-        "B": "color:#56b8d9",
-        "C": f"color:{accent}",
-        "D": "color:#f2994a",
-        "F": "color:#eb5757",
-    }.get(grade, "color:rgba(255,255,255,0.7)")
+    quartile_css = {
+        "Q1": "color:#6fcf97",
+        "Q2": "color:#56b8d9",
+        "Q3": "color:#f2994a",
+        "Q4": "color:#eb5757",
+    }.get(quartile, "color:rgba(255,255,255,0.7)")
 
     return f"""
 <div class="cover">
@@ -516,8 +514,8 @@ def _cover_block(
 
   <div class="cover-score-center">
     <span class="cover-score-num" style="color:{accent}">{score_str}</span>
-    <div class="cover-grade" style="{grade_css}">{grade}</div>
-    <div class="cover-grade-band">{_e(band)}</div>
+    <div class="cover-grade" style="{quartile_css}">{_e(quartile)}</div>
+    <div class="cover-grade-band">{_e(q_band)}</div>
   </div>
 
   <div class="cover-stat-boxes">
