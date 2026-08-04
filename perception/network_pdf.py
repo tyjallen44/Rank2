@@ -514,6 +514,7 @@ def _cover_block(
 
   <div class="cover-score-center">
     <span class="cover-score-num" style="color:{accent}">{score_str}</span>
+    <div style="font-size:8pt;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.65);margin-top:8px">National Quartile</div>
     <div class="cover-grade" style="{quartile_css}">{_e(quartile)}</div>
     <div class="cover-grade-band">{_e(q_band)}</div>
   </div>

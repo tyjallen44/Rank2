@@ -395,8 +395,10 @@ def _cover_block(
   <div class="cover-score-row">
     <div class="cover-score-box">
       <div class="cover-score-num">{score_display}</div>
-      <div class="cover-score-grade">{grade}</div>
       <div class="cover-score-lbl">AI Visibility Score</div>
+      <div style="font-size:6.5pt;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:rgba(255,255,255,0.65);margin-top:10px;margin-bottom:2px">National Quartile</div>
+      <div class="cover-score-grade">{grade}</div>
+      <div style="font-size:8pt;color:rgba(255,255,255,0.7);margin-top:2px">{band}</div>
     </div>
     {mqcr_block_html}
   </div>

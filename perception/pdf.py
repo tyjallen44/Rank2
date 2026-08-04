@@ -30,6 +30,7 @@ def _tier_labels(profile: str | None) -> dict[str, str]:
 
 # RLDatix brand palette (original)
 _TEAL        = "#0F4146"
+_QUARTILE_COLORS = {"Q1": "#2e9e5b", "Q2": "#2e7d9a", "Q3": "#e09b2a", "Q4": "#d94f4f"}
 _PALE_GREEN  = "#EEF7F1"
 _SEAFOAM     = "#80F8E4"
 _BLUE        = "#73D2E1"
@@ -250,11 +251,16 @@ def _aivs_block(p: RankedProvider) -> str:
     ts = p.tier_scores
     score = p.ai_visibility_score
     score_txt = str(score) if score is not None else "—"
-    # Grade is always computed from score — never from LLM-generated overall_rating.
-    letter_grade, band_label = grade_from_score(score)
-    _, band_cls = _score_band(score)  # keep CSS class for coloring
-    grade_html = f'<span class="score-band {band_cls}">{_e(letter_grade)}</span>' if score is not None else ""
-    band_sub_html = f'<div class="score-band-label">{_e(band_label)}</div>' if band_label and band_label != "Unscored" else ""
+    # Quartile is always computed from score — never from LLM-generated overall_rating.
+    quartile, band_label = grade_from_score(score)
+    q_color = _QUARTILE_COLORS.get(quartile, _TEAL)
+    nat_q_html = ""
+    if score is not None and quartile != "—":
+        nat_q_html = (
+            f'<div class="aivs-nat-q-lbl">National Quartile</div>'
+            f'<div class="aivs-nat-q-val" style="color:{q_color}">'
+            f'{_e(quartile)} &middot; {_e(band_label)}</div>'
+        )
     if profile.startswith("practice_"):
         profile_label = PRACTICE_PROFILE_DISPLAY.get(profile, "Procedural")
     elif profile == "relationship":
@@ -272,8 +278,8 @@ def _aivs_block(p: RankedProvider) -> str:
       <div>
         <div class="aivs-label">{SCORE_LABEL}</div>
         <div class="aivs-sublabel">{SCORE_DESCRIPTOR}</div>
-        <div class="aivs-score">{score_txt}<span class="out">/100</span>{grade_html}</div>
-        {band_sub_html}
+        <div class="aivs-score">{score_txt}<span class="out">/100</span></div>
+        {nat_q_html}
         <div class="profile-chip">{profile_label}</div>
         {f'<div class="ceiling-note">⚠ Score capped at 74 ({_e(p.score_ceiling_reason)})</div>' if p.score_ceiling_applied else ""}
       </div>
@@ -2045,6 +2051,13 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
       font-size: 5.5pt; font-weight: 600; letter-spacing: 0.09em;
       text-transform: uppercase; color: #5a8090; margin-bottom: 4px;
     }}
+    .aivs-nat-q-lbl {{
+      font-size: 5.5pt; font-weight: 700; letter-spacing: 0.09em;
+      text-transform: uppercase; color: #5a8090; margin-top: 5px; margin-bottom: 1px;
+    }}
+    .aivs-nat-q-val {{
+      font-size: 9.5pt; font-weight: 800; line-height: 1.2;
+    }}
     .tier-bars {{ flex: 1; }}
     .tier-row {{ display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }}
     .tier-name {{ font-size: 6.5pt; color: #3a5a60; width: 110px; text-align: right; }}
@@ -2369,10 +2382,12 @@ def _comparison_overview_block(result: AnalysisResult, label: str, mixed_rubric_
     name = _e(result.report_title or result.entity_name or result.location)
     score_html = ""
     if p and p.ai_visibility_score is not None:
-        letter_grade, band_label = grade_from_score(p.ai_visibility_score)
+        quartile, band_label = grade_from_score(p.ai_visibility_score)
+        q_color = _QUARTILE_COLORS.get(quartile, _TEAL)
         score_html = (
             f'<span style="font-size:24pt;font-weight:800;color:{_TEAL}">{p.ai_visibility_score}</span>'
-            f'<span style="font-size:11pt;color:{_TEAL};margin-left:6px">{_e(letter_grade)}</span>'
+            f'<div style="font-size:5.5pt;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:#5a8090;margin-top:6px">National Quartile</div>'
+            f'<div style="font-size:10pt;font-weight:800;color:{q_color}">{_e(quartile)} &middot; {_e(band_label)}</div>'
         )
     tier_html = ""
     if p:
