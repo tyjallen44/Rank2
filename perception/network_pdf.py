@@ -537,7 +537,7 @@ def _cover_block(
   </div>
 
   <div class="cover-benchmark">
-    Score reflects AI visibility across the network's full geographic footprint — brand recognition, local market surfacing, and information accuracy in AI assistants used by patients and referring physicians.
+    Score reflects AI visibility across the network's full geographic footprint — brand recognition, local market surfacing, and information accuracy in AI assistants used by patients and referring physicians. Data is gathered through live queries run directly against ChatGPT, Claude, and Gemini.
   </div>
 
   <div class="cover-meta">
