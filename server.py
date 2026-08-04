@@ -891,6 +891,7 @@ async def get_history(role: str = Depends(require_auth)):
         result.append({
             **r,
             "generated_at": str(r["generated_at"]),
+            "created_at": str(r["created_at"]) if r.get("created_at") else None,
             "has_pdf": has_pdf,
             "has_briefing_pdf": bool(
                 r.get("briefing_pdf_path") and Path(r["briefing_pdf_path"]).exists()

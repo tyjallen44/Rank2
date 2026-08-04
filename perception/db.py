@@ -212,6 +212,7 @@ def init_db() -> None:
         ("result_json", "VARCHAR"),
         ("briefing_pdf_path", "VARCHAR"),
         ("event_id", "VARCHAR"),
+        ("created_at", "TIMESTAMP"),
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -731,6 +732,7 @@ def init_network_db(con=None) -> None:
         ("pdf_path",            "VARCHAR"),
         ("teaser_pdf_path",     "VARCHAR"),
         ("user_role",           "VARCHAR DEFAULT 'admin'"),
+        ("created_at",          "TIMESTAMP"),
     ]:
         if _col not in _nr_cols:
             try:
@@ -917,7 +919,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
 
     analysis_cols = ["run_id", "location", "specialty", "generated_at",
                      "pdf_path", "md_path", "briefing_pdf_path", "event_id",
-                     "entity_type", "mqcr", "provider_count"]
+                     "entity_type", "mqcr", "provider_count", "created_at"]
 
     if role == "admin":
         analysis_rows = con.execute("""
@@ -932,17 +934,18 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.event_id,
                 a.entity_type,
                 a.mqcr,
-                COUNT(p.rank) AS provider_count
+                COUNT(p.rank) AS provider_count,
+                a.created_at
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
-                     a.entity_type, a.mqcr
+                     a.entity_type, a.mqcr, a.created_at
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
         network_rows = con.execute("""
             SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
-                   generated_at, pdf_path, total_hospitals
+                   generated_at, pdf_path, total_hospitals, created_at
             FROM network_runs
             ORDER BY generated_at DESC, run_id DESC
         """).fetchall()
@@ -959,18 +962,19 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.event_id,
                 a.entity_type,
                 a.mqcr,
-                COUNT(p.rank) AS provider_count
+                COUNT(p.rank) AS provider_count,
+                a.created_at
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             WHERE a.user_role = ?
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
-                     a.entity_type, a.mqcr
+                     a.entity_type, a.mqcr, a.created_at
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()
         network_rows = con.execute("""
             SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
-                   generated_at, pdf_path, total_hospitals
+                   generated_at, pdf_path, total_hospitals, created_at
             FROM network_runs
             WHERE COALESCE(user_role, 'admin') = ?
             ORDER BY generated_at DESC, run_id DESC
@@ -981,7 +985,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
     results = [dict(zip(analysis_cols, row)) for row in analysis_rows]
 
     for row in network_rows:
-        run_id, network_name, facility_type, generated_at, pdf_path, total = row
+        run_id, network_name, facility_type, generated_at, pdf_path, total, created_at = row
         results.append({
             "run_id":            run_id,
             "location":          network_name,
@@ -995,6 +999,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
             "mqcr":              None,
             "provider_count":    total or 0,
             "report_type":       "network",
+            "created_at":        created_at,
         })
 
     results.sort(key=lambda r: (str(r.get("generated_at") or ""), r["run_id"]), reverse=True)

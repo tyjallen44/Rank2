@@ -1391,8 +1391,8 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
             (run_id, location, specialty, aggregate, generated_at,
              weighting_profile, market_overview, ai_visibility_verdict, coverage_note,
              top_recommendation, practical_advice, disclaimer, report_markdown,
-             pdf_path, md_path, entity_name, individual_report, result_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             pdf_path, md_path, entity_name, individual_report, result_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             result.run_id, result.location, result.specialty, result.aggregate,
@@ -1401,7 +1401,7 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
             result.top_recommendation, json.dumps(result.practical_advice),
             result.disclaimer, result.report_markdown, result.pdf_path, result.md_path,
             db_entity_name, result.individual_report,
-            result.model_dump_json(),
+            result.model_dump_json(), datetime.utcnow(),
         ],
     )
 
