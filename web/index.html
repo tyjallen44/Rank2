@@ -4797,8 +4797,9 @@ function showSingleDone(r) {
     const hosp = r.total_hospitals || 0;
     const states = (r.states_covered || []).length;
     const scoreVal = r.ai_visibility_score != null ? r.ai_visibility_score : '—';
-    const gradeVal = r.grade || '—';
-    const bandVal  = r.grade_band || '';
+    const s = r.ai_visibility_score;
+    const quartile = s == null ? '—' : s >= 75 ? 'Q1' : s >= 68 ? 'Q2' : s >= 58 ? 'Q3' : 'Q4';
+    const quartileBand = s == null ? '' : s >= 75 ? 'Top Quartile' : s >= 68 ? 'Upper Middle' : s >= 58 ? 'Lower Middle' : 'Bottom Quartile';
     const netName  = r.network_canonical_name || r.network_name || '';
     subText = `${hosp} hospital${hosp !== 1 ? 's' : ''} across ${states} state${states !== 1 ? 's' : ''}`;
     bodyHtml = `
@@ -4806,8 +4807,8 @@ function showSingleDone(r) {
         <div style="flex:0 0 auto;background:#0F4146;color:#fff;border-radius:10px;padding:20px 28px;text-align:center;min-width:120px">
           <div style="font-size:36px;font-weight:700;color:#80F8E4;line-height:1">${scoreVal}</div>
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.55);margin-top:6px">Network Score</div>
-          <div style="font-size:22px;font-weight:700;color:#fff;margin-top:8px;line-height:1">${gradeVal}</div>
-          <div style="font-size:9px;color:rgba(255,255,255,0.45);margin-top:3px">${bandVal}</div>
+          <div style="font-size:22px;font-weight:700;color:#fff;margin-top:8px;line-height:1">${quartile}</div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.45);margin-top:3px">${quartileBand}</div>
         </div>
         <div style="flex:1;display:flex;flex-direction:column;gap:8px">
           <div style="background:#EEF7F1;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
