@@ -13,7 +13,7 @@ from typing import Optional
 
 from .models import NetworkResult, NetworkFacility
 from .network_scoring import grade_band as _grade_band
-from .pdf import _BRAND_CONFIGS, _e, _strip_md
+from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL
 from .scoring import grade_from_score as _grade_from_score
 
 # Network Pulse brand — uses the standard RLDatix teal palette.
@@ -26,6 +26,7 @@ def render_network_pdf(
     result: NetworkResult,
     pdf_path: str,
     brand: str = "original",
+    teaser: bool = False,
 ) -> None:
     """Render a Network Pulse report to a branded PDF."""
     from playwright.sync_api import sync_playwright
@@ -37,7 +38,7 @@ def render_network_pdf(
     cfg["pale"]    = _NETWORK_PALE
 
     landscape = len(result.facilities) > 20
-    html = _build_network_html(result, cfg)
+    html = _build_network_html(result, cfg, teaser=teaser)
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -67,7 +68,7 @@ def render_network_pdf(
 # HTML builder
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_network_html(result: NetworkResult, cfg: dict) -> str:
+def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False) -> str:
     from .network_prompts import get_facility_config
     primary = cfg.get("primary", _NETWORK_PRIMARY)
     accent  = cfg.get("accent",  _NETWORK_ACCENT)
@@ -82,8 +83,8 @@ def _build_network_html(result: NetworkResult, cfg: dict) -> str:
     cover       = _cover_block(result, primary, accent, pale, logo_html, ftype_cfg)
     exec_sum    = _exec_summary_block(result)
     score_bkdn  = _score_breakdown_block(result, primary, accent, pale)
-    facility_sc = _facility_scorecard_block(result, primary, pale, ftype_cfg)
-    recs        = _recommendations_block(result, primary, accent)
+    facility_sc = _facility_scorecard_block(result, primary, pale, ftype_cfg, teaser=teaser)
+    recs        = _recommendations_block(result, primary, accent, teaser=teaser)
     appendix    = _methodology_appendix(primary, pale, ftype_cfg)
 
     title = _e(result.network_canonical_name or result.network_name)
@@ -472,6 +473,46 @@ tfoot {{ display: table-footer-group; }}
   border-bottom: 1px solid #dde3ea;
   vertical-align: top;
 }}
+
+/* ── Teaser blur ─────────────────────────────────────────────────────────── */
+.net-teaser-blur-wrapper {{
+  position: relative;
+  overflow: hidden;
+  border-radius: 0 0 6px 6px;
+}}
+.net-teaser-blur-content {{
+  filter: blur(2px);
+  user-select: none;
+  pointer-events: none;
+}}
+.net-teaser-blur-overlay {{
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(238,247,241,0.26);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 14px 20px;
+  border: 1.5px dashed {accent};
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+}}
+.net-teaser-blur-overlay .blur-lock,
+.net-teaser-blur-overlay .blur-cta-heading,
+.net-teaser-blur-overlay .blur-cta-sub,
+.net-teaser-blur-overlay .blur-cta-actions {{
+  background: rgba(238,247,241,0.92);
+  border-radius: 4px;
+  padding: 2px 8px;
+}}
+.blur-lock {{ font-size: 18pt; margin-bottom: 5px; }}
+.blur-cta-heading {{ font-size: 10pt; font-weight: 700; color: {primary}; margin-bottom: 5px; }}
+.blur-cta-sub {{ font-size: 7.5pt; color: #3a5a60; line-height: 1.45; margin-bottom: 9px; max-width: 360px; }}
+.blur-cta-actions {{ font-size: 9pt; font-weight: 600; color: {primary}; }}
+.blur-phone {{ font-weight: 700; }}
+.blur-demo-link {{ color: {primary}; font-weight: 700; text-decoration: underline; }}
 """
 
 
@@ -606,7 +647,8 @@ def _score_breakdown_block(
 
 
 def _facility_scorecard_block(
-    result: NetworkResult, primary: str, pale: str, ftype_cfg: dict | None = None
+    result: NetworkResult, primary: str, pale: str, ftype_cfg: dict | None = None,
+    teaser: bool = False,
 ) -> str:
     if not result.facilities:
         return ""
@@ -703,17 +745,7 @@ def _facility_scorecard_block(
     cms_th = '<th style="text-align:center">CMS Stars</th>' if show_cms else ""
     lf_th  = '<th style="text-align:center">Leapfrog</th>' if show_lf else ""
 
-    return f"""
-<h2>Facility Scorecard</h2>
-<p style="font-size:9pt;color:#4a5a6a">
-  {len(result.facilities)} {plural} assessed, sorted by AI Visibility Score (highest first).
-  <span style="color:#2e9e5b">■</span> Q1 Top Quartile (&#8805;75) &nbsp;
-  <span style="color:#2e7d9a">■</span> Q2 Upper Middle (68–74) &nbsp;
-  <span style="color:#e09b2a">■</span> Q3 Lower Middle (58–67) &nbsp;
-  <span style="color:#d94f4f">■</span> Q4 Bottom Quartile (&lt;58)
-</p>
-{callouts}
-<table class="facility-table">
+    thead_html = f"""
   <thead>
     <tr>
       <th>{singular_cap}</th>
@@ -726,12 +758,52 @@ def _facility_scorecard_block(
       <th style="text-align:center">Network Attribution</th>
       <th>Key Gap</th>
     </tr>
-  </thead>
+  </thead>"""
+
+    if teaser:
+        table_html = f"""
+<table class="facility-table" style="margin-bottom:0;border-bottom:none">
+{thead_html}
+</table>
+<div class="net-teaser-blur-wrapper">
+  <div class="net-teaser-blur-content">
+    <table class="facility-table" style="margin-top:0;border-top:none">
+      <tbody>{rows_html}</tbody>
+    </table>
+  </div>
+  <div class="net-teaser-blur-overlay">
+    <div class="blur-lock">&#128274;</div>
+    <div class="blur-cta-heading">Full facility data available upon request</div>
+    <div class="blur-cta-sub">Contact us to receive the complete Network Pulse report with individual facility scores, gap analysis, and strategic recommendations.</div>
+    <div class="blur-cta-actions">
+      <span class="blur-phone">{_TEASER_PHONE}</span>
+      &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+      <a href="{_TEASER_DEMO_URL}" class="blur-demo-link">Book a Demo &rarr;</a>
+    </div>
+  </div>
+</div>"""
+    else:
+        table_html = f"""
+<table class="facility-table">
+{thead_html}
   <tbody>{rows_html}</tbody>
 </table>"""
 
+    return f"""
+<h2>Facility Scorecard</h2>
+<p style="font-size:9pt;color:#4a5a6a">
+  {len(result.facilities)} {plural} assessed, sorted by AI Visibility Score (highest first).
+  <span style="color:#2e9e5b">■</span> Q1 Top Quartile (&#8805;75) &nbsp;
+  <span style="color:#2e7d9a">■</span> Q2 Upper Middle (68–74) &nbsp;
+  <span style="color:#e09b2a">■</span> Q3 Lower Middle (58–67) &nbsp;
+  <span style="color:#d94f4f">■</span> Q4 Bottom Quartile (&lt;58)
+</p>
+{callouts}
+{table_html}"""
 
-def _recommendations_block(result: NetworkResult, primary: str, accent: str) -> str:
+
+def _recommendations_block(result: NetworkResult, primary: str, accent: str,
+                           teaser: bool = False) -> str:
     recs = result.strategic_recommendations
     if not recs:
         return ""
@@ -750,9 +822,27 @@ def _recommendations_block(result: NetworkResult, primary: str, accent: str) -> 
   {"" if not body else f'<div class="rec-body">{_e(body)}</div>'}
 </div>"""
 
+    if teaser:
+        body_html = f"""
+<div class="net-teaser-blur-wrapper" style="border-radius:6px">
+  <div class="net-teaser-blur-content">{cards_html}</div>
+  <div class="net-teaser-blur-overlay" style="border-top:1.5px dashed {accent};border-radius:6px">
+    <div class="blur-lock">&#128274;</div>
+    <div class="blur-cta-heading">Strategic recommendations available upon request</div>
+    <div class="blur-cta-sub">Request the full report to receive tailored recommendations for improving AI visibility across your network.</div>
+    <div class="blur-cta-actions">
+      <span class="blur-phone">{_TEASER_PHONE}</span>
+      &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+      <a href="{_TEASER_DEMO_URL}" class="blur-demo-link">Book a Demo &rarr;</a>
+    </div>
+  </div>
+</div>"""
+    else:
+        body_html = cards_html
+
     return f"""
 <h2>Strategic Recommendations</h2>
-{cards_html}"""
+{body_html}"""
 
 
 def _methodology_appendix(primary: str, pale: str, ftype_cfg: dict | None = None) -> str:

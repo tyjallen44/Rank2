@@ -1041,6 +1041,7 @@ class NetworkAnalyzeRequest(BaseModel):
     facility_type: str = "hospital"
     brand: str = "original"
     ignore_cache: bool = False   # admin only: bypass same-day cache and regenerate
+    teaser: bool = False
 
 
 @app.post("/api/network/analyze")
@@ -1051,7 +1052,8 @@ async def network_analyze(req: NetworkAnalyzeRequest, payload: dict = Depends(ge
     ignore_cache = req.ignore_cache and (role == "admin")
     job_id = _new_job(role, brand)
     _pool.submit(_job_network_analyze, job_id, req.network_name, req.hq_location,
-                 req.source_url, req.facilities, req.facility_type, brand, ignore_cache)
+                 req.source_url, req.facilities, req.facility_type, brand, ignore_cache,
+                 req.teaser)
     return {"job_id": job_id}
 
 
@@ -1059,7 +1061,8 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
                           source_url: str, facilities: list[dict],
                           facility_type: str = "hospital",
                           brand: str = "original",
-                          ignore_cache: bool = False) -> None:
+                          ignore_cache: bool = False,
+                          teaser: bool = False) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
@@ -1076,6 +1079,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             brand=brand,
             on_event=emit,
             ignore_cache=ignore_cache,
+            teaser=teaser,
         )
         job["status"] = "done"
         job["result"] = {
@@ -1089,6 +1093,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             "total_hospitals": result.total_hospitals,
             "states_covered": result.states_covered,
             "pdf_path": result.pdf_path,
+            "teaser_pdf_path": result.teaser_pdf_path,
         }
     except Exception as exc:
         job["status"] = "error"
@@ -1143,6 +1148,27 @@ async def network_pdf(run_id: str, _: str = Depends(require_auth)):
         except Exception as exc:
             raise HTTPException(500, f"PDF regeneration failed: {type(exc).__name__}: {exc}")
 
+    return FileResponse(
+        str(pdf_path),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{pdf_path.name}"'},
+    )
+
+
+@app.get("/api/network/{run_id}/teaser-pdf")
+async def network_teaser_pdf(run_id: str, _: str = Depends(require_auth)):
+    """Download the teaser Network Pulse PDF by run_id."""
+    from perception.db import get_connection
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT teaser_pdf_path FROM network_runs WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+    if not row or not row[0]:
+        raise HTTPException(404, "Teaser PDF not found for this run")
+    pdf_path = Path(row[0])
+    if not pdf_path.exists():
+        raise HTTPException(404, "Teaser PDF file missing from disk")
     return FileResponse(
         str(pdf_path),
         media_type="application/pdf",

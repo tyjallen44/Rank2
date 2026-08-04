@@ -163,6 +163,7 @@ def analyze_network(
     brand: str = "original",
     on_event: Optional[Callable] = None,
     ignore_cache: bool = False,
+    teaser: bool = False,
 ) -> NetworkResult:
     """Run a Network AI Visibility analysis for a multi-state healthcare network.
 
@@ -322,6 +323,11 @@ def analyze_network(
         pdf_path = output_dir / pdf_filename
         render_network_pdf(result, str(pdf_path), brand=brand)
         result.pdf_path = str(pdf_path)
+        if teaser:
+            teaser_filename = f"{slug}-network-pulse-teaser-{_ts}.pdf"
+            teaser_path = output_dir / teaser_filename
+            render_network_pdf(result, str(teaser_path), brand=brand, teaser=True)
+            result.teaser_pdf_path = str(teaser_path)
     except Exception as exc:
         emit({"type": "text", "text": f"\n⚠ PDF render failed: {exc}\n"})
 
@@ -584,13 +590,14 @@ def _save_network_run(result: NetworkResult) -> None:
         con.execute(
             """INSERT INTO network_runs
                (run_id, network_name, hq_location, source_url, facility_type, total_hospitals,
-                ai_visibility_score, grade, generated_at, result_json, pdf_path, user_role)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ai_visibility_score, grade, generated_at, result_json, pdf_path, teaser_pdf_path, user_role)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (run_id) DO UPDATE SET
                    ai_visibility_score = excluded.ai_visibility_score,
                    grade               = excluded.grade,
                    result_json         = excluded.result_json,
-                   pdf_path            = excluded.pdf_path""",
+                   pdf_path            = excluded.pdf_path,
+                   teaser_pdf_path     = excluded.teaser_pdf_path""",
             [
                 result.run_id,
                 result.network_name,
@@ -603,6 +610,7 @@ def _save_network_run(result: NetworkResult) -> None:
                 result.generated_at.isoformat(),
                 result.model_dump_json(),
                 result.pdf_path,
+                result.teaser_pdf_path,
                 "admin",
             ],
         )

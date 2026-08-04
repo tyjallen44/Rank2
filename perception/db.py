@@ -710,6 +710,7 @@ def init_network_db(con=None) -> None:
             generated_at        DATE NOT NULL,
             result_json         VARCHAR,
             pdf_path            VARCHAR,
+            teaser_pdf_path     VARCHAR,
             user_role           VARCHAR DEFAULT 'admin'
         )
     """)
@@ -728,6 +729,7 @@ def init_network_db(con=None) -> None:
         ("grade",               "VARCHAR"),
         ("result_json",         "VARCHAR"),
         ("pdf_path",            "VARCHAR"),
+        ("teaser_pdf_path",     "VARCHAR"),
         ("user_role",           "VARCHAR DEFAULT 'admin'"),
     ]:
         if _col not in _nr_cols:

@@ -1615,6 +1615,11 @@ html, body {
           <input type="checkbox" id="np-ignore-cache">
           <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
         </label>
+        <label class="aggregate-toggle" style="margin-top:10px" title="Create a teaser version with blurred facility details for sending to prospects.">
+          <input type="checkbox" id="np-teaser-toggle">
+          <span class="agg-label">Also generate a teaser report</span>
+        </label>
+        <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Produces a second PDF with facility details and strategic recommendations blurred — ideal for prospect outreach.</div>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-secondary" onclick="npReset()">← Back</button>
           <button class="btn btn-primary" id="np-run-btn" onclick="npRunAnalysis()">Run Network Pulse →</button>
@@ -3447,6 +3452,7 @@ async function npRunAnalysis() {
   }
 
   const ignoreCache = document.getElementById('np-ignore-cache')?.checked || false;
+  const teaser = document.getElementById('np-teaser-toggle')?.checked || false;
   const btn = document.getElementById('np-run-btn');
   btn.disabled = true;
   btn.textContent = 'Starting…';
@@ -3455,7 +3461,7 @@ async function npRunAnalysis() {
     const res = await fetch('/api/network/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
-      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache }),
+      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache, teaser }),
     });
     if (!res.ok) throw new Error(await res.text());
     const { job_id } = await res.json();
@@ -4848,8 +4854,13 @@ function showSingleDone(r) {
       ? `<div style="font-size:12px;color:#c07a30;margin-top:4px">Briefing skipped: ${r.briefing_skipped_reason}</div>`
       : '';
 
+  const teaserBtn = (isNetwork && r.teaser_pdf_path)
+    ? `<button class="btn btn-ghost" onclick="window.location.href='/api/network/${r.run_id}/teaser-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Teaser</button>`
+    : '';
+
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
+    ${teaserBtn}
     ${briefingBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;

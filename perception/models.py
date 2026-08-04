@@ -313,4 +313,5 @@ class NetworkResult(BaseModel):
     facilities: list[NetworkFacility] = Field(default_factory=list)
     # Meta
     pdf_path: Optional[str] = None
+    teaser_pdf_path: Optional[str] = None
     entity_type: str = "hospital_network"
