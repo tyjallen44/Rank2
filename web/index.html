@@ -1885,6 +1885,7 @@ html, body {
             <select id="fb-type" class="input" style="width:100%">
               <option value="bug">Bug Report</option>
               <option value="feature">Feature Request</option>
+              <option value="socialclimb">SocialClimb Feature</option>
             </select>
           </div>
         </div>
@@ -5242,8 +5243,9 @@ function renderFeedback() {
                     <div style="display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:12px">
                       <input id="fb-edit-title-${f.id}" class="input" value="${f.title.replace(/"/g,'&quot;')}" placeholder="Title" style="width:100%">
                       <select id="fb-edit-type-${f.id}" class="input" style="min-width:130px">
-                        <option value="bug"     ${f.type==='bug'?'selected':''}>Bug Report</option>
-                        <option value="feature" ${f.type==='feature'?'selected':''}>Feature Request</option>
+                        <option value="bug"          ${f.type==='bug'?'selected':''}>Bug Report</option>
+                        <option value="feature"      ${f.type==='feature'?'selected':''}>Feature Request</option>
+                        <option value="socialclimb"  ${f.type==='socialclimb'?'selected':''}>SocialClimb Feature</option>
                       </select>
                     </div>
                     <textarea id="fb-edit-body-${f.id}" class="input" rows="5" style="width:100%;resize:vertical;font-family:inherit;line-height:1.6;margin-bottom:12px">${f.body.replace(/</g,'&lt;')}</textarea>
