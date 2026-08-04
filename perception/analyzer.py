@@ -830,13 +830,9 @@ def analyze_location(
 
     disclaimer = _FULL_DISCLAIMER   # always hardcoded; LLM-generated disclaimer field ignored
 
-    # Post-extraction validation: warn on grade/snake-case inconsistencies
+    # Post-extraction validation: warn on snake-case in client-facing prose
     _verdict = _clean(structured_data.get("ai_visibility_verdict", ""))
     _top_rec = _clean(structured_data.get("top_recommendation", ""))
-    for _p in rankings:
-        _computed_grade, _ = scoring.grade_from_score(_p.ai_visibility_score)
-        _warn_grade_mismatch(_verdict, _computed_grade, context=f"verdict/{_p.name}")
-        _warn_grade_mismatch(_top_rec, _computed_grade, context=f"recommendation/{_p.name}")
     _warn_snake_case(_verdict, context="ai_visibility_verdict")
     _warn_snake_case(_top_rec, context="top_recommendation")
 

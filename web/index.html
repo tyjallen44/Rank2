@@ -2300,7 +2300,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">Events Pulse</div>
-            <div class="rn-body">A new report type for generating batch Pulse Diagnostics from a CSV list of event attendees. Upload a CSV with name, city, state, and optional URL columns using the provided template; the app resolves each entity via Google Places, auto-confirming single matches and presenting a dropdown for ambiguous results. After confirmation, analyses run five at a time. Each entity receives an individual Pulse Diagnostic PDF (named with an <em>EventReport</em> suffix) and the run produces an enriched CSV appending Pulse Score, letter grade, and band label to the original data, plus a ZIP bundle of all PDFs. Community Health entities are fully supported — FQHC reports run through the Community Health Edition pipeline including optional teaser PDFs using the correct template. Event runs are shared across all logged-in users and appear in the History section.</div>
+            <div class="rn-body">A new report type for generating batch Pulse Diagnostics from a CSV list of event attendees. Upload a CSV with name, city, state, and optional URL columns using the provided template; the app resolves each entity via Google Places, auto-confirming single matches and presenting a dropdown for ambiguous results. After confirmation, analyses run five at a time. Each entity receives an individual Pulse Diagnostic PDF (named with an <em>EventReport</em> suffix) and the run produces an enriched CSV appending Pulse Score, quartile, and quartile label to the original data, plus a ZIP bundle of all PDFs. Community Health entities are fully supported — FQHC reports run through the Community Health Edition pipeline including optional teaser PDFs using the correct template. Event runs are shared across all logged-in users and appear in the History section.</div>
           </div>
 
           <div class="rn-item">
@@ -2370,7 +2370,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">URL Column in Events Pulse CSV</div>
-            <div class="rn-body">The Events Pulse CSV template now includes a <em>url</em> column alongside name, city, and state. URLs supplied in the upload are stored with each entity and written as the fourth column in the enriched EventReport CSV output, preserving the original link data alongside the appended Pulse Score, grade, and band.</div>
+            <div class="rn-body">The Events Pulse CSV template now includes a <em>url</em> column alongside name, city, and state. URLs supplied in the upload are stored with each entity and written as the fourth column in the enriched EventReport CSV output, preserving the original link data alongside the appended Pulse Score, quartile, and quartile label.</div>
           </div>
 
         </div>
@@ -2485,7 +2485,7 @@ html, body {
 
           <div class="rn-item">
             <div class="rn-title">AI Visibility Methodology Appendix</div>
-            <div class="rn-body">Every generated report now includes a full methodology appendix covering the Prompt Battery (31 standardized queries across 8 categories) and the Scoring Rubric (four-pillar architecture with per-signal point tables, cross-cutting modifiers, letter grade bands, and verification status conventions). The appendix gives curious readers a complete, auditable account of how Pulse Scores are derived.</div>
+            <div class="rn-body">Every generated report now includes a full methodology appendix covering the Prompt Battery (31 standardized queries across 8 categories) and the Scoring Rubric (four-pillar architecture with per-signal point tables, cross-cutting modifiers, quartile bands, and verification status conventions). The appendix gives curious readers a complete, auditable account of how Pulse Scores are derived.</div>
           </div>
 
           <div class="rn-item">

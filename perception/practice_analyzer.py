@@ -772,9 +772,6 @@ def analyze_practice(
     # Post-extraction validation
     _verdict = _clean(structured_data.get("ai_visibility_verdict", ""))
     _warn_snake_case(_verdict, context="practice/ai_visibility_verdict")
-    for _p in rankings:
-        _computed_grade, _ = scoring.grade_from_score(_p.ai_visibility_score)
-        _warn_grade_mismatch(_verdict, _computed_grade, context=f"practice/verdict/{_p.name}")
 
     result = AnalysisResult(
         run_id=run_id,

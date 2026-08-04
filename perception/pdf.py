@@ -181,18 +181,16 @@ def _rank_text_color(rank: int) -> str:
 
 
 def _score_band(score: int | None) -> tuple[str, str]:
-    """Return (label, css_class) for the score band indicator."""
+    """Return (label, css_class) for the score band indicator — thresholds match quartile cutoffs."""
     if score is None:
         return "", ""
-    if score >= 80:
-        return "Strong", "score-band-strong"
-    if score >= 65:
-        return "Good", "score-band-good"
-    if score >= 50:
-        return "Fair", "score-band-fair"
-    if score >= 35:
-        return "Limited", "score-band-limited"
-    return "Weak", "score-band-weak"
+    if score >= 75:
+        return "Top Quartile", "score-band-strong"
+    if score >= 68:
+        return "Upper Middle", "score-band-good"
+    if score >= 58:
+        return "Lower Middle", "score-band-fair"
+    return "Bottom Quartile", "score-band-weak"
 
 
 def _trauma_teaching_pills(p: RankedProvider) -> str:
@@ -1069,15 +1067,13 @@ def _appendix_html() -> str:
   {_sec("2.7", "Assistant Blend")}
   {_p("Final score = usage-weighted blend across assistants (weights refreshed quarterly from published usage share; e.g., ChatGPT 0.5 / Gemini 0.3 / Claude 0.2 as a placeholder). Report the per-assistant sub-scores in the appendix &#8212; divergence between assistants is itself diagnostic (e.g., strong on Gemini but weak on ChatGPT typically indicates a Google-listings-heavy, Bing-index-light footprint).")}
 
-  {_sec("2.8", "Letter Grade Bands")}
+  {_sec("2.8", "Quartile Bands")}
   {_tbl(
-      ("85&#8211;100", "A / A&#8722;",  "Excellent"),
-      ("75&#8211;84",  "B+ / B",        "Good (strong)"),
-      ("65&#8211;74",  "B / B&#8722;",  "Good"),
-      ("55&#8211;64",  "C+ / C",        "Fair"),
-      ("40&#8211;54",  "C&#8722; / D",  "Weak"),
-      ("&lt;40",       "D / F",         "Poor"),
-      header=("Score", "Grade", "Report label"),
+      ("&#8805;75", "Q1", "Top Quartile"),
+      ("68&#8211;74", "Q2", "Upper Middle"),
+      ("58&#8211;67", "Q3", "Lower Middle"),
+      ("&lt;58",      "Q4", "Bottom Quartile"),
+      header=("Score", "Quartile", "Report label"),
   )}
 
   {_sec("2.9", "Verification Status Convention")}
@@ -1401,17 +1397,15 @@ def _practice_appendix_html() -> str:
   {_sec("2.7", "Assistant Blend")}
   {_p("Identical mechanism to the hospital rubric (usage-weighted blend, per-assistant sub-scores in appendix, quarterly weight refresh). Practice-specific diagnostic note: strong-on-Gemini / weak-on-ChatGPT typically indicates a Google-Business-Profile-heavy, Bing-and-aggregator-light footprint &#8212; even more common for practices than hospitals, since many practices&#8217; entire digital presence is their GBP.")}
 
-  {_sec("2.8", "Letter Grade Bands")}
+  {_sec("2.8", "Quartile Bands")}
   {_tbl(
-      ("85&#8211;100", "A / A&#8722;",  "Excellent"),
-      ("75&#8211;84",  "B+ / B",        "Good (strong)"),
-      ("65&#8211;74",  "B / B&#8722;",  "Good"),
-      ("55&#8211;64",  "C+ / C",        "Fair"),
-      ("40&#8211;54",  "C&#8722; / D",  "Weak"),
-      ("&lt;40",       "D / F",         "Poor"),
-      header=("Score", "Grade", "Report label"),
+      ("&#8805;75", "Q1", "Top Quartile"),
+      ("68&#8211;74", "Q2", "Upper Middle"),
+      ("58&#8211;67", "Q3", "Lower Middle"),
+      ("&lt;58",      "Q4", "Bottom Quartile"),
+      header=("Score", "Quartile", "Report label"),
   )}
-  {_note("Reports must display the profile classification next to the grade (e.g., &#8220;B+ &#8212; Procedural&#8221;).")}
+  {_note("Reports display the quartile label next to the score (e.g., &#8220;74 &#8212; Q2 Upper Middle&#8221;).")}
 
   {_sec("2.9", "Verification Status Convention")}
   {_p("Unchanged: every scored signal carries one of three flags:")}

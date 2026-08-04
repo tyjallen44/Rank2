@@ -2307,7 +2307,7 @@ def _run_event_job(
         out = _io2.StringIO()
         writer = _csv.writer(out)
         writer.writerow(["name", "city", "state", "url", "customer", "pulse_score",
-                         "letter_grade", "band_label", "notes"])
+                         "quartile", "quartile_label", "notes"])
         for e in ev_entities:
             notes = "scored" if e["status"] == "done" else f"skipped - {e['error_msg'] or 'not found'}"
             writer.writerow([

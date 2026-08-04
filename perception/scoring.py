@@ -145,33 +145,24 @@ PRACTICE_PROFILE_DISPLAY: dict[str, str] = {
 
 
 def grade_from_score(score: int | None) -> tuple[str, str]:
-    """Return (letter_grade, band_label) for a 0–100 AI Visibility Score.
+    """Return (quartile_code, quartile_label) for a 0–100 AI Visibility Score.
 
-    Band table (INTL-SALES-119 §3). Within each band the upper half of score
-    values receives the higher of the two grades:
-      93–100 → A   / Excellent    85–92 → A−  / Excellent
-      80–84  → B+  / Strong       75–79 → B   / Strong
-      70–74  → B   / Good         65–69 → B−  / Good
-      60–64  → C+  / Fair         55–59 → C   / Fair
-      47–54  → C−  / Below Avg    40–46 → D   / Below Avg
-      20–39  → D   / Weak         0–19  → F   / Weak
-      None   → —   / Unscored
+    Thresholds calibrated against 270 scored entities in the Rank2 database
+    (Aug 2026): P25=58, P50=68, P75=74.
+
+      ≥ 75 → Q1 / Top Quartile
+      68–74 → Q2 / Upper Middle
+      58–67 → Q3 / Lower Middle
+        <58 → Q4 / Bottom Quartile
+       None → —  / Unscored
     """
     if score is None:
         return "—", "Unscored"
     s = max(0, min(100, score))
-    if s >= 93: return "A",  "Excellent"
-    if s >= 85: return "A−", "Excellent"
-    if s >= 80: return "B+", "Strong"
-    if s >= 75: return "B",  "Strong"
-    if s >= 70: return "B",  "Good"
-    if s >= 65: return "B−", "Good"
-    if s >= 60: return "C+", "Fair"
-    if s >= 55: return "C",  "Fair"
-    if s >= 47: return "C−", "Below Average"
-    if s >= 40: return "D",  "Below Average"
-    if s >= 20: return "D",  "Weak"
-    return "F", "Weak"
+    if s >= 75: return "Q1", "Top Quartile"
+    if s >= 68: return "Q2", "Upper Middle"
+    if s >= 58: return "Q3", "Lower Middle"
+    return "Q4", "Bottom Quartile"
 
 
 def experience_band(
