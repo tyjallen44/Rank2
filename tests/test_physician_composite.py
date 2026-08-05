@@ -460,7 +460,7 @@ def test_db_physician_table_present():
     init_db()
     con = get_connection()
     tables = {r[0] for r in con.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
     ).fetchall()}
     con.close()
     assert "practice_reputation_physicians" in tables

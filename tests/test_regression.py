@@ -107,54 +107,46 @@ def test_practice_reputation_importable():
 
 # ── db.py schema after init ───────────────────────────────────────────────────
 
-def _run_init_db_on_temp():
-    import duckdb
-    import tempfile
-    from perception import db as _db
-    from perception.db import init_db
+def _init_db_and_connect():
+    """Run the idempotent init_db() against the configured Postgres and return a
+    connection for schema introspection.  init_db() is CREATE-IF-NOT-EXISTS plus
+    the composite-table down-migration, so the presence/absence assertions below
+    hold regardless of any existing data in the test database."""
+    from perception.db import init_db, get_connection
+    init_db()
+    return get_connection()
 
-    fd, path = tempfile.mkstemp(suffix=".duckdb")
-    os.close(fd)
-    os.unlink(path)
-
-    orig_path = _db.settings.db_path
-    try:
-        _db.settings.db_path = path
-        init_db()
-        con = duckdb.connect(path)
-        return con, path
-    finally:
-        _db.settings.db_path = orig_path
+def _public_tables(con) -> set[str]:
+    return {r[0] for r in con.execute(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+    ).fetchall()}
 
 def test_db_composite_tables_absent():
-    con, path = _run_init_db_on_temp()
+    con = _init_db_and_connect()
     try:
-        tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
+        tables = _public_tables(con)
         for t in ("composite_results", "network_battery_runs", "network_entities", "network_registries"):
             assert t not in tables, f"Composite table '{t}' should have been dropped"
-        con.close()
     finally:
-        if os.path.exists(path):
-            os.unlink(path)
+        con.close()
 
 def test_db_practice_reputation_tables_present():
-    con, path = _run_init_db_on_temp()
+    con = _init_db_and_connect()
     try:
-        tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
+        tables = _public_tables(con)
         for t in ("practice_reputation_runs", "practice_reputation_practices"):
             assert t in tables, f"Table '{t}' missing from schema"
-        con.close()
     finally:
-        if os.path.exists(path):
-            os.unlink(path)
+        con.close()
 
 def test_db_analysis_runs_no_composite_mode_col():
-    con, path = _run_init_db_on_temp()
+    con = _init_db_and_connect()
     try:
-        cols = {row[0] for row in con.execute("DESCRIBE analysis_runs").fetchall()}
+        cols = {row[0] for row in con.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = 'analysis_runs'"
+        ).fetchall()}
         assert "composite_mode" not in cols, \
             "composite_mode column should have been dropped from analysis_runs"
-        con.close()
     finally:
-        if os.path.exists(path):
-            os.unlink(path)
+        con.close()

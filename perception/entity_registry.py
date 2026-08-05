@@ -35,7 +35,7 @@ def get_registry_siblings(
         """SELECT name, entity_type, city, state, canonical_name
            FROM practice_entity_registry
            WHERE anchor_key = ? AND expires_at > ?
-           ORDER BY rowid ASC""",
+           ORDER BY registered_at ASC, name ASC""",
         [key, now],
     ).fetchall()
     con.close()

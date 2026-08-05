@@ -198,78 +198,53 @@ def test_hospital_signals_filtered_from_practice():
 
 # ── (f) Score reuse: get_recent_run window ────────────────────────────────────
 
-def test_get_recent_run_returns_none_at_91_days(tmp_path, monkeypatch):
-    import duckdb
-    import json
+def test_get_recent_run_returns_none_at_91_days():
     import uuid
-    from unittest.mock import patch
+    from perception.db import init_db, get_connection, get_recent_run
+    init_db()
 
-    db_file = str(tmp_path / "test.db")
-    monkeypatch.setenv("DB_PATH", db_file)
-
-    con = duckdb.connect(db_file)
-    con.execute("""
-        CREATE TABLE analysis_runs (
-            run_id VARCHAR PRIMARY KEY,
-            location VARCHAR NOT NULL,
-            specialty VARCHAR,
-            aggregate BOOLEAN DEFAULT FALSE,
-            generated_at DATE NOT NULL,
-            entity_name VARCHAR,
-            individual_report BOOLEAN DEFAULT FALSE,
-            result_json VARCHAR
-        )
-    """)
     old_date = (date.today() - timedelta(days=91)).isoformat()
     run_id = str(uuid.uuid4())
+    entity, location = "__test_recent_91__", "Salt Lake City, UT"
+    con = get_connection()
     con.execute(
-        "INSERT INTO analysis_runs (run_id, location, entity_name, generated_at, result_json) VALUES (?, ?, ?, ?, ?)",
-        [run_id, "Salt Lake City, UT", "Test Hospital", old_date, '{"run_id": "x"}'],
+        "INSERT INTO analysis_runs (run_id, location, entity_name, generated_at, result_json) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [run_id, location, entity, old_date, '{"run_id": "x"}'],
     )
     con.close()
-
-    with patch("perception.db.settings") as mock_settings:
-        mock_settings.db_path = db_file
-        from perception.db import get_recent_run
-        result = get_recent_run("Test Hospital", "Salt Lake City, UT", days=90)
+    try:
+        result = get_recent_run(entity, location, days=90)
         assert result is None, "91-day-old run should not be returned for 90-day window"
+    finally:
+        con = get_connection()
+        con.execute("DELETE FROM analysis_runs WHERE run_id = ?", [run_id])
+        con.close()
 
 
-def test_get_recent_run_returns_result_at_90_days(tmp_path, monkeypatch):
-    import duckdb
+def test_get_recent_run_returns_result_at_90_days():
     import uuid
-    from unittest.mock import patch
+    from perception.db import init_db, get_connection, get_recent_run
+    init_db()
 
-    db_file = str(tmp_path / "test2.db")
-    monkeypatch.setenv("DB_PATH", db_file)
-
-    con = duckdb.connect(db_file)
-    con.execute("""
-        CREATE TABLE analysis_runs (
-            run_id VARCHAR PRIMARY KEY,
-            location VARCHAR NOT NULL,
-            specialty VARCHAR,
-            aggregate BOOLEAN DEFAULT FALSE,
-            generated_at DATE NOT NULL,
-            entity_name VARCHAR,
-            individual_report BOOLEAN DEFAULT FALSE,
-            result_json VARCHAR
-        )
-    """)
     recent_date = (date.today() - timedelta(days=90)).isoformat()
     run_id = str(uuid.uuid4())
+    entity, location = "__test_recent_90__", "Salt Lake City, UT"
+    con = get_connection()
     con.execute(
-        "INSERT INTO analysis_runs (run_id, location, entity_name, generated_at, result_json) VALUES (?, ?, ?, ?, ?)",
-        [run_id, "Salt Lake City, UT", "Test Hospital", recent_date, '{"run_id": "cached"}'],
+        "INSERT INTO analysis_runs (run_id, location, entity_name, generated_at, result_json) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [run_id, location, entity, recent_date, '{"run_id": "cached"}'],
     )
     con.close()
-
-    with patch("perception.db.settings") as mock_settings:
-        mock_settings.db_path = db_file
-        from perception.db import get_recent_run
-        result = get_recent_run("Test Hospital", "Salt Lake City, UT", days=90)
+    try:
+        result = get_recent_run(entity, location, days=90)
         assert result is not None, "90-day-old run should be returned"
         assert result["result_json"] == '{"run_id": "cached"}'
+    finally:
+        con = get_connection()
+        con.execute("DELETE FROM analysis_runs WHERE run_id = ?", [run_id])
+        con.close()
 
 
 # ── (g) No-address-path regression ───────────────────────────────────────────
@@ -1451,7 +1426,7 @@ def test_ac2_3_practice_cache_not_served_for_hospital_request():
     # Insert a practice-typed result directly into analysis_runs
     con = get_connection()
     con.execute(
-        """INSERT OR REPLACE INTO analysis_runs
+        """INSERT INTO analysis_runs
            (run_id, location, entity_name, entity_type, generated_at, result_json)
            VALUES (?, ?, ?, 'practice', ?, ?)""",
         [_run_id, _location, _entity, date.today().isoformat(),
@@ -1493,7 +1468,7 @@ def test_ac2_3_hospital_cache_not_served_for_practice_request():
 
     con = get_connection()
     con.execute(
-        """INSERT OR REPLACE INTO analysis_runs
+        """INSERT INTO analysis_runs
            (run_id, location, entity_name, entity_type, generated_at, result_json)
            VALUES (?, ?, ?, 'hospital', ?, ?)""",
         [_run_id, _location, _entity, date.today().isoformat(),
@@ -1534,7 +1509,7 @@ def test_ac2_3_null_entity_type_treated_as_hospital():
     con = get_connection()
     # Insert a row with entity_type NULL (simulates pre-migration hospital run)
     con.execute(
-        """INSERT OR REPLACE INTO analysis_runs
+        """INSERT INTO analysis_runs
            (run_id, location, entity_name, generated_at, result_json)
            VALUES (?, ?, ?, ?, ?)""",
         [_run_id, _location, _entity, date.today().isoformat(),

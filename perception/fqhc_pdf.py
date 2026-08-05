@@ -83,7 +83,7 @@ def _build_fqhc_html(result: AnalysisResult, brand_cfg: dict) -> str:
             with get_connection() as _con:
                 _rows = _con.execute(
                     "SELECT query, category, language, assistant, surfaced "
-                    "FROM fqhc_battery_runs WHERE fqhc_run_id = ? ORDER BY rowid",
+                    "FROM fqhc_battery_runs WHERE fqhc_run_id = ? ORDER BY created_at, id",
                     [result.run_id],
                 ).fetchall()
                 battery_rows = [
