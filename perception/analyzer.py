@@ -1387,12 +1387,31 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
 
     con.execute(
         """
-        INSERT OR REPLACE INTO analysis_runs
+        INSERT INTO analysis_runs
             (run_id, location, specialty, aggregate, generated_at,
              weighting_profile, market_overview, ai_visibility_verdict, coverage_note,
              top_recommendation, practical_advice, disclaimer, report_markdown,
              pdf_path, md_path, entity_name, individual_report, result_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (run_id) DO UPDATE SET
+            location              = EXCLUDED.location,
+            specialty             = EXCLUDED.specialty,
+            aggregate             = EXCLUDED.aggregate,
+            generated_at          = EXCLUDED.generated_at,
+            weighting_profile     = EXCLUDED.weighting_profile,
+            market_overview       = EXCLUDED.market_overview,
+            ai_visibility_verdict = EXCLUDED.ai_visibility_verdict,
+            coverage_note         = EXCLUDED.coverage_note,
+            top_recommendation    = EXCLUDED.top_recommendation,
+            practical_advice      = EXCLUDED.practical_advice,
+            disclaimer            = EXCLUDED.disclaimer,
+            report_markdown       = EXCLUDED.report_markdown,
+            pdf_path              = EXCLUDED.pdf_path,
+            md_path               = EXCLUDED.md_path,
+            entity_name           = EXCLUDED.entity_name,
+            individual_report     = EXCLUDED.individual_report,
+            result_json           = EXCLUDED.result_json,
+            created_at            = EXCLUDED.created_at
         """,
         [
             result.run_id, result.location, result.specialty, result.aggregate,
@@ -1408,7 +1427,7 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
     for p in result.rankings:
         con.execute(
             """
-            INSERT OR REPLACE INTO ranked_providers
+            INSERT INTO ranked_providers
                 (run_id, rank, name, website_url, affiliation_type, size_category, physician_count,
                  overall_rating, ai_visibility_score, weighting_profile, tier_scores,
                  google_footprint, third_party_aggregate, disqualifiers,
@@ -1417,6 +1436,33 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
                  patient_voice_summary, leapfrog_grade, accreditations, cms_quality_highlights,
                  cms_star_rating, us_news_rankings, ai_says, trauma_level, teaching_status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (run_id, rank) DO UPDATE SET
+                name                   = EXCLUDED.name,
+                website_url            = EXCLUDED.website_url,
+                affiliation_type       = EXCLUDED.affiliation_type,
+                size_category          = EXCLUDED.size_category,
+                physician_count        = EXCLUDED.physician_count,
+                overall_rating         = EXCLUDED.overall_rating,
+                ai_visibility_score    = EXCLUDED.ai_visibility_score,
+                weighting_profile      = EXCLUDED.weighting_profile,
+                tier_scores            = EXCLUDED.tier_scores,
+                google_footprint       = EXCLUDED.google_footprint,
+                third_party_aggregate  = EXCLUDED.third_party_aggregate,
+                disqualifiers          = EXCLUDED.disqualifiers,
+                key_strengths          = EXCLUDED.key_strengths,
+                notable_weaknesses     = EXCLUDED.notable_weaknesses,
+                best_suited_for        = EXCLUDED.best_suited_for,
+                recommendation_summary = EXCLUDED.recommendation_summary,
+                consolidated_locations = EXCLUDED.consolidated_locations,
+                patient_voice_summary  = EXCLUDED.patient_voice_summary,
+                leapfrog_grade         = EXCLUDED.leapfrog_grade,
+                accreditations         = EXCLUDED.accreditations,
+                cms_quality_highlights = EXCLUDED.cms_quality_highlights,
+                cms_star_rating        = EXCLUDED.cms_star_rating,
+                us_news_rankings       = EXCLUDED.us_news_rankings,
+                ai_says                = EXCLUDED.ai_says,
+                trauma_level           = EXCLUDED.trauma_level,
+                teaching_status        = EXCLUDED.teaching_status
             """,
             [
                 result.run_id, p.rank, p.name, p.website_url, p.affiliation_type.value,

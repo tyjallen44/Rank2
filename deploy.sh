@@ -99,10 +99,14 @@ gcloud run deploy "$SERVICE" \
   --timeout=3600 \
   --min-instances=0 \
   --max-instances=2 \
-  --set-env-vars="REPORTS_DIR=/data/reports,DB_PATH=/data/rank2.duckdb,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
-  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest" \
+  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
+  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest,DATABASE_URL=rank2-db-url:latest" \
   --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount="volume=rank2-data,mount-path=/data"
+# NOTE: The /data volume now holds only generated reports (REPORTS_DIR); the
+# database moved off GCS FUSE to Postgres (Neon) via the DATABASE_URL secret.
+# Once this revision is verified, max-instances can be raised past 2 safely —
+# Postgres supports many concurrent Cloud Run instances (DuckDB did not).
 
 echo ""
 echo "Deploy complete!"

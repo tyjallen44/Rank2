@@ -1,113 +1,90 @@
 from __future__ import annotations
 
-import duckdb
 import threading
-import time as _time
 from datetime import date, timedelta
-from pathlib import Path
 from typing import Any, Optional
+
+import psycopg
+from psycopg_pool import ConnectionPool
 
 from .config import settings
 
-# Single shared connection + reentrant lock.
-# DuckDB raises "already attached" when multiple threads call duckdb.connect()
-# on the same GCS FUSE path concurrently.  One connection serialised behind
-# an RLock eliminates that entirely without meaningfully affecting throughput
-# (AI API calls dominate runtime, not DB writes).
-_db_lock: threading.RLock = threading.RLock()
-_db_con: Optional[duckdb.DuckDBPyConnection] = None
+# ── Postgres connection pool ──────────────────────────────────────────────────
+# The app previously ran DuckDB (a single-file, single-writer engine) on a GCS
+# FUSE mount, which forced every query through one shared connection behind a
+# global RLock and needed ESTALE/WAL recovery hacks.  Postgres is a real
+# client-server DB: many Cloud Run instances can connect concurrently, so we
+# hand each caller its own pooled connection and drop the global lock entirely.
+_pool: Optional[ConnectionPool] = None
+_pool_lock = threading.Lock()
 
 
-def _global_con() -> duckdb.DuckDBPyConnection:
-    """Return the single shared DuckDB connection, opening it if needed."""
-    global _db_con
-    if _db_con is None:
-        _db_con = duckdb.connect(str(settings.db_path))
-    return _db_con
+def _get_pool() -> ConnectionPool:
+    """Return the process-wide connection pool, creating it on first use."""
+    global _pool
+    if _pool is None:
+        with _pool_lock:
+            if _pool is None:
+                p = ConnectionPool(
+                    conninfo=settings.database_url,
+                    min_size=1,
+                    max_size=16,
+                    # Autocommit mirrors the old single-connection behaviour
+                    # (each statement is immediately durable) and keeps a failed
+                    # statement from poisoning the connection with an aborted
+                    # transaction — important for the try/except DDL in init_db.
+                    kwargs={"autocommit": True},
+                    open=False,
+                )
+                p.open()
+                _pool = p
+    return _pool
 
 
-class _StaleHandleConnection:
+def _translate(query: str, has_params: bool) -> str:
+    """Translate DuckDB-style '?' placeholders to psycopg '%s'.
+
+    App SQL contains no literal '?' and no LIKE '%...%' patterns (verified
+    during the DuckDB→Postgres migration), so a plain textual substitution is
+    safe.  Literal '%' is doubled only when params are present, since psycopg
+    performs pyformat interpolation only in that case.
     """
-    Serialises all DuckDB access behind a module-level RLock and routes every
-    operation through a single shared connection.  Transparently retries on
-    GCS FUSE stale-handle errors (ESTALE), reopening the shared connection and
-    removing the WAL file before each retry.
+    if has_params:
+        query = query.replace("%", "%%")
+    return query.replace("?", "%s")
+
+
+class _PgConnection:
+    """Pooled-connection wrapper preserving the historical DuckDB-style API:
+    execute/executemany/fetchone/fetchall/description/close, with execute()
+    returning self so `.execute(...).fetchone()` chaining keeps working.
+
+    Each get_connection() checks out its own connection from the pool and
+    returns it on close(), giving real concurrency.
     """
 
     def __init__(self) -> None:
-        _db_lock.acquire()
-        self._locked = True
-
-    def _handle_stale(self, attempt: int) -> None:
-        global _db_con
-        try:
-            if _db_con is not None:
-                _db_con.close()
-        except Exception:
-            pass
-        _db_con = None
-        wal = Path(str(settings.db_path) + ".wal")
-        try:
-            if wal.exists():
-                wal.unlink()
-        except Exception:
-            pass
-        _time.sleep(0.5 * (attempt + 1))
-
-    @staticmethod
-    def _is_stale(exc: Exception) -> bool:
-        s = str(exc).lower()
-        return "stale file handle" in s or "estale" in s
+        self._pool = _get_pool()
+        self._con: Optional[psycopg.Connection] = self._pool.getconn()
+        self._cur = self._con.cursor()
 
     def execute(self, query: str, params=None):
-        for attempt in range(3):
-            try:
-                con = _global_con()
-                if params is not None:
-                    con.execute(query, params)
-                else:
-                    con.execute(query)
-                return self
-            except Exception as exc:
-                if self._is_stale(exc) and attempt < 2:
-                    self._handle_stale(attempt)
-                    continue
-                raise
+        self._cur.execute(_translate(query, params is not None), params)
+        return self
 
     def executemany(self, query: str, params_list=None):
-        for attempt in range(3):
-            try:
-                _global_con().executemany(query, params_list or [])
-                return self
-            except Exception as exc:
-                if self._is_stale(exc) and attempt < 2:
-                    self._handle_stale(attempt)
-                    continue
-                raise
+        self._cur.executemany(_translate(query, True), params_list or [])
+        return self
 
     @property
     def description(self):
-        return _global_con().description
-
-    def fetchall(self):
-        for attempt in range(3):
-            try:
-                return _global_con().fetchall()
-            except Exception as exc:
-                if self._is_stale(exc) and attempt < 2:
-                    self._handle_stale(attempt)
-                    continue
-                raise
+        return self._cur.description
 
     def fetchone(self):
-        for attempt in range(3):
-            try:
-                return _global_con().fetchone()
-            except Exception as exc:
-                if self._is_stale(exc) and attempt < 2:
-                    self._handle_stale(attempt)
-                    continue
-                raise
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
 
     def __enter__(self):
         return self
@@ -117,24 +94,31 @@ class _StaleHandleConnection:
         return False
 
     def __del__(self) -> None:
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def close(self) -> None:
-        if self._locked:
+        if self._con is not None:
             try:
-                _db_lock.release()
+                self._cur.close()
             except Exception:
                 pass
-            self._locked = False
+            try:
+                self._pool.putconn(self._con)
+            except Exception:
+                pass
+            self._con = None
+            self._cur = None
 
 
-def get_connection() -> _StaleHandleConnection:
-    return _StaleHandleConnection()
+def get_connection() -> _PgConnection:
+    return _PgConnection()
 
 
 def init_db() -> None:
     con = get_connection()
-    con.executemany("", [])  # ensure connection is live
     con.execute("""
         CREATE TABLE IF NOT EXISTS entities (
             id          VARCHAR PRIMARY KEY,
@@ -153,11 +137,11 @@ def init_db() -> None:
             entity_id        VARCHAR NOT NULL,
             review_id        VARCHAR NOT NULL,
             author           VARCHAR,
-            rating           DOUBLE,
+            rating           DOUBLE PRECISION,
             text             VARCHAR,
             review_date      DATE,
             sentiment        VARCHAR,
-            sentiment_score  DOUBLE,
+            sentiment_score  DOUBLE PRECISION,
             PRIMARY KEY (source, review_id)
         )
     """)
@@ -165,10 +149,10 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS entity_summaries (
             entity_id     VARCHAR NOT NULL,
             source        VARCHAR NOT NULL,
-            avg_rating    DOUBLE,
+            avg_rating    DOUBLE PRECISION,
             review_count  INTEGER,
-            positive_pct  DOUBLE,
-            negative_pct  DOUBLE,
+            positive_pct  DOUBLE PRECISION,
+            negative_pct  DOUBLE PRECISION,
             as_of         DATE,
             PRIMARY KEY (entity_id, source)
         )
@@ -270,9 +254,9 @@ def init_db() -> None:
         ("trauma_level", "VARCHAR"),
         ("teaching_status", "VARCHAR"),
         # Practice Edition derived metrics
-        ("entity_resolution_pct",  "DOUBLE"),
-        ("linkage_integrity_pct",  "DOUBLE"),
-        ("physician_capture_rate", "DOUBLE"),
+        ("entity_resolution_pct",  "DOUBLE PRECISION"),
+        ("linkage_integrity_pct",  "DOUBLE PRECISION"),
+        ("physician_capture_rate", "DOUBLE PRECISION"),
         ("key_person_flag",        "BOOLEAN DEFAULT FALSE"),
         ("score_ceiling_applied",  "BOOLEAN DEFAULT FALSE"),
         ("score_ceiling_reason",   "VARCHAR"),
@@ -394,19 +378,19 @@ def init_db() -> None:
             city                 VARCHAR,
             state                VARCHAR,
             affiliation_verified BOOLEAN DEFAULT TRUE,
-            google_rating        DOUBLE,
+            google_rating        DOUBLE PRECISION,
             google_count         INTEGER,
-            healthgrades_rating  DOUBLE,
+            healthgrades_rating  DOUBLE PRECISION,
             healthgrades_count   INTEGER,
-            vitals_rating        DOUBLE,
+            vitals_rating        DOUBLE PRECISION,
             vitals_count         INTEGER,
-            webmd_rating         DOUBLE,
+            webmd_rating         DOUBLE PRECISION,
             webmd_count          INTEGER,
-            yelp_rating          DOUBLE,
+            yelp_rating          DOUBLE PRECISION,
             yelp_count           INTEGER,
-            ratemds_rating       DOUBLE,
+            ratemds_rating       DOUBLE PRECISION,
             ratemds_count        INTEGER,
-            avg_rating           DOUBLE,
+            avg_rating           DOUBLE PRECISION,
             total_reviews        INTEGER DEFAULT 0,
             platforms_found      INTEGER DEFAULT 0,
             platforms_list       VARCHAR DEFAULT '',
@@ -426,27 +410,27 @@ def init_db() -> None:
             specialty            VARCHAR,
             credential           VARCHAR,
             not_established      BOOLEAN DEFAULT FALSE,
-            avg_rating           DOUBLE,
+            avg_rating           DOUBLE PRECISION,
             total_reviews        INTEGER DEFAULT 0,
             platforms_found      INTEGER DEFAULT 0,
             platforms_list       VARCHAR DEFAULT '',
             collection_date      DATE,
-            google_rating        DOUBLE,
+            google_rating        DOUBLE PRECISION,
             google_count         INTEGER,
             google_url           VARCHAR,
-            healthgrades_rating  DOUBLE,
+            healthgrades_rating  DOUBLE PRECISION,
             healthgrades_count   INTEGER,
             healthgrades_url     VARCHAR,
-            vitals_rating        DOUBLE,
+            vitals_rating        DOUBLE PRECISION,
             vitals_count         INTEGER,
             vitals_url           VARCHAR,
-            webmd_rating         DOUBLE,
+            webmd_rating         DOUBLE PRECISION,
             webmd_count          INTEGER,
             webmd_url            VARCHAR,
-            yelp_rating          DOUBLE,
+            yelp_rating          DOUBLE PRECISION,
             yelp_count           INTEGER,
             yelp_url             VARCHAR,
-            ratemds_rating       DOUBLE,
+            ratemds_rating       DOUBLE PRECISION,
             ratemds_count        INTEGER,
             ratemds_url          VARCHAR,
             primary_url          VARCHAR,
@@ -512,7 +496,7 @@ def init_db() -> None:
             city          VARCHAR NOT NULL,
             state         VARCHAR NOT NULL,
             display_name  VARCHAR,
-            rating        DOUBLE,
+            rating        DOUBLE PRECISION,
             review_count  INTEGER,
             maps_url      VARCHAR,
             bound_at      TIMESTAMP NOT NULL,
@@ -536,7 +520,7 @@ def init_db() -> None:
             run_id         VARCHAR NOT NULL,
             entity_name    VARCHAR NOT NULL,
             place_id       VARCHAR,
-            rating         DOUBLE,
+            rating         DOUBLE PRECISION,
             review_count   INTEGER,
             binding_source VARCHAR,
             binding_reason VARCHAR,
@@ -590,7 +574,7 @@ def init_db() -> None:
             ai_representation VARCHAR,
             flag              VARCHAR,
             severity          VARCHAR,
-            points            DOUBLE,
+            points            DOUBLE PRECISION,
             created_at        TIMESTAMP
         )
     """)
@@ -628,7 +612,7 @@ def init_db() -> None:
     if "edition" not in _ar_cols2:
         con.execute("ALTER TABLE analysis_runs ADD COLUMN edition VARCHAR")
     if "mqcr" not in _ar_cols2:
-        con.execute("ALTER TABLE analysis_runs ADD COLUMN mqcr DOUBLE")
+        con.execute("ALTER TABLE analysis_runs ADD COLUMN mqcr DOUBLE PRECISION")
 
     # ── Events Pulse tables ───────────────────────────────────────────────────
     con.execute("""
@@ -1352,17 +1336,27 @@ def set_gbp_identity(
 ) -> None:
     """Write or update the durable GBP binding for a place_id.
 
-    Uses INSERT OR REPLACE so that a stronger/fresher binding supersedes a
+    Uses INSERT ... ON CONFLICT so that a stronger/fresher binding supersedes a
     stale one without leaving orphan rows.
     """
     from datetime import datetime
     now = datetime.utcnow().isoformat()
     con = get_connection()
     con.execute(
-        """INSERT OR REPLACE INTO gbp_identity
+        """INSERT INTO gbp_identity
            (place_id, entity_name, city, state, display_name,
             rating, review_count, maps_url, bound_at, run_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (place_id) DO UPDATE SET
+             entity_name  = EXCLUDED.entity_name,
+             city         = EXCLUDED.city,
+             state        = EXCLUDED.state,
+             display_name = EXCLUDED.display_name,
+             rating       = EXCLUDED.rating,
+             review_count = EXCLUDED.review_count,
+             maps_url     = EXCLUDED.maps_url,
+             bound_at     = EXCLUDED.bound_at,
+             run_id       = EXCLUDED.run_id""",
         [place_id, entity_name, city, state, display_name,
          rating, review_count, maps_url, now, run_id],
     )

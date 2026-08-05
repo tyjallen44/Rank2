@@ -163,7 +163,9 @@ def _cache_set(key: str, rep: SystemReputation) -> None:
         con = get_connection()
         payload = json.dumps({"org": rep.org, **rep.to_dict()})
         con.execute(
-            "INSERT OR REPLACE INTO reputation_cache (org_key, payload, fetched_at) VALUES (?, ?, ?)",
+            "INSERT INTO reputation_cache (org_key, payload, fetched_at) VALUES (?, ?, ?) "
+            "ON CONFLICT (org_key) DO UPDATE SET "
+            "payload = EXCLUDED.payload, fetched_at = EXCLUDED.fetched_at",
             [key, payload, date.today().isoformat()],
         )
         con.close()

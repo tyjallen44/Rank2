@@ -4,7 +4,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # Legacy DuckDB file path — retained only for the one-time migration/copy
+    # script and older tests. The live app talks to Postgres via database_url.
     db_path: str = "rank2.duckdb"
+    # Postgres connection string (Neon in prod, local Homebrew PG in dev).
+    # Sourced from env DATABASE_URL / Secret Manager on Cloud Run.
+    database_url: str = "postgresql://localhost:5432/rank2"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     # Google Places API key — grounds the AI Visibility Score in real Google
