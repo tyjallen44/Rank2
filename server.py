@@ -2627,9 +2627,21 @@ async def frontend(full_path: str):
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
+    from perception.config import settings as _settings
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-    print(f"\n  Rank2  →  http://localhost:{port}\n")
+
+    # Show the database backend so it's obvious this is the Postgres build,
+    # not the legacy DuckDB one (creds masked).
+    _dburl = _settings.database_url
+    if "://" in _dburl and "@" in _dburl:
+        _scheme, _rest = _dburl.split("://", 1)
+        _dbdisplay = f"{_scheme}://***@{_rest.split('@', 1)[1]}"
+    else:
+        _dbdisplay = _dburl
+
+    print(f"\n  Rank2  →  http://localhost:{port}")
+    print(f"  DB     →  Postgres: {_dbdisplay}\n")
     if not ACCESS_PASSWORDS:
         print("  ⚠  WARNING: ACCESS_PASSWORD not set in .env\n")
     uvicorn.run(app, host=host, port=port)
