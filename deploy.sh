@@ -98,7 +98,7 @@ gcloud run deploy "$SERVICE" \
   --cpu=1 \
   --timeout=3600 \
   --min-instances=0 \
-  --max-instances=2 \
+  --max-instances=10 \
   --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
   --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest,DATABASE_URL=rank2-db-url:latest" \
   --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
