@@ -936,7 +936,7 @@ html, body {
       <button class="nav-btn" id="nav-release" onclick="navigate('release')" title="What's new in Pulse">
         <span class="ni">◈</span><span class="nb-lbl">Release Notes</span>
       </button>
-      <div class="sb-build" id="sb-version">Pulse Version 1.04</div>
+      <div class="sb-build" id="sb-version">Pulse Version 1.05</div>
       <div class="sb-build" id="sb-build"></div>
     </div>
   </nav>
@@ -2260,6 +2260,21 @@ html, body {
       <div class="page-sub">What's new in Pulse.</div>
 
       <div class="card" style="max-width:820px">
+
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
+          <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.05</div>
+          <div style="font-size:13px;color:var(--muted)">Released August 5, 2026</div>
+        </div>
+
+        <div class="rn-section">
+          <div class="rn-heading improved">Improvements</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Database Platform Upgrade — Postgres</div>
+            <div class="rn-body">Pulse's underlying data store has been migrated from an embedded single-file database to a managed Postgres backend. This removes a hard ceiling on concurrent usage — the application can now scale across multiple server instances at once without contention — and adds automated backups and point-in-time recovery for stronger data durability. The upgrade is entirely behind the scenes: all existing reports, history, users, tracked entities, and event runs were migrated intact, with no change to how anything works.</div>
+          </div>
+
+        </div>
 
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
           <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.04</div>
