@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir \
     "anthropic>=0.50" \
     "openai>=1.0" \
     "duckdb>=0.10" \
+    "psycopg[binary]>=3.1" \
+    "psycopg-pool>=3.2" \
     "pydantic>=2.7" \
     "pydantic-settings>=2.2" \
     "python-dotenv>=1.0" \

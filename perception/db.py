@@ -33,7 +33,11 @@ def _get_pool() -> ConnectionPool:
                     # (each statement is immediately durable) and keeps a failed
                     # statement from poisoning the connection with an aborted
                     # transaction — important for the try/except DDL in init_db.
-                    kwargs={"autocommit": True},
+                    # prepare_threshold=None disables server-side prepared
+                    # statements, which are incompatible with transaction-mode
+                    # connection poolers like Neon's pooled (PgBouncer) endpoint;
+                    # harmless on a direct connection.
+                    kwargs={"autocommit": True, "prepare_threshold": None},
                     open=False,
                 )
                 p.open()
