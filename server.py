@@ -1679,8 +1679,8 @@ async def submit_feedback(
     files: List[UploadFile] = File(default=[]),
 ):
     from perception.db import init_db, create_feedback
-    if type not in ("bug", "feature"):
-        raise HTTPException(400, "type must be 'bug' or 'feature'")
+    if type not in ("bug", "feature", "socialclimb"):
+        raise HTTPException(400, "type must be 'bug', 'feature', or 'socialclimb'")
     if not title.strip():
         raise HTTPException(400, "title is required")
     if not body.strip():
@@ -1757,8 +1757,8 @@ async def patch_feedback(feedback_id: str, req: FeedbackEditRequest, _: dict = D
     valid_actions = {"pending", "accepted", "fixed", "completed", "rejected"}
     if req.action is not None and req.action not in valid_actions:
         raise HTTPException(400, "invalid action")
-    if req.type is not None and req.type not in ("bug", "feature"):
-        raise HTTPException(400, "type must be 'bug' or 'feature'")
+    if req.type is not None and req.type not in ("bug", "feature", "socialclimb"):
+        raise HTTPException(400, "type must be 'bug', 'feature', or 'socialclimb'")
     init_db()
     updates = {k: v for k, v in req.dict().items() if v is not None}
     update_feedback(feedback_id, **updates)
