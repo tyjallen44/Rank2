@@ -5217,8 +5217,11 @@ function renderFeedback() {
     return `<th onclick="feedbackSort('${field}')" style="cursor:pointer;user-select:none">${label}${icon}</th>`;
   };
 
-  const typeBadge = t => t === 'bug'
+  const typeBadge = t =>
+      t === 'bug'
     ? '<span class="badge" style="background:#fee2e2;color:#991b1b;white-space:nowrap">Bug</span>'
+    : t === 'socialclimb'
+    ? '<span class="badge" style="background:#ede9fe;color:#5b21b6;white-space:nowrap">SocialClimb</span>'
     : '<span class="badge" style="background:#dbeafe;color:#1e40af;white-space:nowrap">Feature</span>';
 
   const actionLabel = a => ({pending: '—', fixed: 'Fixed', completed: 'Completed', accepted: 'Accepted', rejected: 'Rejected'})[a] || '—';
