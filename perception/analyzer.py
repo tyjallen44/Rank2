@@ -509,22 +509,83 @@ def _stream_narrative(client, system_prompt, user_prompt, emit, console) -> str:
         return _run([])
 
 
+_TARGET_STOPWORDS = {
+    "of", "the", "and", "at", "in", "for", "a", "an", "to",
+    "llp", "llc", "pllc", "pa", "pc", "inc", "ltd",
+    "dr", "md", "do", "mds", "dos",
+    "group", "practice", "practices", "clinic", "clinics", "center", "centre",
+    "department", "services", "service", "network", "system", "systems",
+    "health", "healthcare", "medical", "medicine", "physicians", "physician",
+    "associates", "care", "institute", "hospital", "hospitals",
+}
+
+
+def _target_tokens(name: str) -> set[str]:
+    """Normalize an entity name to a set of significant tokens for fuzzy matching:
+    lowercase, fold the -ae-/-oe- medical spelling variants (orthopaedic→orthopedic),
+    drop parenthetical brand suffixes and punctuation, and remove generic
+    corporate/medical filler words."""
+    import re
+    s = (name or "").lower()
+    s = s.replace("orthopaedic", "orthopedic").replace("paediatric", "pediatric")
+    s = s.replace("orthopaedics", "orthopedics").replace("paediatrics", "pediatrics")
+    s = s.replace("ae", "e").replace("oe", "e")   # generic -ae-/-oe- fold
+    s = re.sub(r"\([^)]*\)", " ", s)               # drop "(OAD Orthopaedics)" etc.
+    s = re.sub(r"[^a-z0-9 ]", " ", s)              # strip punctuation/dashes
+    return {t for t in s.split() if len(t) > 1 and t not in _TARGET_STOPWORDS}
+
+
 def _mark_simplified_target(rankings: list, target_entity: str) -> None:
-    """Mark the ranked provider that matches `target_entity` as the target
-    (is_target=True) for Simplified Patient Pulse. Exact case-insensitive match
-    first, then substring in either direction. Marks at most one entity."""
-    t = (target_entity or "").strip().lower()
-    if not t:
+    """Mark the ranked provider best matching `target_entity` as the target
+    (is_target=True) for Simplified Patient Pulse.
+
+    Uses rarity-weighted token overlap: each shared token contributes 1/df where
+    df is how many ranked providers contain that token, so distinctive tokens
+    (e.g. a city or brand) outweigh generic ones (e.g. 'orthopedic'). This is
+    robust to spelling variants (orthopaedic/orthopedic) and location/brand
+    suffixes ('- Plano', '(OAD Orthopaedics)'). Marks at most one entity."""
+    from collections import Counter
+    tgt = _target_tokens(target_entity)
+    if not tgt or not rankings:
         return
-    match = next((p for p in rankings if (p.name or "").strip().lower() == t), None)
-    if match is None:
-        match = next(
-            (p for p in rankings
-             if t in (p.name or "").strip().lower() or (p.name or "").strip().lower() in t),
-            None,
-        )
-    if match is not None:
-        match.is_target = True
+    prov = [(_target_tokens(p.name), p) for p in rankings]
+    df: Counter = Counter()
+    for toks, _ in prov:
+        for t in toks:
+            df[t] += 1
+    best, best_score = None, 0.0
+    for toks, p in prov:
+        shared = tgt & toks
+        if not shared:
+            continue
+        score = sum(1.0 / df[t] for t in shared)
+        if score > best_score:
+            best_score, best = score, p
+    # Require at least one reasonably distinctive shared token (df ≤ 2 → ≥0.5).
+    if best is not None and best_score >= 0.5:
+        best.is_target = True
+
+
+def _reapply_simplified_target(result, target_entity, output_dir, brand):
+    """For a CACHED simplified result: the market analysis is reusable, but the
+    target is request-specific — so re-mark it with the current matcher and
+    re-render the PDF so the cached artifact reflects this request's prospect."""
+    if not target_entity:
+        return result
+    result.simplified = True
+    result.target_entity = target_entity
+    for p in result.rankings:
+        p.is_target = False
+    _mark_simplified_target(result.rankings, target_entity)
+    try:
+        from pathlib import Path as _P
+        from .pdf import render_pdf
+        pdf_path = _P(result.pdf_path) if result.pdf_path else _P(output_dir) / f"{result.run_id}.pdf"
+        render_pdf(result, pdf_path, brand=brand)
+        result.pdf_path = str(pdf_path)
+    except Exception:
+        pass
+    return result
 
 
 def analyze_location(
@@ -597,14 +658,20 @@ def analyze_location(
         if _today_mkt:
             emit({"type": "phase", "name": "cached",
                   "text": f"Returning today's cached market result for {city}, {state}"})
-            return AnalysisResult.model_validate_json(_today_mkt["result_json"])
+            _res = AnalysisResult.model_validate_json(_today_mkt["result_json"])
+            if simplified:
+                _res = _reapply_simplified_target(_res, target_entity, output_dir, brand)
+            return _res
         # 90-day cache (only when force_rerun is not set)
         if not force_rerun:
             _cached_mkt = _grr(_mkey, _mloc)
             if _cached_mkt:
                 emit({"type": "phase", "name": "cached",
                       "text": f"Returning cached market result for {city}, {state}"})
-                return AnalysisResult.model_validate_json(_cached_mkt["result_json"])
+                _res = AnalysisResult.model_validate_json(_cached_mkt["result_json"])
+                if simplified:
+                    _res = _reapply_simplified_target(_res, target_entity, output_dir, brand)
+                return _res
 
     # Cache logic for individual reports
     if individual_report and entity_name and not override_today_lock:
