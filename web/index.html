@@ -1195,6 +1195,22 @@ html, body {
             onkeydown="if(event.key==='Enter')runPatient()">
         </div>
         <div class="fg mt16" style="margin-bottom:0">
+          <label class="fl">Report Format</label>
+          <div class="tg-group">
+            <button class="tg-opt on" id="pp-tg-full"       onclick="setPpFormat('full')">Full Report</button>
+            <button class="tg-opt"    id="pp-tg-simplified" onclick="setPpFormat('simplified')">Simplified (Enticement)</button>
+          </div>
+        </div>
+        <div id="pp-target-wrap" class="fg mt16 hidden" style="margin-bottom:0">
+          <label class="fl">Prospect / Target Entity</label>
+          <input id="pp-target" class="fi" type="text"
+            placeholder="e.g. Hill Country Family Medicine"
+            onkeydown="if(event.key==='Enter')runPatient()">
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">
+            The report shows this entity in full and obscures every competitor. Enter the organization name as it appears publicly.
+          </div>
+        </div>
+        <div class="fg mt16" style="margin-bottom:0">
           <label class="fl">Options</label>
           <label class="aggregate-toggle" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">
             <input type="checkbox" id="pp-agg-toggle" checked>
@@ -3520,6 +3536,7 @@ function setLocMode(m) {
 
 // ── Patient Perspective ───────────────────────────────────────────────────
 let _ppType    = 'hospital';
+let _ppFormat  = 'full';
 let _ppLocMode = 'city';
 let _ppMode    = 'manual';
 let _ppGroups  = [];
@@ -3610,6 +3627,15 @@ function setPpType(t) {
   document.getElementById('pp-specialty-wrap').classList.toggle('hidden', t !== 'specialty');
 }
 
+function setPpFormat(m) {
+  _ppFormat = m;
+  document.getElementById('pp-tg-full').classList.toggle('on', m === 'full');
+  document.getElementById('pp-tg-simplified').classList.toggle('on', m === 'simplified');
+  document.getElementById('pp-target-wrap').classList.toggle('hidden', m !== 'simplified');
+  // Simplified and Teaser are distinct enticement formats; Simplified supersedes.
+  if (m === 'simplified') { const t = document.getElementById('pp-teaser-toggle'); if (t) t.checked = false; }
+}
+
 function setPpLocMode(m) {
   _ppLocMode = m;
   document.getElementById('pp-tg-bycity').classList.toggle('on', m === 'city');
@@ -3628,7 +3654,11 @@ async function runPatient() {
   if (_ppType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
 
   const aggregate       = document.getElementById('pp-agg-toggle').checked;
-  const teaser_report   = document.getElementById('pp-teaser-toggle').checked;
+  const simplified_patient = _ppFormat === 'simplified';
+  const teaser_report   = simplified_patient ? false : document.getElementById('pp-teaser-toggle').checked;
+  const target_entity   = simplified_patient ? document.getElementById('pp-target').value.trim() : null;
+  if (simplified_patient && !target_entity) return showErr(errEl, 'Please enter the prospect / target entity name.');
+  const _simplFields = {simplified_patient, target_entity};
   let body, label;
 
   if (_ppLocMode === 'city') {
@@ -3636,14 +3666,14 @@ async function runPatient() {
     const state = document.getElementById('pp-state').value.trim().toUpperCase();
     if (!city)                        return showErr(errEl, 'Please enter a city.');
     if (!state || state.length !== 2) return showErr(errEl, 'Please enter a 2-letter state code.');
-    body  = {city, state, specialty, aggregate, patient_perspective: true, teaser_report, entity_type: _ppType === 'specialty' ? 'practice' : null};
-    label = `${city}, ${state}` + (specialty ? ` — ${specialty}` : '');
+    body  = {city, state, specialty, aggregate, patient_perspective: true, teaser_report, ..._simplFields, entity_type: _ppType === 'specialty' ? 'practice' : null};
+    label = `${city}, ${state}` + (specialty ? ` — ${specialty}` : '') + (simplified_patient ? ` · Target: ${target_entity}` : '');
   } else {
     const zip    = document.getElementById('pp-zip').value.trim();
     const radius = parseInt(document.getElementById('pp-radius').value);
     if (!zip || !/^\d{5}$/.test(zip)) return showErr(errEl, 'Please enter a valid 5-digit ZIP code.');
-    body  = {zip_code: zip, radius_miles: radius, specialty, aggregate, patient_perspective: true, teaser_report, entity_type: _ppType === 'specialty' ? 'practice' : null};
-    label = `ZIP ${zip} · ${radius} mi radius` + (specialty ? ` — ${specialty}` : '');
+    body  = {zip_code: zip, radius_miles: radius, specialty, aggregate, patient_perspective: true, teaser_report, ..._simplFields, entity_type: _ppType === 'specialty' ? 'practice' : null};
+    label = `ZIP ${zip} · ${radius} mi radius` + (specialty ? ` — ${specialty}` : '') + (simplified_patient ? ` · Target: ${target_entity}` : '');
   }
 
   const btn = document.getElementById('pp-run-btn');

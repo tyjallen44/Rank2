@@ -178,6 +178,9 @@ class RankedProvider(BaseModel):
     key_person_flag: bool = False                   # solo/two-physician practice flag
     score_ceiling_applied: bool = False             # True if the ≤74 ceiling was applied
     score_ceiling_reason: Optional[str] = None      # which triggers fired the ceiling
+    # Simplified Patient Pulse: True for the prospect/target entity (rendered in full);
+    # every other entity is obscured in that report.
+    is_target: bool = False
 
 
 class ImprovementSection(BaseModel):
@@ -231,6 +234,11 @@ class AnalysisResult(BaseModel):
     aggregate: bool = False                # whether parent/child entities were consolidated
     patient_perspective: bool = False      # flat ranking by score, no entity-type grouping
     teaser_report: bool = False            # summary-only cards with CTA; implies patient_perspective
+    # Simplified Patient Pulse (BD enticement): compact 2-block cards ranked by AI
+    # Visibility Score; the target entity renders in full, every competitor is
+    # obscured. Implies patient_perspective.
+    simplified: bool = False
+    target_entity: Optional[str] = None    # name of the prospect/target entity (simplified mode)
     individual_report: bool = False        # single-entity deep-dive report
     entity_name: Optional[str] = None     # named entity for individual_report mode
     report_title: Optional[str] = None    # display name override (PDF title); defaults to entity_name

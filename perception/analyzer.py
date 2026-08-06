@@ -509,6 +509,24 @@ def _stream_narrative(client, system_prompt, user_prompt, emit, console) -> str:
         return _run([])
 
 
+def _mark_simplified_target(rankings: list, target_entity: str) -> None:
+    """Mark the ranked provider that matches `target_entity` as the target
+    (is_target=True) for Simplified Patient Pulse. Exact case-insensitive match
+    first, then substring in either direction. Marks at most one entity."""
+    t = (target_entity or "").strip().lower()
+    if not t:
+        return
+    match = next((p for p in rankings if (p.name or "").strip().lower() == t), None)
+    if match is None:
+        match = next(
+            (p for p in rankings
+             if t in (p.name or "").strip().lower() or (p.name or "").strip().lower() in t),
+            None,
+        )
+    if match is not None:
+        match.is_target = True
+
+
 def analyze_location(
     city: str,
     state: str,
@@ -518,6 +536,8 @@ def analyze_location(
     zip_code: str | None = None,
     patient_perspective: bool = False,
     teaser_report: bool = False,
+    simplified: bool = False,
+    target_entity: str | None = None,
     entity_name: str | None = None,
     individual_report: bool = False,
     output_dir: str | Path = "reports",
@@ -559,12 +579,13 @@ def analyze_location(
     # the parameters that make one market run distinct from another.
     _mkey: str | None = None
     if not individual_report:
-        _mkey = "__market__{}_{}_{}_{}{}" .format(
+        _mkey = "__market__{}_{}_{}_{}{}{}" .format(
             (specialty or "any").lower().replace(" ", "_"),
             (entity_type or "hospital"),
             "agg" if aggregate else "single",
             "pp" if patient_perspective else "mkt",
             "_teaser" if teaser_report else "",
+            ("_simpl_" + (target_entity or "any").lower().replace(" ", "_")) if simplified else "",
         )
 
     # Cache logic for market reports (Patient Pulse, hospital/specialty market)
@@ -843,8 +864,10 @@ def analyze_location(
         aggregate=aggregate,
         zip_code=zip_code,
         radius_miles=radius_miles,
-        patient_perspective=patient_perspective or teaser_report,
+        patient_perspective=patient_perspective or teaser_report or simplified,
         teaser_report=teaser_report,
+        simplified=simplified,
+        target_entity=target_entity,
         individual_report=individual_report,
         entity_name=entity_name if individual_report else None,
         report_title=report_title if individual_report else None,
@@ -869,6 +892,16 @@ def analyze_location(
         rankings=rankings,
         report_markdown=report_markdown,
     )
+
+    # Simplified Patient Pulse: flag the prospect/target so the PDF renders it in
+    # full and obscures every competitor.  Best-effort name match against the
+    # ranked market set (exact first, then substring either direction).
+    if simplified and target_entity:
+        _mark_simplified_target(result.rankings, target_entity)
+        if not any(p.is_target for p in result.rankings):
+            emit({"type": "phase", "name": "target_note",
+                  "text": f"Note: '{target_entity}' did not surface in the ranked market set; "
+                          "no entity is marked as the target."})
 
     # ── Practice Composite reputation collection (before PDF so table is included) ──
     if practice_composite and individual_report and entity_name:

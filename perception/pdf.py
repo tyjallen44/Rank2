@@ -793,6 +793,80 @@ def _teaser_rankings_section(providers: list[RankedProvider], title: str, subtit
   {_teaser_roadmap_section()}"""
 
 
+def _simplified_card(p: RankedProvider, display_rank: int) -> str:
+    """Compact Patient Pulse card showing ONLY the AI Visibility block (four tier
+    bars + score) and 'What AI Assistants Currently See'.
+
+    The target/prospect (`is_target`) renders in full; every other entity has its
+    whole card body — name included — obscured with the standard blur treatment.
+    """
+    bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
+    text_color = _rank_text_color(display_rank)
+    _pc = (p.physician_count or "").strip()
+    physician_html = (
+        f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
+        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
+    )
+    inner = f"""
+        <div class="card-top">
+          <h3 class="provider-name">{_e(p.name)}</h3>
+          {physician_html}
+          {_trauma_teaching_pills(p)}
+          <span class="rating-pill">{_e(p.overall_rating)}</span>
+        </div>
+        {_aivs_block(p)}
+        {_ai_says_block(p)}"""
+
+    if p.is_target:
+        body = f"""
+        <div style="display:inline-block;background:{_TEAL};color:#fff;font-size:7pt;
+                    font-weight:700;letter-spacing:0.06em;text-transform:uppercase;
+                    padding:3px 10px;border-radius:12px;margin-bottom:8px">&#9733; Your Organization</div>
+        {inner}"""
+    else:
+        body = f"""
+        <div class="teaser-blur-wrapper">
+          <div class="teaser-blur-content">{inner}</div>
+          <div class="teaser-blur-overlay">
+            <div class="blur-lock">&#128274;</div>
+            <div class="blur-cta-heading">Competitor &mdash; hidden</div>
+          </div>
+        </div>"""
+
+    return f"""
+    <div class="card">
+      <div class="card-rank" style="background:{bg}; color:{text_color}">
+        <span class="rank-num">{display_rank}</span>
+      </div>
+      <div class="card-body">
+        {body}
+      </div>
+    </div>"""
+
+
+def _simplified_patient_section(providers: list[RankedProvider], title: str, subtitle: str) -> str:
+    """Simplified Patient Pulse: entities ranked most→least AI-visible, each shown
+    as a compact two-block card (target in full, competitors obscured), followed by
+    a single call-to-action."""
+    if not providers:
+        return ""
+    cards = "\n".join(_simplified_card(p, i + 1) for i, p in enumerate(providers))
+    return f"""
+  <div class="rankings">
+    <div class="section-title">{_e(title)}</div>
+    <div class="section-subtitle">{_e(subtitle)}</div>
+    {cards}
+    <div style="margin:16px 20px 8px;padding:14px 18px;border:1.5px dashed {_SEAFOAM};
+                border-radius:8px;background:{_PALE_GREEN};text-align:center">
+      <div style="font-size:9pt;color:#3a5a60;margin-bottom:6px">
+        Competitor identities and the full analysis are available on request.</div>
+      <div style="font-size:9.5pt;font-weight:700;color:{_TEAL}">
+        {_TEASER_PHONE} &nbsp;&middot;&nbsp;
+        <a href="{_TEASER_DEMO_URL}" style="color:#0a5c70;text-decoration:underline">Book a Demo &rarr;</a></div>
+    </div>
+  </div>"""
+
+
 def _appendix_html() -> str:
     """Appendix A — AI Visibility Methodology: Prompt Battery & Scoring Rubric."""
     T   = "#0F4146"
@@ -1443,7 +1517,16 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     _has_custom_logo = brand_cfg.get("logo_html") or brand_cfg.get("logo_path")
     logo_uri         = None if _has_custom_logo else _logo_data_uri()
 
-    if result.individual_report and result.teaser_report:
+    if result.simplified:
+        # Simplified Patient Pulse: compact two-block cards, ranked most→least
+        # AI-visible; target rendered in full, every competitor obscured.
+        all_ranked = sorted(result.rankings, key=lambda p: (-(p.ai_visibility_score or 0), p.rank))
+        section_title = f"{result.specialty} Providers" if result.specialty else "Hospitals & Health Systems"
+        rankings_html = _simplified_patient_section(
+            all_ranked, section_title,
+            "Ranked by AI visibility — most to least visible",
+        )
+    elif result.individual_report and result.teaser_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
         rankings_html = _individual_teaser_section(all_ranked)
     elif result.individual_report:

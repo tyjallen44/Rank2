@@ -302,6 +302,8 @@ def _job_run_single(
             radius_miles=radius_miles, zip_code=job.get("zip_code"),
             patient_perspective=job.get("patient_perspective", False),
             teaser_report=job.get("teaser_report", False),
+            simplified=job.get("simplified_patient", False),
+            target_entity=job.get("target_entity"),
             entity_name=job.get("entity_name"),
             individual_report=job.get("individual_report", False),
             output_dir=REPORTS_DIR, on_event=emit,
@@ -604,6 +606,8 @@ class AnalyzeRequest(BaseModel):
     aggregate: bool = False
     patient_perspective: bool = False
     teaser_report: bool = False
+    simplified_patient: bool = False            # Simplified Patient Pulse (BD enticement) mode
+    target_entity: Optional[str] = None         # prospect/target entity name (simplified mode)
     entity_name: Optional[str] = None
     report_title: Optional[str] = None          # display override for PDF title
     org_name: Optional[str] = None              # parent org brand name; drives prompt subject in org mode
@@ -677,6 +681,8 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["zip_code"] = req.zip_code if req.zip_code else None
     _jobs[job_id]["patient_perspective"] = req.patient_perspective
     _jobs[job_id]["teaser_report"] = req.teaser_report
+    _jobs[job_id]["simplified_patient"] = req.simplified_patient
+    _jobs[job_id]["target_entity"] = _normalize_input(req.target_entity) if req.target_entity else None
     _jobs[job_id]["entity_name"] = entity_name
     _jobs[job_id]["individual_report"] = req.individual_report
     _jobs[job_id]["skip_pdf"] = req.skip_pdf
