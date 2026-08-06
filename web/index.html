@@ -1203,12 +1203,20 @@ html, body {
         </div>
         <div id="pp-target-wrap" class="fg mt16 hidden" style="margin-bottom:0">
           <label class="fl">Prospect / Target Entity</label>
-          <input id="pp-target" class="fi" type="text"
-            placeholder="e.g. Hill Country Family Medicine"
-            onkeydown="if(event.key==='Enter')runPatient()">
-          <div style="font-size:11px;color:var(--muted);margin-top:6px">
-            The report shows this entity in full and obscures every competitor. Enter the organization name as it appears publicly.
+          <div style="display:flex;gap:10px">
+            <input id="pp-target" class="fi" type="text" style="flex:1"
+              placeholder="e.g. Hill Country Family Medicine"
+              oninput="clearPpTargetConfirm()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();resolvePpTarget();}">
+            <button class="btn btn-secondary" id="pp-target-resolve-btn" type="button"
+              onclick="resolvePpTarget()" style="white-space:nowrap">Resolve →</button>
           </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">
+            The report shows this entity in full and obscures every competitor. Resolve to confirm the exact organization before running.
+          </div>
+          <div id="pp-target-candidates" style="margin-top:12px"></div>
+          <div id="pp-target-confirmed" class="hidden"
+            style="margin-top:10px;padding:10px 14px;background:#e8f4f6;border:1.5px solid var(--teal);border-radius:8px;font-size:13px;color:var(--teal)"></div>
         </div>
         <div class="fg mt16" style="margin-bottom:0">
           <label class="fl">Options</label>
@@ -3634,6 +3642,100 @@ function setPpFormat(m) {
   document.getElementById('pp-target-wrap').classList.toggle('hidden', m !== 'simplified');
   // Simplified and Teaser are distinct enticement formats; Simplified supersedes.
   if (m === 'simplified') { const t = document.getElementById('pp-teaser-toggle'); if (t) t.checked = false; }
+  // Reset the target resolve/confirm state whenever the format changes.
+  _ppTargetCandidates = [];
+  clearPpTargetConfirm();
+  const cont = document.getElementById('pp-target-candidates');
+  if (cont) cont.innerHTML = '';
+}
+
+// ── Simplified Patient Pulse: resolve & confirm the target/prospect ──────────
+let _ppTargetCandidates = [];
+let _ppTargetConfirmed  = null;   // confirmed target entity name (required to run)
+
+function clearPpTargetConfirm() {
+  _ppTargetConfirmed = null;
+  const d = document.getElementById('pp-target-confirmed');
+  if (d) d.classList.add('hidden');
+}
+
+async function resolvePpTarget() {
+  const errEl = document.getElementById('pp-err');
+  errEl.classList.add('hidden');
+  const name = document.getElementById('pp-target').value.trim();
+  if (!name) return showErr(errEl, 'Enter the prospect / target entity name first.');
+
+  let reqBody;
+  if (_ppLocMode === 'city') {
+    const city  = document.getElementById('pp-city').value.trim();
+    const state = document.getElementById('pp-state').value.trim().toUpperCase();
+    if (!city || !state || state.length !== 2)
+      return showErr(errEl, 'Enter the market city and 2-letter state above first.');
+    reqBody = { name, city, state };
+  } else {
+    const zip = document.getElementById('pp-zip').value.trim();
+    if (!zip || !/^\d{5}$/.test(zip))
+      return showErr(errEl, 'Enter a valid 5-digit market ZIP above first.');
+    reqBody = { name, zip_code: zip };
+  }
+
+  const btn = document.getElementById('pp-target-resolve-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api('/api/search/entity', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Search failed'));
+    const data = await r.json();
+    _ppTargetCandidates = data.candidates || [];
+    renderPpTargetCandidates(name);
+  } catch(e) { showErr(errEl, e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Resolve →'; }
+}
+
+function renderPpTargetCandidates(enteredName) {
+  clearPpTargetConfirm();
+  const container = document.getElementById('pp-target-candidates');
+  let html = '';
+  if (!_ppTargetCandidates.length) {
+    html += `<div style="color:var(--muted);font-size:12px;margin-bottom:8px">No Google Places matches — you can proceed with the name as entered.</div>`;
+  }
+  html += _ppTargetCandidates.map((c, i) => `
+    <div id="pp-tcand-${i}" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-bottom:6px;gap:12px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;color:var(--teal)">${c.name || ''}</div>
+        ${c.address ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${c.address}</div>` : ''}
+      </div>
+      <button class="btn btn-primary btn-sm" type="button" onclick="selectPpTarget(${i})">Select</button>
+    </div>`).join('');
+  html += `
+    <div id="pp-tcand-manual" style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;background:var(--pale);border:1.5px dashed var(--border);border-radius:8px;gap:12px">
+      <div style="font-size:12px;color:var(--muted)">${_ppTargetCandidates.length ? 'Not the right match? Use:' : 'Proceed with:'} <strong style="color:var(--teal)">${enteredName}</strong></div>
+      <button class="btn btn-secondary btn-sm" type="button" onclick="selectPpTarget(-1)">Use This Name</button>
+    </div>`;
+  container.innerHTML = html;
+}
+
+function selectPpTarget(idx) {
+  const enteredName = document.getElementById('pp-target').value.trim();
+  const sel = idx === -1 ? { name: enteredName } : (_ppTargetCandidates[idx] || { name: enteredName });
+  _ppTargetConfirmed = sel.name;
+  document.getElementById('pp-target').value = sel.name;
+
+  _ppTargetCandidates.forEach((_, i) => {
+    const el = document.getElementById(`pp-tcand-${i}`);
+    if (el) { el.style.background = '#fff'; el.style.borderColor = 'var(--border)'; }
+  });
+  const man = document.getElementById('pp-tcand-manual');
+  if (man) { man.style.background = 'var(--pale)'; man.style.borderColor = 'var(--border)'; }
+  if (idx === -1) { if (man) { man.style.background = '#e8f4f6'; man.style.borderColor = 'var(--teal)'; } }
+  else { const el = document.getElementById(`pp-tcand-${idx}`); if (el) { el.style.background = '#e8f4f6'; el.style.borderColor = 'var(--teal)'; } }
+
+  const disp = document.getElementById('pp-target-confirmed');
+  disp.innerHTML = `&#10003; Target confirmed: <strong>${sel.name}</strong>` +
+    (sel.address ? ` <span style="font-weight:400;color:#3a5a60">— ${sel.address}</span>` : '');
+  disp.classList.remove('hidden');
 }
 
 function setPpLocMode(m) {
@@ -3656,8 +3758,8 @@ async function runPatient() {
   const aggregate       = document.getElementById('pp-agg-toggle').checked;
   const simplified_patient = _ppFormat === 'simplified';
   const teaser_report   = simplified_patient ? false : document.getElementById('pp-teaser-toggle').checked;
-  const target_entity   = simplified_patient ? document.getElementById('pp-target').value.trim() : null;
-  if (simplified_patient && !target_entity) return showErr(errEl, 'Please enter the prospect / target entity name.');
+  const target_entity   = simplified_patient ? _ppTargetConfirmed : null;
+  if (simplified_patient && !target_entity) return showErr(errEl, 'Please resolve and confirm the prospect / target entity first (click “Resolve →”).');
   const _simplFields = {simplified_patient, target_entity};
   let body, label;
 
