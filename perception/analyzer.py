@@ -700,9 +700,9 @@ def analyze_location(
                 patient_perspective=patient_perspective, output_dir=output_dir, brand=brand,
             )
             return _res
-        # 90-day cache (only when force_rerun is not set)
+        # 30-day cache (only when force_rerun is not set)
         if not force_rerun:
-            _cached_mkt = _grr(_mkey, _mloc)
+            _cached_mkt = _grr(_mkey, _mloc, days=30)
             if _cached_mkt:
                 emit({"type": "phase", "name": "cached",
                       "text": f"Returning cached market result for {city}, {state}"})

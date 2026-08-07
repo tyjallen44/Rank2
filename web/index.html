@@ -1232,6 +1232,10 @@ html, body {
             <input type="checkbox" id="pp-teaser-toggle">
             <span class="agg-label" title="Create a summary report to be sent to prospective customers">Create Teaser Report</span>
           </label>
+          <label class="aggregate-toggle" style="margin-top:10px;display:none" id="pp-refresh-label" title="Admin only: ignore the cached market analysis for this market and run a fresh one. Use sparingly — it re-runs the full AI analysis.">
+            <input type="checkbox" id="pp-force-rerun">
+            <span class="agg-label">Refresh data &mdash; force a new analysis <span style="font-size:11px;color:#888">(Admin only)</span></span>
+          </label>
         </div>
         <div id="pp-err" class="err hidden mt16"></div>
         <div class="mt20">
@@ -3136,10 +3140,12 @@ function showApp() {
   const cmpLock   = document.getElementById('cmp-override-lock-label');
   const npLock    = document.getElementById('np-override-lock-label');
   const irSkipPdf = document.getElementById('ir-skip-pdf-label');
+  const ppRefresh = document.getElementById('pp-refresh-label');
   if (irLock)    irLock.style.display    = isAdmin ? '' : 'none';
   if (cmpLock)   cmpLock.style.display   = isAdmin ? '' : 'none';
   if (npLock)    npLock.style.display    = isAdmin ? '' : 'none';
   if (irSkipPdf) irSkipPdf.style.display = isAdmin ? '' : 'none';
+  if (ppRefresh) ppRefresh.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
     let label = 'v' + (d.version || d.build);
@@ -3767,7 +3773,11 @@ async function runPatient() {
   const teaser_report   = simplified_patient ? false : document.getElementById('pp-teaser-toggle').checked;
   const target_entity   = (_ppFormat === 'enticement') ? _ppTargetConfirmed : null;
   if (_ppFormat === 'enticement' && !target_entity) return showErr(errEl, 'Please resolve and confirm the prospect / target entity first (click “Resolve →”).');
-  const _simplFields = {simplified_patient, obscure_competitors, target_entity};
+  // Admin "Refresh data" bypasses both the same-day lock and the 30-day cache
+  // (override_today_lock is admin-gated server-side).
+  const _refresh = document.getElementById('pp-force-rerun')?.checked || false;
+  const _simplFields = {simplified_patient, obscure_competitors, target_entity,
+                        override_today_lock: _refresh, force_rerun: _refresh};
   let body, label;
 
   if (_ppLocMode === 'city') {
