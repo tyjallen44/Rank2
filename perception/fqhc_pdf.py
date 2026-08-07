@@ -404,10 +404,6 @@ def _cover_block(
         <span class="cover-score-num">{score_display}</span><span class="cover-score-out-of">/100</span>
       </div>
       <div class="cover-score-lbl">AI Visibility Score</div>
-      <div class="cover-quartile-badge" style="border-left:3px solid {q_color}">
-        <div class="cover-quartile-badge-lbl">National Quartile</div>
-        <div class="cover-quartile-badge-val" style="color:{q_color}">{grade} <span style="font-size:9pt;font-weight:500;color:rgba(255,255,255,0.7)">&middot;&nbsp;{band}</span></div>
-      </div>
     </div>
     {mqcr_block_html}
   </div>
