@@ -813,12 +813,13 @@ def _teaser_rankings_section(providers: list[RankedProvider], title: str, subtit
   {_teaser_roadmap_section()}"""
 
 
-def _simplified_card(p: RankedProvider, display_rank: int) -> str:
+def _simplified_card(p: RankedProvider, display_rank: int, obscure: bool = True) -> str:
     """Compact Patient Pulse card showing ONLY the AI Visibility block (four tier
     bars + score) and 'What AI Assistants Currently See'.
 
-    The target/prospect (`is_target`) renders in full; every other entity has its
-    whole card body — name included — obscured with the standard blur treatment.
+    obscure=True (Enticement): the target/prospect renders in full; every other
+    entity has its whole card body — name included — obscured with the blur.
+    obscure=False (Market Summary): every entity renders clearly, no target badge.
     """
     bg = _RANK_COLORS.get(display_rank, _RANK_DEFAULT)
     text_color = _rank_text_color(display_rank)
@@ -837,7 +838,10 @@ def _simplified_card(p: RankedProvider, display_rank: int) -> str:
         {_aivs_block(p, methodology_note=False)}
         {_ai_says_block(p)}"""
 
-    if p.is_target:
+    if not obscure:
+        # Market Summary: every provider shown clearly, no target badge.
+        body = inner
+    elif p.is_target:
         body = f"""
         <div style="display:inline-block;background:{_TEAL};color:#fff;font-size:7pt;
                     font-weight:700;letter-spacing:0.06em;text-transform:uppercase;
@@ -864,18 +868,15 @@ def _simplified_card(p: RankedProvider, display_rank: int) -> str:
     </div>"""
 
 
-def _simplified_patient_section(providers: list[RankedProvider], title: str, subtitle: str) -> str:
-    """Simplified Patient Pulse: entities ranked most→least AI-visible, each shown
-    as a compact two-block card (target in full, competitors obscured), followed by
-    a single call-to-action."""
+def _simplified_patient_section(providers: list[RankedProvider], title: str, subtitle: str,
+                                obscure: bool = True) -> str:
+    """Simplified Patient Pulse: entities ranked most→least AI-visible, each a compact
+    two-block card. Enticement (obscure=True) shows the target in full and obscures
+    competitors, with a closing CTA; Market Summary (obscure=False) shows all clearly."""
     if not providers:
         return ""
-    cards = "\n".join(_simplified_card(p, i + 1) for i, p in enumerate(providers))
-    return f"""
-  <div class="rankings">
-    <div class="section-title">{_e(title)}</div>
-    <div class="section-subtitle">{_e(subtitle)}</div>
-    {cards}
+    cards = "\n".join(_simplified_card(p, i + 1, obscure=obscure) for i, p in enumerate(providers))
+    cta = f"""
     <div style="margin:16px 20px 8px;padding:14px 18px;border:1.5px dashed {_SEAFOAM};
                 border-radius:8px;background:{_PALE_GREEN};text-align:center">
       <div style="font-size:9pt;color:#3a5a60;margin-bottom:6px">
@@ -883,7 +884,13 @@ def _simplified_patient_section(providers: list[RankedProvider], title: str, sub
       <div style="font-size:9.5pt;font-weight:700;color:{_TEAL}">
         {_TEASER_PHONE} &nbsp;&middot;&nbsp;
         <a href="{_TEASER_DEMO_URL}" style="color:#0a5c70;text-decoration:underline">Book a Demo &rarr;</a></div>
-    </div>
+    </div>""" if obscure else ""
+    return f"""
+  <div class="rankings">
+    <div class="section-title">{_e(title)}</div>
+    <div class="section-subtitle">{_e(subtitle)}</div>
+    {cards}
+    {cta}
   </div>"""
 
 
@@ -1545,6 +1552,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         rankings_html = _simplified_patient_section(
             all_ranked, section_title,
             "Ranked by AI visibility — most to least visible",
+            obscure=result.obscure_competitors,
         )
     elif result.individual_report and result.teaser_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)

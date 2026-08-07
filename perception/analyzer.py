@@ -618,6 +618,7 @@ def analyze_location(
     patient_perspective: bool = False,
     teaser_report: bool = False,
     simplified: bool = False,
+    obscure_competitors: bool = True,
     target_entity: str | None = None,
     entity_name: str | None = None,
     individual_report: bool = False,
@@ -666,7 +667,8 @@ def analyze_location(
             "agg" if aggregate else "single",
             "pp" if patient_perspective else "mkt",
             "_teaser" if teaser_report else "",
-            ("_simpl_" + (target_entity or "any").lower().replace(" ", "_")) if simplified else "",
+            ("_simpl_" + ("ent_" + (target_entity or "any") if obscure_competitors else "summary")
+             ).lower().replace(" ", "_") if simplified else "",
         )
 
     # Cache logic for market reports (Patient Pulse, hospital/specialty market)
@@ -764,7 +766,7 @@ def analyze_location(
         # the enticement report can always show it (even when it barely surfaces —
         # a low score is itself the finding). Programmatic fallback below guarantees
         # inclusion if the model still omits it.
-        if simplified and target_entity:
+        if simplified and obscure_competitors and target_entity:
             user_prompt += (
                 f"\n\n=== REQUIRED ENTITY (MUST INCLUDE) ===\n"
                 f'You MUST include "{target_entity}" as one of the ranked providers, even if it '
@@ -967,6 +969,7 @@ def analyze_location(
         patient_perspective=patient_perspective or teaser_report or simplified,
         teaser_report=teaser_report,
         simplified=simplified,
+        obscure_competitors=obscure_competitors,
         target_entity=target_entity,
         individual_report=individual_report,
         entity_name=entity_name if individual_report else None,
@@ -996,7 +999,7 @@ def analyze_location(
     # Simplified Patient Pulse: flag the prospect/target so the PDF renders it in
     # full and obscures every competitor.  Best-effort name match against the
     # ranked market set (exact first, then substring either direction).
-    if simplified and target_entity:
+    if simplified and obscure_competitors and target_entity:
         _n_before = len(result.rankings)
         _ensure_target_present(result, target_entity)
         if len(result.rankings) > _n_before:

@@ -303,6 +303,7 @@ def _job_run_single(
             patient_perspective=job.get("patient_perspective", False),
             teaser_report=job.get("teaser_report", False),
             simplified=job.get("simplified_patient", False),
+            obscure_competitors=job.get("obscure_competitors", True),
             target_entity=job.get("target_entity"),
             entity_name=job.get("entity_name"),
             individual_report=job.get("individual_report", False),
@@ -606,8 +607,9 @@ class AnalyzeRequest(BaseModel):
     aggregate: bool = False
     patient_perspective: bool = False
     teaser_report: bool = False
-    simplified_patient: bool = False            # Simplified Patient Pulse (BD enticement) mode
-    target_entity: Optional[str] = None         # prospect/target entity name (simplified mode)
+    simplified_patient: bool = False            # Simplified Patient Pulse (compact 2-block cards)
+    obscure_competitors: bool = True            # True=Enticement (obscure non-targets); False=Market Summary (all clear)
+    target_entity: Optional[str] = None         # prospect/target entity name (enticement mode)
     entity_name: Optional[str] = None
     report_title: Optional[str] = None          # display override for PDF title
     org_name: Optional[str] = None              # parent org brand name; drives prompt subject in org mode
@@ -682,6 +684,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["patient_perspective"] = req.patient_perspective
     _jobs[job_id]["teaser_report"] = req.teaser_report
     _jobs[job_id]["simplified_patient"] = req.simplified_patient
+    _jobs[job_id]["obscure_competitors"] = req.obscure_competitors
     _jobs[job_id]["target_entity"] = _normalize_input(req.target_entity) if req.target_entity else None
     _jobs[job_id]["entity_name"] = entity_name
     _jobs[job_id]["individual_report"] = req.individual_report

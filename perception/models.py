@@ -238,7 +238,10 @@ class AnalysisResult(BaseModel):
     # Visibility Score; the target entity renders in full, every competitor is
     # obscured. Implies patient_perspective.
     simplified: bool = False
-    target_entity: Optional[str] = None    # name of the prospect/target entity (simplified mode)
+    # True (Enticement): highlight the target, obscure every competitor.
+    # False (Market Summary): show all providers clearly, no target, no blur.
+    obscure_competitors: bool = True
+    target_entity: Optional[str] = None    # name of the prospect/target entity (enticement mode)
     individual_report: bool = False        # single-entity deep-dive report
     entity_name: Optional[str] = None     # named entity for individual_report mode
     report_title: Optional[str] = None    # display name override (PDF title); defaults to entity_name
