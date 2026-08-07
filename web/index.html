@@ -1197,11 +1197,11 @@ html, body {
         <div class="fg mt16" style="margin-bottom:0">
           <label class="fl">Report Format</label>
           <div class="tg-group">
-            <button class="tg-opt on" id="pp-tg-full"       onclick="setPpFormat('full')">Full Report</button>
-            <button class="tg-opt"    id="pp-tg-simplified" onclick="setPpFormat('simplified')">Simplified (Enticement)</button>
+            <button class="tg-opt on" id="pp-tg-simplified" onclick="setPpFormat('simplified')">Simplified (Enticement)</button>
+            <button class="tg-opt"    id="pp-tg-full"       onclick="setPpFormat('full')">Full Report</button>
           </div>
         </div>
-        <div id="pp-target-wrap" class="fg mt16 hidden" style="margin-bottom:0">
+        <div id="pp-target-wrap" class="fg mt16" style="margin-bottom:0">
           <label class="fl">Prospect / Target Entity</label>
           <div style="display:flex;gap:10px">
             <input id="pp-target" class="fi" type="text" style="flex:1"
@@ -3544,7 +3544,7 @@ function setLocMode(m) {
 
 // ── Patient Perspective ───────────────────────────────────────────────────
 let _ppType    = 'hospital';
-let _ppFormat  = 'full';
+let _ppFormat  = 'simplified';
 let _ppLocMode = 'city';
 let _ppMode    = 'manual';
 let _ppGroups  = [];
