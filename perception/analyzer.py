@@ -584,39 +584,57 @@ def _ensure_target_present(result, target_entity: str) -> None:
 
 
 def _apply_format(result, *, simplified, obscure_competitors, target_entity,
-                  teaser_report, patient_perspective, output_dir, brand):
-    """Re-cast a CACHED market analysis into the requested Patient Pulse format and
-    re-render its PDF.
+                  teaser_report, patient_perspective, city, state, specialty,
+                  zip_code, market_key, output_dir, brand):
+    """Produce a report in the requested Patient Pulse format from a CACHED market
+    analysis, WITHOUT re-running the AI analysis.
 
-    The analysis (entities + scores) is shared across every format for a market —
-    only rendering differs (compact vs. detailed, obscured vs. clear, target
-    highlighted or not) — so all formats show identical data. This overrides the
-    format flags from whichever request originally populated the cache."""
+    Every format (Enticement / Market Summary / Full Report / teaser) reuses the
+    same shared analysis data — so their numbers are identical — but each gets its
+    OWN run id, PDF file, and history row, so they are distinct downloadable
+    reports (the download endpoint resolves the PDF by run id, so a shared run id
+    would serve one PDF for all formats)."""
+    import uuid
+    from datetime import datetime
+    from pathlib import Path as _P
+
+    result.run_id = str(uuid.uuid4())
     result.simplified = simplified
     result.obscure_competitors = obscure_competitors
     result.target_entity = target_entity
     result.teaser_report = teaser_report
     result.patient_perspective = patient_perspective or teaser_report or simplified
-    # Normalize any target marking / fallback injection left by the format that
-    # first populated the cache, then apply this request's target (Enticement only).
+    result.generated_at = date.today()
+    # Normalize any target marking / fallback from the source cache, then apply
+    # this request's target (Enticement only).
     result.rankings = [p for p in result.rankings if getattr(p, "rank", 0) != 999]
     for p in result.rankings:
         p.is_target = False
     if simplified and obscure_competitors and target_entity:
         _ensure_target_present(result, target_entity)
-    # Render to a format-specific path so different formats of the same cached
-    # analysis don't clobber one another's PDF file.
+
+    # Format-specific filename so the three reports are distinct downloads.
+    _fmt_label = ("Enticement" if (simplified and obscure_competitors)
+                  else "Market-Summary" if simplified
+                  else "Teaser" if teaser_report else "Full-Report")
+    _type = specialty.replace(" ", "-") if specialty else "Hospitals"
+    _ts = datetime.utcnow().strftime("%y%m%d-%H%M")
+    _zip_part = f"-Zip_{zip_code}" if zip_code else ""
+    _base = f"{city.replace(' ', '-')}_{state}_{_type}"
+    if teaser_report:
+        _stem = f"{_base}_Summary-Report-{_fmt_label}-{_ts}"
+    elif result.patient_perspective:
+        _stem = f"{_base}_{FILE_PATIENT}-{_fmt_label}{_zip_part}-{_ts}"
+    else:
+        _stem = f"{_base}-{_fmt_label}{_zip_part}-{_ts}"
     try:
-        from pathlib import Path as _P
         from .pdf import render_pdf
-        _fmt = ("ent" if (simplified and obscure_competitors)
-                else "summary" if simplified
-                else "teaser" if teaser_report else "full")
-        pdf_path = _P(output_dir) / f"{result.run_id}_{_fmt}.pdf"
+        pdf_path = _P(output_dir) / f"{_stem}.pdf"
         render_pdf(result, pdf_path, brand=brand)
         result.pdf_path = str(pdf_path)
     except Exception:
         pass
+    _save_to_db(result, market_key=market_key)
     return result
 
 
@@ -697,7 +715,9 @@ def analyze_location(
             _res = _apply_format(
                 _res, simplified=simplified, obscure_competitors=obscure_competitors,
                 target_entity=target_entity, teaser_report=teaser_report,
-                patient_perspective=patient_perspective, output_dir=output_dir, brand=brand,
+                patient_perspective=patient_perspective, city=city, state=state,
+                specialty=specialty, zip_code=zip_code, market_key=_mkey,
+                output_dir=output_dir, brand=brand,
             )
             return _res
         # 30-day cache (only when force_rerun is not set)
@@ -710,7 +730,9 @@ def analyze_location(
                 _res = _apply_format(
                     _res, simplified=simplified, obscure_competitors=obscure_competitors,
                     target_entity=target_entity, teaser_report=teaser_report,
-                    patient_perspective=patient_perspective, output_dir=output_dir, brand=brand,
+                    patient_perspective=patient_perspective, city=city, state=state,
+                    specialty=specialty, zip_code=zip_code, market_key=_mkey,
+                    output_dir=output_dir, brand=brand,
                 )
                 return _res
 
