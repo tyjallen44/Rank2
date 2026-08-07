@@ -3248,6 +3248,13 @@ function resetPage(p) {
     if (ppSpecEl) ppSpecEl.value = '';
     const ppZipEl = document.getElementById('pp-zip');
     if (ppZipEl) ppZipEl.value = '';
+    // Clear the prospect/target field + its resolve/confirm state for a new report.
+    const ppTargetEl = document.getElementById('pp-target');
+    if (ppTargetEl) ppTargetEl.value = '';
+    _ppTargetCandidates = [];
+    clearPpTargetConfirm();
+    const ppCandEl = document.getElementById('pp-target-candidates');
+    if (ppCandEl) ppCandEl.innerHTML = '';
     const ppErrEl = document.getElementById('pp-err');
     if (ppErrEl) ppErrEl.classList.add('hidden');
     setPpMode('manual');
