@@ -509,61 +509,78 @@ def _stream_narrative(client, system_prompt, user_prompt, emit, console) -> str:
         return _run([])
 
 
-_TARGET_STOPWORDS = {
-    "of", "the", "and", "at", "in", "for", "a", "an", "to",
-    "llp", "llc", "pllc", "pa", "pc", "inc", "ltd",
-    "dr", "md", "do", "mds", "dos",
-    "group", "practice", "practices", "clinic", "clinics", "center", "centre",
-    "department", "services", "service", "network", "system", "systems",
-    "health", "healthcare", "medical", "medicine", "physicians", "physician",
-    "associates", "care", "institute", "hospital", "hospitals",
-}
-
-
-def _target_tokens(name: str) -> set[str]:
-    """Normalize an entity name to a set of significant tokens for fuzzy matching:
-    lowercase, fold the -ae-/-oe- medical spelling variants (orthopaedic→orthopedic),
-    drop parenthetical brand suffixes and punctuation, and remove generic
-    corporate/medical filler words."""
+def _norm_name(name: str) -> str:
+    """Normalize an entity name for fuzzy matching: lowercase, fold the -ae-/-oe-
+    medical spelling variants (orthopaedic→orthopedic), drop parenthetical brand
+    suffixes and punctuation, and remove only trivial connectives."""
     import re
     s = (name or "").lower()
-    s = s.replace("orthopaedic", "orthopedic").replace("paediatric", "pediatric")
-    s = s.replace("orthopaedics", "orthopedics").replace("paediatrics", "pediatrics")
-    s = s.replace("ae", "e").replace("oe", "e")   # generic -ae-/-oe- fold
-    s = re.sub(r"\([^)]*\)", " ", s)               # drop "(OAD Orthopaedics)" etc.
-    s = re.sub(r"[^a-z0-9 ]", " ", s)              # strip punctuation/dashes
-    return {t for t in s.split() if len(t) > 1 and t not in _TARGET_STOPWORDS}
+    s = s.replace("orthopaedic", "orthopedic").replace("orthopaedics", "orthopedics")
+    s = s.replace("paediatric", "pediatric").replace("paediatrics", "pediatrics")
+    # Flatten (don't delete) parentheticals so a searched brand like "OAD
+    # Orthopaedics" inside "... (OAD Orthopaedics)" still matches.
+    s = re.sub(r"[^a-z0-9 ]", " ", s)              # strip punctuation/parens/dashes
+    s = re.sub(r"\s+", " ", s).strip()
+    return " ".join(w for w in s.split() if w not in {"of", "the", "and"})
 
 
 def _mark_simplified_target(rankings: list, target_entity: str) -> None:
     """Mark the ranked provider best matching `target_entity` as the target
     (is_target=True) for Simplified Patient Pulse.
 
-    Uses rarity-weighted token overlap: each shared token contributes 1/df where
-    df is how many ranked providers contain that token, so distinctive tokens
-    (e.g. a city or brand) outweigh generic ones (e.g. 'orthopedic'). This is
-    robust to spelling variants (orthopaedic/orthopedic) and location/brand
-    suffixes ('- Plano', '(OAD Orthopaedics)'). Marks at most one entity."""
-    from collections import Counter
-    tgt = _target_tokens(target_entity)
-    if not tgt or not rankings:
+    Uses normalized fuzzy similarity (difflib ratio) plus a token-containment
+    boost, so it is robust to spelling variants (orthopaedic/orthopedic), brand/
+    location suffixes ('- Plano', '(OAD Orthopaedics)', ', LLP'), while still
+    distinguishing genuinely different practices. Marks at most one entity."""
+    from difflib import SequenceMatcher
+    t = _norm_name(target_entity)
+    if not t or not rankings:
         return
-    prov = [(_target_tokens(p.name), p) for p in rankings]
-    df: Counter = Counter()
-    for toks, _ in prov:
-        for t in toks:
-            df[t] += 1
-    best, best_score = None, 0.0
-    for toks, p in prov:
-        shared = tgt & toks
-        if not shared:
+    t_toks = set(t.split())
+    best, best_r = None, 0.0
+    for p in rankings:
+        n = _norm_name(p.name)
+        if not n:
             continue
-        score = sum(1.0 / df[t] for t in shared)
-        if score > best_score:
-            best_score, best = score, p
-    # Require at least one reasonably distinctive shared token (df ≤ 2 → ≥0.5).
-    if best is not None and best_score >= 0.5:
+        r = SequenceMatcher(None, t, n).ratio()
+        # Strong boost when one name's significant tokens fully contain the other
+        # (e.g. "Texas Orthopedic Associates" ⊆ "Texas Orthopedic Associates LLP").
+        n_toks = set(n.split())
+        if t_toks and (t_toks <= n_toks or n_toks <= t_toks):
+            r = max(r, 0.9)
+        if r > best_r:
+            best_r, best = r, p
+    if best is not None and best_r >= 0.6:
         best.is_target = True
+
+
+def _build_absent_target_provider(name: str):
+    """Guarantee-inclusion fallback: a low-visibility RankedProvider for a target
+    the market analysis omitted despite the prompt instruction. Nothing is
+    fabricated — the score and tiers are left unknown ('—'), and the copy states
+    plainly that AI assistants did not surface the entity, which is itself the
+    finding for a BD enticement report. Sorts last (score None → 0)."""
+    from .models import RankedProvider, TierScores
+    return RankedProvider(
+        rank=999,
+        name=name,
+        overall_rating="Not established",
+        ai_visibility_score=None,
+        tier_scores=TierScores(),
+        ai_says=("AI assistants did not surface this organization when patients asked for "
+                 "recommendations in this market — a strong signal of minimal AI visibility."),
+        is_target=True,
+    )
+
+
+def _ensure_target_present(result, target_entity: str) -> None:
+    """Mark the target in the ranked set; if the analysis still omitted it, append
+    a guaranteed low-visibility target card. Idempotent."""
+    if any(getattr(p, "is_target", False) for p in result.rankings):
+        return
+    _mark_simplified_target(result.rankings, target_entity)
+    if not any(p.is_target for p in result.rankings):
+        result.rankings.append(_build_absent_target_provider(target_entity))
 
 
 def _reapply_simplified_target(result, target_entity, output_dir, brand):
@@ -574,9 +591,12 @@ def _reapply_simplified_target(result, target_entity, output_dir, brand):
         return result
     result.simplified = True
     result.target_entity = target_entity
+    # Drop any previously-injected fallback target (sentinel rank 999) so repeated
+    # cache hits don't accumulate duplicates, then re-mark / re-inject.
+    result.rankings = [p for p in result.rankings if getattr(p, "rank", 0) != 999]
     for p in result.rankings:
         p.is_target = False
-    _mark_simplified_target(result.rankings, target_entity)
+    _ensure_target_present(result, target_entity)
     try:
         from pathlib import Path as _P
         from .pdf import render_pdf
@@ -739,6 +759,19 @@ def analyze_location(
             system_prompt, user_prompt = build_specialty_prompt(city, state, specialty, evidence_text, aggregate=aggregate, radius_miles=radius_miles)
         else:
             system_prompt, user_prompt = build_hospital_prompt(city, state, evidence_text, aggregate=aggregate, radius_miles=radius_miles)
+
+        # Simplified Patient Pulse: force the prospect/target into the ranked set so
+        # the enticement report can always show it (even when it barely surfaces —
+        # a low score is itself the finding). Programmatic fallback below guarantees
+        # inclusion if the model still omits it.
+        if simplified and target_entity:
+            user_prompt += (
+                f"\n\n=== REQUIRED ENTITY (MUST INCLUDE) ===\n"
+                f'You MUST include "{target_entity}" as one of the ranked providers, even if it '
+                f"is small, barely surfaces in AI assistant answers, or has little public data. "
+                f"Score it honestly per the rubric — a low score is expected and correct when an "
+                f"entity does not surface well. Do not omit it under any circumstances."
+            )
 
     # --- Phase 1: stream the narrative (with web search for currency) ---
     emit({"type": "phase", "name": "generating", "text": "Generating analysis"})
@@ -964,11 +997,12 @@ def analyze_location(
     # full and obscures every competitor.  Best-effort name match against the
     # ranked market set (exact first, then substring either direction).
     if simplified and target_entity:
-        _mark_simplified_target(result.rankings, target_entity)
-        if not any(p.is_target for p in result.rankings):
-            emit({"type": "phase", "name": "target_note",
-                  "text": f"Note: '{target_entity}' did not surface in the ranked market set; "
-                          "no entity is marked as the target."})
+        _n_before = len(result.rankings)
+        _ensure_target_present(result, target_entity)
+        if len(result.rankings) > _n_before:
+            emit({"type": "phase", "name": "target_injected",
+                  "text": f"'{target_entity}' did not surface in AI market answers; "
+                          "included as a minimal-visibility entity."})
 
     # ── Practice Composite reputation collection (before PDF so table is included) ──
     if practice_composite and individual_report and entity_name:
