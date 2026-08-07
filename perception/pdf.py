@@ -250,8 +250,11 @@ def _tier_row(label: str, value: int | None) -> str:
     )
 
 
-def _aivs_block(p: RankedProvider) -> str:
-    """AI Visibility score + computed letter grade + weighting profile + the four tier bars."""
+def _aivs_block(p: RankedProvider, methodology_note: bool = True) -> str:
+    """AI Visibility score + computed letter grade + weighting profile + the four tier bars.
+
+    `methodology_note=False` drops the "Scored per Appendix A methodology" footnote
+    for the simplified summary view, which has no appendix."""
     profile = p.weighting_profile or "procedural"
     labels = _tier_labels(profile)
     ts = p.tier_scores
@@ -290,7 +293,7 @@ def _aivs_block(p: RankedProvider) -> str:
         {f'<div class="ceiling-note">⚠ Score capped at 74 ({_e(p.score_ceiling_reason)})</div>' if p.score_ceiling_applied else ""}
       </div>
       <div class="tier-bars">{rows}
-        <div style="font-size:6pt;color:#aabcc0;margin-top:3px;font-style:italic">Scored per Appendix A methodology</div>
+        {'<div style="font-size:6pt;color:#aabcc0;margin-top:3px;font-style:italic">Scored per Appendix A methodology</div>' if methodology_note else ''}
       </div>
     </div>"""
 
@@ -820,7 +823,7 @@ def _simplified_card(p: RankedProvider, display_rank: int) -> str:
           {_trauma_teaching_pills(p)}
           <span class="rating-pill">{_e(p.overall_rating)}</span>
         </div>
-        {_aivs_block(p)}
+        {_aivs_block(p, methodology_note=False)}
         {_ai_says_block(p)}"""
 
     if p.is_target:
@@ -832,7 +835,7 @@ def _simplified_card(p: RankedProvider, display_rank: int) -> str:
     else:
         body = f"""
         <div class="teaser-blur-wrapper">
-          <div class="teaser-blur-content">{inner}</div>
+          <div class="simplified-blur-content">{inner}</div>
           <div class="teaser-blur-overlay">
             <div class="blur-lock">&#128274;</div>
             <div class="blur-cta-heading">Competitor &mdash; hidden</div>
@@ -1697,7 +1700,11 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
             + _paras(result.ai_visibility_verdict) + "</div>"
         )
 
-    appendix_html = _practice_appendix_html() if result.entity_type == "practice" else _appendix_html()
+    # The simplified summary view omits the methodology appendix.
+    if result.simplified:
+        appendix_html = ""
+    else:
+        appendix_html = _practice_appendix_html() if result.entity_type == "practice" else _appendix_html()
 
     _html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1975,6 +1982,12 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     }}
     .teaser-blur-content {{
       filter: blur(2px);
+      user-select: none;
+      pointer-events: none;
+    }}
+    /* Simplified Patient Pulse obscures competitors 10% harder than the teaser. */
+    .simplified-blur-content {{
+      filter: blur(2.2px);
       user-select: none;
       pointer-events: none;
     }}
