@@ -38,6 +38,14 @@ def _get_pool() -> ConnectionPool:
                     # connection poolers like Neon's pooled (PgBouncer) endpoint;
                     # harmless on a direct connection.
                     kwargs={"autocommit": True, "prepare_threshold": None},
+                    # Neon closes idle connections; a long report run leaves pooled
+                    # connections idle, so a later borrow can get a dead one
+                    # ("SSL connection has been closed unexpectedly"). Validate each
+                    # connection on borrow (dead ones are discarded + reconnected)
+                    # and recycle idle/old connections before Neon drops them.
+                    check=ConnectionPool.check_connection,
+                    max_idle=120.0,
+                    max_lifetime=600.0,
                     open=False,
                 )
                 p.open()
