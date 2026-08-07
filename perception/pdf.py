@@ -1646,9 +1646,11 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         )
     elif result.simplified:
         cover_eyebrow = COVER_PATIENT
-        cover_report_sub = '<div class="cover-report-sub">Summary View</div>'
+        _pp_fmt = "Enticement" if result.obscure_competitors else "Market Summary"
+        cover_report_sub = f'<div class="cover-report-sub">{_pp_fmt}</div>'
     elif result.patient_perspective:
         cover_eyebrow = COVER_PATIENT
+        cover_report_sub = '<div class="cover-report-sub">Full Report</div>'
     else:
         cover_eyebrow = COVER_MARKET
 
