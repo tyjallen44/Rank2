@@ -31,6 +31,12 @@ def _tier_labels(profile: str | None) -> dict[str, str]:
 # RLDatix brand palette (original)
 _TEAL        = "#0F4146"
 _QUARTILE_COLORS = {"Q1": "#2e9e5b", "Q2": "#2e7d9a", "Q3": "#e09b2a", "Q4": "#d94f4f"}
+# Reader-facing quartile labels — "Q2" is ambiguous (reads as fiscal quarter).
+_QUARTILE_LABELS = {"Q1": "1st Quartile", "Q2": "2nd Quartile", "Q3": "3rd Quartile", "Q4": "4th Quartile"}
+
+
+def _quartile_label(q: str) -> str:
+    return _QUARTILE_LABELS.get(q, q)
 _PALE_GREEN  = "#EEF7F1"
 _SEAFOAM     = "#80F8E4"
 _BLUE        = "#73D2E1"
@@ -259,7 +265,7 @@ def _aivs_block(p: RankedProvider) -> str:
         nat_q_html = (
             f'<div class="aivs-nat-q-lbl">National Quartile</div>'
             f'<div class="aivs-nat-q-val" style="color:{q_color}">'
-            f'{_e(quartile)} &middot; {_e(band_label)}</div>'
+            f'{_e(_quartile_label(quartile))} &middot; {_e(band_label)}</div>'
         )
     if profile.startswith("practice_"):
         profile_label = PRACTICE_PROFILE_DISPLAY.get(profile, "Procedural")
@@ -1485,7 +1491,7 @@ def _practice_appendix_html() -> str:
       ("&lt;58",      "Q4", "Bottom Quartile"),
       header=("Score", "Quartile", "Report label"),
   )}
-  {_note("Reports display the quartile label next to the score (e.g., &#8220;74 &#8212; Q2 Upper Middle&#8221;).")}
+  {_note("Reports display the quartile label next to the score (e.g., &#8220;72 &#8212; 2nd Quartile &middot; Upper Middle&#8221;).")}
 
   {_sec("2.9", "Verification Status Convention")}
   {_p("Unchanged: every scored signal carries one of three flags:")}
@@ -1616,6 +1622,9 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
             f'{COVER_PATIENT_TEASER} '
             f'<a href="{_TEASER_DEMO_URL}" style="color:{_SEAFOAM};text-decoration:underline;">Here</a>'
         )
+    elif result.simplified:
+        cover_eyebrow = COVER_PATIENT
+        cover_report_sub = '<div class="cover-report-sub">Summary View</div>'
     elif result.patient_perspective:
         cover_eyebrow = COVER_PATIENT
     else:
@@ -1668,14 +1677,21 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
             if para.strip()
         )
 
+    def _first_sentences(text: str, n: int) -> str:
+        parts = re.split(r"(?<=[.!?])\s+", _strip_md(text or "").strip())
+        return " ".join(p for p in parts[:n] if p).strip()
+
     overview_html = ""
     if result.market_overview:
+        # Simplified summary view: keep the market overview to 2–3 sentences.
+        _ov = _first_sentences(result.market_overview, 3) if result.simplified else result.market_overview
         overview_html = (
             f'<div class="overview"><div class="section-title">{overview_title}</div>'
-            + _paras(result.market_overview) + "</div>"
+            + _paras(_ov) + "</div>"
         )
+    # The Pulse verdict is omitted from the simplified summary view.
     verdict_html = ""
-    if result.ai_visibility_verdict:
+    if result.ai_visibility_verdict and not result.simplified:
         verdict_html = (
             f'<div class="verdict"><div class="section-title" style="margin-bottom:8px;">{SECTION_VERDICT}</div>'
             + _paras(result.ai_visibility_verdict) + "</div>"
@@ -2474,7 +2490,7 @@ def _comparison_overview_block(result: AnalysisResult, label: str, mixed_rubric_
             f'</div>'
             f'<div style="margin-top:10px;border-left:3px solid {q_color};background:#f5f8fa;border-radius:0 5px 5px 0;padding:7px 12px 7px 10px">'
             f'<div style="font-size:5.5pt;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:#7a9095;margin-bottom:3px">National Quartile</div>'
-            f'<div style="font-size:10pt;font-weight:800;color:{q_color}">{_e(quartile)} <span style="font-size:7.5pt;font-weight:500;color:#5a7880">&middot;&nbsp;{_e(band_label)}</span></div>'
+            f'<div style="font-size:10pt;font-weight:800;color:{q_color}">{_e(_quartile_label(quartile))} <span style="font-size:7.5pt;font-weight:500;color:#5a7880">&middot;&nbsp;{_e(band_label)}</span></div>'
             f'</div>'
         )
     tier_html = ""
