@@ -1228,10 +1228,6 @@ html, body {
             <input type="checkbox" id="pp-agg-toggle" checked>
             <span class="agg-label" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">Aggregate related facilities into parent systems</span>
           </label>
-          <label class="aggregate-toggle" style="margin-top:10px" title="Create a summary report to be sent to prospective customers">
-            <input type="checkbox" id="pp-teaser-toggle">
-            <span class="agg-label" title="Create a summary report to be sent to prospective customers">Create Teaser Report</span>
-          </label>
           <label class="aggregate-toggle" style="margin-top:10px;display:none" id="pp-refresh-label" title="Admin only: ignore the cached market analysis for this market and run a fresh one. Use sparingly — it re-runs the full AI analysis.">
             <input type="checkbox" id="pp-force-rerun">
             <span class="agg-label">Refresh data &mdash; force a new analysis <span style="font-size:11px;color:#888">(Admin only)</span></span>
@@ -3652,8 +3648,6 @@ function setPpFormat(m) {
   document.getElementById('pp-tg-full').classList.toggle('on', m === 'full');
   // Only Enticement needs a target/prospect.
   document.getElementById('pp-target-wrap').classList.toggle('hidden', m !== 'enticement');
-  // Teaser is a Full-Report option; the compact formats supersede it.
-  if (m !== 'full') { const t = document.getElementById('pp-teaser-toggle'); if (t) t.checked = false; }
   // Reset the target resolve/confirm state whenever the format changes.
   _ppTargetCandidates = [];
   clearPpTargetConfirm();
@@ -3770,7 +3764,7 @@ async function runPatient() {
   const aggregate       = document.getElementById('pp-agg-toggle').checked;
   const simplified_patient  = (_ppFormat === 'enticement' || _ppFormat === 'summary');
   const obscure_competitors = (_ppFormat === 'enticement');
-  const teaser_report   = simplified_patient ? false : document.getElementById('pp-teaser-toggle').checked;
+  const teaser_report   = false;   // Patient Pulse no longer offers a teaser; Enticement replaces it
   const target_entity   = (_ppFormat === 'enticement') ? _ppTargetConfirmed : null;
   if (_ppFormat === 'enticement' && !target_entity) return showErr(errEl, 'Please resolve and confirm the prospect / target entity first (click “Resolve →”).');
   // Admin "Refresh data" bypasses both the same-day lock and the 30-day cache
