@@ -583,24 +583,36 @@ def _ensure_target_present(result, target_entity: str) -> None:
         result.rankings.append(_build_absent_target_provider(target_entity))
 
 
-def _reapply_simplified_target(result, target_entity, output_dir, brand):
-    """For a CACHED simplified result: the market analysis is reusable, but the
-    target is request-specific — so re-mark it with the current matcher and
-    re-render the PDF so the cached artifact reflects this request's prospect."""
-    if not target_entity:
-        return result
-    result.simplified = True
+def _apply_format(result, *, simplified, obscure_competitors, target_entity,
+                  teaser_report, patient_perspective, output_dir, brand):
+    """Re-cast a CACHED market analysis into the requested Patient Pulse format and
+    re-render its PDF.
+
+    The analysis (entities + scores) is shared across every format for a market —
+    only rendering differs (compact vs. detailed, obscured vs. clear, target
+    highlighted or not) — so all formats show identical data. This overrides the
+    format flags from whichever request originally populated the cache."""
+    result.simplified = simplified
+    result.obscure_competitors = obscure_competitors
     result.target_entity = target_entity
-    # Drop any previously-injected fallback target (sentinel rank 999) so repeated
-    # cache hits don't accumulate duplicates, then re-mark / re-inject.
+    result.teaser_report = teaser_report
+    result.patient_perspective = patient_perspective or teaser_report or simplified
+    # Normalize any target marking / fallback injection left by the format that
+    # first populated the cache, then apply this request's target (Enticement only).
     result.rankings = [p for p in result.rankings if getattr(p, "rank", 0) != 999]
     for p in result.rankings:
         p.is_target = False
-    _ensure_target_present(result, target_entity)
+    if simplified and obscure_competitors and target_entity:
+        _ensure_target_present(result, target_entity)
+    # Render to a format-specific path so different formats of the same cached
+    # analysis don't clobber one another's PDF file.
     try:
         from pathlib import Path as _P
         from .pdf import render_pdf
-        pdf_path = _P(result.pdf_path) if result.pdf_path else _P(output_dir) / f"{result.run_id}.pdf"
+        _fmt = ("ent" if (simplified and obscure_competitors)
+                else "summary" if simplified
+                else "teaser" if teaser_report else "full")
+        pdf_path = _P(output_dir) / f"{result.run_id}_{_fmt}.pdf"
         render_pdf(result, pdf_path, brand=brand)
         result.pdf_path = str(pdf_path)
     except Exception:
@@ -661,14 +673,15 @@ def analyze_location(
     # the parameters that make one market run distinct from another.
     _mkey: str | None = None
     if not individual_report:
-        _mkey = "__market__{}_{}_{}_{}{}{}" .format(
+        # Market-only key: all Patient Pulse formats (Enticement / Market Summary /
+        # Full Report, teaser or not) share ONE analysis per market, so their data
+        # is identical. Format/target/teaser affect rendering only, applied per
+        # request via _apply_format on cache hits.
+        _mkey = "__market__{}_{}_{}_{}".format(
             (specialty or "any").lower().replace(" ", "_"),
             (entity_type or "hospital"),
             "agg" if aggregate else "single",
             "pp" if patient_perspective else "mkt",
-            "_teaser" if teaser_report else "",
-            ("_simpl_" + ("ent_" + (target_entity or "any") if obscure_competitors else "summary")
-             ).lower().replace(" ", "_") if simplified else "",
         )
 
     # Cache logic for market reports (Patient Pulse, hospital/specialty market)
@@ -681,8 +694,11 @@ def analyze_location(
             emit({"type": "phase", "name": "cached",
                   "text": f"Returning today's cached market result for {city}, {state}"})
             _res = AnalysisResult.model_validate_json(_today_mkt["result_json"])
-            if simplified:
-                _res = _reapply_simplified_target(_res, target_entity, output_dir, brand)
+            _res = _apply_format(
+                _res, simplified=simplified, obscure_competitors=obscure_competitors,
+                target_entity=target_entity, teaser_report=teaser_report,
+                patient_perspective=patient_perspective, output_dir=output_dir, brand=brand,
+            )
             return _res
         # 90-day cache (only when force_rerun is not set)
         if not force_rerun:
@@ -691,8 +707,11 @@ def analyze_location(
                 emit({"type": "phase", "name": "cached",
                       "text": f"Returning cached market result for {city}, {state}"})
                 _res = AnalysisResult.model_validate_json(_cached_mkt["result_json"])
-                if simplified:
-                    _res = _reapply_simplified_target(_res, target_entity, output_dir, brand)
+                _res = _apply_format(
+                    _res, simplified=simplified, obscure_competitors=obscure_competitors,
+                    target_entity=target_entity, teaser_report=teaser_report,
+                    patient_perspective=patient_perspective, output_dir=output_dir, brand=brand,
+                )
                 return _res
 
     # Cache logic for individual reports
@@ -762,18 +781,10 @@ def analyze_location(
         else:
             system_prompt, user_prompt = build_hospital_prompt(city, state, evidence_text, aggregate=aggregate, radius_miles=radius_miles)
 
-        # Simplified Patient Pulse: force the prospect/target into the ranked set so
-        # the enticement report can always show it (even when it barely surfaces —
-        # a low score is itself the finding). Programmatic fallback below guarantees
-        # inclusion if the model still omits it.
-        if simplified and obscure_competitors and target_entity:
-            user_prompt += (
-                f"\n\n=== REQUIRED ENTITY (MUST INCLUDE) ===\n"
-                f'You MUST include "{target_entity}" as one of the ranked providers, even if it '
-                f"is small, barely surfaces in AI assistant answers, or has little public data. "
-                f"Score it honestly per the rubric — a low score is expected and correct when an "
-                f"entity does not surface well. Do not omit it under any circumstances."
-            )
+        # NOTE: The market analysis is intentionally target-NEUTRAL so a single
+        # cached analysis is shared across all Patient Pulse formats (identical
+        # data). The Enticement target is highlighted at render time; if it wasn't
+        # discovered, _ensure_target_present appends a fallback card.
 
     # --- Phase 1: stream the narrative (with web search for currency) ---
     emit({"type": "phase", "name": "generating", "text": "Generating analysis"})
