@@ -227,6 +227,17 @@ def _locations_block(p: RankedProvider) -> str:
     return f'<div class="locations-block"><div class="locations-label">Includes locations:</div><ul class="locations-list">{items}</ul></div>'
 
 
+def _rating_pill(p: RankedProvider) -> str:
+    """Top-right rating pill for a card. Suppressed when the 'rating' is just a
+    quartile code (Q1-Q4): that's already shown in the National Quartile detail
+    in the score block below, so a top-right duplicate is redundant and reads
+    like a fiscal quarter."""
+    r = (p.overall_rating or "").strip()
+    if not r or re.fullmatch(r"[Qq][1-4]", r):
+        return ""
+    return f'<span class="rating-pill">{_e(r)}</span>'
+
+
 def _ai_says_block(p: RankedProvider) -> str:
     if not p.ai_says:
         return ""
@@ -521,7 +532,7 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
           <h3 class="provider-name">{_e(p.name)}</h3>
           {physician_pill}
           {_trauma_teaching_pills(p)}
-          <span class="rating-pill">{_e(p.overall_rating)}</span>
+          {_rating_pill(p)}
         </div>
         {f'<div class="provider-url"><a href="{_e(p.website_url)}">{_e(p.website_url)}</a></div>' if p.website_url else ""}
         {_aivs_block(p)}
@@ -572,7 +583,7 @@ def _individual_entity_card(p: RankedProvider) -> str:
           <h3 class="provider-name" style="font-size:13pt">{_e(p.name)}</h3>
           {physician_pill}
           {_trauma_teaching_pills(p)}
-          <span class="rating-pill">{_e(p.overall_rating)}</span>
+          {_rating_pill(p)}
         </div>
         {f'<div class="provider-url"><a href="{_e(p.website_url)}">{_e(p.website_url)}</a></div>' if p.website_url else ""}
         {_aivs_block(p)}
@@ -617,7 +628,7 @@ def _individual_teaser_card(p: RankedProvider) -> str:
           <h3 class="provider-name" style="font-size:13pt">{_e(p.name)}</h3>
           {physician_html}
           {_trauma_teaching_pills(p)}
-          <span class="rating-pill">{_e(p.overall_rating)}</span>
+          {_rating_pill(p)}
         </div>
         {_aivs_block(p)}
         {_ai_says_block(p)}
@@ -704,7 +715,7 @@ def _teaser_card(p: RankedProvider, display_rank: int) -> str:
           <h3 class="provider-name">{_e(p.name)}</h3>
           {physician_html}
           {_trauma_teaching_pills(p)}
-          <span class="rating-pill">{_e(p.overall_rating)}</span>
+          {_rating_pill(p)}
         </div>
         {_aivs_block(p)}
         {_ai_says_block(p)}
@@ -821,7 +832,7 @@ def _simplified_card(p: RankedProvider, display_rank: int) -> str:
           <h3 class="provider-name">{_e(p.name)}</h3>
           {physician_html}
           {_trauma_teaching_pills(p)}
-          <span class="rating-pill">{_e(p.overall_rating)}</span>
+          {_rating_pill(p)}
         </div>
         {_aivs_block(p, methodology_note=False)}
         {_ai_says_block(p)}"""
