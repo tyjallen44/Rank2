@@ -1996,9 +1996,9 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
       user-select: none;
       pointer-events: none;
     }}
-    /* Simplified Patient Pulse obscures competitors 10% harder than the teaser. */
+    /* Simplified Patient Pulse obscures competitors harder than the teaser (2px). */
     .simplified-blur-content {{
-      filter: blur(2.2px);
+      filter: blur(2.42px);
       user-select: none;
       pointer-events: none;
     }}
