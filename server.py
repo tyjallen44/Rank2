@@ -2340,17 +2340,24 @@ def _run_event_job(
         def _ascii_grade(g: str) -> str:
             return (g or "").replace("−", "-").replace("—", "N/A").replace("–", "-")
 
+        # Letter grade derived from the quartile: Q1→A, Q2→B, Q3→C, Q4→D.
+        _Q_TO_LETTER = {"Q1": "A", "Q2": "B", "Q3": "C", "Q4": "D"}
+        def _letter_grade(quartile: str) -> str:
+            return _Q_TO_LETTER.get((quartile or "").strip().upper(), "")
+
         out = _io2.StringIO()
         writer = _csv.writer(out)
         writer.writerow(["name", "city", "state", "url", "customer", "pulse_score",
-                         "quartile", "quartile_label", "notes"])
+                         "letter_grade", "quartile", "quartile_label", "notes"])
         for e in ev_entities:
             notes = "scored" if e["status"] == "done" else f"skipped - {e['error_msg'] or 'not found'}"
+            _quartile = e["letter_grade"]   # DB field 'letter_grade' actually holds the quartile code (Q1–Q4)
             writer.writerow([
                 e["input_name"], e["input_city"], e["input_state"], e.get("input_url") or "",
                 e.get("input_customer") or "",
                 e["pulse_score"] if e["pulse_score"] is not None else "",
-                _ascii_grade(e["letter_grade"]), e["band_label"] or "", notes,
+                _letter_grade(_quartile),
+                _ascii_grade(_quartile), e["band_label"] or "", notes,
             ])
 
         ts        = _dt.utcnow().strftime("%y%m%d-%H%M")
