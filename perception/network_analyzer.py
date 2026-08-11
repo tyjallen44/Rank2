@@ -222,14 +222,26 @@ def analyze_network(
         facility_type=facility_type,
     )
 
+    # 16K is the safe non-streaming ceiling for claude-opus-4-8 (128K max, but
+    # larger non-streaming calls risk SDK HTTP timeouts). A big network (e.g. 99
+    # hospitals) needs well over 8K to fit every facility_assessment — at 8K the
+    # tool_use JSON truncated, facility_assessments came back empty, and the
+    # facility scorecard silently disappeared.
     response = client.messages.create(
         model=_MODEL,
-        max_tokens=8000,
+        max_tokens=16000,
         tools=[_ANALYSIS_TOOL],
         tool_choice={"type": "tool", "name": "submit_network_result"},
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
+    if response.stop_reason == "max_tokens":
+        import sys as _sys
+        print(
+            f"[network_analyzer] WARNING: analysis output hit max_tokens with "
+            f"{len(facilities)} facilities — facility scorecard may be truncated.",
+            file=_sys.stderr,
+        )
 
     raw: dict = {}
     for block in response.content:
