@@ -18,7 +18,7 @@ from .fqhc_scoring import (
 )
 from .scoring import grade_from_score
 # Reuse brand configs and low-level helpers from pdf.py
-from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL
+from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label
 
 _BLUR_CTA_FQHC = (
     "Access the complete Community Health Edition report — AI Visibility Verdict, "
@@ -404,6 +404,10 @@ def _cover_block(
         <span class="cover-score-num">{score_display}</span><span class="cover-score-out-of">/100</span>
       </div>
       <div class="cover-score-lbl">AI Visibility Score</div>
+      <div class="cover-quartile-badge" style="border-left:3px solid {q_color}">
+        <div class="cover-quartile-badge-lbl">National Quartile</div>
+        <div class="cover-quartile-badge-val" style="color:{q_color}">{_e(_quartile_label(grade))} <span style="font-size:9pt;font-weight:500;color:rgba(255,255,255,0.7)">&middot;&nbsp;{_e(band)}</span></div>
+      </div>
     </div>
     {mqcr_block_html}
   </div>
