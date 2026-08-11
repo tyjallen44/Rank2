@@ -2291,15 +2291,70 @@ html, body {
 
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
           <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.05</div>
-          <div style="font-size:13px;color:var(--muted)">Released August 5, 2026</div>
+          <div style="font-size:13px;color:var(--muted)">Released August 5, 2026 · Updated August 11, 2026</div>
+        </div>
+
+        <div class="rn-section">
+          <div class="rn-heading new">New Features</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Patient Pulse — Three Report Formats</div>
+            <div class="rn-body">Patient Pulse now offers three report formats, chosen at the start of each run. <strong>Enticement</strong> is a prospect-facing summary that spotlights a single target organization in full and obscures every competitor — built to hand to a prospect. <strong>Market Summary</strong> is a clean, compact scorecard of every provider in the market, with nothing hidden. <strong>Full Report</strong> is the complete, detailed analysis. Each report names its format on the cover.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Enticement Target — Resolve &amp; Confirm</div>
+            <div class="rn-body">When building an Enticement report you name the prospect and confirm the exact organization against Google Places before the run. The target is guaranteed to appear and is highlighted as &ldquo;Your Organization,&rdquo; with every competitor obscured — so a customer sees precisely where they stand without seeing the field.</div>
+          </div>
+
         </div>
 
         <div class="rn-section">
           <div class="rn-heading improved">Improvements</div>
 
           <div class="rn-item">
+            <div class="rn-title">Consistent Data Across Patient Pulse Formats</div>
+            <div class="rn-body">All three Patient Pulse formats for a given market share a single analysis, so the scores are identical whether you run Enticement, Market Summary, or Full Report — and switching formats for the same market is near-instant. Each format is its own downloadable report. Results are reused for 30 days; admins can force a fresh analysis with a new &ldquo;Refresh data&rdquo; option.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Clearer National Quartile Labels</div>
+            <div class="rn-body">Quartile indicators now read &ldquo;1st / 2nd / 3rd / 4th Quartile&rdquo; instead of the ambiguous &ldquo;Q1&ndash;Q4&rdquo; (which read like fiscal quarters), everywhere the AI Visibility Score appears — cover pages, scorecards, and entity cards.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Events Pulse — Letter Grade Column</div>
+            <div class="rn-body">The enriched Events Pulse CSV now includes a <em>letter_grade</em> column (A&ndash;D) derived from each entity's national quartile, alongside the existing Pulse Score and quartile columns.</div>
+          </div>
+
+          <div class="rn-item">
             <div class="rn-title">Database Platform Upgrade — Postgres</div>
-            <div class="rn-body">Pulse's underlying data store has been migrated from an embedded single-file database to a managed Postgres backend. This removes a hard ceiling on concurrent usage — the application can now scale across multiple server instances at once without contention — and adds automated backups and point-in-time recovery for stronger data durability. The upgrade is entirely behind the scenes: all existing reports, history, users, tracked entities, and event runs were migrated intact, with no change to how anything works.</div>
+            <div class="rn-body">Pulse's underlying data store has been migrated from an embedded single-file database to a managed Postgres backend. This removes a hard ceiling on concurrent usage — the application can now scale across multiple server instances at once — and adds automated backups and point-in-time recovery for stronger data durability. The upgrade is entirely behind the scenes: all existing reports, history, users, tracked entities, and event runs were migrated intact.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">More Reliable Large Network Reports</div>
+            <div class="rn-body">Long-running reports — such as network analyses spanning dozens of hospitals — now hold their live-progress connection and keep processing more reliably, reducing &ldquo;connection lost&rdquo; interruptions on large runs.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Wider Admin &amp; Feedback Tables</div>
+            <div class="rn-body">The Admin user table and the Feedback table now fill the full content width, so all columns — including Actions — are visible without cutoff.</div>
+          </div>
+
+        </div>
+
+        <div class="rn-section">
+          <div class="rn-heading fixed">Fixes</div>
+
+          <div class="rn-item">
+            <div class="rn-title">SocialClimb Feedback Type</div>
+            <div class="rn-body">Feedback items tagged &ldquo;SocialClimb Feature&rdquo; now save correctly and display a distinct badge in the feedback list.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">National Quartile on Report Covers</div>
+            <div class="rn-body">Restored the National Quartile badge on the Network Pulse and Community Health report covers.</div>
           </div>
 
         </div>
