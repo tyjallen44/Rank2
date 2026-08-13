@@ -37,6 +37,17 @@ _QUARTILE_LABELS = {"Q1": "1st Quartile", "Q2": "2nd Quartile", "Q3": "3rd Quart
 
 def _quartile_label(q: str) -> str:
     return _QUARTILE_LABELS.get(q, q)
+
+
+def _score_bar_color(score: int | None) -> str:
+    """Threshold colors for a 0-100 score bar. Single source of truth shared by
+    the four pillar bars (every report card) and the Network Pulse Score
+    Breakdown so they always match: <35 red, 35-64 amber, ≥65 green (None → red)."""
+    if score is None or score < 35:
+        return "#d94f4f"   # red   — bottom
+    if score < 65:
+        return "#e09b2a"   # amber — middle
+    return "#2e9e5b"       # green — strong
 _PALE_GREEN  = "#EEF7F1"
 _SEAFOAM     = "#80F8E4"
 _BLUE        = "#73D2E1"
@@ -254,10 +265,13 @@ def _ai_says_block(p: RankedProvider) -> str:
 def _tier_row(label: str, value: int | None) -> str:
     width = value if isinstance(value, int) else 0
     val_txt = str(value) if isinstance(value, int) else "—"
+    # Color the bar + number by threshold (same as the Network Pulse Score
+    # Breakdown). Unscored ("—") stays neutral gray — there's no bar to color.
+    color = _score_bar_color(value) if isinstance(value, int) else "#aabcc0"
     return (
         f'<div class="tier-row"><span class="tier-name">{_e(label)}</span>'
-        f'<span class="tier-track"><span class="tier-fill" style="width:{width}%"></span></span>'
-        f'<span class="tier-val">{val_txt}</span></div>'
+        f'<span class="tier-track"><span class="tier-fill" style="width:{width}%;background:{color}"></span></span>'
+        f'<span class="tier-val" style="color:{color}">{val_txt}</span></div>'
     )
 
 

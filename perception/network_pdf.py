@@ -13,7 +13,7 @@ from typing import Optional
 
 from .models import NetworkResult, NetworkFacility
 from .network_scoring import grade_band as _grade_band
-from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label
+from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label, _score_bar_color
 from .scoring import grade_from_score as _grade_from_score
 
 # Network Pulse brand — uses the standard RLDatix teal palette.
@@ -637,18 +637,11 @@ def _score_breakdown_block(
          _strip_md(result.information_accuracy_narrative or "")),
     ]
 
-    def _bar_color(s: int | None) -> str:
-        if s is None or s < 35:
-            return "#d94f4f"   # red  — Bottom Quartile
-        if s < 65:
-            return "#e09b2a"   # amber — Below Avg / Industry Avg
-        return "#2e9e5b"       # green — Above Average or better
-
     bars_html = ""
     for label, weight, score, narrative in dims:
         pct   = score if score is not None else 0
         num   = str(score) if score is not None else "—"
-        color = _bar_color(score)
+        color = _score_bar_color(score)
         bars_html += f"""
 <div class="score-bar-row">
   <div class="score-bar-label">
