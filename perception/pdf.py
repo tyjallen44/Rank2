@@ -266,8 +266,8 @@ def _tier_row(label: str, value: int | None) -> str:
     width = value if isinstance(value, int) else 0
     val_txt = str(value) if isinstance(value, int) else "—"
     # Color the bar + number by threshold (same as the Network Pulse Score
-    # Breakdown). Unscored ("—") stays neutral gray — there's no bar to color.
-    color = _score_bar_color(value) if isinstance(value, int) else "#aabcc0"
+    # Breakdown). A missing/unscored value ("—") is treated as red.
+    color = _score_bar_color(value if isinstance(value, int) else None)
     return (
         f'<div class="tier-row"><span class="tier-name">{_e(label)}</span>'
         f'<span class="tier-track"><span class="tier-fill" style="width:{width}%;background:{color}"></span></span>'
