@@ -886,20 +886,20 @@ html, body {
     </div>
     <div class="sb-nav">
       <div class="nav-section-label">Report Creation</div>
-      <button class="nav-btn active" id="nav-individual" onclick="navigate('individual')" title="Run a focused Pulse Diagnostic for a single hospital or practice">
-        <span class="ni">◎</span><span class="nb-lbl">Pulse Diagnostic</span>
-      </button>
-      <button class="nav-btn" id="nav-events" onclick="navigate('events')" title="Generate Pulse Diagnostics for an event attendee list">
-        <span class="ni">◫</span><span class="nb-lbl">Events Pulse</span>
+      <button class="nav-btn active" id="nav-individual" onclick="navigate('individual')" title="Run a focused deep diagnostic for a single hospital or practice">
+        <span class="ni">◎</span><span class="nb-lbl">Deep Diagnostic</span>
       </button>
       <button class="nav-btn" id="nav-network" onclick="navigate('network')" title="AI Visibility report for a multi-state hospital network">
-        <span class="ni">⬡</span><span class="nb-lbl">Network Pulse</span>
+        <span class="ni">⬡</span><span class="nb-lbl">Hospital Network</span>
       </button>
-      <button class="nav-btn" id="nav-patient" onclick="navigate('patient')" title="Report Creation for Prospects and Customers">
-        <span class="ni">⊙</span><span class="nb-lbl">Patient Pulse</span>
+      <button class="nav-btn" id="nav-patient" onclick="navigate('patient')" title="Rank competitors in a market — prospect- and customer-facing reports">
+        <span class="ni">⊙</span><span class="nb-lbl">Competitor Ranking</span>
       </button>
       <button class="nav-btn" id="nav-compare" onclick="navigate('compare')" title="Compare two organizations head-to-head on Pulse Score">
-        <span class="ni">⇄</span><span class="nb-lbl">Pulse Comparison</span>
+        <span class="ni">⇄</span><span class="nb-lbl">Practice Comparison</span>
+      </button>
+      <button class="nav-btn" id="nav-events" onclick="navigate('events')" title="Generate diagnostics for an event attendee list">
+        <span class="ni">◫</span><span class="nb-lbl">Event Preparation</span>
       </button>
       <button class="nav-btn" id="nav-new" onclick="navigate('new')" title="Analysis Tools for Internal RLDatix Teams" style="display:none">
         <span class="ni">✦</span><span class="nb-lbl">Market Pulse</span>
@@ -1097,7 +1097,7 @@ html, body {
 
     <!-- ── Patient Perspective ───────────────────────────────────────────── -->
     <div id="page-patient" class="page">
-      <div class="page-title">Patient Pulse</div>
+      <div class="page-title">Competitor Ranking</div>
       <div class="page-sub">See your market the way a patient's AI assistant sees it — providers ranked purely by Pulse Score, exactly as they surface when patients ask.</div>
 
       <div class="oc-grid">
@@ -1280,7 +1280,7 @@ html, body {
 
     <!-- ── Individual Report ────────────────────────────────────────────── -->
     <div id="page-individual" class="page">
-      <div class="page-title">Pulse Diagnostic</div>
+      <div class="page-title">Deep Diagnostic</div>
       <div class="page-sub">Run a focused diagnostic on a single hospital or practice: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
 
       <!-- Step 1: Search form -->
@@ -1592,7 +1592,7 @@ html, body {
     <!-- ── Comparison Report ─────────────────────────────────────────────── -->
     <!-- ── Network Pulse ──────────────────────────────────────────────────── -->
     <div id="page-network" class="page">
-      <div class="page-title">Network Pulse</div>
+      <div class="page-title">Hospital Network</div>
       <div class="page-sub">AI Visibility report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
 
       <!-- Step 1: Network identity -->
@@ -1656,7 +1656,7 @@ html, body {
     </div>
 
     <div id="page-compare" class="page">
-      <div class="page-title">Pulse Comparison</div>
+      <div class="page-title">Practice Comparison</div>
       <div class="page-sub">Compare two organizations head-to-head on Pulse Score, with the same depth as a full diagnostic for each.</div>
 
       <!-- Entity A -->
@@ -1941,7 +1941,7 @@ html, body {
 
     <!-- ── Events Pulse ─────────────────────────────────────────────────── -->
     <div id="page-events" class="page">
-      <div class="page-title">Events Pulse</div>
+      <div class="page-title">Event Preparation</div>
       <div class="page-sub">Upload an event attendee list to generate a Pulse Diagnostic for every hospital, practice, or community health center — and download an enriched CSV with scores.</div>
 
       <!-- Step 1: Setup -->
