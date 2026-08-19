@@ -984,6 +984,36 @@ def analyze_location(
     )
     console.print(f"[green]✓[/green] Scored {len(rankings)} providers ({systems_done} system aggregates){capped_note}")
 
+    # ── Canonical entity-score sync (shared with the Network report) ──────────
+    # Market reports participate in the shared entity_scores cache so a system
+    # reads an IDENTICAL four-pillar score here and in the Network report. Adopt
+    # a fresh canonical score if one exists, otherwise seed it. Only the numbers
+    # sync — each report keeps its own narrative. Re-sort only when an adoption
+    # actually changed a score, to leave ordinary runs untouched.
+    if not individual_report and not practice_composite and not physician_composite:
+        from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
+        _loc = f"{city}, {state}"
+        _adopted = False
+        for prov in rankings:
+            _canon = None if override_today_lock else _get_es(prov.name, _loc, days=30)
+            if _canon and _canon.get("pulse_score") is not None:
+                prov.ai_visibility_score = _canon["pulse_score"]
+                for _k, _v in (_canon.get("tier_scores") or {}).items():
+                    if hasattr(prov.tier_scores, _k):
+                        setattr(prov.tier_scores, _k, _v)
+                prov.overall_rating, _ = scoring.grade_from_score(prov.ai_visibility_score)
+                _adopted = True
+            elif prov.ai_visibility_score is not None:
+                _code, _band = scoring.grade_from_score(prov.ai_visibility_score)
+                _put_es(prov.name, _loc, prov.ai_visibility_score,
+                        prov.tier_scores.as_dict(), overall_rating=_code,
+                        band_label=_band, ai_says=getattr(prov, "ai_says", "") or "",
+                        source="market", run_id=run_id, overwrite=override_today_lock)
+        if _adopted:
+            rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))
+            for _i, prov in enumerate(rankings, start=1):
+                prov.rank = _i
+
     disclaimer = _FULL_DISCLAIMER   # always hardcoded; LLM-generated disclaimer field ignored
 
     # Post-extraction validation: warn on snake-case in client-facing prose

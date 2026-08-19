@@ -367,6 +367,27 @@ def init_db() -> None:
             updated_at   TIMESTAMP NOT NULL
         )
     """)
+    # ── Canonical entity score cache (shared by Market + Network reports) ─────
+    # One four-pillar Pulse Score per (normalized entity, location, calendar day).
+    # Whichever report evaluates an entity first seeds it; the other reads it, so
+    # a system reads an IDENTICAL score in the Hospital Market and Network reports.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS entity_scores (
+            norm_name      VARCHAR NOT NULL,
+            location       VARCHAR NOT NULL,
+            generated_at   DATE    NOT NULL,
+            display_name   VARCHAR,
+            pulse_score    INTEGER,
+            tier_scores    VARCHAR DEFAULT '{}',
+            overall_rating VARCHAR,
+            band_label     VARCHAR,
+            ai_says        VARCHAR DEFAULT '',
+            source         VARCHAR,
+            run_id         VARCHAR,
+            created_at     TIMESTAMP,
+            PRIMARY KEY (norm_name, location, generated_at)
+        )
+    """)
     # ── Down-migrate System Composite (Tier 3) tables ────────────────────────
     for _tbl in ("composite_results", "network_battery_runs",
                  "network_entities", "network_registries"):
@@ -1410,6 +1431,128 @@ def get_recent_network_run(network_name: str, days: int = 0) -> dict | None:
     if not row:
         return None
     return {"run_id": str(row[0]), "generated_at": str(row[1]), "result_json": row[2]}
+
+
+# ── Canonical entity score cache ──────────────────────────────────────────────
+
+_STATE_ABBR = {
+    "alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar",
+    "california": "ca", "colorado": "co", "connecticut": "ct", "delaware": "de",
+    "florida": "fl", "georgia": "ga", "hawaii": "hi", "idaho": "id",
+    "illinois": "il", "indiana": "in", "iowa": "ia", "kansas": "ks",
+    "kentucky": "ky", "louisiana": "la", "maine": "me", "maryland": "md",
+    "massachusetts": "ma", "michigan": "mi", "minnesota": "mn", "mississippi": "ms",
+    "missouri": "mo", "montana": "mt", "nebraska": "ne", "nevada": "nv",
+    "new hampshire": "nh", "new jersey": "nj", "new mexico": "nm", "new york": "ny",
+    "north carolina": "nc", "north dakota": "nd", "ohio": "oh", "oklahoma": "ok",
+    "oregon": "or", "pennsylvania": "pa", "rhode island": "ri", "south carolina": "sc",
+    "south dakota": "sd", "tennessee": "tn", "texas": "tx", "utah": "ut",
+    "vermont": "vt", "virginia": "va", "washington": "wa", "west virginia": "wv",
+    "wisconsin": "wi", "wyoming": "wy", "district of columbia": "dc",
+}
+
+
+def _norm_entity_name(name: str) -> str:
+    """Match analyzer._norm_name so canonical lookups line up across reports:
+    lowercase, fold -ae-/-oe- medical spellings, strip punctuation, drop trivial
+    connectives."""
+    import re
+    s = (name or "").lower()
+    s = s.replace("orthopaedic", "orthopedic").replace("orthopaedics", "orthopedics")
+    s = s.replace("paediatric", "pediatric").replace("paediatrics", "pediatrics")
+    s = re.sub(r"[^a-z0-9 ]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return " ".join(w for w in s.split() if w not in {"of", "the", "and"})
+
+
+def _norm_location(loc: str) -> str:
+    """Normalize 'City, State' so 'Chicago, IL' and 'Chicago, Illinois' match."""
+    import re
+    s = (loc or "").lower().replace(".", "")
+    s = re.sub(r"\s+", " ", s).strip().strip(",").strip()
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+    if len(parts) >= 2:
+        city, st = parts[0], parts[-1]
+        return f"{city}, {_STATE_ABBR.get(st, st)}"
+    return s
+
+
+def get_entity_score(name: str, location: str, days: int = 30) -> dict | None:
+    """Return the canonical four-pillar score for this entity within `days` days,
+    or None. tier_scores is returned as a parsed dict."""
+    import json
+    nn = _norm_entity_name(name)
+    nl = _norm_location(location)
+    if not nn:
+        return None
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    con = get_connection()
+    row = con.execute(
+        """SELECT display_name, pulse_score, tier_scores, overall_rating, band_label,
+                  ai_says, source, run_id, generated_at
+           FROM entity_scores
+           WHERE norm_name = ? AND location = ? AND generated_at >= ?
+           ORDER BY generated_at DESC
+           LIMIT 1""",
+        [nn, nl, cutoff],
+    ).fetchone()
+    con.close()
+    if not row:
+        return None
+    try:
+        tiers = json.loads(row[2] or "{}")
+    except Exception:
+        tiers = {}
+    return {
+        "display_name": row[0], "pulse_score": row[1], "tier_scores": tiers,
+        "overall_rating": row[3], "band_label": row[4], "ai_says": row[5] or "",
+        "source": row[6], "run_id": str(row[7]) if row[7] else None,
+        "generated_at": str(row[8]),
+    }
+
+
+def upsert_entity_score(name: str, location: str, pulse_score: int | None,
+                        tier_scores: dict | None, overall_rating: str | None = None,
+                        band_label: str | None = None, ai_says: str = "",
+                        source: str = "", run_id: str | None = None,
+                        overwrite: bool = False) -> None:
+    """Seed (or, with overwrite=True for an admin refresh, replace) today's
+    canonical score. Without overwrite, an existing row for today is left intact
+    (first writer within the window wins)."""
+    import json
+    from datetime import datetime
+    nn = _norm_entity_name(name)
+    nl = _norm_location(location)
+    if not nn:
+        return
+    today = date.today().isoformat()
+    conflict = (
+        "DO UPDATE SET display_name=EXCLUDED.display_name, pulse_score=EXCLUDED.pulse_score, "
+        "tier_scores=EXCLUDED.tier_scores, overall_rating=EXCLUDED.overall_rating, "
+        "band_label=EXCLUDED.band_label, ai_says=EXCLUDED.ai_says, source=EXCLUDED.source, "
+        "run_id=EXCLUDED.run_id, created_at=EXCLUDED.created_at"
+        if overwrite else "DO NOTHING"
+    )
+    con = get_connection()
+    con.execute(
+        f"""INSERT INTO entity_scores
+            (norm_name, location, generated_at, display_name, pulse_score, tier_scores,
+             overall_rating, band_label, ai_says, source, run_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (norm_name, location, generated_at) {conflict}""",
+        [nn, nl, today, name, pulse_score, json.dumps(tier_scores or {}),
+         overall_rating, band_label, ai_says or "", source, run_id, datetime.utcnow()],
+    )
+    con.close()
+
+
+def clear_entity_score(name: str, location: str) -> None:
+    """Remove all canonical rows for this entity/location (admin hard reset)."""
+    nn = _norm_entity_name(name)
+    nl = _norm_location(location)
+    con = get_connection()
+    con.execute("DELETE FROM entity_scores WHERE norm_name = ? AND location = ?", [nn, nl])
+    con.close()
 
 
 def get_gbp_identity(
