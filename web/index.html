@@ -735,6 +735,14 @@ html, body {
   align-items:center;justify-content:center;
 }
 #learn-modal.open { display:flex; }
+.md-primer { flex:0 0 250px; border:1px solid var(--border); border-radius:8px;
+  padding:10px 12px; background:#fbfcfc; font-size:11.5px; color:var(--muted); }
+.md-primer-h { font-weight:700; color:var(--teal); font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.06em; margin-bottom:6px; }
+.md-primer table { width:100%; border-collapse:collapse; }
+.md-primer td { padding:2px 0; vertical-align:top; line-height:1.35; }
+.md-primer td.syn { font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--ink); white-space:nowrap; padding-right:10px; }
 
 /* ── Learn reader ─────────────────────────────────────────────── */
 .learn-cat-h { font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--teal);
@@ -2963,9 +2971,25 @@ html, body {
 
 <!-- ── Learn article editor modal ──────────────────────────────────────────── -->
 <div id="learn-modal">
-  <div class="modal-card" style="width:760px">
-    <div class="modal-title" id="learn-modal-title">Add Article</div>
-    <div id="learn-err" class="err hidden" style="margin-bottom:12px"></div>
+  <div class="modal-card" style="width:840px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap">
+      <div class="modal-title" id="learn-modal-title" style="margin-bottom:0">Add Article</div>
+      <aside class="md-primer">
+        <div class="md-primer-h">Markdown quick reference</div>
+        <table><tbody>
+          <tr><td class="syn"># Text</td><td>Heading (##, ### = smaller)</td></tr>
+          <tr><td class="syn">**text**</td><td>Bold</td></tr>
+          <tr><td class="syn">*text*</td><td>Italic</td></tr>
+          <tr><td class="syn">- text</td><td>Bullet list</td></tr>
+          <tr><td class="syn">1. text</td><td>Numbered list</td></tr>
+          <tr><td class="syn">[text](url)</td><td>Link (opens new tab)</td></tr>
+          <tr><td class="syn">&gt; text</td><td>Quote</td></tr>
+          <tr><td class="syn">`text`</td><td>Inline code</td></tr>
+          <tr><td class="syn">---</td><td>Divider line</td></tr>
+        </tbody></table>
+      </aside>
+    </div>
+    <div id="learn-err" class="err hidden" style="margin:14px 0 12px"></div>
     <div style="display:flex;gap:12px">
       <div class="fg" style="flex:1">
         <label class="fl">Category</label>
