@@ -249,20 +249,41 @@ def analyze_network(
             raw = block.input if isinstance(block.input, dict) else json.loads(block.input)
             break
 
-    # ── Parse scores ─────────────────────────────────────────────────────────
+    # ── Headline four-pillar score (shared canonical, synced with Market) ─────
+    # The network's headline is the SAME four-pillar Pulse Score the Hospital
+    # Market report gives this system. Read the canonical store; on a miss, score
+    # the system with the market's per-entity evaluator and seed the store.
+    from .db import get_entity_score, upsert_entity_score
+    from . import scoring as _sc
+    _canon = None if ignore_cache else get_entity_score(network_name, hq_location, days=14)
+    if _canon and _canon.get("pulse_score") is not None:
+        pulse = _canon["pulse_score"]
+        tier_scores = _canon.get("tier_scores") or {}
+        ai_says = _canon.get("ai_says") or ""
+        weighting_profile = "procedural"
+    else:
+        emit({"type": "phase", "name": "scoring",
+              "text": f"Scoring {network_name} on the four-pillar rubric"})
+        pulse, tier_scores, ai_says, weighting_profile = _entity_pulse_score(
+            network_name, hq_location, brand=brand, emit=emit, force=ignore_cache
+        )
+        if pulse is not None:
+            _code, _band = _sc.grade_from_score(pulse)
+            upsert_entity_score(network_name, hq_location, pulse, tier_scores,
+                                overall_rating=_code, band_label=_band, ai_says=ai_says,
+                                source="network", run_id=run_id, overwrite=ignore_cache)
+    quartile, quartile_band = _sc.grade_from_score(pulse)
+
+    # Qualitative 3-dimension reads are kept only as optional commentary.
     brand_score    = raw.get("brand_visibility_score")
     market_score   = raw.get("market_coverage_score")
     accuracy_score = raw.get("information_accuracy_score")
 
-    composite = network_scoring.composite(brand_score, market_score, accuracy_score)
-    letter, band = network_scoring.grade_band(composite)
-
-    # ── Parse facilities ──────────────────────────────────────────────────────
+    # ── Parse facilities (roster only — no competing composite score) ─────────
     facility_objects: list[NetworkFacility] = []
     for fa in raw.get("facility_assessments", []):
         if not isinstance(fa, dict):
             continue
-        fac_score = fa.get("ai_visibility_score")
         fac_name = fa.get("name", "")
         fd       = facility_data.get(fac_name.lower(), {})
         facility_objects.append(NetworkFacility(
@@ -274,23 +295,15 @@ def analyze_network(
                  if f.get("name", "").lower() == fac_name.lower()),
                 None,
             ),
-            ai_visibility_score=fac_score,
-            grade=network_scoring.facility_grade(fac_score),
             surfaced_for_local=fa.get("surfaced_for_local"),
-            attributed_to_network=fa.get("attributed_to_network"),
-            key_gap=fa.get("key_gap"),
             google_rating=fd.get("google_rating"),
             google_review_count=fd.get("google_review_count"),
             cms_star_rating=fd.get("cms_star_rating"),
             leapfrog_grade=fd.get("leapfrog_grade"),
         ))
+    # Roster order is geographic (per-facility scores are no longer shown).
+    facility_objects.sort(key=lambda f: ((f.state or ""), (f.city or ""), (f.name or "")))
 
-    # Sort worst → best (None scores go to the bottom)
-    facility_objects.sort(
-        key=lambda f: f.ai_visibility_score if f.ai_visibility_score is not None else 999
-    )
-
-    # Derive states_covered from roster
     states_covered = sorted({f.get("state", "") for f in facilities if f.get("state")})
 
     result = NetworkResult(
@@ -303,12 +316,15 @@ def analyze_network(
         total_hospitals=len(facilities),
         states_covered=states_covered,
         generated_at=date.today(),
-        ai_visibility_score=composite,
+        ai_visibility_score=pulse,
         brand_visibility_score=brand_score,
         market_coverage_score=market_score,
         information_accuracy_score=accuracy_score,
-        grade=letter,
-        grade_band=band,
+        grade=quartile,
+        grade_band=quartile_band,
+        tier_scores=tier_scores,
+        weighting_profile=weighting_profile,
+        ai_says=ai_says,
         executive_summary=raw.get("executive_summary", ""),
         brand_visibility_narrative=raw.get("brand_visibility_narrative", ""),
         market_coverage_narrative=raw.get("market_coverage_narrative", ""),
@@ -353,6 +369,41 @@ def analyze_network(
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _split_location(loc: str) -> tuple[str, str]:
+    """'Chicago, IL' → ('Chicago', 'IL'). Falls back to (loc, '')."""
+    parts = [p.strip() for p in (loc or "").split(",") if p.strip()]
+    if len(parts) >= 2:
+        return parts[0], parts[-1]
+    return (loc or "").strip(), ""
+
+
+def _entity_pulse_score(entity_name: str, location: str, brand: str = "original",
+                        emit: Optional[Callable] = None, force: bool = False):
+    """Score one system on the four-pillar rubric using the SAME per-entity
+    evaluator the Hospital Market report uses. Returns
+    (pulse_score, tier_scores dict, ai_says, weighting_profile)."""
+    from .analyzer import analyze_location
+    city, state = _split_location(location)
+    try:
+        res = analyze_location(
+            city=city, state=state, entity_name=entity_name,
+            individual_report=True, entity_type="hospital",
+            skip_pdf=True, on_event=emit, brand=brand,
+            force_rerun=force, override_today_lock=force,
+        )
+    except Exception as exc:
+        import sys as _sys
+        print(f"[network_analyzer] four-pillar scoring failed for "
+              f"{entity_name}: {exc}", file=_sys.stderr)
+        return None, {}, "", "procedural"
+    prov = res.rankings[0] if res.rankings else None
+    if prov is None:
+        return None, {}, "", "procedural"
+    tiers = prov.tier_scores.as_dict() if hasattr(prov.tier_scores, "as_dict") else {}
+    return (prov.ai_visibility_score, tiers,
+            getattr(prov, "ai_says", "") or "", res.weighting_profile or "procedural")
+
 
 def _gemini_api_key() -> str | None:
     import os

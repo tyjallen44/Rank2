@@ -310,8 +310,12 @@ class NetworkResult(BaseModel):
     brand_visibility_score: Optional[int] = None  # 40% weight
     market_coverage_score: Optional[int] = None   # 35% weight
     information_accuracy_score: Optional[int] = None  # 25% weight
-    grade: Optional[str] = None
+    grade: Optional[str] = None                 # quartile code ("Q1"…) — synced with Market rubric
     grade_band: Optional[str] = None            # "Top Quartile" etc.
+    # Four-pillar entity score (shared canonical rubric — synced with the Market report)
+    tier_scores: Optional[dict] = None          # {clinical_outcomes_safety, credentials_recognition, patient_experience_reviews, access_fit}
+    weighting_profile: Optional[str] = None     # drives pillar labels in the PDF
+    ai_says: str = ""                           # "What AI assistants currently see" for the network entity
     # Narrative (written for C-suite)
     executive_summary: str = ""
     brand_visibility_narrative: str = ""
