@@ -2331,6 +2331,7 @@ html, body {
       </div>
       <div id="learn-admin-bar" style="display:none;margin:6px 0 18px">
         <button class="btn btn-primary" style="padding:8px 16px;font-size:13px" onclick="learnEdit(null)">+ Add Article</button>
+        <button class="btn" style="padding:8px 16px;font-size:13px;margin-left:8px;border:1px solid var(--border);background:#fff" onclick="learnSeed()">Load starter articles</button>
         <span style="margin-left:12px;font-size:12px;color:var(--muted)">Drafts are shown here but hidden from the public page.</span>
       </div>
       <div id="learn-content"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
@@ -6223,6 +6224,18 @@ async function learnDelete(id){
 async function learnMove(id,dir){
   const r=await api('/api/admin/learn/'+id+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction:dir})});
   if(r.ok) loadLearn();
+}
+
+async function learnSeed(){
+  if(!confirm('Load the starter articles? Existing articles with the same title are left unchanged.')) return;
+  const r=await api('/api/admin/learn/seed',{method:'POST'});
+  if(r.ok){
+    const d=await r.json();
+    alert(`Starter content loaded — ${d.added} added, ${d.skipped} already present.`);
+    loadLearn();
+  } else {
+    alert('Could not load starter content.');
+  }
 }
 
 async function learnTogglePublish(id,cur){

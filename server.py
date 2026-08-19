@@ -1989,6 +1989,23 @@ async def learn_admin_preview(req: LearnPreviewRequest, _: dict = Depends(requir
     return {"html": render_markdown(req.body)}
 
 
+@app.post("/api/admin/learn/seed")
+async def learn_admin_seed(_: dict = Depends(require_admin)):
+    """Insert the starter articles. Idempotent — skips any title that already exists."""
+    from perception.db import init_db, list_learn_articles, create_learn_article
+    from perception.learn_seed import STARTER_ARTICLES
+    init_db()
+    existing = {a["title"].strip().lower() for a in list_learn_articles(include_unpublished=True)}
+    added = 0
+    for art in STARTER_ARTICLES:
+        if art["title"].strip().lower() in existing:
+            continue
+        create_learn_article(category=art["category"], title=art["title"],
+                             body=art["body"], is_published=True)
+        added += 1
+    return {"added": added, "skipped": len(STARTER_ARTICLES) - added}
+
+
 # ── Tracked Entities ──────────────────────────────────────────────────────────
 
 class TrackEntityRequest(BaseModel):
