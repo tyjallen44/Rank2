@@ -354,6 +354,19 @@ def init_db() -> None:
         ) sub
         WHERE feedback.id = sub.id
     """)
+    # ── Learn / educational content (public + in-app) ────────────────────────
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS learn_articles (
+            id           VARCHAR PRIMARY KEY,
+            category     VARCHAR NOT NULL DEFAULT '',
+            title        VARCHAR NOT NULL,
+            body         TEXT NOT NULL DEFAULT '',
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            is_published BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at   TIMESTAMP NOT NULL,
+            updated_at   TIMESTAMP NOT NULL
+        )
+    """)
     # ── Down-migrate System Composite (Tier 3) tables ────────────────────────
     for _tbl in ("composite_results", "network_battery_runs",
                  "network_entities", "network_registries"):
@@ -1069,6 +1082,98 @@ def update_feedback(feedback_id: str, **kwargs) -> None:
 def update_feedback_action(feedback_id: str, action: str) -> None:
     con = get_connection()
     con.execute("UPDATE feedback SET action = ? WHERE id = ?", [action, feedback_id])
+    con.close()
+
+
+# ── Learn / educational content ──────────────────────────────────────────────
+
+_LEARN_COLS = ["id", "category", "title", "body", "sort_order",
+               "is_published", "created_at", "updated_at"]
+
+
+def _learn_row_to_dict(r) -> dict:
+    d = dict(zip(_LEARN_COLS, r))
+    d["is_published"] = bool(r[5])
+    d["created_at"] = str(r[6])
+    d["updated_at"] = str(r[7])
+    return d
+
+
+def list_learn_articles(include_unpublished: bool = False) -> list[dict]:
+    """Return articles ordered for display. Public callers get published only."""
+    con = get_connection()
+    where = "" if include_unpublished else "WHERE is_published = TRUE"
+    rows = con.execute(f"""
+        SELECT id, category, title, body, sort_order, is_published, created_at, updated_at
+        FROM learn_articles
+        {where}
+        ORDER BY sort_order ASC, created_at ASC
+    """).fetchall()
+    con.close()
+    return [_learn_row_to_dict(r) for r in rows]
+
+
+def get_learn_article(article_id: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute("""
+        SELECT id, category, title, body, sort_order, is_published, created_at, updated_at
+        FROM learn_articles WHERE id = ?
+    """, [article_id]).fetchone()
+    con.close()
+    return _learn_row_to_dict(r) if r else None
+
+
+def create_learn_article(category: str, title: str, body: str,
+                         is_published: bool = True) -> dict:
+    import uuid
+    from datetime import datetime
+    con = get_connection()
+    aid = str(uuid.uuid4())
+    now = datetime.utcnow()
+    row = con.execute("SELECT COALESCE(MAX(sort_order), 0) + 10 FROM learn_articles").fetchone()
+    next_order = row[0] if row else 10
+    con.execute(
+        "INSERT INTO learn_articles (id, category, title, body, sort_order, is_published, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [aid, category, title, body, next_order, is_published, now, now]
+    )
+    con.close()
+    return get_learn_article(aid)
+
+
+def update_learn_article(article_id: str, **kwargs) -> None:
+    from datetime import datetime
+    allowed = {"category", "title", "body", "is_published", "sort_order"}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        return
+    fields["updated_at"] = datetime.utcnow()
+    con = get_connection()
+    sets = ", ".join(f"{k}=?" for k in fields)
+    con.execute(f"UPDATE learn_articles SET {sets} WHERE id=?",
+                list(fields.values()) + [article_id])
+    con.close()
+
+
+def delete_learn_article(article_id: str) -> None:
+    con = get_connection()
+    con.execute("DELETE FROM learn_articles WHERE id = ?", [article_id])
+    con.close()
+
+
+def move_learn_article(article_id: str, direction: str) -> None:
+    """Swap sort_order with the adjacent article in the global ordering."""
+    articles = list_learn_articles(include_unpublished=True)
+    idx = next((i for i, a in enumerate(articles) if a["id"] == article_id), None)
+    if idx is None:
+        return
+    swap = idx - 1 if direction == "up" else idx + 1
+    if swap < 0 or swap >= len(articles):
+        return
+    a, b = articles[idx], articles[swap]
+    con = get_connection()
+    con.execute("UPDATE learn_articles SET sort_order=? WHERE id=?", [b["sort_order"], a["id"]])
+    con.execute("UPDATE learn_articles SET sort_order=? WHERE id=?", [a["sort_order"], b["id"]])
     con.close()
 
 

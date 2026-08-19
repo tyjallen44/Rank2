@@ -1774,6 +1774,221 @@ async def patch_feedback(feedback_id: str, req: FeedbackEditRequest, _: dict = D
     return {"ok": True}
 
 
+# ── Learn / educational content ───────────────────────────────────────────────
+
+class LearnArticleRequest(BaseModel):
+    category: Optional[str] = None
+    title: Optional[str] = None
+    body: Optional[str] = None
+    is_published: Optional[bool] = None
+
+
+class LearnMoveRequest(BaseModel):
+    direction: str  # "up" | "down"
+
+
+class LearnPreviewRequest(BaseModel):
+    body: str = ""
+
+
+def _learn_grouped(articles: list[dict]) -> list[tuple[str, list[dict]]]:
+    """Group already-ordered articles by category, preserving first-seen order."""
+    groups: dict[str, list[dict]] = {}
+    order: list[str] = []
+    for a in articles:
+        cat = (a.get("category") or "").strip() or "General"
+        if cat not in groups:
+            groups[cat] = []
+            order.append(cat)
+    for a in articles:
+        cat = (a.get("category") or "").strip() or "General"
+        groups[cat].append(a)
+    return [(c, groups[c]) for c in order]
+
+
+def _render_learn_page(articles: list[dict]) -> str:
+    """Server-render the standalone, publicly-indexable /learn page."""
+    from perception.learn import render_markdown
+    grouped = _learn_grouped(articles)
+
+    toc_html = ""
+    body_html = ""
+    if not articles:
+        body_html = ('<div class="empty">Content is coming soon. '
+                     'Check back shortly to learn about Pulse.</div>')
+    else:
+        for cat, arts in grouped:
+            cat_anchor = "cat-" + re.sub(r"[^a-z0-9]+", "-", cat.lower()).strip("-")
+            toc_html += f'<div class="toc-cat"><a href="#{cat_anchor}">{_esc_html(cat)}</a></div>'
+            body_html += f'<h2 class="cat-h" id="{cat_anchor}">{_esc_html(cat)}</h2>'
+            for a in arts:
+                anchor = "a-" + a["id"]
+                toc_html += f'<div class="toc-item"><a href="#{anchor}">{_esc_html(a["title"])}</a></div>'
+                body_html += (
+                    f'<article class="learn-article" id="{anchor}">'
+                    f'<h3>{_esc_html(a["title"])}</h3>'
+                    f'<div class="learn-body">{render_markdown(a["body"])}</div>'
+                    f'</article>'
+                )
+
+    return _LEARN_PAGE_TEMPLATE.replace("{{TOC}}", toc_html).replace("{{BODY}}", body_html)
+
+
+def _esc_html(s: str) -> str:
+    import html as _html
+    return _html.escape(s or "")
+
+
+_LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn about Pulse — AI Visibility Intelligence</title>
+<meta name="description" content="Learn what Pulse is, what its AI-visibility reports show, who they help, and how to get started.">
+<style>
+  :root { --teal:#0f766e; --teal-d:#0b5a54; --ink:#1b2733; --muted:#5b6b7a; --line:#e2e8ec; --bg:#f6f8f9; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+         color:var(--ink); background:var(--bg); line-height:1.6; }
+  a { color:var(--teal); }
+  header.top { background:linear-gradient(120deg,#0f766e,#0b5a54); color:#fff; padding:28px 32px; }
+  header.top .wm { font-weight:800; letter-spacing:.14em; font-size:22px; }
+  header.top .sub { opacity:.85; font-size:13px; letter-spacing:.06em; margin-top:2px; }
+  header.top .signin { float:right; color:#fff; text-decoration:none; border:1px solid rgba(255,255,255,.5);
+                       padding:8px 16px; border-radius:6px; font-size:13px; }
+  header.top .signin:hover { background:rgba(255,255,255,.12); }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 24px; display:flex; gap:40px; align-items:flex-start; }
+  nav.toc { position:sticky; top:24px; flex:0 0 240px; padding:28px 0; font-size:14px; }
+  nav.toc .toc-cat { margin-top:16px; font-weight:700; }
+  nav.toc .toc-cat:first-child { margin-top:0; }
+  nav.toc .toc-cat a { color:var(--ink); text-decoration:none; }
+  nav.toc .toc-item { margin:4px 0 4px 12px; }
+  nav.toc .toc-item a { color:var(--muted); text-decoration:none; }
+  nav.toc a:hover { color:var(--teal); }
+  main { flex:1 1 auto; padding:32px 0 80px; min-width:0; }
+  h1.page { font-size:28px; margin:0 0 4px; }
+  .lede { color:var(--muted); margin:0 0 28px; font-size:15px; }
+  h2.cat-h { font-size:13px; text-transform:uppercase; letter-spacing:.1em; color:var(--teal);
+             border-bottom:1px solid var(--line); padding-bottom:8px; margin:40px 0 8px; }
+  article.learn-article { padding:16px 0; border-bottom:1px solid var(--line); }
+  article.learn-article h3 { font-size:20px; margin:8px 0 6px; }
+  .learn-body :first-child { margin-top:0; }
+  .learn-body img { max-width:100%; }
+  .learn-body pre { background:#0f1720; color:#e6edf3; padding:14px 16px; border-radius:8px; overflow:auto; }
+  .learn-body code { background:#eef2f4; padding:2px 5px; border-radius:4px; font-size:.92em; }
+  .learn-body pre code { background:none; padding:0; }
+  .learn-body blockquote { border-left:3px solid var(--teal); margin:12px 0; padding:2px 16px; color:var(--muted); }
+  .empty { color:var(--muted); padding:60px 0; text-align:center; }
+  footer { text-align:center; color:var(--muted); font-size:13px; padding:32px; border-top:1px solid var(--line); }
+  @media (max-width:820px) { .wrap { flex-direction:column; gap:0; } nav.toc { position:static; flex:none; padding:20px 0 0; } }
+</style>
+</head>
+<body>
+  <header class="top">
+    <a class="signin" href="/">Sign In &rarr;</a>
+    <div class="wm">PULSE</div>
+    <div class="sub">AI VISIBILITY INTELLIGENCE</div>
+  </header>
+  <div class="wrap">
+    <nav class="toc">{{TOC}}</nav>
+    <main>
+      <h1 class="page">Learn about Pulse</h1>
+      <p class="lede">What Pulse is, what its reports reveal, who they help, and how to get started.</p>
+      {{BODY}}
+    </main>
+  </div>
+  <footer>Pulse &middot; AI Visibility Intelligence &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
+</body>
+</html>"""
+
+
+@app.get("/learn", response_class=HTMLResponse)
+async def learn_public_page():
+    """Public, unauthenticated, server-rendered educational page (indexable)."""
+    from perception.db import init_db, list_learn_articles
+    try:
+        init_db()
+        articles = list_learn_articles(include_unpublished=False)
+    except Exception:
+        articles = []
+    return HTMLResponse(_render_learn_page(articles))
+
+
+@app.get("/api/learn")
+async def learn_public_api():
+    """Published Learn content (rendered HTML) — used by the in-app Learn view. Public."""
+    from perception.db import init_db, list_learn_articles
+    from perception.learn import render_markdown
+    init_db()
+    arts = list_learn_articles(include_unpublished=False)
+    return [{"id": a["id"], "category": a["category"], "title": a["title"],
+             "html": render_markdown(a["body"])} for a in arts]
+
+
+@app.get("/api/admin/learn")
+async def learn_admin_list(_: dict = Depends(require_admin)):
+    from perception.db import init_db, list_learn_articles
+    init_db()
+    return list_learn_articles(include_unpublished=True)
+
+
+@app.post("/api/admin/learn")
+async def learn_admin_create(req: LearnArticleRequest, _: dict = Depends(require_admin)):
+    from perception.db import init_db, create_learn_article
+    if not (req.title or "").strip():
+        raise HTTPException(400, "title is required")
+    init_db()
+    return create_learn_article(
+        category=(req.category or "").strip(),
+        title=req.title.strip(),
+        body=req.body or "",
+        is_published=True if req.is_published is None else req.is_published,
+    )
+
+
+@app.put("/api/admin/learn/{article_id}")
+async def learn_admin_update(article_id: str, req: LearnArticleRequest,
+                             _: dict = Depends(require_admin)):
+    from perception.db import init_db, update_learn_article, get_learn_article
+    init_db()
+    if get_learn_article(article_id) is None:
+        raise HTTPException(404, "Article not found")
+    updates = {}
+    if req.category is not None:     updates["category"] = req.category.strip()
+    if req.title is not None:        updates["title"] = req.title.strip()
+    if req.body is not None:         updates["body"] = req.body
+    if req.is_published is not None: updates["is_published"] = req.is_published
+    update_learn_article(article_id, **updates)
+    return get_learn_article(article_id)
+
+
+@app.delete("/api/admin/learn/{article_id}")
+async def learn_admin_delete(article_id: str, _: dict = Depends(require_admin)):
+    from perception.db import init_db, delete_learn_article
+    init_db()
+    delete_learn_article(article_id)
+    return {"ok": True}
+
+
+@app.post("/api/admin/learn/{article_id}/move")
+async def learn_admin_move(article_id: str, req: LearnMoveRequest,
+                           _: dict = Depends(require_admin)):
+    from perception.db import init_db, move_learn_article
+    if req.direction not in ("up", "down"):
+        raise HTTPException(400, "direction must be 'up' or 'down'")
+    init_db()
+    move_learn_article(article_id, req.direction)
+    return {"ok": True}
+
+
+@app.post("/api/admin/learn/preview")
+async def learn_admin_preview(req: LearnPreviewRequest, _: dict = Depends(require_admin)):
+    """Render Markdown exactly as the public page will, for the editor preview."""
+    from perception.learn import render_markdown
+    return {"html": render_markdown(req.body)}
+
+
 # ── Tracked Entities ──────────────────────────────────────────────────────────
 
 class TrackEntityRequest(BaseModel):

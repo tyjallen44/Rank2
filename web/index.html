@@ -727,6 +727,37 @@ html, body {
 }
 .modal-title { font-size:17px;font-weight:700;color:var(--teal);margin-bottom:20px; }
 .modal-footer { display:flex;justify-content:flex-end;gap:10px;margin-top:20px; }
+
+/* ── Learn editor modal ───────────────────────────────────────── */
+#learn-modal {
+  display:none;position:fixed;inset:0;
+  background:rgba(15,65,70,0.55);z-index:1000;
+  align-items:center;justify-content:center;
+}
+#learn-modal.open { display:flex; }
+
+/* ── Learn reader ─────────────────────────────────────────────── */
+.learn-cat-h { font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--teal);
+  border-bottom:1px solid var(--border);padding-bottom:8px;margin:34px 0 6px; }
+.learn-item { padding:16px 0;border-bottom:1px solid var(--border); }
+.learn-item h3 { font-size:19px;margin:2px 0 8px; }
+.learn-item.draft { opacity:.62; }
+.learn-draft-tag { display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;
+  color:#8a6d00;background:#fdf2c8;border-radius:4px;padding:1px 7px;margin-left:8px;vertical-align:middle; }
+.learn-body h1,.learn-body h2,.learn-body h3 { line-height:1.3; }
+.learn-body h1 { font-size:22px;margin:18px 0 8px; }
+.learn-body h2 { font-size:18px;margin:16px 0 6px; }
+.learn-body h3 { font-size:16px;margin:14px 0 6px; }
+.learn-body p { margin:8px 0; }
+.learn-body ul,.learn-body ol { margin:8px 0;padding-left:22px; }
+.learn-body li { margin:3px 0; }
+.learn-body a { color:var(--teal); }
+.learn-body code { background:#eef2f4;padding:2px 5px;border-radius:4px;font-size:.92em; }
+.learn-body pre { background:#0f1720;color:#e6edf3;padding:14px 16px;border-radius:8px;overflow:auto; }
+.learn-body pre code { background:none;padding:0;color:inherit; }
+.learn-body blockquote { border-left:3px solid var(--teal);margin:12px 0;padding:2px 16px;color:var(--muted); }
+.learn-row-actions { display:flex;gap:6px;flex-wrap:wrap;margin-top:10px; }
+.learn-row-actions .btn { padding:4px 10px;font-size:12px;border:1px solid var(--border);background:#fff; }
 </style>
 </head>
 <body>
@@ -785,6 +816,10 @@ html, body {
       <button class="link-btn" onclick="showForgotPassword()">Forgot Password?</button>
       <span style="color:var(--border)">·</span>
       <button class="link-btn muted" onclick="toggleAdminAccess()" id="admin-toggle-link">Admin</button>
+    </div>
+
+    <div style="text-align:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      <a href="/learn" style="font-size:13px;color:var(--muted);text-decoration:none">New to Pulse? Learn what it does &rarr;</a>
     </div>
 
     <!-- Legacy access-password bypass (hidden by default) -->
@@ -932,6 +967,9 @@ html, body {
       </div>
       <button class="nav-btn sb-logout" onclick="doLogout()">
         <span class="ni">⎋</span><span class="nb-lbl">Sign Out</span>
+      </button>
+      <button class="nav-btn" id="nav-learn" onclick="navigate('learn')" title="Learn about Pulse — guides and resources">
+        <span class="ni">ⓘ</span><span class="nb-lbl">Learn</span>
       </button>
       <button class="nav-btn" id="nav-release" onclick="navigate('release')" title="What's new in Pulse">
         <span class="ni">◈</span><span class="nb-lbl">Release Notes</span>
@@ -2282,6 +2320,22 @@ html, body {
       </div>
     </div>
 
+    <!-- ── Learn ─────────────────────────────────────────────────────────── -->
+    <div id="page-learn" class="page">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+        <div>
+          <div class="page-title">Learn</div>
+          <div class="page-sub">Guides and resources — what Pulse is, what the reports show, and how to get started. This page is also public at <a href="/learn" target="_blank" style="color:var(--teal)">/learn</a>.</div>
+        </div>
+        <button id="learn-manage-btn" class="btn" style="display:none;white-space:nowrap;border:1px solid var(--border);background:#fff" onclick="toggleLearnManage()">Manage Content</button>
+      </div>
+      <div id="learn-admin-bar" style="display:none;margin:6px 0 18px">
+        <button class="btn btn-primary" style="padding:8px 16px;font-size:13px" onclick="learnEdit(null)">+ Add Article</button>
+        <span style="margin-left:12px;font-size:12px;color:var(--muted)">Drafts are shown here but hidden from the public page.</span>
+      </div>
+      <div id="learn-content"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
+    </div>
+
     <!-- ── Release Notes ─────────────────────────────────────────────────── -->
     <div id="page-release" class="page">
       <div class="page-title">Release Notes</div>
@@ -2906,6 +2960,40 @@ html, body {
   </div>
 </div>
 
+<!-- ── Learn article editor modal ──────────────────────────────────────────── -->
+<div id="learn-modal">
+  <div class="modal-card" style="width:760px">
+    <div class="modal-title" id="learn-modal-title">Add Article</div>
+    <div id="learn-err" class="err hidden" style="margin-bottom:12px"></div>
+    <div style="display:flex;gap:12px">
+      <div class="fg" style="flex:1">
+        <label class="fl">Category</label>
+        <input id="learn-cat" class="fi" type="text" list="learn-cat-list" placeholder="e.g. Overview, The Reports, Getting Access">
+        <datalist id="learn-cat-list"></datalist>
+      </div>
+      <div class="fg" style="flex:2">
+        <label class="fl">Title</label>
+        <input id="learn-title" class="fi" type="text" placeholder="Article title">
+      </div>
+    </div>
+    <div class="fg">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <label class="fl" style="margin:0">Body <span style="color:var(--muted)">(Markdown)</span></label>
+        <button type="button" class="link-btn" style="font-size:12px" onclick="learnTogglePreview()"><span id="learn-preview-label">Show preview</span></button>
+      </div>
+      <textarea id="learn-body" class="fi" style="min-height:260px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5;resize:vertical" placeholder="Write with Markdown: # headings, **bold**, *italic*, - lists, [links](https://...), &gt; quotes, `code`."></textarea>
+      <div id="learn-preview" style="display:none;border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:8px;background:#fbfcfc;max-height:320px;overflow:auto"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input id="learn-published" type="checkbox" checked> Published (visible on the public page)
+    </label>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeLearnModal()">Cancel</button>
+      <button class="btn btn-primary" id="learn-save-btn" onclick="learnSave()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
@@ -3197,6 +3285,8 @@ function showApp() {
   if (npLock)    npLock.style.display    = isAdmin ? '' : 'none';
   if (irSkipPdf) irSkipPdf.style.display = isAdmin ? '' : 'none';
   if (ppRefresh) ppRefresh.style.display = isAdmin ? '' : 'none';
+  const learnMng = document.getElementById('learn-manage-btn');
+  if (learnMng) learnMng.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('sb-build');
     let label = 'v' + (d.version || d.build);
@@ -3258,6 +3348,7 @@ function navigate(p) {
   if (p === 'admin') loadAdminPage();
   if (p === 'feedback') loadFeedback();
   if (p === 'track') loadTrackPage();
+  if (p === 'learn') loadLearn();
 }
 
 function resetPage(p) {
@@ -6005,6 +6096,153 @@ async function adminTestEmail() {
     el.style.background = '#fdecea';
     el.style.border = '1px solid #f5c6cb';
     el.textContent = `Error: ${e.message}`;
+  }
+}
+
+// ── Learn ───────────────────────────────────────────────────────────────────
+let _learnManage = false;
+let _learnEditingId = null;
+let _learnCache = [];
+
+function _learnEsc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function _learnGroup(arts){
+  const order=[]; const map={};
+  arts.forEach(a=>{ const c=(a.category||'').trim()||'General'; if(!(c in map)){map[c]=[];order.push(c);} map[c].push(a); });
+  return order.map(c=>[c,map[c]]);
+}
+
+async function loadLearn(){
+  const host = document.getElementById('learn-content');
+  const bar  = document.getElementById('learn-admin-bar');
+  const manageOn = _learnManage && _role==='admin';
+  if (bar) bar.style.display = manageOn ? '' : 'none';
+  host.innerHTML = '<div class="empty" style="padding:24px 0"><div>Loading…</div></div>';
+  try {
+    if (manageOn) {
+      const r = await api('/api/admin/learn');
+      _learnCache = await r.json();
+      renderLearnManage(_learnCache);
+    } else {
+      const r = await fetch('/api/learn');
+      renderLearnReader(await r.json());
+    }
+  } catch(e){
+    host.innerHTML = '<div class="empty" style="padding:24px 0"><div>Could not load content.</div></div>';
+  }
+}
+
+function renderLearnReader(arts){
+  const host=document.getElementById('learn-content');
+  if(!arts.length){ host.innerHTML='<div class="empty" style="padding:48px 0"><div>No published content yet.</div></div>'; return; }
+  let html='';
+  _learnGroup(arts).forEach(([cat,items])=>{
+    html+=`<div class="learn-cat-h">${_learnEsc(cat)}</div>`;
+    items.forEach(a=>{
+      html+=`<div class="learn-item"><h3>${_learnEsc(a.title)}</h3><div class="learn-body">${a.html||''}</div></div>`;
+    });
+  });
+  host.innerHTML=html;
+}
+
+function renderLearnManage(arts){
+  const host=document.getElementById('learn-content');
+  const cats=[...new Set(arts.map(a=>(a.category||'').trim()).filter(Boolean))];
+  const dl=document.getElementById('learn-cat-list');
+  if(dl) dl.innerHTML=cats.map(c=>`<option value="${_learnEsc(c)}">`).join('');
+  if(!arts.length){ host.innerHTML='<div class="empty" style="padding:48px 0"><div>No articles yet. Click &ldquo;+ Add Article&rdquo; to create one.</div></div>'; return; }
+  let html='';
+  _learnGroup(arts).forEach(([cat,items])=>{
+    html+=`<div class="learn-cat-h">${_learnEsc(cat)}</div>`;
+    items.forEach(a=>{
+      const draft=!a.is_published;
+      html+=`<div class="learn-item ${draft?'draft':''}">
+        <h3>${_learnEsc(a.title)}${draft?'<span class="learn-draft-tag">DRAFT</span>':''}</h3>
+        <div class="learn-row-actions">
+          <button class="btn" onclick="learnEdit('${a.id}')">Edit</button>
+          <button class="btn" onclick="learnTogglePublish('${a.id}',${a.is_published})">${a.is_published?'Unpublish':'Publish'}</button>
+          <button class="btn" onclick="learnMove('${a.id}','up')" title="Move up">&uarr;</button>
+          <button class="btn" onclick="learnMove('${a.id}','down')" title="Move down">&darr;</button>
+          <button class="btn" onclick="learnDelete('${a.id}')" style="color:#c0392b">Delete</button>
+        </div>
+      </div>`;
+    });
+  });
+  host.innerHTML=html;
+}
+
+function toggleLearnManage(){
+  _learnManage=!_learnManage;
+  const b=document.getElementById('learn-manage-btn');
+  if(b) b.textContent=_learnManage?'Done Managing':'Manage Content';
+  loadLearn();
+}
+
+function learnEdit(id){
+  _learnEditingId=id||null;
+  const a = id ? _learnCache.find(x=>x.id===id) : null;
+  document.getElementById('learn-modal-title').textContent = a?'Edit Article':'Add Article';
+  document.getElementById('learn-cat').value = a?(a.category||''):'';
+  document.getElementById('learn-title').value = a?(a.title||''):'';
+  document.getElementById('learn-body').value = a?(a.body||''):'';
+  document.getElementById('learn-published').checked = a?!!a.is_published:true;
+  const err=document.getElementById('learn-err'); err.classList.add('hidden'); err.textContent='';
+  document.getElementById('learn-preview').style.display='none';
+  document.getElementById('learn-preview-label').textContent='Show preview';
+  document.getElementById('learn-modal').classList.add('open');
+}
+
+function closeLearnModal(){ document.getElementById('learn-modal').classList.remove('open'); _learnEditingId=null; }
+
+async function learnSave(){
+  const cat=document.getElementById('learn-cat').value.trim();
+  const title=document.getElementById('learn-title').value.trim();
+  const body=document.getElementById('learn-body').value;
+  const pub=document.getElementById('learn-published').checked;
+  const err=document.getElementById('learn-err');
+  if(!title){ err.textContent='Title is required.'; err.classList.remove('hidden'); return; }
+  const btn=document.getElementById('learn-save-btn'); btn.disabled=true;
+  try{
+    const payload=JSON.stringify({category:cat,title:title,body:body,is_published:pub});
+    const opts={method:_learnEditingId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:payload};
+    const url=_learnEditingId?('/api/admin/learn/'+_learnEditingId):'/api/admin/learn';
+    const r=await api(url,opts);
+    if(!r.ok){ err.textContent=await errDetail(r,'Save failed'); err.classList.remove('hidden'); btn.disabled=false; return; }
+    closeLearnModal();
+    loadLearn();
+  }catch(e){ err.textContent=e.message||'Save failed'; err.classList.remove('hidden'); }
+  btn.disabled=false;
+}
+
+async function learnDelete(id){
+  if(!confirm('Delete this article? This cannot be undone.')) return;
+  const r=await api('/api/admin/learn/'+id,{method:'DELETE'});
+  if(r.ok) loadLearn();
+}
+
+async function learnMove(id,dir){
+  const r=await api('/api/admin/learn/'+id+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction:dir})});
+  if(r.ok) loadLearn();
+}
+
+async function learnTogglePublish(id,cur){
+  const r=await api('/api/admin/learn/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_published:!cur})});
+  if(r.ok) loadLearn();
+}
+
+async function learnTogglePreview(){
+  const pv=document.getElementById('learn-preview');
+  const lbl=document.getElementById('learn-preview-label');
+  if(pv.style.display==='none'){
+    pv.style.display=''; lbl.textContent='Hide preview';
+    pv.innerHTML='<div style="color:var(--muted)">Rendering…</div>';
+    try{
+      const r=await api('/api/admin/learn/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:document.getElementById('learn-body').value})});
+      const d=await r.json();
+      pv.innerHTML='<div class="learn-body">'+(d.html||'')+'</div>';
+    }catch(e){ pv.innerHTML='<div style="color:#c0392b">Preview failed.</div>'; }
+  } else {
+    pv.style.display='none'; lbl.textContent='Show preview';
   }
 }
 
