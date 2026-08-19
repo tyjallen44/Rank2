@@ -255,7 +255,7 @@ def analyze_network(
     # the system with the market's per-entity evaluator and seed the store.
     from .db import get_entity_score, upsert_entity_score
     from . import scoring as _sc
-    _canon = None if ignore_cache else get_entity_score(network_name, hq_location, days=14)
+    _canon = None if ignore_cache else get_entity_score(network_name, hq_location, days=30)
     if _canon and _canon.get("pulse_score") is not None:
         pulse = _canon["pulse_score"]
         tier_scores = _canon.get("tier_scores") or {}

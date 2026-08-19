@@ -995,7 +995,7 @@ def analyze_location(
         _loc = f"{city}, {state}"
         _adopted = False
         for prov in rankings:
-            _canon = None if override_today_lock else _get_es(prov.name, _loc, days=14)
+            _canon = None if override_today_lock else _get_es(prov.name, _loc, days=30)
             if _canon and _canon.get("pulse_score") is not None:
                 prov.ai_visibility_score = _canon["pulse_score"]
                 for _k, _v in (_canon.get("tier_scores") or {}).items():

@@ -1477,7 +1477,7 @@ def _norm_location(loc: str) -> str:
     return s
 
 
-def get_entity_score(name: str, location: str, days: int = 14) -> dict | None:
+def get_entity_score(name: str, location: str, days: int = 30) -> dict | None:
     """Return the canonical four-pillar score for this entity within `days` days,
     or None. tier_scores is returned as a parsed dict."""
     import json
