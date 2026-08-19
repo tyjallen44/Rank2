@@ -606,7 +606,7 @@ def _cover_block(
   </div>
 
   <div class="cover-benchmark">
-    Score reflects AI visibility across the network's full geographic footprint — brand recognition, local market surfacing, and information accuracy in AI assistants used by patients and referring physicians. Data is gathered through live queries run directly against ChatGPT, Claude, and Gemini.
+    The Pulse Score reflects how visible and favorable this system is across four pillars — Outcomes &amp; Safety, Credentials &amp; Recognition, Experience &amp; Reviews, and Access &amp; Fit — when patients and referring physicians ask AI assistants where to get care. It is the same score this system receives in the Hospital Market report. Data is gathered through live queries run directly against ChatGPT, Claude, and Gemini.
   </div>
 
   <div class="cover-meta">
@@ -628,45 +628,55 @@ def _exec_summary_block(result: NetworkResult) -> str:
 def _score_breakdown_block(
     result: NetworkResult, primary: str, accent: str, pale: str
 ) -> str:
-    dims = [
-        ("Brand Visibility",      "40% weight", result.brand_visibility_score,
-         _strip_md(result.brand_visibility_narrative or "")),
-        ("Market Coverage",       "35% weight", result.market_coverage_score,
-         _strip_md(result.market_coverage_narrative or "")),
-        ("Information Accuracy",  "25% weight", result.information_accuracy_score,
-         _strip_md(result.information_accuracy_narrative or "")),
+    tiers = result.tier_scores or {}
+    pillars = [
+        ("Outcomes & Safety",          tiers.get("clinical_outcomes_safety")),
+        ("Credentials & Recognition",  tiers.get("credentials_recognition")),
+        ("Experience & Reviews",       tiers.get("patient_experience_reviews")),
+        ("Access & Fit",               tiers.get("access_fit")),
     ]
 
     bars_html = ""
-    for label, weight, score, narrative in dims:
-        pct   = score if score is not None else 0
+    for label, score in pillars:
+        pct   = score if score is not None else 0     # None → red, empty bar
         num   = str(score) if score is not None else "—"
         color = _score_bar_color(score)
         bars_html += f"""
 <div class="score-bar-row">
-  <div class="score-bar-label">
-    {_e(label)}
-    <span class="weight">{_e(weight)}</span>
-  </div>
+  <div class="score-bar-label">{_e(label)}</div>
   <div class="score-bar-track">
     <div class="score-bar-fill" style="width:{pct}%;background:{color}"></div>
   </div>
   <div class="score-bar-num" style="color:{color}">{num}</div>
 </div>"""
-        if narrative:
-            bars_html += f'<p style="font-size:9pt;color:#4a5a6a;margin:0 0 10px 234px">{_e(narrative)}</p>'
 
     composite_str = str(result.ai_visibility_score) if result.ai_visibility_score is not None else "—"
+    quartile, q_band = _grade_from_score(result.ai_visibility_score)
+    system_name = _e(result.network_canonical_name or result.network_name)
+
+    ai_says = _strip_md(result.ai_says or "")
+    ai_says_html = ""
+    if ai_says:
+        ai_says_html = f"""
+<div style="background:{pale};border-left:3px solid {accent};padding:12px 16px;margin-top:12px;border-radius:4px">
+  <div style="font-size:8.5pt;font-weight:700;letter-spacing:0.05em;color:{primary};text-transform:uppercase;margin-bottom:4px">What AI Assistants Currently See</div>
+  <p style="font-size:9.5pt;color:#3a4a5a;margin:0">{_e(ai_says)}</p>
+</div>"""
 
     return f"""
-<h2>Score Breakdown</h2>
+<h2>System-Level AI Visibility</h2>
+<p style="font-size:9pt;color:#4a5a6a;margin-top:-4px">
+  How AI assistants view {system_name} as a single system — the same four-pillar Pulse Score
+  this system receives in the Hospital Market report.
+</p>
 <div class="score-breakdown">
 {bars_html}
 <p style="font-size:8.5pt;color:#8a9aaa;margin-top:8px">
-  Composite score: <strong style="color:{primary}">{composite_str}/100</strong>
-  &nbsp;·&nbsp; Weights: Brand Visibility 40% + Market Coverage 35% + Information Accuracy 25%
+  Pulse Score: <strong style="color:{primary}">{composite_str}/100</strong>
+  &nbsp;·&nbsp; {_e(_quartile_label(quartile))} ({_e(q_band)})
 </p>
-</div>"""
+</div>
+{ai_says_html}"""
 
 
 def _facility_scorecard_block(
@@ -680,16 +690,15 @@ def _facility_scorecard_block(
     plural       = ftype_cfg.get("plural", "hospitals")
     quality_cols = ftype_cfg.get("quality_cols", ["google", "cms", "leapfrog"])
     show_cms = "cms" in quality_cols
-    show_lf  = "leapfrog" in quality_cols
 
-    # Market callouts
+    # Market callouts (commentary — where facilities surface well vs. poorly)
     top_html = ""
     gap_html = ""
     if result.top_markets:
         items = "".join(f"<li>{_e(m)}</li>" for m in result.top_markets)
         top_html = f"""
 <div class="market-callout top">
-  <div class="market-callout-title">Top Markets</div>
+  <div class="market-callout-title">Strong Local Markets</div>
   <ul>{items}</ul>
 </div>"""
     if result.gap_markets:
@@ -704,19 +713,10 @@ def _facility_scorecard_block(
     if top_html or gap_html:
         callouts = f'<div class="market-callouts">{top_html}{gap_html}</div>'
 
-    # Facility table rows — sorted best→worst for display
+    # Facility roster rows (geographic order; no competing per-facility score)
     rows_html = ""
-    for fac in sorted(result.facilities,
-                      key=lambda f: f.ai_visibility_score if f.ai_visibility_score is not None else -1,
-                      reverse=True):
-        score = fac.ai_visibility_score
-        quartile, _ = _grade_from_score(score)
-        quartile_css = "q-" + (quartile if quartile in ("Q1", "Q2", "Q3", "Q4") else "dash")
-        row_cls = "row-" + quartile if quartile in ("Q1", "Q2", "Q3", "Q4") else ""
-        score_str = str(score) if score is not None else "—"
+    for fac in result.facilities:
         surfaced = "Yes" if fac.surfaced_for_local else ("No" if fac.surfaced_for_local is not None else "—")
-        attributed = "Yes" if fac.attributed_to_network else ("No" if fac.attributed_to_network is not None else "—")
-        key_gap = _e(fac.key_gap or "")
 
         # Google rating
         g_rating = fac.google_rating
@@ -735,51 +735,28 @@ def _facility_scorecard_block(
                 cms_cell = "★" * cms + '<span style="color:#ccc">' + "★" * (5 - cms) + "</span>"
             else:
                 cms_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
+            cms_td = f'<td style="text-align:center;font-size:9pt">{cms_cell}</td>'
         else:
-            cms_cell = None
+            cms_td = ""
 
-        # Leapfrog grade (hospitals only)
-        if show_lf:
-            lf = fac.leapfrog_grade
-            if lf:
-                lf_color = {"A": "#1a7a3c", "B": "#2e7d9a", "C": "#b87a00",
-                            "D": "#c05020", "F": "#8b1c1c"}.get(lf, "#666")
-                lf_cell = f'<span style="font-weight:700;color:{lf_color};font-size:11pt">{_e(lf)}</span>'
-            else:
-                lf_cell = '<span style="font-size:8pt;color:#b0b8c0">—</span>'
-        else:
-            lf_cell = None
-
-        cms_td = f'<td style="text-align:center;font-size:9pt">{cms_cell}</td>' if cms_cell is not None else ""
-        lf_td  = f'<td style="text-align:center;font-size:10pt">{lf_cell}</td>' if lf_cell is not None else ""
-
-        rows_html += f"""<tr class="{row_cls}">
+        rows_html += f"""<tr>
   <td>{_e(fac.name)}</td>
   <td>{_e(fac.city)}, {_e(fac.state)}</td>
-  <td style="text-align:center"><strong>{score_str}</strong></td>
-  <td style="text-align:center"><span class="quartile-badge {quartile_css}">{_e(quartile)}</span></td>
+  {cms_td}
   <td style="text-align:center">{google_cell}</td>
-  {cms_td}{lf_td}
   <td style="text-align:center;font-size:9pt">{surfaced}</td>
-  <td style="text-align:center;font-size:9pt">{attributed}</td>
-  <td style="font-size:8.5pt;color:#4a5a6a">{key_gap}</td>
 </tr>"""
 
     cms_th = '<th style="text-align:center">CMS Stars</th>' if show_cms else ""
-    lf_th  = '<th style="text-align:center">Leapfrog</th>' if show_lf else ""
 
     thead_html = f"""
   <thead>
     <tr>
       <th>{singular_cap}</th>
       <th>City, State</th>
-      <th style="text-align:center">AI Score</th>
-      <th style="text-align:center">Quartile</th>
+      {cms_th}
       <th style="text-align:center">Google Rating</th>
-      {cms_th}{lf_th}
-      <th style="text-align:center">Local Surface</th>
-      <th style="text-align:center">Network Attribution</th>
-      <th>Key Gap</th>
+      <th style="text-align:center">Surfaces Locally</th>
     </tr>
   </thead>"""
 
@@ -796,8 +773,8 @@ def _facility_scorecard_block(
   </div>
   <div class="net-teaser-blur-overlay">
     <div class="blur-lock">&#128274;</div>
-    <div class="blur-cta-heading">Full facility data available upon request</div>
-    <div class="blur-cta-sub">Contact us to receive the complete Network Pulse report with individual facility scores, gap analysis, and strategic recommendations.</div>
+    <div class="blur-cta-heading">Full facility detail available upon request</div>
+    <div class="blur-cta-sub">Contact us to receive the complete Network Pulse report with the full facility roster and strategic recommendations.</div>
     <div class="blur-cta-actions">
       <span class="blur-phone">{_TEASER_PHONE}</span>
       &nbsp;&nbsp;&middot;&nbsp;&nbsp;
@@ -813,13 +790,10 @@ def _facility_scorecard_block(
 </table>"""
 
     return f"""
-<h2>Facility Scorecard</h2>
+<h2>Facility Detail</h2>
 <p style="font-size:9pt;color:#4a5a6a">
-  {len(result.facilities)} {plural} assessed, sorted by AI Visibility Score (highest first).
-  <span style="color:#2e9e5b">■</span> Q1 Top Quartile (&#8805;75) &nbsp;
-  <span style="color:#2e7d9a">■</span> Q2 Upper Middle (68–74) &nbsp;
-  <span style="color:#e09b2a">■</span> Q3 Lower Middle (58–67) &nbsp;
-  <span style="color:#d94f4f">■</span> Q4 Bottom Quartile (&lt;58)
+  {len(result.facilities)} {plural} in the network — individual facility detail for reference.
+  Per-facility AI scores are not shown; the system-level Pulse Score above reflects the network as a whole.
 </p>
 {callouts}
 {table_html}"""
@@ -875,37 +849,38 @@ def _methodology_appendix(primary: str, pale: str, ftype_cfg: dict | None = None
     quality_note = ftype_cfg.get("methodology_quality", "Google Rating — verified via Google Places API.")
     return f"""
 <div class="appendix">
-<h3>Methodology — Network Pulse AI Visibility Scoring</h3>
+<h3>Methodology — Pulse AI Visibility Scoring</h3>
 <p>
-  The Network AI Visibility Score is a composite of three dimensions, each scored 0–100.
-  The composite is a weighted average: Brand Visibility (40%) + Market Coverage (35%) + Information Accuracy (25%).
-  Scoring reflects how well this network and its member {plural} are represented in AI assistants
-  when patients and referring professionals ask network-level and local discovery queries.
+  The Pulse Score is a 0–100 measure of how visible and favorable a system is when patients and
+  referring professionals ask AI assistants (ChatGPT, Claude, Gemini) where to get care. It is a
+  weighted blend of four pillars, and is the <strong>same score this system receives in the Hospital
+  Market report</strong> — a system reads an identical score in both reports.
 </p>
 <table>
-  <thead><tr><th>Dimension</th><th>Weight</th><th>What it measures</th></tr></thead>
+  <thead><tr><th>Pillar</th><th>What it measures</th></tr></thead>
   <tbody>
     <tr>
-      <td><strong>Brand Visibility</strong></td>
-      <td>40%</td>
-      <td>How accurately and completely AI assistants represent the network when queried by name — roster, geography, and capabilities. Incorporates Google review volume and ratings as a signal of digital brand presence.</td>
+      <td><strong>Outcomes &amp; Safety</strong></td>
+      <td>Clinical quality, safety, and reputation (e.g. CMS Overall Hospital Quality Star Rating).</td>
     </tr>
     <tr>
-      <td><strong>Market Coverage</strong></td>
-      <td>35%</td>
-      <td>Whether member {plural} surface in local "{local_q}" queries and are correctly attributed to the network</td>
+      <td><strong>Credentials &amp; Recognition</strong></td>
+      <td>Accreditations, awards, national rankings, and affiliations.</td>
     </tr>
     <tr>
-      <td><strong>Information Accuracy</strong></td>
-      <td>25%</td>
-      <td>Correctness of key facts in AI responses: service lines, capabilities, and correct network attribution</td>
+      <td><strong>Experience &amp; Reviews</strong></td>
+      <td>Patient sentiment and verified review volume and ratings.</td>
+    </tr>
+    <tr>
+      <td><strong>Access &amp; Fit</strong></td>
+      <td>Location, availability, and how well the system matches what patients ask for.</td>
     </tr>
   </tbody>
 </table>
 <p style="margin-top:8px">
-  Grade bands: A (80+, Top Quartile) · B (65–79, Above Average) · C (50–64, Industry Average) · D (35–49, Below Average) · F (&lt;35, Bottom Quartile).
-  Facility table is sorted worst → best to prioritize remediation effort.
-  <strong>External quality columns:</strong>
-  {quality_note}
+  National quartiles (calibrated against scored entities in the Rank2 database):
+  Q1 Top Quartile (&#8805;75) · Q2 Upper Middle (68–74) · Q3 Lower Middle (58–67) · Q4 Bottom Quartile (&lt;58).
+  The facility detail table lists each of the network's {plural} for reference and is not separately scored.
+  <strong>External signals:</strong> {quality_note}
 </p>
 </div>"""
