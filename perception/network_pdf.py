@@ -44,6 +44,8 @@ def render_network_pdf(
         browser = p.chromium.launch()
         page = browser.new_page()
         page.set_content(html, wait_until="networkidle")
+        from .pdf import _fmt_cached
+        _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
         page.pdf(
             path=str(pdf_path),
             format="A4",
@@ -57,6 +59,7 @@ def render_network_pdf(
                 'font-size:8px;color:#8a9aaa;display:flex;justify-content:space-between;'
                 'align-items:center;padding:0 48px 10px;box-sizing:border-box">'
                 '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+                f'<span>{_cached_lbl}</span>'
                 '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
                 '</div>'
             ),

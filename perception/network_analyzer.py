@@ -187,12 +187,12 @@ def analyze_network(
         if on_event:
             on_event(event)
 
-    # ── Same-day cache ───────────────────────────────────────────────────────
+    # ── 30-day cache ─────────────────────────────────────────────────────────
     if not ignore_cache:
-        cached = get_recent_network_run(network_name, days=0)
+        cached = get_recent_network_run(network_name, days=30)
         if cached:
             emit({"type": "phase", "name": "analyzing",
-                  "text": f"Using today's cached result for {network_name}"})
+                  "text": f"Using recent cached result for {network_name}"})
             emit({"type": "phase", "name": "pdf", "text": "Serving cached PDF"})
             emit({"type": "phase", "name": "saving", "text": "Done"})
             return NetworkResult.model_validate_json(cached["result_json"])
@@ -316,6 +316,7 @@ def analyze_network(
         total_hospitals=len(facilities),
         states_covered=states_covered,
         generated_at=date.today(),
+        data_collected_at=date.today(),
         ai_visibility_score=pulse,
         brand_visibility_score=brand_score,
         market_coverage_score=market_score,

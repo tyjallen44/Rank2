@@ -248,6 +248,7 @@ class AnalysisResult(BaseModel):
     zip_code: Optional[str] = None         # set when search was by ZIP code
     radius_miles: Optional[int] = None     # set when search was by ZIP code
     generated_at: date
+    data_collected_at: Optional[date] = None  # when the underlying analysis was first computed (footer "Cached …")
     weighting_profile: Optional[str] = None  # the profile used for the whole run
     entity_type: Optional[str] = None        # "hospital" | "practice" — None means hospital
     rubric_version: Optional[str] = None     # e.g. "practice-v1.0"
@@ -305,6 +306,7 @@ class NetworkResult(BaseModel):
     total_hospitals: int = 0                    # count of assessed facilities (name kept for DB compat)
     states_covered: list[str] = Field(default_factory=list)
     generated_at: date
+    data_collected_at: Optional[date] = None  # when the underlying analysis was first computed (footer "Cached …")
     # Scores (0–100 each)
     ai_visibility_score: Optional[int] = None   # overall composite
     brand_visibility_score: Optional[int] = None  # 40% weight

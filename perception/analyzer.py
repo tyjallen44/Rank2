@@ -747,9 +747,9 @@ def analyze_location(
         if _today:
             emit({"type": "phase", "name": "cached", "text": f"Returning today's cached result for {entity_name}"})
             return AnalysisResult.model_validate_json(_today["result_json"])
-        # 90-day cache (only when force_rerun is not set)
+        # 30-day cache (only when force_rerun is not set)
         if not force_rerun:
-            _cached = get_recent_run(entity_name, _loc_key, entity_type="hospital")
+            _cached = get_recent_run(entity_name, _loc_key, days=30, entity_type="hospital")
             if _cached:
                 emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
                 return AnalysisResult.model_validate_json(_cached["result_json"])
@@ -1040,6 +1040,7 @@ def analyze_location(
         entity_name=entity_name if individual_report else None,
         report_title=report_title if individual_report else None,
         generated_at=date.today(),
+        data_collected_at=date.today(),
         weighting_profile=run_profile,
         entity_type=entity_type,
         market_overview=_clean(structured_data.get("market_overview", "")),
@@ -1453,9 +1454,9 @@ def compare_locations(
             today = get_recent_run(entity_name, location, days=0, entity_type=etype_key)
             if today:
                 return _AR.model_validate_json(today["result_json"])
-        # 90-day cache (skipped when force_rerun or override_today_lock)
+        # 30-day cache (skipped when force_rerun or override_today_lock)
         if not force_rerun and not override_today_lock:
-            cached = get_recent_run(entity_name, location, entity_type=etype_key)
+            cached = get_recent_run(entity_name, location, days=30, entity_type=etype_key)
             if cached:
                 return _AR.model_validate_json(cached["result_json"])
         return None

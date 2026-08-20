@@ -602,9 +602,9 @@ def analyze_practice(
         if _today:
             emit({"type": "phase", "name": "cached", "text": f"Returning today's cached result for {entity_name}"})
             return AnalysisResult.model_validate_json(_today["result_json"])
-        # 90-day cache (only when force_rerun is not set)
+        # 30-day cache (only when force_rerun is not set)
         if not force_rerun:
-            _cached = get_recent_run(entity_name, _loc_key, entity_type="practice", aggregate=aggregate)
+            _cached = get_recent_run(entity_name, _loc_key, days=30, entity_type="practice", aggregate=aggregate)
             if _cached:
                 emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
                 return AnalysisResult.model_validate_json(_cached["result_json"])
@@ -784,6 +784,7 @@ def analyze_practice(
         entity_name=entity_name,
         report_title=report_title,
         generated_at=date.today(),
+        data_collected_at=date.today(),
         weighting_profile=run_profile,
         entity_type="practice",
         rubric_version=_RUBRIC_VERSION,

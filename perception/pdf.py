@@ -120,6 +120,7 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
 
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
     html = _build_html(result, cfg)
+    _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
     # Practice-report validation: hospital-only signals must never appear in the body.
     if result.entity_type == "practice":
         import sys as _sys
@@ -144,8 +145,10 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
             header_template="<span></span>",
             footer_template=(
                 '<div style="width:100%;font-family:Arial,sans-serif;'
-                'font-size:9px;color:#7a9095;text-align:center;padding:0 0 8px 0">'
-                'Page <span class="pageNumber"></span> of <span class="totalPages"></span>'
+                'font-size:9px;color:#7a9095;display:flex;justify-content:space-between;'
+                'align-items:center;padding:0 48px 8px;box-sizing:border-box">'
+                f'<span>{_cached_lbl}</span>'
+                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
                 "</div>"
             ),
         )
@@ -154,6 +157,25 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
 
 def _e(text: str | None) -> str:
     return _html_lib.escape(str(text or ""))
+
+
+def _fmt_cached(gen) -> str:
+    """'Cached MM/DD/YYYY' from a date or ISO string (the data-collection date),
+    or '' if unavailable. Shown in the report footer so a stable, cached score
+    reads as data-as-of a fixed date rather than looking freshly recomputed."""
+    from datetime import datetime as _dt
+    d = gen
+    if isinstance(d, str):
+        try:
+            d = _dt.fromisoformat(d).date()
+        except Exception:
+            return ""
+    if not d:
+        return ""
+    try:
+        return "Cached " + d.strftime("%m/%d/%Y")
+    except Exception:
+        return ""
 
 
 _MD_BOLD     = re.compile(r'\*\*(.+?)\*\*', re.DOTALL)
@@ -2771,6 +2793,7 @@ def render_comparison_pdf(
 
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
     html = _build_comparison_html(result_a, result_b, comparison, cfg, teaser=teaser)
+    _cached_lbl = _fmt_cached(getattr(result_a, "data_collected_at", None) or result_a.generated_at)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -2784,8 +2807,10 @@ def render_comparison_pdf(
             header_template="<span></span>",
             footer_template=(
                 '<div style="width:100%;font-family:Arial,sans-serif;'
-                'font-size:9px;color:#7a9095;text-align:center;padding:0 0 8px 0">'
-                'Page <span class="pageNumber"></span> of <span class="totalPages"></span>'
+                'font-size:9px;color:#7a9095;display:flex;justify-content:space-between;'
+                'align-items:center;padding:0 48px 8px;box-sizing:border-box">'
+                f'<span>{_cached_lbl}</span>'
+                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
                 "</div>"
             ),
         )

@@ -482,7 +482,7 @@ def analyze_fqhc(
                   "text": f"Returning today's cached result for {entity_name}"})
             return AnalysisResult.model_validate_json(_today["result_json"])
         if not force_rerun:
-            _cached = get_recent_run(entity_name, _loc_key, entity_type="community_health")
+            _cached = get_recent_run(entity_name, _loc_key, days=30, entity_type="community_health")
             if _cached:
                 emit({"type": "phase", "name": "cached",
                       "text": f"Returning cached result for {entity_name}"})
@@ -703,6 +703,7 @@ def analyze_fqhc(
         entity_name=entity_name,
         report_title=report_title,
         generated_at=date.today(),
+        data_collected_at=date.today(),
         entity_type="community_health",
         rubric_version=_RUBRIC_VERSION,
         weighting_profile="community_health",
