@@ -96,7 +96,7 @@ def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False) 
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Network Pulse — {title}</title>
+<title>Hospital Network — {title}</title>
 <style>
 {css}
 {css_overrides}
@@ -574,7 +574,7 @@ def _cover_block(
 <div class="cover">
   <div class="cover-logo-header">
     {logo_html}
-    <div class="cover-report-type-label">Network Pulse<br>AI Visibility Report</div>
+    <div class="cover-report-type-label">Hospital Network<br>AI Visibility Report</div>
   </div>
 
   <div class="cover-edition">Network AI Visibility</div>
@@ -777,7 +777,7 @@ def _facility_scorecard_block(
   <div class="net-teaser-blur-overlay">
     <div class="blur-lock">&#128274;</div>
     <div class="blur-cta-heading">Full facility detail available upon request</div>
-    <div class="blur-cta-sub">Contact us to receive the complete Network Pulse report with the full facility roster and strategic recommendations.</div>
+    <div class="blur-cta-sub">Contact us to receive the complete Hospital Network report with the full facility roster and strategic recommendations.</div>
     <div class="blur-cta-actions">
       <span class="blur-phone">{_TEASER_PHONE}</span>
       &nbsp;&nbsp;&middot;&nbsp;&nbsp;

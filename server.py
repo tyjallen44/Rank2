@@ -1128,7 +1128,7 @@ async def network_pdf(run_id: str, _: str = Depends(require_auth)):
             [run_id],
         ).fetchone()
     if not row:
-        raise HTTPException(404, "Network Pulse run not found")
+        raise HTTPException(404, "Hospital Network run not found")
 
     pdf_path = Path(row[0]) if row[0] else None
 
@@ -1136,7 +1136,7 @@ async def network_pdf(run_id: str, _: str = Depends(require_auth)):
         # PDF missing from disk — regenerate from stored result_json
         result_json = row[2]
         if not result_json:
-            raise HTTPException(404, "Network Pulse PDF missing and no stored result to regenerate from")
+            raise HTTPException(404, "Hospital Network PDF missing and no stored result to regenerate from")
         try:
             from perception.models import NetworkResult
             from perception.network_pdf import render_network_pdf

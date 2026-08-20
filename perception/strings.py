@@ -9,18 +9,18 @@ PRODUCT_SUBTITLE = "AI Visibility Intelligence"
 
 # ── Report-type display names (sidebar nav, page titles, completion back-buttons) ──
 REPORT_MARKET     = "Market Pulse"
-REPORT_PATIENT    = "Patient Pulse"
-REPORT_INDIVIDUAL = "Pulse Diagnostic"
-REPORT_COMPARISON = "Pulse Comparison"
+REPORT_PATIENT    = "Competitors Rankings"
+REPORT_INDIVIDUAL = "Deep Diagnostic"
+REPORT_COMPARISON = "Compare Two"
 
 # ── PDF cover eyebrow & sub-label ───────────────────────────────────────────────
 COVER_MARKET              = "Market Pulse"
-COVER_PATIENT             = "Patient Pulse"
-COVER_PATIENT_TEASER      = "Patient Pulse Summary — Request Full Report"
-COVER_INDIVIDUAL          = "Pulse Diagnostic"
-COVER_INDIVIDUAL_TEASER   = "Pulse Diagnostic Summary — Request Full Report"
-COVER_COMPARISON          = "Pulse Comparison"
-COVER_REPORT_SUB          = "AI Visibility Report"   # small line under Pulse Diagnostic / Pulse Comparison
+COVER_PATIENT             = "Competitors Rankings"
+COVER_PATIENT_TEASER      = "Competitors Rankings — Request Full Report"
+COVER_INDIVIDUAL          = "Deep Diagnostic"
+COVER_INDIVIDUAL_TEASER   = "Deep Diagnostic Summary — Request Full Report"
+COVER_COMPARISON          = "Head-to-Head Comparison"
+COVER_REPORT_SUB          = "AI Visibility Report"   # small line under the cover title
 
 # ── Section headers (presentation layer only — not used in prompts or extraction) ──
 SECTION_VERDICT                  = "Pulse Verdict"
@@ -37,11 +37,11 @@ SCORE_DESCRIPTOR = "AI Visibility"  # sub-label line, also uppercase via CSS
 ROADMAP_TITLE = "Pulse Improvement Roadmap"
 
 BLUR_CTA_INDIVIDUAL = (
-    "Access the complete Pulse diagnostic, detailed signal breakdown, "
+    "Access the complete Deep Diagnostic, detailed signal breakdown, "
     "and your personalized Pulse Improvement Roadmap."
 )
 BLUR_CTA_COMPARISON = (
-    "Access the complete Pulse Comparison, detailed signal breakdown, "
+    "Access the complete Head-to-Head Comparison, detailed signal breakdown, "
     "and your personalized Pulse Improvement Roadmap."
 )
 
@@ -58,8 +58,8 @@ RANKED_PATIENT_SUBTITLE = (
 MARKET_ADVICE_CTA = (
     "The recommendations in this section are most valuable when focused on a "
     "single organization. This report covers multiple providers across a market — "
-    "to receive a personalized Pulse Diagnostic for your organization, "
-    "contact us for a full Pulse Diagnostic. An individual report delivers a "
+    "to receive a personalized Deep Diagnostic for your organization, "
+    "contact us for a full Deep Diagnostic. An individual report delivers a "
     "prioritized, action-ready roadmap specific to your digital footprint, naming "
     "exactly what to fix, where to fix it, and which AI visibility channel each "
     "action improves. Call us at 801.998.2830 or "
@@ -67,8 +67,8 @@ MARKET_ADVICE_CTA = (
     "Get Your Report</a>."
 )
 
-# ── Deep-dive section header inside Pulse Comparison PDF ────────────────────────
-DEEP_DIVE_HEADER_TPL = "Pulse Diagnostic — {name}"
+# ── Deep-dive section header inside the Head-to-Head Comparison PDF ─────────────
+DEEP_DIVE_HEADER_TPL = "Deep Diagnostic — {name}"
 
 # ── AI Visibility disclaimer ─────────────────────────────────────────────────────
 # AIVS_DISCLAIMER: the closing Pulse Score definition sentence (one sentence, unchanged).
@@ -118,10 +118,10 @@ def _practice_profile_display() -> dict[str, str]:
 EMAIL_BRAND = "Pulse"
 
 # ── PDF filename tokens ──────────────────────────────────────────────────────────
-FILE_INDIVIDUAL     = "Pulse-Diagnostic"
-FILE_INDIVIDUAL_SUM = "Pulse-Diagnostic-Summary"
-FILE_PATIENT        = "Patient-Pulse"
-FILE_COMPARISON_PFX = "Pulse-Comparison"
+FILE_INDIVIDUAL     = "Deep-Diagnostic"
+FILE_INDIVIDUAL_SUM = "Deep-Diagnostic-Summary"
+FILE_PATIENT        = "Competitors-Rankings"
+FILE_COMPARISON_PFX = "Compare-Two"
 
 
 def titlecase_filename(stem: str) -> str:

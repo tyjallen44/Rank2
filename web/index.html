@@ -1282,7 +1282,7 @@ html, body {
         <div id="pp-err" class="err hidden mt16"></div>
         <div class="mt20">
           <button class="btn btn-primary" id="pp-run-btn" onclick="runPatient()">
-            Run Patient Pulse →
+            Run Competitors Rankings →
           </button>
         </div>
       </div>
@@ -1696,7 +1696,7 @@ html, body {
         <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Produces a second PDF with facility details and strategic recommendations blurred — ideal for prospect outreach.</div>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-secondary" onclick="npReset()">← Back</button>
-          <button class="btn btn-primary" id="np-run-btn" onclick="npRunAnalysis()">Run Network Pulse →</button>
+          <button class="btn btn-primary" id="np-run-btn" onclick="npRunAnalysis()">Run Hospital Network →</button>
         </div>
       </div>
     </div>
@@ -1842,7 +1842,7 @@ html, body {
           </label>
           <div id="cmp-run-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
-            <button class="btn btn-primary" id="cmp-run-btn" onclick="runComparison()">Run Pulse Comparison →</button>
+            <button class="btn btn-primary" id="cmp-run-btn" onclick="runComparison()">Run Compare Two →</button>
             <button class="btn btn-ghost btn-sm" onclick="resetComparison()">← Start Over</button>
           </div>
         </div>
@@ -1988,7 +1988,7 @@ html, body {
     <!-- ── Events Pulse ─────────────────────────────────────────────────── -->
     <div id="page-events" class="page">
       <div class="page-title">Event Preparation</div>
-      <div class="page-sub">Upload an event attendee list to generate a Pulse Diagnostic for every hospital, practice, or community health center — and download an enriched CSV with scores.</div>
+      <div class="page-sub">Upload an event attendee list to generate a Deep Diagnostic for every hospital, practice, or community health center — and download an enriched CSV with scores.</div>
 
       <!-- Step 1: Setup -->
       <div id="ev-step1" style="max-width:680px">
@@ -2052,7 +2052,7 @@ html, body {
               <input type="checkbox" id="ev-include-teaser">
               Also generate a teaser report for each entity
             </label>
-            <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Each entity will produce both a full Pulse Diagnostic and a teaser (summary-only) PDF.</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Each entity will produce both a full Deep Diagnostic and a teaser (summary-only) PDF.</div>
           </div>
 
           <div style="margin-bottom:16px">
@@ -3548,7 +3548,7 @@ function npReset() {
   const findBtn = document.getElementById('np-find-btn');
   if (findBtn) { findBtn.disabled = false; findBtn.textContent = cfg.findBtn; }
   const runBtn = document.getElementById('np-run-btn');
-  if (runBtn)  { runBtn.disabled  = false; runBtn.textContent  = 'Run Network Pulse →'; }
+  if (runBtn)  { runBtn.disabled  = false; runBtn.textContent  = 'Run Hospital Network →'; }
 }
 
 async function npFindFacilities() {
@@ -3690,13 +3690,13 @@ async function npRunAnalysis() {
     const { job_id } = await res.json();
 
     _lastPage = 'network';
-    startProgress(job_id, `${name} — Network Pulse`, false);
+    startProgress(job_id, `${name} — Hospital Network`, false);
 
   } catch (err) {
     errEl.textContent = 'Error: ' + (err.message || err);
     errEl.classList.remove('hidden');
     btn.disabled = false;
-    btn.textContent = 'Run Network Pulse →';
+    btn.textContent = 'Run Hospital Network →';
   }
 }
 
@@ -3980,7 +3980,7 @@ async function runPatient() {
     _lastPage = 'patient';
     startProgress(job_id, label, false);
   } catch(e) { showErr(errEl, e.message); }
-  finally { btn.disabled = false; btn.innerHTML = 'Run Patient Pulse →'; }
+  finally { btn.disabled = false; btn.innerHTML = 'Run Competitors Rankings →'; }
 }
 
 // ── Individual Report ─────────────────────────────────────────────────────
@@ -4647,7 +4647,7 @@ async function runComparison() {
     showErr(errEl, e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Run Pulse Comparison →';
+    btn.innerHTML = 'Run Compare Two →';
   }
 }
 
@@ -5172,10 +5172,10 @@ function showSingleDone(r) {
   document.getElementById('done-sub').textContent = subText;
   document.getElementById('done-body').innerHTML = bodyHtml;
 
-  const backLabel = _lastPage === 'patient'   ? 'New Patient Pulse'
-    : _lastPage === 'individual' ? 'New Pulse Diagnostic'
-    : _lastPage === 'compare'   ? 'New Pulse Comparison'
-    : _lastPage === 'network'   ? 'New Network Pulse'
+  const backLabel = _lastPage === 'patient'   ? 'New Competitors Rankings'
+    : _lastPage === 'individual' ? 'New Deep Diagnostic'
+    : _lastPage === 'compare'   ? 'New Compare Two'
+    : _lastPage === 'network'   ? 'New Hospital Network Report'
     : 'New Market Pulse';
 
   const isNetwork = (_lastPage === 'network' || r.entity_type === 'hospital_network');
@@ -5898,15 +5898,15 @@ function renderHistory(events) {
           ${runs.length ? runs.map(run => {
             const isNetwork = run.report_type === 'network' || run.entity_type === 'hospital_network';
             const NP_TYPE_BADGE = {
-              hospital: 'Network Pulse', asc: 'ASC Network', urgent_care: 'Urgent Care',
-              imaging: 'Imaging', behavioral_health: 'Behavioral', other: 'Network Pulse',
+              hospital: 'Hospital Network', asc: 'ASC Network', urgent_care: 'Urgent Care',
+              imaging: 'Imaging', behavioral_health: 'Behavioral', other: 'Hospital Network',
             };
             const typeBadge = run.event_id
               ? `<span class="badge bg-teal">Event</span>`
               : run.entity_type === 'community_health'
                 ? `<span class="badge bg-teal">FQHC</span>`
                 : isNetwork
-                  ? `<span class="badge bg-teal">${NP_TYPE_BADGE[run.specialty] || 'Network Pulse'}</span>`
+                  ? `<span class="badge bg-teal">${NP_TYPE_BADGE[run.specialty] || 'Hospital Network'}</span>`
                   : run.specialty
                     ? `<span class="badge bg-gold">${run.specialty}</span>`
                     : `<span class="badge bg-muted">Hospitals</span>`;

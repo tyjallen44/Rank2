@@ -341,7 +341,7 @@ def analyze_network(
 
     # ── Phase: pdf ───────────────────────────────────────────────────────────
     emit({"type": "phase", "name": "pdf",
-          "text": "Rendering Network Pulse PDF"})
+          "text": "Rendering Hospital Network PDF"})
     try:
         from .network_pdf import render_network_pdf
         output_dir = Path("reports")
@@ -349,12 +349,12 @@ def analyze_network(
         from .strings import titlecase_filename
         slug = _slug(network_name)
         _ts = datetime.utcnow().strftime("%y%m%d-%H%M")
-        pdf_filename = titlecase_filename(f"{slug}-network-pulse-{_ts}") + ".pdf"
+        pdf_filename = titlecase_filename(f"{slug}-hospital-network-{_ts}") + ".pdf"
         pdf_path = output_dir / pdf_filename
         render_network_pdf(result, str(pdf_path), brand=brand)
         result.pdf_path = str(pdf_path)
         if teaser:
-            teaser_filename = titlecase_filename(f"{slug}-network-pulse-teaser-{_ts}") + ".pdf"
+            teaser_filename = titlecase_filename(f"{slug}-hospital-network-teaser-{_ts}") + ".pdf"
             teaser_path = output_dir / teaser_filename
             render_network_pdf(result, str(teaser_path), brand=brand, teaser=True)
             result.teaser_pdf_path = str(teaser_path)
