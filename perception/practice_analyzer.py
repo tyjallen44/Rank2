@@ -960,6 +960,8 @@ def analyze_practice(
         _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_Practice-Summary-{_ts}"
     else:
         _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_Practice-{_ts}"
+    from .strings import titlecase_filename
+    _stem = titlecase_filename(_stem)
     report_path = output_dir / f"{_stem}.md"
     report_path.write_text(report_markdown, encoding="utf-8")
     console.print(f"[green]✓[/green] Practice report → [dim]{report_path}[/dim]")

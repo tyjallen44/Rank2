@@ -14,6 +14,7 @@ from .strings import (
     AIVS_DISCLAIMER_CHECK as _AIVS_DISCLAIMER_CHECK,
     FULL_DISCLAIMER as _FULL_DISCLAIMER,
     FILE_INDIVIDUAL, FILE_INDIVIDUAL_SUM, FILE_PATIENT, FILE_COMPARISON_PFX,
+    titlecase_filename,
 )
 
 from . import scoring
@@ -627,6 +628,7 @@ def _apply_format(result, *, simplified, obscure_competitors, target_entity,
         _stem = f"{_base}_{FILE_PATIENT}-{_fmt_label}{_zip_part}-{_ts}"
     else:
         _stem = f"{_base}-{_fmt_label}{_zip_part}-{_ts}"
+    _stem = titlecase_filename(_stem)
     try:
         from .pdf import render_pdf
         pdf_path = _P(output_dir) / f"{_stem}.pdf"
@@ -1150,6 +1152,7 @@ def analyze_location(
         _stem = f"{city.replace(' ', '-')}_{state}_{_type}_{FILE_PATIENT}{_zip_part}-{_ts}"
     else:
         _stem = f"{city.replace(' ', '-')}_{state}_{_type}{_zip_part}-{_ts}"
+    _stem = titlecase_filename(_stem)
     report_path = output_dir / f"{_stem}.md"
     report_path.write_text(report_markdown, encoding="utf-8")
     console.print(f"[green]✓[/green] Report saved → [dim]{report_path}[/dim]")
@@ -1572,7 +1575,7 @@ def compare_locations(
     emit({"type": "phase", "name": "pdf", "text": "Generating Comparison Report PDF"})
     safe_a = re.sub(r"[^\w\-]", "_", entity_a_name)[:30]
     safe_b = re.sub(r"[^\w\-]", "_", entity_b_name)[:30]
-    pdf_name = f"{FILE_COMPARISON_PFX}_{safe_a}_vs_{safe_b}_{result_a.run_id[:8]}.pdf"
+    pdf_name = titlecase_filename(f"{FILE_COMPARISON_PFX}_{safe_a}_vs_{safe_b}_{result_a.run_id[:8]}") + ".pdf"
     pdf_path = output_dir / pdf_name
     render_comparison_pdf(result_a, result_b, comparison, pdf_path, brand=brand, teaser=teaser_report)
 

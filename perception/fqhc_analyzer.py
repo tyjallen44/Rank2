@@ -783,9 +783,10 @@ def analyze_fqhc(
         emit({"type": "phase", "name": "pdf", "text": "Rendering Community Health PDF"})
         try:
             from .fqhc_pdf import render_fqhc_pdf
+            from .strings import titlecase_filename
             slug = _slug(entity_name)
             _fqhc_infix = "community-health-teaser" if teaser_report else "community-health"
-            pdf_filename = f"{slug}-{_fqhc_infix}-{run_id[:8]}.pdf"
+            pdf_filename = titlecase_filename(f"{slug}-{_fqhc_infix}-{run_id[:8]}") + ".pdf"
             pdf_path = output_dir / pdf_filename
             render_fqhc_pdf(result, str(pdf_path), brand=brand)
             result.pdf_path = str(pdf_path)
@@ -811,7 +812,8 @@ def analyze_fqhc(
             else:
                 br = briefing_extract(result, briefing_variant)
                 b_slug = _slug(entity_name)
-                b_filename = f"{b_slug}-briefing-{briefing_variant}-{run_id[:8]}.pdf"
+                from .strings import titlecase_filename
+                b_filename = titlecase_filename(f"{b_slug}-briefing-{briefing_variant}-{run_id[:8]}") + ".pdf"
                 b_path = output_dir / b_filename
                 render_briefing_pdf(br, str(b_path), brand=brand)
                 result.briefing_pdf_path = str(b_path)

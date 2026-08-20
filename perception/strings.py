@@ -121,4 +121,21 @@ EMAIL_BRAND = "Pulse"
 FILE_INDIVIDUAL     = "Pulse-Diagnostic"
 FILE_INDIVIDUAL_SUM = "Pulse-Diagnostic-Summary"
 FILE_PATIENT        = "Patient-Pulse"
-FILE_COMPARISON_PFX = "pulse-comparison"
+FILE_COMPARISON_PFX = "Pulse-Comparison"
+
+
+def titlecase_filename(stem: str) -> str:
+    """Capitalize each word in a report filename stem so downloads read as Title
+    Case (e.g. 'endeavor-health-network-pulse' → 'Endeavor-Health-Network-Pulse').
+    Preserves all-uppercase tokens (state codes / acronyms like IL, TX) and leaves
+    mixed alphanumeric tokens (run-id hashes) and pure numbers (timestamps) alone.
+    Do not pass the '.pdf' extension."""
+    import re
+    def _cap(m: "re.Match") -> str:
+        w = m.group(0)
+        if not w.isalpha():        # skip hashes (a7f4abd) and numbers (260819)
+            return w
+        if w.isupper():            # preserve IL, TX, OAD
+            return w
+        return w[0].upper() + w[1:]
+    return re.sub(r"[A-Za-z0-9]+", _cap, stem)
