@@ -160,7 +160,7 @@ def _e(text: str | None) -> str:
 
 
 def _fmt_cached(gen) -> str:
-    """'Cached MM/DD/YYYY' from a date or ISO string (the data-collection date),
+    """'Data MM/DD/YYYY' from a date or ISO string (the data-collection date),
     or '' if unavailable. Shown in the report footer so a stable, cached score
     reads as data-as-of a fixed date rather than looking freshly recomputed."""
     from datetime import datetime as _dt
@@ -173,7 +173,7 @@ def _fmt_cached(gen) -> str:
     if not d:
         return ""
     try:
-        return "Cached " + d.strftime("%m/%d/%Y")
+        return "Data " + d.strftime("%m/%d/%Y")
     except Exception:
         return ""
 
