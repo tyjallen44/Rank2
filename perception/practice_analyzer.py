@@ -767,6 +767,30 @@ def analyze_practice(
         )
     console.print(f"[green]✓[/green] Scored practice ({run_profile} / {profile_label})")
 
+    # ── Canonical entity-score sync (shared across reports) ───────────────────
+    # A practice's Deep Diagnostic and its appearance in a Competitors Rankings
+    # market share the same practice pillar rubric, so they share one canonical
+    # four-pillar score — adopt a fresh one if present, otherwise seed it. Keyed
+    # on the anchor practice (rankings[0]) by the name it surfaces under, so it
+    # lines up with how the same practice is keyed in the market report.
+    if rankings and rankings[0] is not None:
+        from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
+        _anchor = rankings[0]
+        _loc = f"{city}, {state}"
+        _canon = None if override_today_lock else _get_es(_anchor.name, _loc, days=30)
+        if _canon and _canon.get("pulse_score") is not None:
+            _anchor.ai_visibility_score = _canon["pulse_score"]
+            for _k, _v in (_canon.get("tier_scores") or {}).items():
+                if hasattr(_anchor.tier_scores, _k):
+                    setattr(_anchor.tier_scores, _k, _v)
+            _anchor.overall_rating, _ = scoring.grade_from_score(_anchor.ai_visibility_score)
+        elif _anchor.ai_visibility_score is not None:
+            _code, _band = scoring.grade_from_score(_anchor.ai_visibility_score)
+            _put_es(_anchor.name, _loc, _anchor.ai_visibility_score,
+                    _anchor.tier_scores.as_dict(), overall_rating=_code,
+                    band_label=_band, ai_says=getattr(_anchor, "ai_says", "") or "",
+                    source="deep_diagnostic", run_id=run_id, overwrite=override_today_lock)
+
     disclaimer = _FULL_DISCLAIMER   # always hardcoded; LLM-generated disclaimer field ignored
 
     # Post-extraction validation
