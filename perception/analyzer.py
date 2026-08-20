@@ -986,14 +986,18 @@ def analyze_location(
     )
     console.print(f"[green]✓[/green] Scored {len(rankings)} providers ({systems_done} system aggregates){capped_note}")
 
-    # ── Canonical entity-score sync (shared with the Network report) ──────────
-    # Market reports participate in the shared entity_scores cache so a system
-    # reads an IDENTICAL four-pillar score here and in the Network report. Adopt
-    # a fresh canonical score if one exists, otherwise seed it. Only the numbers
+    # ── Canonical entity-score sync (shared across reports) ───────────────────
+    # Market reports and hospital Deep Diagnostics participate in the shared
+    # entity_scores cache so a system reads an IDENTICAL four-pillar score in the
+    # Hospital Market, Hospital Network, and Deep Diagnostic reports. Adopt a
+    # fresh canonical score if one exists, otherwise seed it. Only the numbers
     # sync — each report keeps its own narrative. Re-sort only when an adoption
-    # actually changed a score, to leave ordinary runs untouched.
-    if not individual_report and not practice_composite and not physician_composite:
+    # actually changed a score, to leave ordinary runs untouched. Practice
+    # deep-dives are excluded (their pillar rubric is not comparable).
+    if (not practice_composite and not physician_composite
+            and (not individual_report or entity_type != "practice")):
         from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
+        _es_src = "deep_diagnostic" if individual_report else "market"
         _loc = f"{city}, {state}"
         _adopted = False
         for prov in rankings:
@@ -1010,7 +1014,7 @@ def analyze_location(
                 _put_es(prov.name, _loc, prov.ai_visibility_score,
                         prov.tier_scores.as_dict(), overall_rating=_code,
                         band_label=_band, ai_says=getattr(prov, "ai_says", "") or "",
-                        source="market", run_id=run_id, overwrite=override_today_lock)
+                        source=_es_src, run_id=run_id, overwrite=override_today_lock)
         if _adopted:
             rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))
             for _i, prov in enumerate(rankings, start=1):
