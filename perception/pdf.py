@@ -2707,8 +2707,11 @@ def _build_comparison_html(
     """Build the full HTML for a comparison PDF."""
     import base64 as _b64
     date_str = result_a.generated_at.strftime("%B %d, %Y")
-    name_a = _e(result_a.entity_name or result_a.location)
-    name_b = _e(result_b.entity_name or result_b.location)
+    # Prefer the org brand (report_title) over the incidental search-anchor name —
+    # for an aggregate practice the anchor may be one clinic (e.g. "OrthoCarolina
+    # University"), but the report is about the whole organization.
+    name_a = _e(result_a.report_title or result_a.entity_name or result_a.location)
+    name_b = _e(result_b.report_title or result_b.entity_name or result_b.location)
 
     _has_custom_logo = brand_cfg.get("logo_html") or brand_cfg.get("logo_path")
     logo_uri = None if _has_custom_logo else _logo_data_uri()

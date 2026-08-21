@@ -1628,8 +1628,13 @@ def compare_locations(
 
     # ── Phase 4: Build PDF ───────────────────────────────────────────────────
     emit({"type": "phase", "name": "pdf", "text": "Generating Comparison Report PDF"})
-    safe_a = re.sub(r"[^\w\-]", "_", entity_a_name)[:30]
-    safe_b = re.sub(r"[^\w\-]", "_", entity_b_name)[:30]
+    # Name the file after the org brand (report_title) rather than the incidental
+    # search anchor, so an aggregate reads e.g. "OrthoCarolina" not the University
+    # City clinic it resolved to.
+    _disp_a = getattr(result_a, "report_title", None) or entity_a_name
+    _disp_b = getattr(result_b, "report_title", None) or entity_b_name
+    safe_a = re.sub(r"[^\w\-]", "_", _disp_a)[:30]
+    safe_b = re.sub(r"[^\w\-]", "_", _disp_b)[:30]
     pdf_name = titlecase_filename(f"{FILE_COMPARISON_PFX}_{safe_a}_vs_{safe_b}_{result_a.run_id[:8]}") + ".pdf"
     pdf_path = output_dir / pdf_name
     render_comparison_pdf(result_a, result_b, comparison, pdf_path, brand=brand, teaser=teaser_report)
