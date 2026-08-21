@@ -271,7 +271,8 @@ def analyze_network(
             _code, _band = _sc.grade_from_score(pulse)
             upsert_entity_score(network_name, hq_location, pulse, tier_scores,
                                 overall_rating=_code, band_label=_band, ai_says=ai_says,
-                                source="network", run_id=run_id, overwrite=ignore_cache)
+                                source="network", run_id=run_id, overwrite=ignore_cache,
+                                weighting_profile=weighting_profile or "procedural")
     quartile, quartile_band = _sc.grade_from_score(pulse)
 
     # Qualitative 3-dimension reads are kept only as optional commentary.

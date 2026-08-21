@@ -388,12 +388,18 @@ def init_db() -> None:
             overall_rating VARCHAR,
             band_label     VARCHAR,
             ai_says        VARCHAR DEFAULT '',
+            weighting_profile VARCHAR DEFAULT '',
             source         VARCHAR,
             run_id         VARCHAR,
             created_at     TIMESTAMP,
             PRIMARY KEY (norm_name, location, generated_at)
         )
     """)
+    _es_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='entity_scores'"
+    ).fetchall()}
+    if "weighting_profile" not in _es_cols:
+        con.execute("ALTER TABLE entity_scores ADD COLUMN weighting_profile VARCHAR DEFAULT ''")
     # ── Down-migrate System Composite (Tier 3) tables ────────────────────────
     for _tbl in ("composite_results", "network_battery_runs",
                  "network_entities", "network_registries"):
@@ -1502,7 +1508,7 @@ def get_entity_score(name: str, location: str, days: int = 30) -> dict | None:
     con = get_connection()
     row = con.execute(
         """SELECT display_name, pulse_score, tier_scores, overall_rating, band_label,
-                  ai_says, source, run_id, generated_at
+                  ai_says, source, run_id, generated_at, weighting_profile
            FROM entity_scores
            WHERE norm_name = ? AND location = ? AND generated_at >= ?
            ORDER BY generated_at DESC
@@ -1521,6 +1527,7 @@ def get_entity_score(name: str, location: str, days: int = 30) -> dict | None:
         "overall_rating": row[3], "band_label": row[4], "ai_says": row[5] or "",
         "source": row[6], "run_id": str(row[7]) if row[7] else None,
         "generated_at": str(row[8]),
+        "weighting_profile": (row[9] or "") if len(row) > 9 else "",
     }
 
 
@@ -1528,10 +1535,11 @@ def upsert_entity_score(name: str, location: str, pulse_score: int | None,
                         tier_scores: dict | None, overall_rating: str | None = None,
                         band_label: str | None = None, ai_says: str = "",
                         source: str = "", run_id: str | None = None,
-                        overwrite: bool = False) -> None:
+                        overwrite: bool = False, weighting_profile: str = "") -> None:
     """Seed (or, with overwrite=True for an admin refresh, replace) today's
     canonical score. Without overwrite, an existing row for today is left intact
-    (first writer within the window wins)."""
+    (first writer within the window wins). weighting_profile records the rubric
+    behind the score so adopters can render matching pillar labels."""
     import json
     from datetime import datetime
     nn = _norm_entity_name(name)
@@ -1542,7 +1550,8 @@ def upsert_entity_score(name: str, location: str, pulse_score: int | None,
     conflict = (
         "DO UPDATE SET display_name=EXCLUDED.display_name, pulse_score=EXCLUDED.pulse_score, "
         "tier_scores=EXCLUDED.tier_scores, overall_rating=EXCLUDED.overall_rating, "
-        "band_label=EXCLUDED.band_label, ai_says=EXCLUDED.ai_says, source=EXCLUDED.source, "
+        "band_label=EXCLUDED.band_label, ai_says=EXCLUDED.ai_says, "
+        "weighting_profile=EXCLUDED.weighting_profile, source=EXCLUDED.source, "
         "run_id=EXCLUDED.run_id, created_at=EXCLUDED.created_at"
         if overwrite else "DO NOTHING"
     )
@@ -1550,11 +1559,12 @@ def upsert_entity_score(name: str, location: str, pulse_score: int | None,
     con.execute(
         f"""INSERT INTO entity_scores
             (norm_name, location, generated_at, display_name, pulse_score, tier_scores,
-             overall_rating, band_label, ai_says, source, run_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             overall_rating, band_label, ai_says, weighting_profile, source, run_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (norm_name, location, generated_at) {conflict}""",
         [nn, nl, today, name, pulse_score, json.dumps(tier_scores or {}),
-         overall_rating, band_label, ai_says or "", source, run_id, datetime.utcnow()],
+         overall_rating, band_label, ai_says or "", weighting_profile or "",
+         source, run_id, datetime.utcnow()],
     )
     con.close()
 

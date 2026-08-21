@@ -1016,22 +1016,30 @@ def analyze_location(
         from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
         _es_src = "deep_diagnostic" if individual_report else "market"
         _loc = f"{city}, {state}"
+        _run_family = "practice" if (run_profile or "").startswith("practice_") else "hospital"
         _adopted = False
         for prov in rankings:
             _canon = None if override_today_lock else _get_es(prov.name, _loc, days=30)
-            if _canon and _canon.get("pulse_score") is not None:
+            _cf = "practice" if (_canon or {}).get("weighting_profile", "").startswith("practice_") else "hospital"
+            # Only adopt a canonical score computed under the SAME rubric — the
+            # practice and hospital rubrics reuse the same four slots with different
+            # pillar meanings, so a cross-rubric adoption would mislabel the values.
+            if _canon and _canon.get("pulse_score") is not None and _cf == _run_family:
                 prov.ai_visibility_score = _canon["pulse_score"]
                 for _k, _v in (_canon.get("tier_scores") or {}).items():
                     if hasattr(prov.tier_scores, _k):
                         setattr(prov.tier_scores, _k, _v)
                 prov.overall_rating, _ = scoring.grade_from_score(prov.ai_visibility_score)
+                if _canon.get("ai_says"):          # sync the "what AI sees" narrative too
+                    prov.ai_says = _canon["ai_says"]
                 _adopted = True
             elif prov.ai_visibility_score is not None:
                 _code, _band = scoring.grade_from_score(prov.ai_visibility_score)
                 _put_es(prov.name, _loc, prov.ai_visibility_score,
                         prov.tier_scores.as_dict(), overall_rating=_code,
                         band_label=_band, ai_says=getattr(prov, "ai_says", "") or "",
-                        source=_es_src, run_id=run_id, overwrite=override_today_lock)
+                        source=_es_src, run_id=run_id, overwrite=override_today_lock,
+                        weighting_profile=getattr(prov, "weighting_profile", None) or run_profile)
         if _adopted:
             rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))
             for _i, prov in enumerate(rankings, start=1):

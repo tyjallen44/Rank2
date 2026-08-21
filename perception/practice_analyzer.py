@@ -795,18 +795,23 @@ def analyze_practice(
         _anchor = rankings[0]
         _loc = f"{city}, {state}"
         _canon = None if override_today_lock else _get_es(_anchor.name, _loc, days=30)
-        if _canon and _canon.get("pulse_score") is not None:
+        _cf = "practice" if (_canon or {}).get("weighting_profile", "").startswith("practice_") else "hospital"
+        # Only adopt a canonical computed under the practice rubric (same-rubric).
+        if _canon and _canon.get("pulse_score") is not None and _cf == "practice":
             _anchor.ai_visibility_score = _canon["pulse_score"]
             for _k, _v in (_canon.get("tier_scores") or {}).items():
                 if hasattr(_anchor.tier_scores, _k):
                     setattr(_anchor.tier_scores, _k, _v)
             _anchor.overall_rating, _ = scoring.grade_from_score(_anchor.ai_visibility_score)
+            if _canon.get("ai_says"):
+                _anchor.ai_says = _canon["ai_says"]
         elif _anchor.ai_visibility_score is not None:
             _code, _band = scoring.grade_from_score(_anchor.ai_visibility_score)
             _put_es(_anchor.name, _loc, _anchor.ai_visibility_score,
                     _anchor.tier_scores.as_dict(), overall_rating=_code,
                     band_label=_band, ai_says=getattr(_anchor, "ai_says", "") or "",
-                    source="deep_diagnostic", run_id=run_id, overwrite=override_today_lock)
+                    source="deep_diagnostic", run_id=run_id, overwrite=override_today_lock,
+                    weighting_profile=getattr(_anchor, "weighting_profile", None) or run_profile)
 
     disclaimer = _FULL_DISCLAIMER   # always hardcoded; LLM-generated disclaimer field ignored
 

@@ -4005,6 +4005,9 @@ function selectPpTarget(idx) {
         _ppTargetConfirmed = brand;
         _ppServiceLine = { service_line: d.service_line, parent_system: d.parent_system };
         const t = document.getElementById('pp-target'); if (t) t.value = brand;
+        // A service line is scored on the practice rubric — switch the market to
+        // Specialty Practice so it ranks (and labels) on the same rubric.
+        if (_ppType !== 'specialty') setPpType('specialty');
         const spec = document.getElementById('pp-specialty');
         if (spec && !spec.value.trim()) spec.value = d.service_line;
       }
