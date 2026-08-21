@@ -3907,9 +3907,11 @@ function setPpFormat(m) {
 let _ppTargetCandidates = [];
 let _ppTargetConfirmed  = null;   // confirmed target entity name (required to run)
 let _ppResolvedCity = null, _ppResolvedState = null;  // from target resolution, for service-line detection
+let _ppServiceLine = null;   // {service_line, parent_system} when the target is a hospital service line
 
 function clearPpTargetConfirm() {
   _ppTargetConfirmed = null;
+  _ppServiceLine = null;
   const d = document.getElementById('pp-target-confirmed');
   if (d) d.classList.add('hidden');
 }
@@ -3980,8 +3982,10 @@ function selectPpTarget(idx) {
   _ppTargetConfirmed = sel.name;
   document.getElementById('pp-target').value = sel.name;
 
-  // If the target is a hospital service line, adopt its patient-facing brand and
-  // auto-fill the specialty so the market ranks that service line's field.
+  // If the target is a hospital service line, adopt its patient-facing brand,
+  // auto-fill the specialty, and remember it so the run scores the subject as its
+  // exact service-line aggregate.
+  _ppServiceLine = null;
   if (_ppType === 'specialty') {
     api('/api/practice/detect-service-line', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3994,6 +3998,7 @@ function selectPpTarget(idx) {
       if (d.is_service_line && d.parent_system && d.service_line) {
         const brand = d.service_line_brand || `${d.parent_system} ${d.service_line}`;
         _ppTargetConfirmed = brand;
+        _ppServiceLine = { service_line: d.service_line, parent_system: d.parent_system };
         const t = document.getElementById('pp-target'); if (t) t.value = brand;
         const spec = document.getElementById('pp-specialty');
         if (spec && !spec.value.trim()) spec.value = d.service_line;
@@ -4042,7 +4047,10 @@ async function runPatient() {
   // Admin "Refresh data" bypasses both the same-day lock and the 30-day cache
   // (override_today_lock is admin-gated server-side).
   const _refresh = document.getElementById('pp-force-rerun')?.checked || false;
+  const _sl = (_ppFormat === 'enticement') ? _ppServiceLine : null;
   const _simplFields = {simplified_patient, obscure_competitors, target_entity,
+                        service_line:  _sl ? _sl.service_line  : undefined,
+                        parent_system: _sl ? _sl.parent_system : undefined,
                         override_today_lock: _refresh, force_rerun: _refresh};
   let body, label;
 

@@ -319,6 +319,8 @@ def _job_run_single(
             briefing_variant=job.get("briefing_variant"),
             entity_type=entity_type,
             report_title=job.get("report_title"),
+            service_line=job.get("service_line"),
+            parent_system=job.get("parent_system"),
         )
         _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"])
@@ -610,6 +612,8 @@ class AnalyzeRequest(BaseModel):
     simplified_patient: bool = False            # Simplified Patient Pulse (compact 2-block cards)
     obscure_competitors: bool = True            # True=Enticement (obscure non-targets); False=Market Summary (all clear)
     target_entity: Optional[str] = None         # prospect/target entity name (enticement mode)
+    service_line: Optional[str] = None          # enticement target is a hospital service line
+    parent_system: Optional[str] = None
     entity_name: Optional[str] = None
     report_title: Optional[str] = None          # display override for PDF title
     org_name: Optional[str] = None              # parent org brand name; drives prompt subject in org mode
@@ -690,6 +694,8 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["simplified_patient"] = req.simplified_patient
     _jobs[job_id]["obscure_competitors"] = req.obscure_competitors
     _jobs[job_id]["target_entity"] = _normalize_input(req.target_entity) if req.target_entity else None
+    _jobs[job_id]["service_line"] = req.service_line
+    _jobs[job_id]["parent_system"] = req.parent_system
     _jobs[job_id]["entity_name"] = entity_name
     _jobs[job_id]["individual_report"] = req.individual_report
     _jobs[job_id]["skip_pdf"] = req.skip_pdf

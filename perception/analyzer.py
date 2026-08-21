@@ -574,14 +574,29 @@ def _build_absent_target_provider(name: str):
     )
 
 
-def _ensure_target_present(result, target_entity: str) -> None:
+def _ensure_target_present(result, target_entity: str, subject: dict | None = None) -> None:
     """Mark the target in the ranked set; if the analysis still omitted it, append
-    a guaranteed low-visibility target card. Idempotent."""
-    if any(getattr(p, "is_target", False) for p in result.rankings):
-        return
-    _mark_simplified_target(result.rankings, target_entity)
-    if not any(p.is_target for p in result.rankings):
-        result.rankings.append(_build_absent_target_provider(target_entity))
+    a guaranteed low-visibility target card. Idempotent.
+
+    When `subject` (a precomputed aggregate: {ai_visibility_score, tier_scores,
+    ai_says}) is provided — e.g. a hospital service line scored on its own clinic
+    roster — the target's score/tiers are forced to that exact aggregate so the
+    ranking shows the real number rather than the market's incidental read."""
+    if not any(getattr(p, "is_target", False) for p in result.rankings):
+        _mark_simplified_target(result.rankings, target_entity)
+        if not any(p.is_target for p in result.rankings):
+            result.rankings.append(_build_absent_target_provider(target_entity))
+    if subject and subject.get("ai_visibility_score") is not None:
+        for p in result.rankings:
+            if getattr(p, "is_target", False):
+                p.ai_visibility_score = subject["ai_visibility_score"]
+                for _k, _v in (subject.get("tier_scores") or {}).items():
+                    if hasattr(p.tier_scores, _k):
+                        setattr(p.tier_scores, _k, _v)
+                p.overall_rating, _ = scoring.grade_from_score(p.ai_visibility_score)
+                if subject.get("ai_says"):
+                    p.ai_says = subject["ai_says"]
+                break
 
 
 def _apply_format(result, *, simplified, obscure_competitors, target_entity,
@@ -667,6 +682,8 @@ def analyze_location(
     override_today_lock: bool = False,
     entity_type: str | None = None,
     report_title: str | None = None,
+    service_line: str | None = None,     # Competitors Rankings: target is a hospital service line
+    parent_system: str | None = None,
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -1070,12 +1087,39 @@ def analyze_location(
     # full and obscures every competitor.  Best-effort name match against the
     # ranked market set (exact first, then substring either direction).
     if simplified and obscure_competitors and target_entity:
+        # If the target is a hospital service line, compute its EXACT aggregate on
+        # the practice rubric (its own scoped clinic roster) so the ranking shows
+        # the real number, not the market's incidental read of one clinic.
+        _subject_agg = None
+        if service_line and parent_system:
+            try:
+                from .practice_analyzer import analyze_practice as _ap
+                emit({"type": "phase", "name": "subject",
+                      "text": f"Scoring {target_entity} as a {service_line} service line"})
+                _subj = _ap(entity_name=target_entity, city=city, state=state,
+                            specialty=specialty, aggregate=True,
+                            service_line=service_line, parent_system=parent_system,
+                            skip_pdf=True, on_event=emit, brand=brand,
+                            force_rerun=force_rerun, override_today_lock=override_today_lock)
+                _sp = _subj.rankings[0] if _subj.rankings else None
+                if _sp and _sp.ai_visibility_score is not None:
+                    _subject_agg = {
+                        "ai_visibility_score": _sp.ai_visibility_score,
+                        "tier_scores": _sp.tier_scores.as_dict() if hasattr(_sp.tier_scores, "as_dict") else {},
+                        "ai_says": getattr(_sp, "ai_says", "") or "",
+                    }
+            except Exception as _exc:
+                emit({"type": "text", "text": f"Service-line subject scoring failed: {_exc}"})
         _n_before = len(result.rankings)
-        _ensure_target_present(result, target_entity)
+        _ensure_target_present(result, target_entity, subject=_subject_agg)
         if len(result.rankings) > _n_before:
             emit({"type": "phase", "name": "target_injected",
                   "text": f"'{target_entity}' did not surface in AI market answers; "
                           "included as a minimal-visibility entity."})
+        if _subject_agg:
+            result.rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))
+            for _i, _p in enumerate(result.rankings, start=1):
+                _p.rank = _i
 
     # ── Practice Composite reputation collection (before PDF so table is included) ──
     if practice_composite and individual_report and entity_name:
