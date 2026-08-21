@@ -654,6 +654,10 @@ class CompareRequest(BaseModel):
     practice_composite_b: bool = False
     practice_roster_a: List[dict] = []
     practice_roster_b: List[dict] = []
+    service_line_a: Optional[str] = None    # analyze this side as a hospital service line
+    parent_system_a: Optional[str] = None
+    service_line_b: Optional[str] = None
+    parent_system_b: Optional[str] = None
     force_rerun_a: bool = False
     force_rerun_b: bool = False
     override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
@@ -754,6 +758,10 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
             practice_composite_b=req_dict.get("practice_composite_b", False),
             practice_roster_a=req_dict.get("practice_roster_a") or [],
             practice_roster_b=req_dict.get("practice_roster_b") or [],
+            service_line_a=req_dict.get("service_line_a"),
+            parent_system_a=req_dict.get("parent_system_a"),
+            service_line_b=req_dict.get("service_line_b"),
+            parent_system_b=req_dict.get("parent_system_b"),
             force_rerun_a=req_dict.get("force_rerun_a", False),
             force_rerun_b=req_dict.get("force_rerun_b", False),
             override_today_lock=req_dict.get("override_today_lock", False),
@@ -2449,17 +2457,31 @@ def _run_event_job(
                         ), resolved_name, base_wait=base_wait)
                     elif entity_type == "practice":
                         from perception.practice_analyzer import analyze_practice
-                        result = _analyze_with_retry(analyze_practice, dict(
+                        # Auto-detect (no confirm — batch) whether this attendee is a
+                        # hospital service line; if so, aggregate that service line.
+                        _sl = {}
+                        try:
+                            from perception.practice_discovery import detect_service_line
+                            _sl = detect_service_line(resolved_name, city, state)
+                        except Exception:
+                            _sl = {}
+                        _pkwargs = dict(
                             entity_name=resolved_name,
                             city=city, state=state,
                             aggregate=True,
-                            confirmed_siblings=[],
                             output_dir=event_dir,
                             on_event=lambda _e: None,
                             brand=brand,
                             force_rerun=override_cache,
                             override_today_lock=override_cache,
-                        ), resolved_name, base_wait=base_wait)
+                        )
+                        if _sl.get("is_service_line"):
+                            _pkwargs["service_line"]  = _sl["service_line"]
+                            _pkwargs["parent_system"] = _sl["parent_system"]
+                        else:
+                            _pkwargs["confirmed_siblings"] = []   # single-location, unchanged
+                        result = _analyze_with_retry(analyze_practice, _pkwargs,
+                                                     resolved_name, base_wait=base_wait)
                     else:
                         from perception.analyzer import analyze_location
                         result = _analyze_with_retry(analyze_location, dict(

@@ -1427,6 +1427,10 @@ def compare_locations(
     practice_composite_b: bool = False,
     practice_roster_a: list[dict] | None = None,
     practice_roster_b: list[dict] | None = None,
+    service_line_a: str | None = None,
+    parent_system_a: str | None = None,
+    service_line_b: str | None = None,
+    parent_system_b: str | None = None,
     force_rerun_a: bool = False,
     force_rerun_b: bool = False,
     override_today_lock: bool = False,
@@ -1479,6 +1483,7 @@ def compare_locations(
                 specialty=specialty_a, aggregate=aggregate_a,
                 practice_profile=practice_profile_a, skip_pdf=True,
                 output_dir=output_dir, on_event=on_event, brand=brand,
+                service_line=service_line_a, parent_system=parent_system_a,
             )
         else:
             result_a = analyze_location(
@@ -1504,6 +1509,7 @@ def compare_locations(
                 specialty=specialty_b, aggregate=aggregate_b,
                 practice_profile=practice_profile_b, skip_pdf=True,
                 output_dir=output_dir, on_event=on_event, brand=brand,
+                service_line=service_line_b, parent_system=parent_system_b,
             )
         else:
             result_b = analyze_location(

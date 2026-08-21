@@ -1771,6 +1771,10 @@ html, body {
       <div id="cmp-a-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Entity A Selected</div>
         <div id="cmp-a-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
+        <label class="aggregate-toggle hidden" id="cmp-a-sl-wrap" style="margin-bottom:12px;border-color:var(--teal)">
+          <input type="checkbox" id="cmp-a-sl-toggle" checked>
+          <span class="agg-label" id="cmp-a-sl-label"></span>
+        </label>
         <div id="cmp-a-hosp-opts">
           <label class="aggregate-toggle">
             <input type="checkbox" id="cmp-a-agg" checked>
@@ -1833,6 +1837,10 @@ html, body {
         <div id="cmp-b-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Entity B Selected</div>
           <div id="cmp-b-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
+          <label class="aggregate-toggle hidden" id="cmp-b-sl-wrap" style="margin-bottom:12px;border-color:var(--teal)">
+            <input type="checkbox" id="cmp-b-sl-toggle" checked>
+            <span class="agg-label" id="cmp-b-sl-label"></span>
+          </label>
           <div id="cmp-b-hosp-opts">
             <label class="aggregate-toggle">
               <input type="checkbox" id="cmp-b-agg" checked>
@@ -3898,6 +3906,7 @@ function setPpFormat(m) {
 // ── Simplified Patient Pulse: resolve & confirm the target/prospect ──────────
 let _ppTargetCandidates = [];
 let _ppTargetConfirmed  = null;   // confirmed target entity name (required to run)
+let _ppResolvedCity = null, _ppResolvedState = null;  // from target resolution, for service-line detection
 
 function clearPpTargetConfirm() {
   _ppTargetConfirmed = null;
@@ -3934,6 +3943,8 @@ async function resolvePpTarget() {
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Search failed'));
     const data = await r.json();
+    _ppResolvedCity  = data.city || '';
+    _ppResolvedState = data.state || '';
     _ppTargetCandidates = data.candidates || [];
     renderPpTargetCandidates(name);
   } catch(e) { showErr(errEl, e.message); }
@@ -3968,6 +3979,27 @@ function selectPpTarget(idx) {
   const sel = idx === -1 ? { name: enteredName } : (_ppTargetCandidates[idx] || { name: enteredName });
   _ppTargetConfirmed = sel.name;
   document.getElementById('pp-target').value = sel.name;
+
+  // If the target is a hospital service line, adopt its patient-facing brand and
+  // auto-fill the specialty so the market ranks that service line's field.
+  if (_ppType === 'specialty') {
+    api('/api/practice/detect-service-line', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entity_name: sel.name,
+        city:  _ppResolvedCity  || document.getElementById('pp-city').value.trim(),
+        state: _ppResolvedState || document.getElementById('pp-state').value.trim().toUpperCase(),
+      }),
+    }).then(r => r.json()).then(d => {
+      if (d.is_service_line && d.parent_system && d.service_line) {
+        const brand = d.service_line_brand || `${d.parent_system} ${d.service_line}`;
+        _ppTargetConfirmed = brand;
+        const t = document.getElementById('pp-target'); if (t) t.value = brand;
+        const spec = document.getElementById('pp-specialty');
+        if (spec && !spec.value.trim()) spec.value = d.service_line;
+      }
+    }).catch(() => {});
+  }
 
   _ppTargetCandidates.forEach((_, i) => {
     const el = document.getElementById(`pp-tcand-${i}`);
@@ -4658,7 +4690,9 @@ function selectCmpCandidate(side, idx) {
   document.getElementById(`cmp-${side}-step2`).classList.add('hidden');
   document.getElementById(`cmp-${side}-step3`).classList.remove('hidden');
 
-  // Auto-classify practice profile when it's a specialty entity
+  // Auto-classify practice profile + detect service line when it's a specialty entity
+  _cmp[side].serviceLine = null;
+  document.getElementById(`cmp-${side}-sl-wrap`).classList.add('hidden');
   if (_cmp[side].type === 'specialty') {
     const spec = document.getElementById(`cmp-${side}-specialty`).value.trim();
     api('/api/practice/classify', {
@@ -4668,6 +4702,23 @@ function selectCmpCandidate(side, idx) {
     }).then(r => r.json())
       .then(d => { _cmp[side].practiceProfile = d.profile || 'practice_procedural'; })
       .catch(() => { _cmp[side].practiceProfile = 'practice_procedural'; });
+    api('/api/practice/detect-service-line', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_name: s.name, city: _cmp[side].city, state: _cmp[side].state }),
+    }).then(r => r.json())
+      .then(d => {
+        if (d.is_service_line && d.parent_system && d.service_line) {
+          _cmp[side].serviceLine = {
+            parent_system: d.parent_system, service_line: d.service_line,
+            service_line_brand: d.service_line_brand || `${d.parent_system} ${d.service_line}`,
+          };
+          document.getElementById(`cmp-${side}-sl-label`).textContent =
+            `Analyze the ${d.service_line} service line of ${d.parent_system} as one aggregated entity`;
+          document.getElementById(`cmp-${side}-sl-toggle`).checked = true;
+          document.getElementById(`cmp-${side}-sl-wrap`).classList.remove('hidden');
+        }
+      }).catch(() => {});
   }
 
   if (side === 'a') {
@@ -4728,17 +4779,24 @@ async function runComparison() {
 
   const pcA = document.getElementById('cmp-a-practice-composite')?.checked;
   const pcB = document.getElementById('cmp-b-practice-composite')?.checked;
+  // Service-line sides (confirmed via the inline toggle) aggregate that service line.
+  const slA = (_cmp.a.serviceLine && document.getElementById('cmp-a-sl-toggle')?.checked) ? _cmp.a.serviceLine : null;
+  const slB = (_cmp.b.serviceLine && document.getElementById('cmp-b-sl-toggle')?.checked) ? _cmp.b.serviceLine : null;
   const body = {
     entity_a_name:    _cmp.a.selected.name,
     city_a:           _cmp.a.city,
     state_a:          _cmp.a.state,
     specialty_a:      specA,
-    aggregate_a:      document.getElementById('cmp-a-agg').checked,
+    aggregate_a:      slA ? true : document.getElementById('cmp-a-agg').checked,
+    service_line_a:   slA ? slA.service_line  : undefined,
+    parent_system_a:  slA ? slA.parent_system : undefined,
     entity_b_name:    _cmp.b.selected.name,
     city_b:           _cmp.b.city,
     state_b:          _cmp.b.state,
     specialty_b:      specB,
-    aggregate_b:      document.getElementById('cmp-b-agg').checked,
+    aggregate_b:      slB ? true : document.getElementById('cmp-b-agg').checked,
+    service_line_b:   slB ? slB.service_line  : undefined,
+    parent_system_b:  slB ? slB.parent_system : undefined,
     teaser_report:    document.getElementById('cmp-teaser').checked,
     entity_type_a:    _cmp.a.type === 'specialty' ? 'practice' : null,
     entity_type_b:    _cmp.b.type === 'specialty' ? 'practice' : null,

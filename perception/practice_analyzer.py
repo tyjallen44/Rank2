@@ -573,6 +573,8 @@ def analyze_practice(
     report_title: Optional[str] = None,
     confirmed_siblings: Optional[list] = None,
     org_name: Optional[str] = None,
+    service_line: Optional[str] = None,          # e.g. "Orthopedics" — scope aggregation to a hospital service line
+    parent_system: Optional[str] = None,         # e.g. "Duke Health" — the system that operates the service line
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -658,6 +660,21 @@ def analyze_practice(
             else:
                 emit({"type": "phase", "name": "discovery",
                       "text": f"Single-location run for {entity_name}"})
+        elif service_line and parent_system:
+            # Scope aggregation to a hospital service line (e.g. Duke Health's
+            # orthopedic clinics only) — used by Compare Two / Event Preparation
+            # where there is no roster-confirm UI.
+            from .practice_discovery import discover_service_line_siblings as _disc_sl
+            emit({"type": "phase", "name": "discovery",
+                  "text": f"Discovering {service_line} locations for {parent_system}"})
+            _siblings, _sl_brand = _disc_sl(
+                entity_name, parent_system, service_line, city, state,
+                on_event=emit, force_rerun=force_rerun,
+            )
+            if _siblings:
+                _location_roster = [entity_name] + [s["name"] for s in _siblings]
+            if not org_name and _sl_brand:
+                org_name = _sl_brand
         else:
             from .practice_discovery import discover_practice_siblings as _disc_siblings
             emit({"type": "phase", "name": "discovery", "text": f"Discovering {entity_name} locations"})
