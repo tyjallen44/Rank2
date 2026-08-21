@@ -2173,6 +2173,26 @@ class PracticeDiscoverRequest(BaseModel):
     entity_name: str
     city: str
     state: str
+    service_line: Optional[str] = None   # set → scope sibling discovery to this service line
+    parent_system: Optional[str] = None  # the larger hospital/health system that operates it
+
+
+@app.post("/api/practice/detect-service-line")
+async def practice_detect_service_line(
+    req: PracticeDiscoverRequest,
+    _: str = Depends(require_auth),
+):
+    """Detect whether a selected listing is a specialty department / service line
+    of a larger hospital or academic health system."""
+    try:
+        from perception.db import init_db
+        from perception.practice_discovery import detect_service_line
+        init_db()
+        city  = _normalize_input(req.city)
+        state = req.state.strip().upper()
+        return detect_service_line(req.entity_name, city, state)
+    except Exception as exc:
+        raise HTTPException(500, f"Service-line detection error: {exc}")
 
 
 @app.post("/api/practice/discover")
@@ -2198,13 +2218,20 @@ async def practice_siblings(
     req: PracticeDiscoverRequest,
     _: str = Depends(require_auth),
 ):
-    """Discover sibling locations of a specialty practice for the initiation-screen roster step."""
+    """Discover sibling locations for the initiation-screen roster step. When
+    service_line + parent_system are provided, scope discovery to that service
+    line only (e.g. Duke Health's orthopedic clinics)."""
     try:
         from perception.db import init_db
-        from perception.practice_discovery import discover_practice_siblings
         init_db()
         city  = _normalize_input(req.city)
         state = req.state.strip().upper()
+        if req.service_line and req.parent_system:
+            from perception.practice_discovery import discover_service_line_siblings
+            siblings, brand = discover_service_line_siblings(
+                req.entity_name, req.parent_system, req.service_line, city, state)
+            return {"siblings": siblings, "parent_org_name": brand, "count": len(siblings)}
+        from perception.practice_discovery import discover_practice_siblings
         siblings, parent_org_name = discover_practice_siblings(req.entity_name, city, state)
         return {"siblings": siblings, "parent_org_name": parent_org_name, "count": len(siblings)}
     except Exception as exc:

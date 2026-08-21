@@ -1427,6 +1427,23 @@ html, body {
         </div>
       </div>
 
+      <!-- Step 2b-2: Service-line detection (department within a larger hospital system) -->
+      <div id="ir-step-sl" class="card hidden mt16" style="background:var(--bg);border-color:var(--teal)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Service Line Detected</div>
+        <div style="font-size:14px;color:var(--text);margin-bottom:6px">
+          This looks like the <strong id="ir-sl-line" style="color:var(--teal)"></strong> service line of
+          <strong id="ir-sl-parent" style="color:var(--teal)"></strong>.
+        </div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          Analyze <strong id="ir-sl-brand"></strong> as one aggregated entity — all of its
+          <span id="ir-sl-line2"></span> clinics rolled together — and compare it against nearby groups on the practice rubric?
+        </div>
+        <div class="row-actions">
+          <button class="btn btn-primary" onclick="irUseServiceLine()">Analyze as service line →</button>
+          <button class="btn btn-ghost btn-sm" onclick="irSkipServiceLine()">No, use as entered</button>
+        </div>
+      </div>
+
       <!-- Step 2c: Organization Location Discovery (specialty practice only) -->
       <div id="ir-step2c" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:12px">Organization Coverage</div>
@@ -4037,6 +4054,7 @@ let _irReportTitle         = null;
 let _irDiscoveredSiblings  = [];
 let _irConfirmedSiblings   = [];
 let _irOrgName             = null;  // parent org brand name from discovery
+let _irServiceLine         = null;  // {parent_system, service_line, service_line_brand} when analyzing a hospital service line
 let _irResolvedCity        = null;
 let _irResolvedState  = null;
 let _irPracticeProfile = null;
@@ -4247,11 +4265,65 @@ function onIrTitleInput(val) {
 function irConfirmProfile() {
   _irPracticeProfile = document.getElementById('ir-profile-select').value;
   document.getElementById('ir-step2b').classList.add('hidden');
+  irDetectServiceLine();
+}
+
+// Detect whether the selected listing is a department/service line of a larger
+// hospital system (e.g. Duke Orthopaedics within Duke Health). If so, offer to
+// analyze the whole service line as one aggregated entity.
+async function irDetectServiceLine() {
+  _irServiceLine = null;
+  try {
+    const r = await api('/api/practice/detect-service-line', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entity_name: _irSelected.name,
+        city: _irResolvedCity,
+        state: _irResolvedState,
+      }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.is_service_line && d.parent_system && d.service_line) {
+        _pendingServiceLine = {
+          parent_system: d.parent_system,
+          service_line: d.service_line,
+          service_line_brand: d.service_line_brand || `${d.parent_system} ${d.service_line}`,
+        };
+        document.getElementById('ir-sl-line').textContent   = d.service_line;
+        document.getElementById('ir-sl-line2').textContent  = d.service_line.toLowerCase();
+        document.getElementById('ir-sl-parent').textContent = d.parent_system;
+        document.getElementById('ir-sl-brand').textContent  = _pendingServiceLine.service_line_brand;
+        const card = document.getElementById('ir-step-sl');
+        card.classList.remove('hidden');
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+    }
+  } catch(e) { /* fall through to normal discovery */ }
+  irStartDiscovery();
+}
+
+let _pendingServiceLine = null;
+
+function irUseServiceLine() {
+  _irServiceLine = _pendingServiceLine;
+  _irOrgName = _irServiceLine.service_line_brand;
+  document.getElementById('ir-step-sl').classList.add('hidden');
+  irStartDiscovery();
+}
+
+function irSkipServiceLine() {
+  _irServiceLine = null;
+  document.getElementById('ir-step-sl').classList.add('hidden');
   irStartDiscovery();
 }
 
 async function irStartDiscovery() {
-  const orgName = document.getElementById('ir-name').value.trim();
+  const orgName = _irServiceLine
+    ? _irServiceLine.service_line_brand
+    : document.getElementById('ir-name').value.trim();
   document.getElementById('ir-siblings-org-name').textContent = orgName;
   document.getElementById('ir-siblings-loading').classList.remove('hidden');
   document.getElementById('ir-siblings-content').classList.add('hidden');
@@ -4270,12 +4342,14 @@ async function irStartDiscovery() {
         entity_name: _irSelected.name,
         city: _irResolvedCity,
         state: _irResolvedState,
+        service_line:  _irServiceLine ? _irServiceLine.service_line  : undefined,
+        parent_system: _irServiceLine ? _irServiceLine.parent_system : undefined,
       }),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Location discovery failed'));
     const data = await r.json();
     _irDiscoveredSiblings = data.siblings || [];
-    // Prefer the AI-identified parent org name; fall back to what the user typed
+    // Prefer the AI-identified parent org / service-line brand; fall back to typed name
     _irOrgName = (data.parent_org_name || '').trim() || orgName;
     renderIrSiblings(_irDiscoveredSiblings);
   } catch(e) {
@@ -4473,9 +4547,11 @@ function irResetSearch() {
   _irDiscoveredSiblings = [];
   _irConfirmedSiblings = [];
   _irOrgName = null;
+  _irServiceLine = null;
+  _pendingServiceLine = null;
   _fqhcIntake = {};
   _fqhcSiteRoster = [];
-  ['ir-step2','ir-step2b','ir-step2c','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake'].forEach(id => {
+  ['ir-step2','ir-step2b','ir-step-sl','ir-step2c','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake'].forEach(id => {
     document.getElementById(id).classList.add('hidden');
   });
   document.getElementById('ir-search-err').classList.add('hidden');
