@@ -850,44 +850,4 @@ def _methodology_appendix(primary: str, pale: str, ftype_cfg: dict | None = None
     return _methodology_box_html(
         ["Outcomes &amp; Safety", "Credentials &amp; Recognition",
          "Experience &amp; Reviews", "Access &amp; Fit"])
-    ftype_cfg = ftype_cfg or {}
-    plural    = ftype_cfg.get("plural", "hospitals")
-    local_q   = ftype_cfg.get("local_query", "[city] hospital")
-    quality_note = ftype_cfg.get("methodology_quality", "Google Rating — verified via Google Places API.")
-    return f"""
-<div class="appendix">
-<h3>Methodology — Pulse AI Visibility Scoring</h3>
-<p>
-  The Pulse Score is a 0–100 measure of how visible and favorable a system is when patients and
-  referring professionals ask AI assistants (ChatGPT, Claude, Gemini) where to get care. It is a
-  weighted blend of four pillars, and is the <strong>same score this system receives in the Hospital
-  Market report</strong> — a system reads an identical score in both reports.
-</p>
-<table>
-  <thead><tr><th>Pillar</th><th>What it measures</th></tr></thead>
-  <tbody>
-    <tr>
-      <td><strong>Outcomes &amp; Safety</strong></td>
-      <td>Clinical quality, safety, and reputation (e.g. CMS Overall Hospital Quality Star Rating).</td>
-    </tr>
-    <tr>
-      <td><strong>Credentials &amp; Recognition</strong></td>
-      <td>Accreditations, awards, national rankings, and affiliations.</td>
-    </tr>
-    <tr>
-      <td><strong>Experience &amp; Reviews</strong></td>
-      <td>Patient sentiment and verified review volume and ratings.</td>
-    </tr>
-    <tr>
-      <td><strong>Access &amp; Fit</strong></td>
-      <td>Location, availability, and how well the system matches what patients ask for.</td>
-    </tr>
-  </tbody>
-</table>
-<p style="margin-top:8px">
-  National quartiles (calibrated against scored entities in the Rank2 database):
-  Q1 Top Quartile (&#8805;75) · Q2 Upper Middle (68–74) · Q3 Lower Middle (58–67) · Q4 Bottom Quartile (&lt;58).
-  The facility detail table lists each of the network's {plural} for reference and is not separately scored.
-  <strong>External signals:</strong> {quality_note}
-</p>
-</div>"""
+

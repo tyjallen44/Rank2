@@ -849,28 +849,6 @@ def _appendix_block(primary: str, pale: str) -> str:
         ["Access &amp; Findability", "Eligibility &amp; Cost Accuracy",
          "Site &amp; Service Completeness", "Experience &amp; Reputation",
          "Institutional Signals"], n_label="five pillars")
-    rubric_rows = [
-        ("Pillar 1", "Access & Findability", "25", "MQCR 12 + Multilingual 8 + Service-Adjacent 5"),
-        ("Pillar 2", "Eligibility & Cost Accuracy", "25", "Fact-audit: sliding fee 5, NTAFA 4, insurance 5, free-clinic 4, new-patient 4, framing 3"),
-        ("Pillar 3", "Site & Service Completeness", "20", "Discoverability 7, service attribution 5, directory consistency 8"),
-        ("Pillar 4", "Experience & Reputation", "20", "Rating×volume 7, dispersion 4, third-party 3, recency 3, narrative framing 3"),
-        ("Pillar 5", "Institutional Signals", "10", "HRSA quality 3, UDS 3, NCQA PCMH 2, 330 status 2"),
-    ]
-    rows_html = "".join(
-        f"<tr><td><strong>{_e(p)}</strong></td><td>{_e(n)}</td><td style='text-align:center'>{_e(w)}</td><td style='font-size:8pt'>{_e(d)}</td></tr>"
-        for p, n, w, d in rubric_rows
-    )
-
-    return f"""
-<div class="appendix">
-<h3>Appendix — Community Health Edition Prompt Battery &amp; Scoring Rubric v1.0</h3>
-<p style="font-size:8.5pt;margin:8px 0">The AI Visibility Score is computed deterministically from the pillar sub-scores above. The Mission Query Capture Rate (MQCR) is the fraction of logged mission-frame battery runs where this organization or a correct site surfaced — it is never narrated or estimated. All scores are 0–100; composite = weighted average of scored sub-pillars (minimum 50% weight required to render).</p>
-<table>
-  <thead><tr><th>Pillar</th><th>Name</th><th style="text-align:center">Max Pts</th><th>Sub-components</th></tr></thead>
-  <tbody>{rows_html}</tbody>
-</table>
-<p style="font-size:8pt;margin-top:10px;color:#4a6a70">Battery categories: A (Baseline entity knowledge), M (Mission-frame discovery — feeds MQCR), EL (Eligibility &amp; cost verification — feeds Pillar 2 audit), ML (Multilingual subset), SV (Service/site specific), CMP (Alternatives framing, 3 intents), ADV (Adverse probing), S (Stakeholder perception — reported unscored in v1).</p>
-</div>"""
 
 
 def _disclaimer_block(result: AnalysisResult, primary: str) -> str:
