@@ -358,6 +358,7 @@ def init_db() -> None:
     con.execute("""
         CREATE TABLE IF NOT EXISTS learn_articles (
             id           VARCHAR PRIMARY KEY,
+            page         VARCHAR NOT NULL DEFAULT 'learn',
             category     VARCHAR NOT NULL DEFAULT '',
             title        VARCHAR NOT NULL,
             body         TEXT NOT NULL DEFAULT '',
@@ -367,6 +368,11 @@ def init_db() -> None:
             updated_at   TIMESTAMP NOT NULL
         )
     """)
+    _learn_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='learn_articles'"
+    ).fetchall()}
+    if "page" not in _learn_cols:
+        con.execute("ALTER TABLE learn_articles ADD COLUMN page VARCHAR DEFAULT 'learn'")
     # ── Canonical entity score cache (shared by Market + Network reports) ─────
     # One four-pillar Pulse Score per (normalized entity, location, calendar day).
     # Whichever report evaluates an entity first seeds it; the other reads it, so
@@ -1109,7 +1115,7 @@ def update_feedback_action(feedback_id: str, action: str) -> None:
 # ── Learn / educational content ──────────────────────────────────────────────
 
 _LEARN_COLS = ["id", "category", "title", "body", "sort_order",
-               "is_published", "created_at", "updated_at"]
+               "is_published", "created_at", "updated_at", "page"]
 
 
 def _learn_row_to_dict(r) -> dict:
@@ -1117,19 +1123,22 @@ def _learn_row_to_dict(r) -> dict:
     d["is_published"] = bool(r[5])
     d["created_at"] = str(r[6])
     d["updated_at"] = str(r[7])
+    d["page"] = r[8] if len(r) > 8 and r[8] else "learn"
     return d
 
 
-def list_learn_articles(include_unpublished: bool = False) -> list[dict]:
-    """Return articles ordered for display. Public callers get published only."""
+def list_learn_articles(include_unpublished: bool = False,
+                        page: str = "learn") -> list[dict]:
+    """Return articles for a content page ('learn' or 'methodology'), ordered for
+    display. Public callers get published only."""
     con = get_connection()
-    where = "" if include_unpublished else "WHERE is_published = TRUE"
+    where = "WHERE page = ?" + ("" if include_unpublished else " AND is_published = TRUE")
     rows = con.execute(f"""
-        SELECT id, category, title, body, sort_order, is_published, created_at, updated_at
+        SELECT id, category, title, body, sort_order, is_published, created_at, updated_at, page
         FROM learn_articles
         {where}
         ORDER BY sort_order ASC, created_at ASC
-    """).fetchall()
+    """, [page]).fetchall()
     con.close()
     return [_learn_row_to_dict(r) for r in rows]
 
@@ -1137,7 +1146,7 @@ def list_learn_articles(include_unpublished: bool = False) -> list[dict]:
 def get_learn_article(article_id: str) -> Optional[dict]:
     con = get_connection()
     r = con.execute("""
-        SELECT id, category, title, body, sort_order, is_published, created_at, updated_at
+        SELECT id, category, title, body, sort_order, is_published, created_at, updated_at, page
         FROM learn_articles WHERE id = ?
     """, [article_id]).fetchone()
     con.close()
@@ -1145,18 +1154,19 @@ def get_learn_article(article_id: str) -> Optional[dict]:
 
 
 def create_learn_article(category: str, title: str, body: str,
-                         is_published: bool = True) -> dict:
+                         is_published: bool = True, page: str = "learn") -> dict:
     import uuid
     from datetime import datetime
     con = get_connection()
     aid = str(uuid.uuid4())
     now = datetime.utcnow()
-    row = con.execute("SELECT COALESCE(MAX(sort_order), 0) + 10 FROM learn_articles").fetchone()
+    row = con.execute("SELECT COALESCE(MAX(sort_order), 0) + 10 FROM learn_articles WHERE page = ?",
+                      [page]).fetchone()
     next_order = row[0] if row else 10
     con.execute(
-        "INSERT INTO learn_articles (id, category, title, body, sort_order, is_published, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [aid, category, title, body, next_order, is_published, now, now]
+        "INSERT INTO learn_articles (id, page, category, title, body, sort_order, is_published, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [aid, page, category, title, body, next_order, is_published, now, now]
     )
     con.close()
     return get_learn_article(aid)
@@ -1183,8 +1193,11 @@ def delete_learn_article(article_id: str) -> None:
 
 
 def move_learn_article(article_id: str, direction: str) -> None:
-    """Swap sort_order with the adjacent article in the global ordering."""
-    articles = list_learn_articles(include_unpublished=True)
+    """Swap sort_order with the adjacent article within the same content page."""
+    _cur = get_learn_article(article_id)
+    if _cur is None:
+        return
+    articles = list_learn_articles(include_unpublished=True, page=_cur.get("page", "learn"))
     idx = next((i for i, a in enumerate(articles) if a["id"] == article_id), None)
     if idx is None:
         return

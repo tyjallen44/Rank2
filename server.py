@@ -1795,6 +1795,7 @@ class LearnArticleRequest(BaseModel):
     title: Optional[str] = None
     body: Optional[str] = None
     is_published: Optional[bool] = None
+    page: str = "learn"          # "learn" | "methodology"
 
 
 class LearnMoveRequest(BaseModel):
@@ -1820,16 +1821,19 @@ def _learn_grouped(articles: list[dict]) -> list[tuple[str, list[dict]]]:
     return [(c, groups[c]) for c in order]
 
 
-def _render_learn_page(articles: list[dict]) -> str:
-    """Server-render the standalone, publicly-indexable /learn page."""
+def _render_learn_page(articles: list[dict], *, title: str = "Learn about Pulse — AI Visibility Intelligence",
+                       heading: str = "Learn about Pulse",
+                       lede: str = "What Pulse is, what its reports reveal, who they help, and how to get started.",
+                       desc: str = "Learn what Pulse is, what its AI-visibility reports show, who they help, and how to get started.",
+                       empty_msg: str = "Content is coming soon. Check back shortly.") -> str:
+    """Server-render a standalone, publicly-indexable content page (Learn / Methodology)."""
     from perception.learn import render_markdown
     grouped = _learn_grouped(articles)
 
     toc_html = ""
     body_html = ""
     if not articles:
-        body_html = ('<div class="empty">Content is coming soon. '
-                     'Check back shortly to learn about Pulse.</div>')
+        body_html = f'<div class="empty">{_esc_html(empty_msg)}</div>'
     else:
         for cat, arts in grouped:
             cat_anchor = "cat-" + re.sub(r"[^a-z0-9]+", "-", cat.lower()).strip("-")
@@ -1845,7 +1849,13 @@ def _render_learn_page(articles: list[dict]) -> str:
                     f'</article>'
                 )
 
-    return _LEARN_PAGE_TEMPLATE.replace("{{TOC}}", toc_html).replace("{{BODY}}", body_html)
+    return (_LEARN_PAGE_TEMPLATE
+            .replace("{{TITLE}}", _esc_html(title))
+            .replace("{{DESC}}", _esc_html(desc))
+            .replace("{{HEADING}}", _esc_html(heading))
+            .replace("{{LEDE}}", _esc_html(lede))
+            .replace("{{TOC}}", toc_html)
+            .replace("{{BODY}}", body_html))
 
 
 def _esc_html(s: str) -> str:
@@ -1858,8 +1868,8 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Learn about Pulse — AI Visibility Intelligence</title>
-<meta name="description" content="Learn what Pulse is, what its AI-visibility reports show, who they help, and how to get started.">
+<title>{{TITLE}}</title>
+<meta name="description" content="{{DESC}}">
 <style>
   :root { --teal:#0f766e; --teal-d:#0b5a54; --ink:#1b2733; --muted:#5b6b7a; --line:#e2e8ec; --bg:#f6f8f9; }
   * { box-sizing:border-box; }
@@ -1907,8 +1917,8 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
   <div class="wrap">
     <nav class="toc">{{TOC}}</nav>
     <main>
-      <h1 class="page">Learn about Pulse</h1>
-      <p class="lede">What Pulse is, what its reports reveal, who they help, and how to get started.</p>
+      <h1 class="page">{{HEADING}}</h1>
+      <p class="lede">{{LEDE}}</p>
       {{BODY}}
     </main>
   </div>
@@ -1923,10 +1933,29 @@ async def learn_public_page():
     from perception.db import init_db, list_learn_articles
     try:
         init_db()
-        articles = list_learn_articles(include_unpublished=False)
+        articles = list_learn_articles(include_unpublished=False, page="learn")
     except Exception:
         articles = []
     return HTMLResponse(_render_learn_page(articles))
+
+
+@app.get("/methodology", response_class=HTMLResponse)
+async def methodology_public_page():
+    """Public, unauthenticated methodology page linked from report appendices."""
+    from perception.db import init_db, list_learn_articles
+    try:
+        init_db()
+        articles = list_learn_articles(include_unpublished=False, page="methodology")
+    except Exception:
+        articles = []
+    return HTMLResponse(_render_learn_page(
+        articles,
+        title="Methodology — Pulse AI Visibility Intelligence",
+        heading="Pulse AI Visibility Methodology",
+        lede="How Pulse measures AI visibility — the pillars, scoring rubric, national quartiles, data sources, and prompt battery behind every report.",
+        desc="The full methodology behind Pulse AI Visibility reports: pillars, scoring, quartiles, data sources, and prompt battery.",
+        empty_msg="The full methodology is being published. Check back shortly.",
+    ))
 
 
 @app.get("/api/learn")
@@ -1935,16 +1964,16 @@ async def learn_public_api():
     from perception.db import init_db, list_learn_articles
     from perception.learn import render_markdown
     init_db()
-    arts = list_learn_articles(include_unpublished=False)
+    arts = list_learn_articles(include_unpublished=False, page="learn")
     return [{"id": a["id"], "category": a["category"], "title": a["title"],
              "html": render_markdown(a["body"])} for a in arts]
 
 
 @app.get("/api/admin/learn")
-async def learn_admin_list(_: dict = Depends(require_admin)):
+async def learn_admin_list(page: str = "learn", _: dict = Depends(require_admin)):
     from perception.db import init_db, list_learn_articles
     init_db()
-    return list_learn_articles(include_unpublished=True)
+    return list_learn_articles(include_unpublished=True, page=page)
 
 
 @app.post("/api/admin/learn")
@@ -1958,6 +1987,7 @@ async def learn_admin_create(req: LearnArticleRequest, _: dict = Depends(require
         title=req.title.strip(),
         body=req.body or "",
         is_published=True if req.is_published is None else req.is_published,
+        page=req.page or "learn",
     )
 
 
@@ -2004,20 +2034,22 @@ async def learn_admin_preview(req: LearnPreviewRequest, _: dict = Depends(requir
 
 
 @app.post("/api/admin/learn/seed")
-async def learn_admin_seed(_: dict = Depends(require_admin)):
-    """Insert the starter articles. Idempotent — skips any title that already exists."""
+async def learn_admin_seed(page: str = "learn", _: dict = Depends(require_admin)):
+    """Insert the starter articles for a page. Idempotent — skips existing titles."""
     from perception.db import init_db, list_learn_articles, create_learn_article
-    from perception.learn_seed import STARTER_ARTICLES
+    from perception.learn_seed import STARTER_ARTICLES, METHODOLOGY_ARTICLES
     init_db()
-    existing = {a["title"].strip().lower() for a in list_learn_articles(include_unpublished=True)}
+    arts = METHODOLOGY_ARTICLES if page == "methodology" else STARTER_ARTICLES
+    existing = {a["title"].strip().lower()
+                for a in list_learn_articles(include_unpublished=True, page=page)}
     added = 0
-    for art in STARTER_ARTICLES:
+    for art in arts:
         if art["title"].strip().lower() in existing:
             continue
         create_learn_article(category=art["category"], title=art["title"],
-                             body=art["body"], is_published=True)
+                             body=art["body"], is_published=True, page=page)
         added += 1
-    return {"added": added, "skipped": len(STARTER_ARTICLES) - added}
+    return {"added": added, "skipped": len(arts) - added}
 
 
 # ── Tracked Entities ──────────────────────────────────────────────────────────

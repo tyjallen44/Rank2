@@ -178,6 +178,31 @@ def _fmt_cached(gen) -> str:
         return ""
 
 
+_METHODOLOGY_URL = "careclimb.com/methodology"
+
+
+def _methodology_box_html(pillars: list[str], n_label: str = "four pillars") -> str:
+    """Compact methodology summary + link to the full public /methodology page —
+    replaces the former multi-page in-report appendix (details now live online)."""
+    T, S, BD, TXT, ALT = "#0F4146", "#177B6E", "#d0e4e8", "#3a5a60", "#f8fbfa"
+    pill = " &middot; ".join(pillars)
+    return (
+        f'<div style="page-break-inside:avoid;background:{ALT};border:1px solid {BD};'
+        f'border-radius:6px;padding:16px 20px;margin:22px 0;font-size:8.5pt;color:{TXT};line-height:1.55">'
+        f'<div style="font-size:9.5pt;font-weight:700;color:{T};margin-bottom:8px">Methodology &mdash; Pulse AI Visibility</div>'
+        f'<p style="margin:0 0 6px">The <strong>Pulse Score</strong> (0&ndash;100) measures how visibly and '
+        f'favorably an organization surfaces when patients and referrers ask AI assistants (ChatGPT, Claude, '
+        f'Gemini) where to get care &mdash; a market-perception measure, not a clinical-quality verdict. It is a '
+        f'weighted blend of {n_label}: {pill}.</p>'
+        f'<p style="margin:0 0 6px"><strong>National quartiles:</strong> 1st (&#8805;75) &middot; 2nd (68&ndash;74) '
+        f'&middot; 3rd (58&ndash;67) &middot; 4th (&lt;58). &nbsp;<strong>Sources:</strong> CMS Care Compare, Google, '
+        f'The Leapfrog Group, U.S. News, HRSA (Community Health).</p>'
+        f'<p style="margin:0">The complete scoring rubric, data sources, and prompt battery are published at '
+        f'<a href="https://{_METHODOLOGY_URL}" style="color:{S};font-weight:700;text-decoration:none">{_METHODOLOGY_URL}</a>.</p>'
+        f'</div>'
+    )
+
+
 _MD_BOLD     = re.compile(r'\*\*(.+?)\*\*', re.DOTALL)
 _MD_ITALIC   = re.compile(r'\*(.+?)\*|_(.+?)_', re.DOTALL)
 _MD_HEADER   = re.compile(r'^#{1,6}\s+', re.MULTILINE)
@@ -931,7 +956,11 @@ def _simplified_patient_section(providers: list[RankedProvider], title: str, sub
 
 
 def _appendix_html() -> str:
-    """Appendix A — AI Visibility Methodology: Prompt Battery & Scoring Rubric."""
+    """Appendix — compact methodology summary + link to the full /methodology page.
+    (The former multi-page prompt-battery/rubric detail now lives online.)"""
+    return _methodology_box_html(
+        ["Outcomes &amp; Safety", "Credentials &amp; Recognition",
+         "Experience &amp; Reviews", "Access &amp; Fit"])
     T   = "#0F4146"
     S   = "#177B6E"
     M   = "#7a9095"
@@ -1240,7 +1269,10 @@ def _appendix_html() -> str:
 
 
 def _practice_appendix_html() -> str:
-    """Appendix A — AI Visibility Methodology: Practice Edition Prompt Battery & Scoring Rubric."""
+    """Appendix — compact methodology summary + link (Practice Edition)."""
+    return _methodology_box_html(
+        ["Practitioner Credentials &amp; Clinical Quality", "Reviews &amp; Reputation",
+         "Identity &amp; Machine-Readability", "Access &amp; Fit"])
     T   = "#0F4146"
     S   = "#177B6E"
     M   = "#7a9095"

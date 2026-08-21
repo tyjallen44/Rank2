@@ -844,6 +844,11 @@ def _assessment_block(result: AnalysisResult, primary: str) -> str:
 
 
 def _appendix_block(primary: str, pale: str) -> str:
+    from .pdf import _methodology_box_html
+    return _methodology_box_html(
+        ["Access &amp; Findability", "Eligibility &amp; Cost Accuracy",
+         "Site &amp; Service Completeness", "Experience &amp; Reputation",
+         "Institutional Signals"], n_label="five pillars")
     rubric_rows = [
         ("Pillar 1", "Access & Findability", "25", "MQCR 12 + Multilingual 8 + Service-Adjacent 5"),
         ("Pillar 2", "Eligibility & Cost Accuracy", "25", "Fact-audit: sliding fee 5, NTAFA 4, insurance 5, free-clinic 4, new-patient 4, framing 3"),

@@ -150,3 +150,109 @@ STARTER_ARTICLES: list[dict] = [
         ),
     },
 ]
+
+
+# ── Methodology page (public /methodology, linked from report appendices) ─────
+METHODOLOGY_ARTICLES: list[dict] = [
+    {
+        "category": "Overview",
+        "title": "What the Pulse Score measures",
+        "body": (
+            "The **Pulse Score** (0–100) measures how visible and favorable an "
+            "organization is when patients and referring professionals ask AI "
+            "assistants — ChatGPT, Claude, and Gemini — where to get care. It is a "
+            "**market-perception measure**, not a clinical-quality verdict: it reflects "
+            "how the public signals AI assistants rely on add up, not the underlying "
+            "quality of care.\n\n"
+            "Every report — Deep Diagnostic, Hospital Network, Competitors Rankings, "
+            "Compare Two, and Event Preparation — uses this same score, so a given "
+            "organization reads consistently across reports."
+        ),
+    },
+    {
+        "category": "Scoring — The Four Pillars",
+        "title": "The four pillars",
+        "body": (
+            "For hospitals, practices, and markets, the Pulse Score is a weighted blend "
+            "of four pillars, each scored 0–100:\n\n"
+            "- **Outcomes & Safety** — clinical quality, safety, and reputation (e.g. the "
+            "CMS Overall Hospital Quality Star Rating; for practices, procedure depth and "
+            "accreditations).\n"
+            "- **Credentials & Recognition** — accreditations, awards, national rankings "
+            "(e.g. U.S. News), fellowship training, and academic affiliation.\n"
+            "- **Experience & Reviews** — patient sentiment and verified review volume and "
+            "ratings.\n"
+            "- **Access & Fit** — location, availability, online scheduling, insurance "
+            "breadth, and how well the organization matches what patients ask for.\n\n"
+            "The weighting of the four pillars is set by a **profile** matched to the "
+            "organization type (e.g. procedural vs. relationship-based specialties), so the "
+            "blend reflects what actually drives patient choice in that setting. An "
+            "unscored pillar (a signal that could not be established) is shown in red rather "
+            "than guessed."
+        ),
+    },
+    {
+        "category": "Scoring — The Four Pillars",
+        "title": "National quartiles",
+        "body": (
+            "The 0–100 Pulse Score maps to a **national quartile**, calibrated against the "
+            "distribution of scored organizations in the Pulse database:\n\n"
+            "- **Q1 · Top Quartile** — 75 and above\n"
+            "- **Q2 · Upper Middle** — 68–74\n"
+            "- **Q3 · Lower Middle** — 58–67\n"
+            "- **Q4 · Bottom Quartile** — below 58\n\n"
+            "Quartiles are shown as *1st / 2nd / 3rd / 4th Quartile* on report covers and "
+            "scorecards so the standing is unambiguous."
+        ),
+    },
+    {
+        "category": "Data Sources",
+        "title": "Where the signals come from",
+        "body": (
+            "Scores and rankings are derived from publicly available signals collected at "
+            "the time of the report. No quotes, patient statements, or clinical outcomes "
+            "are fabricated. Primary sources include:\n\n"
+            "- **CMS Care Compare** — Overall Hospital Quality Star Rating.\n"
+            "- **The Leapfrog Group** — Hospital Safety Grade (A–F).\n"
+            "- **Google (Places)** — verified ratings and review volume, sampled across a "
+            "system's locations.\n"
+            "- **U.S. News & World Report** — national and specialty rankings.\n"
+            "- **NPPES** — provider/organization identity and physician rosters.\n\n"
+            "Ratings, review counts, accreditation statuses, and quality designations change "
+            "over time; verify current standings directly with the primary source before "
+            "making coverage, referral, or treatment decisions."
+        ),
+    },
+    {
+        "category": "The Prompt Battery",
+        "title": "How AI assistants are queried",
+        "body": (
+            "Pulse evaluates visibility by running a **battery of realistic patient and "
+            "referrer queries** against today's leading AI assistants — the same kinds of "
+            "questions people actually ask (*\"best orthopedic surgeon near me,\" \"which "
+            "hospital for heart surgery in [city],\"* and so on) — spanning brand, local, "
+            "specialty, and referral framings.\n\n"
+            "The final score is a **usage-weighted blend across assistants**, so an "
+            "organization that surfaces well on the assistants patients actually use counts "
+            "for more. Divergence between assistants is itself diagnostic — strong on one "
+            "assistant but weak on another typically points to an uneven digital footprint "
+            "(for example, Google-listings-heavy but thin in the training-data record)."
+        ),
+    },
+    {
+        "category": "Community Health Edition",
+        "title": "FQHC five-pillar rubric",
+        "body": (
+            "Community Health (FQHC) reports use a five-pillar rubric calibrated to the "
+            "safety-net sector rather than the four-pillar model:\n\n"
+            "- **Access & Findability** — including the Mission Query Capture Rate (MQCR).\n"
+            "- **Eligibility & Cost Accuracy** — sliding-fee scale, uninsured acceptance, and "
+            "enrollment assistance, audited against the center's attested facts.\n"
+            "- **Site & Service Completeness** — locations, service lines, and languages.\n"
+            "- **Experience & Reputation** — patient sentiment and reviews.\n"
+            "- **Institutional Signals** — HRSA Section 330 status and other trust markers.\n\n"
+            "The analysis integrates live HRSA Find-a-Health-Center data and a client-attested "
+            "intake form."
+        ),
+    },
+]

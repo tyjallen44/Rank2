@@ -2363,6 +2363,11 @@ html, body {
         <button id="learn-manage-btn" class="btn" style="display:none;white-space:nowrap;border:1px solid var(--border);background:#fff" onclick="toggleLearnManage()">Manage Content</button>
       </div>
       <div id="learn-admin-bar" style="display:none;margin:6px 0 18px">
+        <label style="font-size:12px;color:var(--muted);margin-right:6px">Managing:</label>
+        <select id="learn-page-select" onchange="setLearnPage(this.value)" style="padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;margin-right:12px">
+          <option value="learn">Learn page (/learn)</option>
+          <option value="methodology">Methodology page (/methodology)</option>
+        </select>
         <button class="btn btn-primary" style="padding:8px 16px;font-size:13px" onclick="learnEdit(null)">+ Add Article</button>
         <button class="btn" style="padding:8px 16px;font-size:13px;margin-left:8px;border:1px solid var(--border);background:#fff" onclick="learnSeed()">Load starter articles</button>
         <span style="margin-left:12px;font-size:12px;color:var(--muted)">Drafts are shown here but hidden from the public page.</span>
@@ -6313,6 +6318,8 @@ async function adminTestEmail() {
 
 // ── Learn ───────────────────────────────────────────────────────────────────
 let _learnManage = false;
+let _learnPage = 'learn';   // which content page admins are managing: 'learn' | 'methodology'
+function setLearnPage(p){ _learnPage = p; loadLearn(); }
 let _learnEditingId = null;
 let _learnCache = [];
 
@@ -6332,7 +6339,7 @@ async function loadLearn(){
   host.innerHTML = '<div class="empty" style="padding:24px 0"><div>Loading…</div></div>';
   try {
     if (manageOn) {
-      const r = await api('/api/admin/learn');
+      const r = await api('/api/admin/learn?page=' + encodeURIComponent(_learnPage));
       _learnCache = await r.json();
       renderLearnManage(_learnCache);
     } else {
@@ -6415,7 +6422,7 @@ async function learnSave(){
   if(!title){ err.textContent='Title is required.'; err.classList.remove('hidden'); return; }
   const btn=document.getElementById('learn-save-btn'); btn.disabled=true;
   try{
-    const payload=JSON.stringify({category:cat,title:title,body:body,is_published:pub});
+    const payload=JSON.stringify({category:cat,title:title,body:body,is_published:pub,page:_learnPage});
     const opts={method:_learnEditingId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:payload};
     const url=_learnEditingId?('/api/admin/learn/'+_learnEditingId):'/api/admin/learn';
     const r=await api(url,opts);
@@ -6438,11 +6445,12 @@ async function learnMove(id,dir){
 }
 
 async function learnSeed(){
-  if(!confirm('Load the starter articles? Existing articles with the same title are left unchanged.')) return;
-  const r=await api('/api/admin/learn/seed',{method:'POST'});
+  const _lbl = _learnPage === 'methodology' ? 'methodology' : 'starter';
+  if(!confirm(`Load the ${_lbl} content? Existing articles with the same title are left unchanged.`)) return;
+  const r=await api('/api/admin/learn/seed?page=' + encodeURIComponent(_learnPage),{method:'POST'});
   if(r.ok){
     const d=await r.json();
-    alert(`Starter content loaded — ${d.added} added, ${d.skipped} already present.`);
+    alert(`Content loaded — ${d.added} added, ${d.skipped} already present.`);
     loadLearn();
   } else {
     alert('Could not load starter content.');

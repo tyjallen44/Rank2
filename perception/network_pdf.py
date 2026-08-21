@@ -846,6 +846,10 @@ def _recommendations_block(result: NetworkResult, primary: str, accent: str,
 
 
 def _methodology_appendix(primary: str, pale: str, ftype_cfg: dict | None = None) -> str:
+    from .pdf import _methodology_box_html
+    return _methodology_box_html(
+        ["Outcomes &amp; Safety", "Credentials &amp; Recognition",
+         "Experience &amp; Reviews", "Access &amp; Fit"])
     ftype_cfg = ftype_cfg or {}
     plural    = ftype_cfg.get("plural", "hospitals")
     local_q   = ftype_cfg.get("local_query", "[city] hospital")
