@@ -97,7 +97,7 @@ gcloud run deploy "$SERVICE" \
   --memory=2Gi \
   --cpu=1 \
   --timeout=3600 \
-  --min-instances=0 \
+  --min-instances=1 \
   --max-instances=10 \
   --session-affinity \
   --no-cpu-throttling \

@@ -6034,11 +6034,16 @@ function renderHistory(events, bulkRuns) {
   if (events && events.length) {
     const evRows = events.map(ev => {
       const date  = (ev.created_at || '').slice(0, 10);
-      const count = `${ev.done_count} scored${ev.skip_count ? ` · ${ev.skip_count} skipped` : ''}`;
+      const count = ev.status === 'complete'
+        ? `${ev.done_count} scored${ev.skip_count ? ` · ${ev.skip_count} skipped` : ''}`
+        : `${ev.done_count} / ${ev.total_count} scored${ev.skip_count ? ` · ${ev.skip_count} skipped` : ''}`;
       const type  = ev.entity_type === 'practice' ? 'Practice' : ev.entity_type === 'fqhc' ? 'Community Health' : 'Hospital';
       const statusBadge = ev.status === 'complete'
         ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
-        : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
+        : `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
+             <span class="badge bg-muted" style="font-size:10px">Running</span>
+             <button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 9px" onclick="evResume('${ev.id}')" title="Re-run any entities that never finished">↻ Resume</button>
+           </div>`;
       const csvBtn = ev.has_csv
         ? `<button class="btn btn-gold btn-sm" onclick="evDlCsvById('${ev.id}')">⬇ CSV</button>`
         : `<span style="color:var(--muted);font-size:12px">—</span>`;
@@ -6137,12 +6142,17 @@ function renderHistory(events, bulkRuns) {
   if (bulkRuns && bulkRuns.length) {
     const nbRows = bulkRuns.map(b => {
       const date = (b.created_at || '').slice(0, 10);
-      const result = `${b.scored} scored${b.failed ? ` · ${b.failed} failed` : ''}`;
+      const result = b.status === 'running'
+        ? `${b.done_count || 0} / ${b.total} scored`
+        : `${b.scored} scored${b.failed ? ` · ${b.failed} failed` : ''}`;
+      const resumeBtn = `<button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 9px" onclick="nbResume('${b.id}')" title="Re-run from the saved upload — already-scored systems return from cache">↻ Resume</button>`;
       const statusBadge = b.status === 'done'
         ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
         : b.status === 'failed'
-          ? `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>`
-          : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
+          ? `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
+               <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>${resumeBtn}</div>`
+          : `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
+               <span class="badge bg-muted" style="font-size:10px">Running</span>${resumeBtn}</div>`;
       const csvBtn = b.status === 'done'
         ? `<button class="btn btn-ghost btn-sm" onclick="window.location.href='/api/network/bulk/${b.id}/csv?token=${encodeURIComponent(_token)}'">⬇ CSV</button>`
         : `<span style="color:var(--muted);font-size:13px">—</span>`;
@@ -6275,6 +6285,7 @@ function renderHistory(events, bulkRuns) {
       </table>
     </div>`;
   _applyEvHistState();
+  _scheduleHistPoll();
   if (searchWasFocused) {
     const inp = document.getElementById('history-search');
     if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
@@ -6310,6 +6321,45 @@ async function nbDelete(id) {
   if (!confirm('Delete this National Entity run? This removes the run record and its CSV.')) return;
   const r = await api('/api/network/bulk/' + id, { method: 'DELETE' });
   if (r.ok) loadHistory();
+}
+
+async function nbResume(id) {
+  if (!confirm('Resume this National Entity run? Systems already scored return instantly from cache; only the remainder is re-computed.')) return;
+  try {
+    const r = await api('/api/network/bulk/' + id + '/resume', { method: 'POST' });
+    if (!r.ok) { const e = await r.json().catch(()=>({})); alert(e.detail || 'Could not resume this run.'); return; }
+    loadHistory();
+  } catch (e) { alert(e.message || 'Could not resume this run.'); }
+}
+
+async function evResume(id) {
+  if (!confirm('Resume this event run? Any entities that never finished are re-scored; completed ones are kept.')) return;
+  try {
+    const r = await api('/api/event/' + id + '/resume', { method: 'POST' });
+    if (!r.ok) { const e = await r.json().catch(()=>({})); alert(e.detail || 'Could not resume this run.'); return; }
+    loadHistory();
+  } catch (e) { alert(e.message || 'Could not resume this run.'); }
+}
+
+// Auto-refresh History while any run is still in progress, so live progress and
+// finished status appear without a manual reload. Polls only when work is active.
+let _histPollTimer = null;
+async function _pollHistory() {
+  try {
+    const [eventsResp, bulkResp] = await Promise.all([
+      api('/api/events'), api('/api/network/bulk/runs'),
+    ]);
+    renderHistory(await eventsResp.json(), await bulkResp.json());
+  } catch (e) { /* transient — try again next tick */ }
+}
+function _scheduleHistPoll() {
+  const anyRunning = (_cachedEvents || []).some(e => e.status !== 'complete')
+    || (_cachedBulkRuns || []).some(b => b.status === 'running');
+  if (anyRunning && !_histPollTimer) {
+    _histPollTimer = setInterval(_pollHistory, 8000);
+  } else if (!anyRunning && _histPollTimer) {
+    clearInterval(_histPollTimer); _histPollTimer = null;
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────

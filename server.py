@@ -1221,35 +1221,53 @@ def _detect_network_cols(header: list):
     return name_i, city_i, state_i
 
 
-def _score_network_row(name: str, city: str, state: str, brand: str = "original"):
+def _score_network_row(name: str, city: str, state: str, brand: str = "original",
+                       attempts: int = 3):
     """Headless four-pillar score for one system → (score:int, quartile_label:str).
     Reuses a fresh canonical score if one exists; otherwise scores headless (no
-    PDF, no History) and seeds the canonical cache."""
+    PDF, no History) and seeds the canonical cache. Retries transient failures."""
     from perception.db import get_entity_score
     from perception.scoring import grade_from_score
     loc = ", ".join([p for p in [(city or "").strip(), (state or "").strip()] if p])
-    canon = get_entity_score(name, loc, days=30)
-    if canon and canon.get("pulse_score") is not None:
-        score = canon["pulse_score"]
-    else:
-        from perception.network_analyzer import _entity_pulse_score
-        score, _t, _a, _p = _entity_pulse_score(name, loc, brand=brand, headless=True)
-    if score is None:
-        raise ValueError("no score produced")
-    q_code, _band = grade_from_score(score)
-    return int(score), _Q_ORDINAL.get(q_code, q_code)
+    _last = None
+    for _a in range(attempts):
+        try:
+            canon = get_entity_score(name, loc, days=30)
+            if canon and canon.get("pulse_score") is not None:
+                score = canon["pulse_score"]
+            else:
+                from perception.network_analyzer import _entity_pulse_score
+                score, _t, _ai, _p = _entity_pulse_score(name, loc, brand=brand, headless=True)
+            if score is None:
+                raise ValueError("no score produced")
+            q_code, _band = grade_from_score(score)
+            return int(score), _Q_ORDINAL.get(q_code, q_code)
+        except Exception as exc:
+            _last = exc
+            if _a < attempts - 1:
+                time.sleep(1.5 * (_a + 1))
+    raise _last or ValueError("no score produced")
 
 
-def _run_network_bulk_job(job_id: str, bulk_id: str, header: list,
-                          rows: list, name_i, city_i, state_i, brand: str) -> None:
+def _run_network_bulk_job(job_id: str, bulk_id: str, input_path: str, brand: str) -> None:
+    """Score every row of the stored input CSV headlessly. Progress is persisted
+    to the DB row each time an entity finishes, so a dropped connection or a
+    recycled instance never loses the count — and Resume re-runs the same input
+    (already-scored systems return instantly from the canonical cache)."""
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
     try:
+        import csv as _csv
         from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
-        from perception.db import init_db
+        from perception.db import init_db, bump_network_bulk_progress, finalize_network_bulk_run
         init_db()
         _NETWORK_BULK_DIR.mkdir(parents=True, exist_ok=True)
+        with open(input_path, newline="", encoding="utf-8-sig") as fh:
+            reader = list(_csv.reader(fh))
+        header = reader[0]
+        rows = [r for r in reader[1:] if any((c or "").strip() for c in r)]
+        name_i, city_i, state_i = _detect_network_cols(header)
         total = len(rows)
         emit({"type": "phase", "name": "starting", "text": f"Scoring {total} systems"})
         out: dict = {}
@@ -1276,10 +1294,9 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, header: list,
                 idx, cols = f.result()
                 out[idx] = cols
                 done += 1
-                emit({"type": "phase", "name": "scoring",
-                      "text": f"Scored {done} of {total}"})
+                bump_network_bulk_progress(bulk_id, 1)     # durable, reconnectable progress
+                emit({"type": "phase", "name": "scoring", "text": f"Scored {done} of {total}"})
 
-        import csv as _csv
         out_path = _NETWORK_BULK_DIR / f"{bulk_id}.csv"
         with open(out_path, "w", newline="", encoding="utf-8") as fh:
             w = _csv.writer(fh)
@@ -1288,7 +1305,6 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, header: list,
                 w.writerow(list(row) + out.get(i, ["Failure to run", ""]))
 
         failed = sum(1 for c in out.values() if c[0] == "Failure to run")
-        from perception.db import finalize_network_bulk_run
         finalize_network_bulk_run(bulk_id, total - failed, failed, str(out_path))
         job["status"] = "done"
         job["result"] = {"bulk_id": bulk_id, "total": total,
@@ -1308,8 +1324,8 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, header: list,
 @app.post("/api/network/bulk/run")
 async def network_bulk_run(file: UploadFile = File(...),
                            payload: dict = Depends(get_current_user_payload)):
-    """Headless bulk scoring of an uploaded list of hospital systems. Returns a
-    job_id (for SSE progress) + bulk_id (for CSV download). No PDFs, no History."""
+    """Headless bulk scoring of an uploaded list of hospital systems. The upload is
+    saved so the run can be resumed. Returns a job_id (SSE) + bulk_id (CSV)."""
     import csv as _csv, io as _io
     raw = await file.read()
     try:
@@ -1321,21 +1337,44 @@ async def network_bulk_run(file: UploadFile = File(...),
         raise HTTPException(400, "The uploaded file is empty.")
     header = reader[0]
     rows = [r for r in reader[1:] if any((c or "").strip() for c in r)]
-    name_i, city_i, state_i = _detect_network_cols(header)
+    name_i, _ci, _si = _detect_network_cols(header)
     if name_i is None:
         raise HTTPException(400, "Could not find a system/entity name column "
                                  "(expected a header containing 'name').")
     if not rows:
         raise HTTPException(400, "No data rows found in the uploaded file.")
-    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
-    bulk_id = uuid.uuid4().hex[:12]
     from perception.db import init_db, create_network_bulk_run
     init_db()
+    _NETWORK_BULK_DIR.mkdir(parents=True, exist_ok=True)
+    bulk_id = uuid.uuid4().hex[:12]
+    input_path = _NETWORK_BULK_DIR / f"{bulk_id}_input.csv"
+    input_path.write_bytes(raw)
     create_network_bulk_run(bulk_id, (file.filename or "list.csv"),
-                            len(rows), payload.get("role", ""))
-    _pool.submit(_run_network_bulk_job, job_id, bulk_id, header, rows,
-                 name_i, city_i, state_i, payload.get("brand", "original"))
+                            len(rows), payload.get("role", ""), str(input_path))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    _pool.submit(_run_network_bulk_job, job_id, bulk_id, str(input_path),
+                 payload.get("brand", "original"))
     return {"job_id": job_id, "bulk_id": bulk_id, "total": len(rows)}
+
+
+@app.post("/api/network/bulk/{bulk_id}/resume")
+async def network_bulk_resume(bulk_id: str,
+                              payload: dict = Depends(get_current_user_payload)):
+    """Re-run a bulk list from its saved upload. Already-scored systems return
+    instantly from the canonical cache, so only the remainder is re-computed."""
+    from perception.db import init_db, get_network_bulk_run, reset_network_bulk_run
+    init_db()
+    rec = get_network_bulk_run(bulk_id)
+    if not rec:
+        raise HTTPException(404, "Run not found")
+    input_path = rec.get("input_path")
+    if not input_path or not Path(input_path).exists():
+        raise HTTPException(400, "The original upload is no longer available to resume.")
+    reset_network_bulk_run(bulk_id)
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    _pool.submit(_run_network_bulk_job, job_id, bulk_id, input_path,
+                 payload.get("brand", "original"))
+    return {"job_id": job_id, "bulk_id": bulk_id, "total": rec.get("total", 0)}
 
 
 @app.get("/api/network/bulk/runs")
@@ -2579,6 +2618,27 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
     _event_job_map[event_id] = job_id
     _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser, req.override_cache, req.auto_practice_composite)
     return {"event_id": event_id, "job_id": job_id}
+
+
+@app.post("/api/event/{event_id}/resume")
+async def event_resume(event_id: str, payload: dict = Depends(get_current_user_payload)):
+    """Re-run only the entities that never reached 'done' (failed, skipped, or left
+    pending when an instance was recycled mid-run). Entities already scored keep
+    their result; the CSV/ZIP are rebuilt from the full checkpoint at the end."""
+    from perception.db import init_db, get_event_run, get_event_entities
+    init_db()
+    run = get_event_run(event_id)
+    if not run:
+        raise HTTPException(404, "Event not found")
+    ents = get_event_entities(event_id)
+    pending = [e for e in ents if (e.get("status") or "") != "done"]
+    if not pending:
+        raise HTTPException(400, "All entities already completed — nothing to resume.")
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    _event_job_map[event_id] = job_id
+    _pool.submit(_run_event_job, job_id, event_id, pending,
+                 run.get("entity_type", "hospital"))
+    return {"event_id": event_id, "job_id": job_id, "pending": len(pending)}
 
 
 def _run_event_job(

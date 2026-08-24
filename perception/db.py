@@ -701,14 +701,22 @@ def init_db() -> None:
             id         VARCHAR PRIMARY KEY,
             label      VARCHAR,
             total      INTEGER DEFAULT 0,
+            done_count INTEGER DEFAULT 0,
             scored     INTEGER DEFAULT 0,
             failed     INTEGER DEFAULT 0,
             status     VARCHAR DEFAULT 'running',
             csv_path   VARCHAR,
+            input_path VARCHAR,
             user_role  VARCHAR DEFAULT 'user',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    _nb_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='network_bulk_runs'"
+    ).fetchall()}
+    for _c, _t in [("done_count", "INTEGER DEFAULT 0"), ("input_path", "VARCHAR")]:
+        if _c not in _nb_cols:
+            con.execute(f"ALTER TABLE network_bulk_runs ADD COLUMN {_c} {_t}")
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
 
@@ -944,13 +952,29 @@ def list_event_runs(role: str) -> list:
     return [dict(zip(cols, r)) for r in rows]
 
 
-def create_network_bulk_run(bulk_id: str, label: str, total: int, role: str) -> None:
+def create_network_bulk_run(bulk_id: str, label: str, total: int, role: str,
+                            input_path: str = "") -> None:
     con = get_connection()
     con.execute(
-        "INSERT INTO network_bulk_runs (id, label, total, status, user_role) "
-        "VALUES (?, ?, ?, 'running', ?)",
-        [bulk_id, label, total, role],
+        "INSERT INTO network_bulk_runs (id, label, total, status, user_role, input_path) "
+        "VALUES (?, ?, ?, 'running', ?, ?)",
+        [bulk_id, label, total, role, input_path],
     )
+    con.close()
+
+
+def bump_network_bulk_progress(bulk_id: str, done_inc: int = 1) -> None:
+    con = get_connection()
+    con.execute("UPDATE network_bulk_runs SET done_count = done_count + ? WHERE id = ?",
+                [done_inc, bulk_id])
+    con.close()
+
+
+def reset_network_bulk_run(bulk_id: str) -> None:
+    """Mark a run running again (for Resume) — progress counters recompute on re-run."""
+    con = get_connection()
+    con.execute("UPDATE network_bulk_runs SET status='running', done_count=0 WHERE id=?",
+                [bulk_id])
     con.close()
 
 
@@ -969,15 +993,29 @@ def fail_network_bulk_run(bulk_id: str) -> None:
     con.close()
 
 
+def get_network_bulk_run(bulk_id: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute(
+        "SELECT id, label, total, done_count, scored, failed, status, csv_path, "
+        "input_path, created_at FROM network_bulk_runs WHERE id = ?", [bulk_id]
+    ).fetchone()
+    con.close()
+    if not r:
+        return None
+    cols = ["id", "label", "total", "done_count", "scored", "failed", "status",
+            "csv_path", "input_path", "created_at"]
+    return dict(zip(cols, r))
+
+
 def list_network_bulk_runs() -> list:
     """Return all National Entity (bulk network) runs — visible to every user."""
     con = get_connection()
     rows = con.execute(
-        "SELECT id, label, total, scored, failed, status, created_at "
+        "SELECT id, label, total, done_count, scored, failed, status, created_at "
         "FROM network_bulk_runs ORDER BY created_at DESC"
     ).fetchall()
     con.close()
-    cols = ["id", "label", "total", "scored", "failed", "status", "created_at"]
+    cols = ["id", "label", "total", "done_count", "scored", "failed", "status", "created_at"]
     return [dict(zip(cols, r)) for r in rows]
 
 
