@@ -72,6 +72,41 @@ STARTER_ARTICLES: list[dict] = [
     },
     {
         "category": "The Reports",
+        "title": "Hospital Network — Bulk List Scoring",
+        "body": (
+            "Score an **entire list of hospital systems at once**, instead of one "
+            "report at a time. Upload a spreadsheet of health systems and get the same "
+            "file back with an AI Visibility **Pulse Score**, a **national quartile**, "
+            "and all four pillar scores filled in for every entity.\n\n"
+            "**What it shows**\n\n"
+            "For each system in your list:\n\n"
+            "- A **Pulse Score** (0–100) and **national quartile** (Q1–Q4)\n"
+            "- All four pillar scores, on the same 0–100 scale:\n"
+            "  - **Outcomes & Safety** — quality, safety, and clinical reputation\n"
+            "  - **Credentials & Recognition** — accreditations, awards, and affiliations\n"
+            "  - **Experience & Reviews** — patient sentiment and ratings\n"
+            "  - **Access & Fit** — findability and match to what patients ask for\n\n"
+            "**How it works**\n\n"
+            "Switch the Hospital Network page to **Bulk List (CSV)** and upload a file "
+            "with a system-name column (city and state are optional). Pulse scores every "
+            "entity in the background — no individual reports to open — and you download "
+            "the enriched CSV when it's done. Each run is also saved under **National "
+            "Entity Runs** on the History page, so you can re-download it any time.\n\n"
+            "**Why the pillar detail matters**\n\n"
+            "The four pillar columns let you see *where* each system is strong or weak at "
+            "a glance. Sort or filter any column to find the systems with the biggest gaps "
+            "— whether in reputation, quality recognition, or findability.\n\n"
+            "**Good to know**\n\n"
+            "- Uses the same four-pillar engine as the Hospital Network and Hospital "
+            "Market reports, so a system reads the same score across every report.\n"
+            "- Fast and repeatable — recent scores are reused, and long lists can be "
+            "resumed if a run is interrupted.\n\n"
+            "**Best for:** sizing up a whole market, region, or target list quickly — and "
+            "spotting which systems most need attention."
+        ),
+    },
+    {
+        "category": "The Reports",
         "title": "Competitors Rankings",
         "body": (
             "Ranks the providers in a market from **most to least AI-visible**, exactly "
