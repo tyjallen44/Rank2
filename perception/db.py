@@ -963,6 +963,12 @@ def finalize_network_bulk_run(bulk_id: str, scored: int, failed: int, csv_path: 
     con.close()
 
 
+def fail_network_bulk_run(bulk_id: str) -> None:
+    con = get_connection()
+    con.execute("UPDATE network_bulk_runs SET status='failed' WHERE id=?", [bulk_id])
+    con.close()
+
+
 def list_network_bulk_runs() -> list:
     """Return all National Entity (bulk network) runs — visible to every user."""
     con = get_connection()

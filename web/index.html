@@ -6140,7 +6140,9 @@ function renderHistory(events, bulkRuns) {
       const result = `${b.scored} scored${b.failed ? ` · ${b.failed} failed` : ''}`;
       const statusBadge = b.status === 'done'
         ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
-        : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
+        : b.status === 'failed'
+          ? `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>`
+          : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
       const csvBtn = b.status === 'done'
         ? `<button class="btn btn-ghost btn-sm" onclick="window.location.href='/api/network/bulk/${b.id}/csv?token=${encodeURIComponent(_token)}'">⬇ CSV</button>`
         : `<span style="color:var(--muted);font-size:13px">—</span>`;

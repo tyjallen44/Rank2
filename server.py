@@ -1294,6 +1294,11 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, header: list,
         job["result"] = {"bulk_id": bulk_id, "total": total,
                          "scored": total - failed, "failed": failed, "bulk": True}
     except Exception as exc:
+        try:
+            from perception.db import fail_network_bulk_run
+            fail_network_bulk_run(bulk_id)
+        except Exception:
+            pass
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
