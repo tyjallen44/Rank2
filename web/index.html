@@ -735,6 +735,24 @@ html, body {
   align-items:center;justify-content:center;
 }
 #learn-modal.open { display:flex; }
+
+/* ── Bulk "About this report" info modal ──────────────────────── */
+#np-about-modal {
+  display:none;position:fixed;inset:0;
+  background:rgba(15,65,70,0.55);z-index:1000;
+  align-items:center;justify-content:center;
+}
+#np-about-modal.open { display:flex; }
+#np-about-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
+.npa-h { font-size:12px;font-weight:700;color:var(--teal);text-transform:uppercase;
+  letter-spacing:.06em;margin:20px 0 8px; }
+.npa-p { font-size:13.5px;color:var(--text);line-height:1.55;margin:0 0 10px; }
+.npa-li { font-size:13px;color:var(--text);line-height:1.5;margin:0 0 5px; }
+.npa-tbl { width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:12.5px; }
+.npa-tbl th { text-align:left;background:var(--pale);color:var(--teal);font-weight:700;
+  padding:6px 10px;border:1px solid var(--border); }
+.npa-tbl td { padding:6px 10px;border:1px solid var(--border);color:var(--text);vertical-align:top; }
+
 .md-primer { flex:0 0 250px; border:1px solid var(--border); border-radius:8px;
   padding:10px 12px; background:#fbfcfc; font-size:11.5px; color:var(--muted); }
 .md-primer-h { font-weight:700; color:var(--teal); font-size:10.5px; text-transform:uppercase;
@@ -1668,15 +1686,18 @@ html, body {
       <div id="np-bulk" class="card hidden">
         <div style="font-size:13px;color:var(--text);margin-bottom:14px">
           Upload a CSV of hospital systems. Each row is scored <strong>headlessly</strong> — no report is produced or saved —
-          and two columns are appended to your file: <strong>Pulse Score</strong> and <strong>Quartile</strong>.
+          and six columns are appended to your file: <strong>Pulse Score</strong>, <strong>Quartile</strong>, and the four pillar
+          scores (<strong>Outcomes &amp; Safety</strong>, <strong>Credentials &amp; Recognition</strong>,
+          <strong>Experience &amp; Reviews</strong>, <strong>Access &amp; Fit</strong>).
           Rows that can't be scored get <em>“Failure to run”</em> in the score column.
         </div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
           The file needs a column whose header contains <em>name</em> (the system), plus optional <em>city</em> / <em>state</em> columns.
           Any other columns are preserved as-is. Large lists run 5 at a time and can take a while.
         </div>
-        <div style="margin-bottom:14px">
+        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
           <a href="#" onclick="npDownloadTemplate();return false" style="font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">⬇ Download CSV template</a>
+          <a href="#" onclick="npShowAbout();return false" style="font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">ℹ About this report &amp; how sales uses it</a>
         </div>
         <div class="fg" style="margin-bottom:14px">
           <label class="fl">Hospital system list (.csv)</label>
@@ -3024,6 +3045,72 @@ html, body {
 
   </div><!-- /main -->
 </div><!-- /app -->
+
+<!-- ── Hospital Network Bulk: About this report ───────────────────────────── -->
+<div id="np-about-modal" onclick="if(event.target===this)npCloseAbout()">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div class="modal-title" style="margin-bottom:4px">Hospital Network — Bulk List Scoring</div>
+      <button class="btn btn-ghost btn-sm" onclick="npCloseAbout()" style="flex-shrink:0">✕</button>
+    </div>
+    <div class="npa-p" style="margin-top:6px">
+      Score an <strong>entire list of hospital systems at once</strong>, instead of one report at a time.
+      Upload a spreadsheet of health systems and get the same file back with an AI Visibility
+      <strong>Pulse Score</strong>, a <strong>national quartile</strong>, and all four pillar scores
+      filled in for every entity — no individual reports to open, and nothing cluttering your report History.
+    </div>
+
+    <div class="npa-h">What it's for</div>
+    <div class="npa-p">
+      The full Hospital Network report is built to brief one system in depth. Bulk List Scoring answers a
+      different question: <em>across a whole market, region, or target list — who's strong, who's weak, and where?</em>
+      It turns a list of prospects into a ranked, filterable dataset your team can act on in minutes.
+    </div>
+
+    <div class="npa-h">How it works</div>
+    <div class="npa-li">1. On this page, keep the toggle on <strong>Bulk List (CSV)</strong>.</div>
+    <div class="npa-li">2. Upload a CSV of systems. The only required column is a <strong>system name</strong> (any header containing “name”); optional <strong>city</strong> and <strong>state</strong> sharpen the match. Use the <strong>template</strong> for the exact format.</div>
+    <div class="npa-li">3. Pulse scores each system <strong>headlessly</strong> — no PDFs, no History clutter. Progress shows live.</div>
+    <div class="npa-li" style="margin-bottom:10px">4. Download the <strong>enriched CSV</strong>: your original file, untouched, with the results appended as new columns.</div>
+
+    <div class="npa-h">What you get</div>
+    <table class="npa-tbl">
+      <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Pulse_Score</strong></td><td>Overall AI Visibility score, 0–100</td></tr>
+        <tr><td><strong>Quartile</strong></td><td>National quartile (1st = top, 4th = bottom)</td></tr>
+        <tr><td><strong>Outcomes &amp; Safety</strong></td><td>Clinical quality and safety signals AI can cite</td></tr>
+        <tr><td><strong>Credentials &amp; Recognition</strong></td><td>Accreditations, awards, national rankings</td></tr>
+        <tr><td><strong>Experience &amp; Reviews</strong></td><td>Patient sentiment and review ratings</td></tr>
+        <tr><td><strong>Access &amp; Fit</strong></td><td>Findability and match to what patients ask for</td></tr>
+      </tbody>
+    </table>
+    <div class="npa-p" style="font-size:12.5px;color:var(--muted)">
+      Every pillar is on the same 0–100 scale as the report's bars. Any system that can't be scored is marked
+      <em>“Failure to run”</em> so nothing is silently dropped.
+    </div>
+
+    <div class="npa-h">How to read the results</div>
+    <div class="npa-p">The four pillar columns are the point. Sort or filter any one to instantly surface where a system is exposed:</div>
+    <div class="npa-li"><strong>Low Experience &amp; Reviews</strong> → reputation-management opportunity</div>
+    <div class="npa-li"><strong>Low Access &amp; Fit</strong> → structured-data / machine-readability opportunity</div>
+    <div class="npa-li" style="margin-bottom:8px"><strong>Low Credentials &amp; Recognition</strong> → the system isn't getting credit for quality it already has</div>
+    <div class="npa-p">
+      A weak pillar is a concrete, defensible reason to start a conversation — and a direct map to the
+      <strong>PX&amp;G</strong> offerings that address it.
+    </div>
+
+    <div class="npa-h">Good to know</div>
+    <div class="npa-li"><strong>Consistent scoring.</strong> Bulk uses the same four-pillar engine as the Hospital Market report — a system gets the same Pulse Score either way.</div>
+    <div class="npa-li"><strong>Fast and repeatable.</strong> Recent scores are reused from cache, so re-running a list is nearly instant and won't redo work already done.</div>
+    <div class="npa-li"><strong>Resilient.</strong> Long lists survive interruptions — a run can be resumed and picks up where it left off.</div>
+    <div class="npa-li"><strong>Everything's saved.</strong> Each run is stored under <strong>National Entity Runs</strong> on the History page, where you can re-download the enriched CSV any time.</div>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-sm" onclick="npCloseAbout()">Got it</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Invite User Modal ──────────────────────────────────────────────────── -->
 <div id="invite-modal">
@@ -5441,6 +5528,9 @@ function npSetMode(mode) {
     });
   }
 }
+
+function npShowAbout()  { document.getElementById('np-about-modal').classList.add('open'); }
+function npCloseAbout() { document.getElementById('np-about-modal').classList.remove('open'); }
 
 function npDownloadTemplate() {
   const csv = 'Entity_ID,Entity_Name,Primary_City,Primary_State\n'
