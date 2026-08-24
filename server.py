@@ -1221,9 +1221,30 @@ def _detect_network_cols(header: list):
     return name_i, city_i, state_i
 
 
+# Four-pillar columns appended to the bulk CSV — key + header, in report order.
+# The values come free from the same evaluation that produces the Pulse Score
+# (returned as tier_scores; also stored in the canonical cache), on a 0-100 scale.
+_NETWORK_PILLARS = [
+    ("clinical_outcomes_safety",   "Outcomes & Safety"),
+    ("credentials_recognition",    "Credentials & Recognition"),
+    ("patient_experience_reviews", "Experience & Reviews"),
+    ("access_fit",                 "Access & Fit"),
+]
+
+
+def _pillar_cells(tiers: dict) -> list:
+    """Four pillar scores as CSV cells (blank if a pillar is missing)."""
+    out = []
+    for key, _label in _NETWORK_PILLARS:
+        v = (tiers or {}).get(key)
+        out.append(str(int(v)) if isinstance(v, (int, float)) else "")
+    return out
+
+
 def _score_network_row(name: str, city: str, state: str, brand: str = "original",
                        attempts: int = 3):
-    """Headless four-pillar score for one system → (score:int, quartile_label:str).
+    """Headless four-pillar score for one system →
+    (score:int, quartile_label:str, tier_scores:dict).
     Reuses a fresh canonical score if one exists; otherwise scores headless (no
     PDF, no History) and seeds the canonical cache. Retries transient failures."""
     from perception.db import get_entity_score
@@ -1235,13 +1256,14 @@ def _score_network_row(name: str, city: str, state: str, brand: str = "original"
             canon = get_entity_score(name, loc, days=30)
             if canon and canon.get("pulse_score") is not None:
                 score = canon["pulse_score"]
+                tiers = canon.get("tier_scores") or {}
             else:
                 from perception.network_analyzer import _entity_pulse_score
-                score, _t, _ai, _p = _entity_pulse_score(name, loc, brand=brand, headless=True)
+                score, tiers, _ai, _p = _entity_pulse_score(name, loc, brand=brand, headless=True)
             if score is None:
                 raise ValueError("no score produced")
             q_code, _band = grade_from_score(score)
-            return int(score), _Q_ORDINAL.get(q_code, q_code)
+            return int(score), _Q_ORDINAL.get(q_code, q_code), (tiers or {})
         except Exception as exc:
             _last = exc
             if _a < attempts - 1:
@@ -1272,21 +1294,23 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, input_path: str, brand: str
         emit({"type": "phase", "name": "starting", "text": f"Scoring {total} systems"})
         out: dict = {}
 
+        _fail_cols = ["Failure to run", "", "", "", "", ""]   # score, quartile, 4 pillars
+
         def _work(idx: int):
             row = rows[idx]
             name = (row[name_i] if name_i is not None and name_i < len(row) else "").strip()
             city = row[city_i] if city_i is not None and city_i < len(row) else ""
             state = row[state_i] if state_i is not None and state_i < len(row) else ""
             if not name:
-                return idx, ["Failure to run", ""]
+                return idx, list(_fail_cols)
             emit({"type": "text", "text": f"▶ {name}"})
             try:
-                score, quartile = _score_network_row(name, city, state, brand)
+                score, quartile, tiers = _score_network_row(name, city, state, brand)
                 emit({"type": "text", "text": f"✓ {name} — {score} ({quartile})"})
-                return idx, [str(score), quartile]
+                return idx, [str(score), quartile] + _pillar_cells(tiers)
             except Exception as exc:
                 emit({"type": "text", "text": f"✗ {name} — failed ({type(exc).__name__})"})
-                return idx, ["Failure to run", ""]
+                return idx, list(_fail_cols)
 
         done = 0
         with _TPE(max_workers=5) as ex:
@@ -1300,9 +1324,10 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, input_path: str, brand: str
         out_path = _NETWORK_BULK_DIR / f"{bulk_id}.csv"
         with open(out_path, "w", newline="", encoding="utf-8") as fh:
             w = _csv.writer(fh)
-            w.writerow(list(header) + ["Pulse_Score", "Quartile"])
+            w.writerow(list(header) + ["Pulse_Score", "Quartile"]
+                       + [lbl for _k, lbl in _NETWORK_PILLARS])
             for i, row in enumerate(rows):
-                w.writerow(list(row) + out.get(i, ["Failure to run", ""]))
+                w.writerow(list(row) + out.get(i, list(_fail_cols)))
 
         failed = sum(1 for c in out.values() if c[0] == "Failure to run")
         finalize_network_bulk_run(bulk_id, total - failed, failed, str(out_path))
