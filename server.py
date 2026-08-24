@@ -2611,6 +2611,9 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
         csv_filename=req.csv_filename,
         total_count=len(entities_db),
         role=role,
+        include_teaser=req.include_teaser,
+        override_cache=req.override_cache,
+        auto_practice_composite=req.auto_practice_composite,
     )
     create_event_entities(entities_db)
 
@@ -2636,8 +2639,12 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
         raise HTTPException(400, "All entities already completed — nothing to resume.")
     job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
     _event_job_map[event_id] = job_id
+    # Repeat the original run's settings so resumed entities are analyzed the same way.
     _pool.submit(_run_event_job, job_id, event_id, pending,
-                 run.get("entity_type", "hospital"))
+                 run.get("entity_type", "hospital"),
+                 bool(run.get("include_teaser")),
+                 bool(run.get("override_cache")),
+                 bool(run.get("auto_practice_composite")))
     return {"event_id": event_id, "job_id": job_id, "pending": len(pending)}
 
 

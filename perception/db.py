@@ -687,15 +687,22 @@ def init_db() -> None:
             user_role         VARCHAR DEFAULT 'user',
             enriched_csv_path VARCHAR,
             zip_path          VARCHAR,
+            include_teaser          BOOLEAN DEFAULT FALSE,
+            override_cache          BOOLEAN DEFAULT FALSE,
+            auto_practice_composite BOOLEAN DEFAULT FALSE,
             created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    # Migrate existing event_runs rows that pre-date zip_path
+    # Migrate existing event_runs rows that pre-date later columns
     _er_cols = {r[0] for r in con.execute(
         "SELECT column_name FROM information_schema.columns WHERE table_name='event_runs'"
     ).fetchall()}
     if "zip_path" not in _er_cols:
         con.execute("ALTER TABLE event_runs ADD COLUMN zip_path VARCHAR")
+    # Run settings persisted so a resumed run repeats the original as closely as possible
+    for _c in ("include_teaser", "override_cache", "auto_practice_composite"):
+        if _c not in _er_cols:
+            con.execute(f"ALTER TABLE event_runs ADD COLUMN {_c} BOOLEAN DEFAULT FALSE")
     con.execute("""
         CREATE TABLE IF NOT EXISTS network_bulk_runs (
             id         VARCHAR PRIMARY KEY,
@@ -813,14 +820,18 @@ def create_event_run(
     event_id: str, event_name: str, event_date: Optional[str],
     entity_type: str, csv_filename: Optional[str],
     total_count: int, role: str,
+    include_teaser: bool = False, override_cache: bool = False,
+    auto_practice_composite: bool = False,
 ) -> None:
     from datetime import datetime
     con = get_connection()
     con.execute(
         "INSERT INTO event_runs (id, event_name, event_date, entity_type, csv_filename, "
-        "total_count, done_count, skip_count, status, user_role, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?)",
+        "total_count, done_count, skip_count, status, user_role, "
+        "include_teaser, override_cache, auto_practice_composite, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?, ?, ?, ?)",
         [event_id, event_name, event_date, entity_type, csv_filename, total_count, role,
+         bool(include_teaser), bool(override_cache), bool(auto_practice_composite),
          datetime.utcnow()],
     )
     con.close()
@@ -910,7 +921,8 @@ def get_event_run(event_id: str) -> Optional[dict]:
     con = get_connection()
     row = con.execute(
         "SELECT id, event_name, event_date, entity_type, csv_filename, total_count, "
-        "done_count, skip_count, status, user_role, enriched_csv_path, zip_path, created_at "
+        "done_count, skip_count, status, user_role, enriched_csv_path, zip_path, "
+        "include_teaser, override_cache, auto_practice_composite, created_at "
         "FROM event_runs WHERE id = ?",
         [event_id],
     ).fetchone()
@@ -919,7 +931,8 @@ def get_event_run(event_id: str) -> Optional[dict]:
         return None
     cols = ["id", "event_name", "event_date", "entity_type", "csv_filename",
             "total_count", "done_count", "skip_count", "status", "user_role",
-            "enriched_csv_path", "zip_path", "created_at"]
+            "enriched_csv_path", "zip_path", "include_teaser", "override_cache",
+            "auto_practice_composite", "created_at"]
     return dict(zip(cols, row))
 
 
