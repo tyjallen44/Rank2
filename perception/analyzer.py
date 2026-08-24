@@ -684,6 +684,7 @@ def analyze_location(
     report_title: str | None = None,
     service_line: str | None = None,     # Competitors Rankings: target is a hospital service line
     parent_system: str | None = None,
+    skip_db_save: bool = False,          # headless bulk scoring: compute score, don't persist a History row
 ) -> AnalysisResult:
     """Run a Claude-powered, evidence-grounded AI Visibility market analysis.
 
@@ -1238,7 +1239,8 @@ def analyze_location(
         result.pdf_path = str(pdf_path)
         result.md_path = str(report_path)
 
-    _save_to_db(result, market_key=_mkey)
+    if not skip_db_save:
+        _save_to_db(result, market_key=_mkey)
 
     if result.practice_composite_rows:
         from .practice_reputation import save_practice_reputation

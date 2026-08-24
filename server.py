@@ -1200,6 +1200,143 @@ async def network_teaser_pdf(run_id: str, _: str = Depends(require_auth)):
     )
 
 
+# ── Hospital Network — bulk (headless) scoring from an uploaded list ──────────
+
+_Q_ORDINAL = {"Q1": "1st Quartile", "Q2": "2nd Quartile",
+              "Q3": "3rd Quartile", "Q4": "4th Quartile"}
+_NETWORK_BULK_DIR = REPORTS_DIR / "network_bulk"
+
+
+def _detect_network_cols(header: list):
+    """Find the (name, city, state) column indices in an arbitrary CSV header."""
+    low = [(h or "").strip().lower() for h in header]
+    def _find(preds):
+        for i, h in enumerate(low):
+            if any(p in h for p in preds):
+                return i
+        return None
+    name_i  = _find(["entity_name", "system_name", "hospital_name", "organization", "name"])
+    city_i  = _find(["primary_city", "city"])
+    state_i = _find(["primary_state", "state"])
+    return name_i, city_i, state_i
+
+
+def _score_network_row(name: str, city: str, state: str, brand: str = "original"):
+    """Headless four-pillar score for one system → (score:int, quartile_label:str).
+    Reuses a fresh canonical score if one exists; otherwise scores headless (no
+    PDF, no History) and seeds the canonical cache."""
+    from perception.db import get_entity_score
+    from perception.scoring import grade_from_score
+    loc = ", ".join([p for p in [(city or "").strip(), (state or "").strip()] if p])
+    canon = get_entity_score(name, loc, days=30)
+    if canon and canon.get("pulse_score") is not None:
+        score = canon["pulse_score"]
+    else:
+        from perception.network_analyzer import _entity_pulse_score
+        score, _t, _a, _p = _entity_pulse_score(name, loc, brand=brand, headless=True)
+    if score is None:
+        raise ValueError("no score produced")
+    q_code, _band = grade_from_score(score)
+    return int(score), _Q_ORDINAL.get(q_code, q_code)
+
+
+def _run_network_bulk_job(job_id: str, bulk_id: str, header: list,
+                          rows: list, name_i, city_i, state_i, brand: str) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+    try:
+        from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
+        from perception.db import init_db
+        init_db()
+        _NETWORK_BULK_DIR.mkdir(parents=True, exist_ok=True)
+        total = len(rows)
+        emit({"type": "phase", "name": "starting", "text": f"Scoring {total} systems"})
+        out: dict = {}
+
+        def _work(idx: int):
+            row = rows[idx]
+            name = (row[name_i] if name_i is not None and name_i < len(row) else "").strip()
+            city = row[city_i] if city_i is not None and city_i < len(row) else ""
+            state = row[state_i] if state_i is not None and state_i < len(row) else ""
+            if not name:
+                return idx, ["Failure to run", ""]
+            emit({"type": "text", "text": f"▶ {name}"})
+            try:
+                score, quartile = _score_network_row(name, city, state, brand)
+                emit({"type": "text", "text": f"✓ {name} — {score} ({quartile})"})
+                return idx, [str(score), quartile]
+            except Exception as exc:
+                emit({"type": "text", "text": f"✗ {name} — failed ({type(exc).__name__})"})
+                return idx, ["Failure to run", ""]
+
+        done = 0
+        with _TPE(max_workers=5) as ex:
+            for f in _ac([ex.submit(_work, i) for i in range(total)]):
+                idx, cols = f.result()
+                out[idx] = cols
+                done += 1
+                emit({"type": "phase", "name": "scoring",
+                      "text": f"Scored {done} of {total}"})
+
+        import csv as _csv
+        out_path = _NETWORK_BULK_DIR / f"{bulk_id}.csv"
+        with open(out_path, "w", newline="", encoding="utf-8") as fh:
+            w = _csv.writer(fh)
+            w.writerow(list(header) + ["Pulse_Score", "Quartile"])
+            for i, row in enumerate(rows):
+                w.writerow(list(row) + out.get(i, ["Failure to run", ""]))
+
+        failed = sum(1 for c in out.values() if c[0] == "Failure to run")
+        job["status"] = "done"
+        job["result"] = {"bulk_id": bulk_id, "total": total,
+                         "scored": total - failed, "failed": failed, "bulk": True}
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
+@app.post("/api/network/bulk/run")
+async def network_bulk_run(file: UploadFile = File(...),
+                           payload: dict = Depends(get_current_user_payload)):
+    """Headless bulk scoring of an uploaded list of hospital systems. Returns a
+    job_id (for SSE progress) + bulk_id (for CSV download). No PDFs, no History."""
+    import csv as _csv, io as _io
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1")
+    reader = list(_csv.reader(_io.StringIO(text)))
+    if not reader:
+        raise HTTPException(400, "The uploaded file is empty.")
+    header = reader[0]
+    rows = [r for r in reader[1:] if any((c or "").strip() for c in r)]
+    name_i, city_i, state_i = _detect_network_cols(header)
+    if name_i is None:
+        raise HTTPException(400, "Could not find a system/entity name column "
+                                 "(expected a header containing 'name').")
+    if not rows:
+        raise HTTPException(400, "No data rows found in the uploaded file.")
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    bulk_id = uuid.uuid4().hex[:12]
+    _pool.submit(_run_network_bulk_job, job_id, bulk_id, header, rows,
+                 name_i, city_i, state_i, payload.get("brand", "original"))
+    return {"job_id": job_id, "bulk_id": bulk_id, "total": len(rows)}
+
+
+@app.get("/api/network/bulk/{bulk_id}/csv")
+async def network_bulk_csv(bulk_id: str, _: str = Depends(require_auth)):
+    safe = "".join(ch for ch in bulk_id if ch.isalnum())
+    path = _NETWORK_BULK_DIR / f"{safe}.csv"
+    if not path.exists():
+        raise HTTPException(404, "Enriched CSV not found (the run may still be in progress).")
+    return FileResponse(str(path), media_type="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="hospital-network-scores.csv"'})
+
+
 @app.post("/api/upload")
 async def upload_csv(file: UploadFile = File(...), _: str = Depends(require_auth)):
     from perception.loader import load

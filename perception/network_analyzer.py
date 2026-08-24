@@ -382,10 +382,14 @@ def _split_location(loc: str) -> tuple[str, str]:
 
 
 def _entity_pulse_score(entity_name: str, location: str, brand: str = "original",
-                        emit: Optional[Callable] = None, force: bool = False):
+                        emit: Optional[Callable] = None, force: bool = False,
+                        headless: bool = False):
     """Score one system on the four-pillar rubric using the SAME per-entity
     evaluator the Hospital Market report uses. Returns
-    (pulse_score, tier_scores dict, ai_says, weighting_profile)."""
+    (pulse_score, tier_scores dict, ai_says, weighting_profile).
+
+    headless=True skips the analysis_runs/History save (used by bulk scoring) —
+    the canonical entity-score cache is still seeded so re-runs stay fast."""
     from .analyzer import analyze_location
     city, state = _split_location(location)
     try:
@@ -394,6 +398,7 @@ def _entity_pulse_score(entity_name: str, location: str, brand: str = "original"
             individual_report=True, entity_type="hospital",
             skip_pdf=True, on_event=emit, brand=brand,
             force_rerun=force, override_today_lock=force,
+            skip_db_save=headless,
         )
     except Exception as exc:
         import sys as _sys

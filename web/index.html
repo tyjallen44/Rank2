@@ -1658,6 +1658,31 @@ html, body {
       <div class="page-title">Hospital Network</div>
       <div class="page-sub">AI Visibility report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
 
+      <!-- Mode: single guided report vs bulk headless CSV scoring -->
+      <div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
+        <button class="tg-opt on" id="np-mode-single" onclick="npSetMode('single')">Single Network</button>
+        <button class="tg-opt"    id="np-mode-bulk"   onclick="npSetMode('bulk')">Bulk List (CSV)</button>
+      </div>
+
+      <!-- Bulk list mode: upload → headless score → enriched CSV -->
+      <div id="np-bulk" class="card hidden">
+        <div style="font-size:13px;color:var(--text);margin-bottom:14px">
+          Upload a CSV of hospital systems. Each row is scored <strong>headlessly</strong> — no report is produced or saved —
+          and two columns are appended to your file: <strong>Pulse Score</strong> and <strong>Quartile</strong>.
+          Rows that can't be scored get <em>“Failure to run”</em> in the score column.
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+          The file needs a column whose header contains <em>name</em> (the system), plus optional <em>city</em> / <em>state</em> columns.
+          Large lists run 5 at a time and can take a while.
+        </div>
+        <div class="fg" style="margin-bottom:14px">
+          <label class="fl">Hospital system list (.csv)</label>
+          <input id="np-bulk-file" class="fi" type="file" accept=".csv,text/csv">
+        </div>
+        <div id="np-bulk-err" class="err hidden mt8"></div>
+        <button class="btn btn-primary" id="np-bulk-btn" onclick="npBulkRun()">Score List →</button>
+      </div>
+
       <!-- Step 1: Network identity -->
       <div id="np-step1" class="card">
         <div class="fg" style="margin-bottom:14px">
@@ -5298,6 +5323,7 @@ function onSSE(ev) {
     _es.close();
     PHASES.forEach(p => setPhase(p, 'done'));
     document.getElementById('prog-sub').textContent = 'Complete';
+    if (ev.bulk) { showBulkDone(ev); return; }
     ev.results ? showBatchDone(ev.results) : showSingleDone(ev);
     return;
   }
@@ -5396,6 +5422,56 @@ function showSingleDone(r) {
     ${briefingBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
+  document.getElementById('prog-done').classList.remove('hidden');
+}
+
+// ── Hospital Network — bulk list mode ───────────────────────────────────────
+function npSetMode(mode) {
+  const single = mode === 'single';
+  document.getElementById('np-mode-single').classList.toggle('on', single);
+  document.getElementById('np-mode-bulk').classList.toggle('on', !single);
+  document.getElementById('np-step1').classList.toggle('hidden', !single);
+  document.getElementById('np-bulk').classList.toggle('hidden', single);
+  if (!single) {
+    ['np-step2', 'np-step3'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.classList.add('hidden');
+    });
+  }
+}
+
+async function npBulkRun() {
+  const errEl = document.getElementById('np-bulk-err');
+  errEl.classList.add('hidden');
+  const fileEl = document.getElementById('np-bulk-file');
+  const f = fileEl.files && fileEl.files[0];
+  if (!f) return showErr(errEl, 'Choose a CSV file first.');
+  const btn = document.getElementById('np-bulk-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Uploading…';
+  try {
+    const fd = new FormData(); fd.append('file', f);
+    const r = await api('/api/network/bulk/run', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error(await errDetail(r, 'Upload failed'));
+    const { job_id, total } = await r.json();
+    _lastPage = 'network';
+    startProgress(job_id, `Scoring ${total} hospital systems`, true);
+  } catch (e) { showErr(errEl, e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Score List →'; }
+}
+
+function showBulkDone(ev) {
+  _completedPages.add('network');
+  document.getElementById('done-sub').textContent =
+    `${ev.scored} scored${ev.failed ? ` · ${ev.failed} failed` : ''} of ${ev.total}`;
+  document.getElementById('done-body').innerHTML = `
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-val">${ev.total}</div><div class="stat-lbl">Systems</div></div>
+      <div class="stat-box"><div class="stat-val">${ev.scored}</div><div class="stat-lbl">Scored</div></div>
+      <div class="stat-box"><div class="stat-val">${ev.failed}</div><div class="stat-lbl">Failed</div></div>
+    </div>`;
+  const dl = `/api/network/bulk/${ev.bulk_id}/csv?token=${encodeURIComponent(_token)}`;
+  document.getElementById('done-actions').innerHTML = `
+    <button class="btn btn-gold" onclick="window.location.href='${dl}'">⬇ Download Enriched CSV</button>
+    <button class="btn btn-secondary" onclick="navigate('network')">New Bulk Run</button>`;
   document.getElementById('prog-done').classList.remove('hidden');
 }
 
