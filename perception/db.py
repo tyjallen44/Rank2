@@ -696,6 +696,19 @@ def init_db() -> None:
     ).fetchall()}
     if "zip_path" not in _er_cols:
         con.execute("ALTER TABLE event_runs ADD COLUMN zip_path VARCHAR")
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS network_bulk_runs (
+            id         VARCHAR PRIMARY KEY,
+            label      VARCHAR,
+            total      INTEGER DEFAULT 0,
+            scored     INTEGER DEFAULT 0,
+            failed     INTEGER DEFAULT 0,
+            status     VARCHAR DEFAULT 'running',
+            csv_path   VARCHAR,
+            user_role  VARCHAR DEFAULT 'user',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
 
@@ -929,6 +942,43 @@ def list_event_runs(role: str) -> list:
     cols = ["id", "event_name", "event_date", "entity_type", "total_count",
             "done_count", "skip_count", "status", "enriched_csv_path", "zip_path", "created_at"]
     return [dict(zip(cols, r)) for r in rows]
+
+
+def create_network_bulk_run(bulk_id: str, label: str, total: int, role: str) -> None:
+    con = get_connection()
+    con.execute(
+        "INSERT INTO network_bulk_runs (id, label, total, status, user_role) "
+        "VALUES (?, ?, ?, 'running', ?)",
+        [bulk_id, label, total, role],
+    )
+    con.close()
+
+
+def finalize_network_bulk_run(bulk_id: str, scored: int, failed: int, csv_path: str) -> None:
+    con = get_connection()
+    con.execute(
+        "UPDATE network_bulk_runs SET scored=?, failed=?, csv_path=?, status='done' WHERE id=?",
+        [scored, failed, csv_path, bulk_id],
+    )
+    con.close()
+
+
+def list_network_bulk_runs() -> list:
+    """Return all National Entity (bulk network) runs — visible to every user."""
+    con = get_connection()
+    rows = con.execute(
+        "SELECT id, label, total, scored, failed, status, created_at "
+        "FROM network_bulk_runs ORDER BY created_at DESC"
+    ).fetchall()
+    con.close()
+    cols = ["id", "label", "total", "scored", "failed", "status", "created_at"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def delete_network_bulk_run(bulk_id: str) -> None:
+    con = get_connection()
+    con.execute("DELETE FROM network_bulk_runs WHERE id = ?", [bulk_id])
+    con.close()
 
 
 def delete_event_run(event_id: str) -> None:

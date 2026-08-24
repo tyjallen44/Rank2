@@ -1288,6 +1288,8 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, header: list,
                 w.writerow(list(row) + out.get(i, ["Failure to run", ""]))
 
         failed = sum(1 for c in out.values() if c[0] == "Failure to run")
+        from perception.db import finalize_network_bulk_run
+        finalize_network_bulk_run(bulk_id, total - failed, failed, str(out_path))
         job["status"] = "done"
         job["result"] = {"bulk_id": bulk_id, "total": total,
                          "scored": total - failed, "failed": failed, "bulk": True}
@@ -1322,9 +1324,29 @@ async def network_bulk_run(file: UploadFile = File(...),
         raise HTTPException(400, "No data rows found in the uploaded file.")
     job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
     bulk_id = uuid.uuid4().hex[:12]
+    from perception.db import init_db, create_network_bulk_run
+    init_db()
+    create_network_bulk_run(bulk_id, (file.filename or "list.csv"),
+                            len(rows), payload.get("role", ""))
     _pool.submit(_run_network_bulk_job, job_id, bulk_id, header, rows,
                  name_i, city_i, state_i, payload.get("brand", "original"))
     return {"job_id": job_id, "bulk_id": bulk_id, "total": len(rows)}
+
+
+@app.get("/api/network/bulk/runs")
+async def network_bulk_runs_list(_: str = Depends(require_auth)):
+    """List all National Entity (bulk network) runs for the History page."""
+    from perception.db import init_db, list_network_bulk_runs
+    init_db()
+    return list_network_bulk_runs()
+
+
+@app.delete("/api/network/bulk/{bulk_id}")
+async def network_bulk_delete(bulk_id: str, _: dict = Depends(require_admin)):
+    from perception.db import init_db, delete_network_bulk_run
+    init_db()
+    delete_network_bulk_run(bulk_id)
+    return {"ok": True}
 
 
 @app.get("/api/network/bulk/{bulk_id}/csv")

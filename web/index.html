@@ -1671,9 +1671,12 @@ html, body {
           and two columns are appended to your file: <strong>Pulse Score</strong> and <strong>Quartile</strong>.
           Rows that can't be scored get <em>“Failure to run”</em> in the score column.
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
           The file needs a column whose header contains <em>name</em> (the system), plus optional <em>city</em> / <em>state</em> columns.
-          Large lists run 5 at a time and can take a while.
+          Any other columns are preserved as-is. Large lists run 5 at a time and can take a while.
+        </div>
+        <div style="margin-bottom:14px">
+          <a href="#" onclick="npDownloadTemplate();return false" style="font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">⬇ Download CSV template</a>
         </div>
         <div class="fg" style="margin-bottom:14px">
           <label class="fl">Hospital system list (.csv)</label>
@@ -5439,6 +5442,16 @@ function npSetMode(mode) {
   }
 }
 
+function npDownloadTemplate() {
+  const csv = 'Entity_ID,Entity_Name,Primary_City,Primary_State\n'
+            + 'ENT-001,Mayo Clinic,Rochester,MN\n'
+            + 'ENT-002,Cleveland Clinic,Cleveland,OH\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'national-entity-list-template.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
 async function npBulkRun() {
   const errEl = document.getElementById('np-bulk-err');
   errEl.classList.add('hidden');
@@ -5951,22 +5964,26 @@ let _historySortField = 'date';
 let _historySortDir = 'desc';
 let _historySearch = '';
 let _cachedEvents = [];
-let _evHistExpanded = localStorage.getItem('evHistExpanded') === 'true';
+let _evHistExpanded = false;   // both History run-sections start collapsed
+let _nbHistExpanded = false;
+let _cachedBulkRuns = [];
 
 async function loadHistory() {
   const el = document.getElementById('history-body');
   el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
   try {
-    const [runsResp, eventsResp] = await Promise.all([
+    const [runsResp, eventsResp, bulkResp] = await Promise.all([
       api('/api/history'),
       api('/api/events'),
+      api('/api/network/bulk/runs'),
     ]);
     _historyRuns = await runsResp.json();
     const events  = await eventsResp.json();
+    const bulkRuns = await bulkResp.json();
     _historySortField = 'date';
     _historySortDir = 'desc';
     _historySearch = '';
-    renderHistory(events);
+    renderHistory(events, bulkRuns);
   } catch(e) {
     el.innerHTML = `<div class="err">${e.message}</div>`;
   }
@@ -6004,9 +6021,11 @@ function _fmtRunDate(run) {
   return run.generated_at || '—';
 }
 
-function renderHistory(events) {
+function renderHistory(events, bulkRuns) {
   if (events !== undefined) _cachedEvents = events;
+  if (bulkRuns !== undefined) _cachedBulkRuns = bulkRuns;
   events = _cachedEvents;
+  bulkRuns = _cachedBulkRuns;
   const searchWasFocused = document.activeElement && document.activeElement.id === 'history-search';
   const el = document.getElementById('history-body');
 
@@ -6113,7 +6132,50 @@ function renderHistory(events) {
       </div>`;
   }
 
-  if (!_historyRuns.length && !evHtml) {
+  // ── National Entity Runs section (bulk headless Hospital Network scoring) ──
+  let nbHtml = '';
+  if (bulkRuns && bulkRuns.length) {
+    const nbRows = bulkRuns.map(b => {
+      const date = (b.created_at || '').slice(0, 10);
+      const result = `${b.scored} scored${b.failed ? ` · ${b.failed} failed` : ''}`;
+      const statusBadge = b.status === 'done'
+        ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
+        : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
+      const csvBtn = b.status === 'done'
+        ? `<button class="btn btn-ghost btn-sm" onclick="window.location.href='/api/network/bulk/${b.id}/csv?token=${encodeURIComponent(_token)}'">⬇ CSV</button>`
+        : `<span style="color:var(--muted);font-size:13px">—</span>`;
+      const delCell = _role === 'admin'
+        ? `<td><button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="nbDelete('${b.id}')">Delete</button></td>` : '';
+      return `<tr><td>${date}</td><td>${b.label || ''}</td><td>${b.total}</td>
+        <td>${result}</td><td>${statusBadge}</td><td>${csvBtn}</td>${delCell}</tr>`;
+    }).join('');
+    const nbCount = bulkRuns.length;
+    nbHtml = `
+      <div style="margin-bottom:24px">
+        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">National Entity Runs</div>
+        <div id="nb-hist-collapsed" onclick="nbToggleHistory()" style="cursor:pointer;padding:14px 18px;border-radius:8px;border:1.5px solid var(--border);background:var(--pale);transition:background 0.15s" onmouseenter="this.style.background='#e8f0ee'" onmouseleave="this.style.background='var(--pale)'">
+          <div style="display:flex;align-items:center;gap:14px">
+            <span style="font-size:22px;color:var(--teal-mid);line-height:1">≡</span>
+            <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--body)">${nbCount} National Entity Run${nbCount === 1 ? '' : 's'}</div></div>
+            <button class="btn btn-primary btn-sm" style="pointer-events:none;flex-shrink:0">View All ▼</button>
+          </div>
+        </div>
+        <div id="nb-hist-body">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:12px;color:var(--muted)">${nbCount} run${nbCount === 1 ? '' : 's'}</span>
+            <button class="btn btn-ghost btn-sm" onclick="nbToggleHistory()">Hide National Entity Runs ▲</button>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table class="tbl">
+              <thead><tr><th>Date</th><th>List</th><th>Systems</th><th>Result</th><th>Status</th><th>CSV</th>${_role === 'admin' ? '<th></th>' : ''}</tr></thead>
+              <tbody>${nbRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if (!_historyRuns.length && !evHtml && !nbHtml) {
     el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
     return;
   }
@@ -6144,7 +6206,7 @@ function renderHistory(events) {
     return `<th onclick="historySort('${field}')" style="cursor:pointer;user-select:none${align ? ';text-align:' + align : ''}">${label}${icon}</th>`;
   };
 
-  el.innerHTML = evHtml + `
+  el.innerHTML = evHtml + nbHtml + `
     <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">All Reports</div>
     <div style="margin-bottom:16px">
       <input id="history-search" type="text" class="input"
@@ -6219,16 +6281,33 @@ function renderHistory(events) {
 
 function evToggleHistory() {
   _evHistExpanded = !_evHistExpanded;
-  localStorage.setItem('evHistExpanded', _evHistExpanded);
+  _applyEvHistState();
+}
+
+function nbToggleHistory() {
+  _nbHistExpanded = !_nbHistExpanded;
   _applyEvHistState();
 }
 
 function _applyEvHistState() {
   const body      = document.getElementById('ev-hist-body');
   const collapsed = document.getElementById('ev-hist-collapsed');
-  if (!body) return;
-  body.style.display      = _evHistExpanded ? '' : 'none';
-  if (collapsed) collapsed.style.display = _evHistExpanded ? 'none' : '';
+  if (body) {
+    body.style.display = _evHistExpanded ? '' : 'none';
+    if (collapsed) collapsed.style.display = _evHistExpanded ? 'none' : '';
+  }
+  const nbBody      = document.getElementById('nb-hist-body');
+  const nbCollapsed = document.getElementById('nb-hist-collapsed');
+  if (nbBody) {
+    nbBody.style.display = _nbHistExpanded ? '' : 'none';
+    if (nbCollapsed) nbCollapsed.style.display = _nbHistExpanded ? 'none' : '';
+  }
+}
+
+async function nbDelete(id) {
+  if (!confirm('Delete this National Entity run? This removes the run record and its CSV.')) return;
+  const r = await api('/api/network/bulk/' + id, { method: 'DELETE' });
+  if (r.ok) loadHistory();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
