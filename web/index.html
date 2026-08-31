@@ -878,7 +878,7 @@ html, body {
         <input id="ra-email" class="fi" type="email" placeholder="you@example.com or you@rldatix.com">
       </div>
       <p style="font-size:12px;color:var(--muted);margin:-4px 0 16px;line-height:1.5">
-        @rldatix.com emails receive a native account with password login.<br>
+        @rldatix.com and @socialclimb.com emails receive a native account with password login.<br>
         Other emails are approved for Google Sign In.
       </p>
       <button class="btn btn-primary btn-full" id="ra-btn" onclick="submitRequestAccess()">Submit Request</button>
@@ -923,7 +923,7 @@ html, body {
     <div id="fp-err" class="err hidden mt12"></div>
     <div id="fp-ok" class="hidden mt12" style="background:var(--pale);border:1px solid var(--border);padding:12px 14px;border-radius:8px;font-size:13px;color:var(--teal);line-height:1.55"></div>
     <div id="fp-form">
-      <p style="font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.5">Enter your @rldatix.com email and we'll send you a link to reset your password.</p>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.5">Enter your @rldatix.com or @socialclimb.com email and we'll send you a link to reset your password.</p>
       <div class="fg">
         <label class="fl">Email</label>
         <input id="fp-email" class="fi" type="email" placeholder="you@rldatix.com"
@@ -3128,7 +3128,7 @@ html, body {
     <div class="fg">
       <label class="fl">Auth Type</label>
       <select id="inv-auth" class="fi">
-        <option value="native">Native — email + password (@rldatix.com)</option>
+        <option value="native">Native — email + password (@rldatix.com / @socialclimb.com)</option>
         <option value="google">Google SSO</option>
       </select>
     </div>
@@ -3399,7 +3399,10 @@ async function submitRequestAccess() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
   try {
-    const isRLD = email.toLowerCase().endsWith('@rldatix.com');
+    // Internal domains get a native (email+password) account; everyone else → Google.
+    // NOTE: the backend re-derives this from the domain, so it can't be spoofed here.
+    const _nativeDomains = ['@rldatix.com', '@socialclimb.com'];
+    const isRLD = _nativeDomains.some(d => email.toLowerCase().endsWith(d));
     const request_type = isRLD ? 'native' : 'google';
     const r = await fetch('/api/auth/request', {
       method: 'POST',

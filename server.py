@@ -1618,6 +1618,17 @@ async def native_login(req: NativeLoginRequest):
 
 # ── Access request submission ─────────────────────────────────────────────────
 
+# Internal domains whose users get a native (email + password) account. Everyone
+# else is routed to Google Sign-In. Derived server-side so the track can't be
+# spoofed by a crafted request_type in the client payload.
+_NATIVE_LOGIN_DOMAINS = ("rldatix.com", "socialclimb.com")
+
+
+def _is_native_domain(email: str) -> bool:
+    e = (email or "").lower().strip()
+    return any(e.endswith("@" + d) for d in _NATIVE_LOGIN_DOMAINS)
+
+
 @app.post("/api/auth/request")
 async def request_access(req: RequestAccessBody):
     from perception.db import init_db
@@ -1632,9 +1643,11 @@ async def request_access(req: RequestAccessBody):
     existing = get_access_request_by_email(email)
     if existing and existing["status"] == "pending":
         return {"status": "pending", "message": "Your request is already being reviewed"}
-    new_req = create_access_request(email, req.name, req.request_type)
+    # Authoritative: the login track is decided by the email domain, not the client.
+    request_type = "native" if _is_native_domain(email) else "google"
+    new_req = create_access_request(email, req.name, request_type)
     try:
-        notify_admin_access_request(email, req.name, req.request_type, new_req["id"])
+        notify_admin_access_request(email, req.name, request_type, new_req["id"])
     except Exception as _e:
         print(f"[email] request notify error: {_e}")
     return {"status": "requested"}
