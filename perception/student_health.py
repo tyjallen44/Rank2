@@ -181,17 +181,12 @@ def score_clinic(clinic: dict) -> dict:
     reviews_source = "estimate"
     g_rating = g_count = None
     reviews_val = _cl(d.get("reviews_reputation"))
-    try:
-        from .data.places import fetch_google_rating
-        read = fetch_google_rating(_clinic_query_name(clinic),
-                                   clinic.get("city"), clinic.get("state"))
-        if read.verified and read.rating is not None:
-            band = scoring.experience_band(read.rating, read.review_count)
-            if band is not None:
-                reviews_val, reviews_source = band, "google"
-                g_rating, g_count = read.rating, read.review_count
-    except Exception:
-        pass
+    read = _google_reviews_for_clinic(clinic)
+    if read is not None:
+        band = scoring.experience_band(read.rating, read.review_count)
+        if band is not None:
+            reviews_val, reviews_source = band, "google"
+            g_rating, g_count = read.rating, read.review_count
 
     tiers = {
         "clinical_outcomes_safety":   _cl(d.get("services_access")),      # Services & Access
@@ -207,18 +202,34 @@ def score_clinic(clinic: dict) -> dict:
             "google_review_count": g_count}
 
 
-def _clinic_query_name(clinic: dict) -> str:
-    """Build a Google search string that disambiguates a campus clinic — prepend
-    the university when the clinic name doesn't already carry a distinctive token."""
-    import re
+def _google_reviews_for_clinic(clinic: dict):
+    """Resolve a campus clinic's Google listing, trying query variants from most
+    to least specific and returning the first VERIFIED rated read (or None).
+
+    Trying the clinic name AS-IS first is what lets a specific name like
+    'BYU Student Health Center' match directly, while the school-qualified
+    variants rescue generically-named clinics ('Student Health Center')."""
+    from .data.places import fetch_google_rating
     name = (clinic.get("clinic_name") or "").strip()
     school = (clinic.get("school") or "").strip()
-    _stop = {"university", "college", "state", "the", "of", "a", "and"}
-    toks = [t for t in re.split(r"[^A-Za-z0-9]+", school)
-            if len(t) >= 4 and t.lower() not in _stop]
-    if name and toks and not any(t.lower() in name.lower() for t in toks):
-        return f"{school} {name}".strip()
-    return name or f"{school} student health center".strip()
+    city, state = clinic.get("city"), clinic.get("state")
+    seen, candidates = set(), []
+    for q in (name,
+              f"{school} student health center",
+              f"{school} student health",
+              f"{school} {name}"):
+        q = (q or "").strip()
+        if q and q.lower() not in seen:
+            seen.add(q.lower())
+            candidates.append(q)
+    for q in candidates:
+        try:
+            read = fetch_google_rating(q, city, state)
+            if read.verified and read.rating is not None:
+                return read
+        except Exception:
+            pass
+    return None
 
 
 def _clean(d: dict) -> dict:
