@@ -40,6 +40,19 @@ WEIGHTS: dict[str, dict[str, float]] = {
         "patient_experience_reviews": 0.23,
         "credentials_recognition": 0.13,
     },
+    # Student Health (on-campus university clinics). No CMS/hospital data — the
+    # slots are remapped to student-relevant pillars (see PRACTICE_TIER_LABELS
+    # below). Registered here so scoring.composite_score() applies these weights.
+    #   clinical_outcomes_safety   → Services & Access                     (0.25)
+    #   credentials_recognition    → Findability & Identity                (0.25)
+    #   patient_experience_reviews → Reviews & Reputation                  (0.30)
+    #   access_fit                 → Machine-Readability & Digital Presence(0.20)
+    "practice_student_health": {
+        "clinical_outcomes_safety":   0.25,
+        "credentials_recognition":    0.25,
+        "patient_experience_reviews": 0.30,
+        "access_fit":                 0.20,
+    },
 }
 
 # Report-facing label for the first slot, which differs by profile.
@@ -136,11 +149,21 @@ PRACTICE_TIER_LABELS: dict[str, dict[str, str]] = {
     )
 }
 
+# Student Health uses its own pillar labels (on-campus clinics have no clinical
+# outcomes / credentials data — the four slots become student-relevant pillars).
+PRACTICE_TIER_LABELS["practice_student_health"] = {
+    "clinical_outcomes_safety":   "Services & Access",
+    "credentials_recognition":    "Findability & Identity",
+    "patient_experience_reviews": "Reviews & Reputation",
+    "access_fit":                 "Machine-Readability & Digital Presence",
+}
+
 PRACTICE_PROFILE_DISPLAY: dict[str, str] = {
     "practice_procedural":   "Procedural",
     "practice_relationship": "Relationship",
     "practice_referral_fed": "Referral-Fed",
     "practice_hybrid":       "Hybrid",
+    "practice_student_health": "Student Health",
 }
 
 

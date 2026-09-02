@@ -45,6 +45,16 @@ WEIGHTS["practice_hybrid"] = {
     for k in WEIGHTS["practice_procedural"]
 }
 
+# Student Health (on-campus university clinics): reputation-led, then findability
+# and services, with machine-readability last. Slots remap to student pillars
+# (see scoring.PRACTICE_TIER_LABELS["practice_student_health"]).
+WEIGHTS["practice_student_health"] = {
+    "clinical_outcomes_safety":   0.25,   # Services & Access
+    "credentials_recognition":    0.25,   # Findability & Identity
+    "patient_experience_reviews": 0.30,   # Reviews & Reputation
+    "access_fit":                 0.20,   # Machine-Readability & Digital Presence
+}
+
 
 def composite(
     tier_scores: dict[str, Optional[float]],
