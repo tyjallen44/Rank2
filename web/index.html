@@ -2064,6 +2064,54 @@ html, body {
           </div>
         </div>
 
+        <div class="card" style="margin-bottom:16px">
+          <details>
+            <summary style="cursor:pointer;font-weight:600;font-size:15px;list-style:none;display:flex;align-items:center;gap:8px">
+              <span style="color:var(--teal)">▸</span> HubSpot Workflow — Setup Guide
+            </summary>
+            <div style="margin-top:16px;font-size:13px;color:var(--text);line-height:1.6">
+              <p style="margin:0 0 14px;color:var(--muted)">
+                Connect a HubSpot form to Pulse so each submission generates a Hospital Network report and emails the requester.
+                The reliable path is an Operations Hub <strong>Custom Code</strong> action (it can send our exact fields and the secret header);
+                the snippet below is pre-filled with your live webhook URL.
+              </p>
+
+              <div style="font-weight:700;color:var(--teal);margin:14px 0 4px">1 · Build the form</div>
+              Create (or reuse) a HubSpot form that captures — and maps to contact properties —
+              <strong>Organization name</strong>, <strong>Headquarters</strong> (city, state), <strong>Website URL</strong>,
+              <strong>Name</strong>, <strong>Email</strong>, and optionally <strong>Job title</strong>.
+
+              <div style="font-weight:700;color:var(--teal);margin:14px 0 4px">2 · Create a workflow</div>
+              Automation → <strong>Workflows</strong> → Create → <em>Contact-based</em>. Set the enrollment trigger to
+              <strong>Form submission</strong> = your form.
+
+              <div style="font-weight:700;color:var(--teal);margin:14px 0 4px">3 · Store the secret</div>
+              In the workflow, add a <strong>secret</strong> named <code>PULSE_WEBHOOK_SECRET</code> and paste the
+              <strong>Shared secret</strong> shown above. (Keeps the secret out of the code body.)
+
+              <div style="font-weight:700;color:var(--teal);margin:14px 0 4px">4 · Add a “Custom code” action</div>
+              Choose Node.js. Under <em>Property to include in code</em>, add the contact properties for organization name,
+              headquarters, website, name, email, and job title — using the input names in the snippet
+              (<code>organization_name</code>, <code>headquarters</code>, <code>website_url</code>, <code>requester_name</code>,
+              <code>email</code>, <code>jobtitle</code>). Then paste:
+              <div style="display:flex;justify-content:flex-end;margin:8px 0 4px">
+                <button class="btn btn-secondary btn-sm" onclick="intgCopy('intg-guide-code', this)">Copy code</button>
+              </div>
+              <pre id="intg-guide-code" style="background:#0F2A2E;color:#CFEAE6;border-radius:8px;padding:14px 16px;font-size:11.5px;overflow:auto;margin:0;line-height:1.5"></pre>
+
+              <div style="font-weight:700;color:var(--teal);margin:14px 0 4px">5 · Test &amp; turn on</div>
+              Submit the form with a real hospital email, then watch <strong>Recent Requests</strong> below for the row
+              (<em>Sent</em> when affiliation is confirmed, <em>Follow-up</em> when it isn’t). Turn the workflow on.
+
+              <div style="font-size:12px;color:var(--muted);margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+                <strong>No Operations Hub?</strong> The native “Send a webhook” action can’t set a custom header or our field
+                names — append the secret as a query parameter instead (<code>…/network-request?key=YOUR_SECRET</code>), and
+                relay the payload from your own backend, or use the Custom Code action above.
+              </div>
+            </div>
+          </details>
+        </div>
+
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
             <div style="font-weight:600;font-size:15px">Recent Requests</div>
@@ -6873,6 +6921,27 @@ async function loadIntegrations() {
     sec.value = d.secret; sec.type = 'password';
     document.getElementById('intg-reveal-btn').textContent = 'Reveal';
     document.getElementById('intg-payload').textContent = JSON.stringify(d.sample_payload, null, 2);
+    const guide = document.getElementById('intg-guide-code');
+    if (guide) guide.textContent =
+`exports.main = async (event, callback) => {
+  const p = event.inputFields;            // mapped HubSpot contact properties
+  const resp = await fetch('${d.webhook_url}', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      '${d.signature_header}': process.env.PULSE_WEBHOOK_SECRET   // the shared secret above
+    },
+    body: JSON.stringify({
+      organization_name: p.organization_name || '',
+      headquarters:      p.headquarters || '',
+      website_url:       p.website_url || '',
+      requester_name:    p.requester_name || '',
+      requester_email:   p.email || '',
+      requester_title:   p.jobtitle || ''
+    })
+  });
+  callback({ outputFields: { status: resp.status, body: await resp.text() } });
+};`;
     document.getElementById('intg-policy').innerHTML =
       `Verified requests receive the full report via a link that expires in <strong>${d.link_ttl_days} days</strong>. `
       + `Cost backstop: up to <strong>${d.daily_cap}</strong> requests per email per day.`;

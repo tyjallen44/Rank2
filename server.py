@@ -1630,8 +1630,11 @@ async def public_hubspot_network_request(req: HubspotNetworkRequest, request: Re
     """Public webhook (HubSpot Workflow → outbound POST), authenticated by a
     shared-secret header. Persists the request, returns 200 immediately, and
     generates + emails the Hospital Network report in the background."""
-    supplied = request.headers.get(_HUBSPOT_SIG_HEADER, "") or request.headers.get(
-        _HUBSPOT_SIG_HEADER.lower(), "")
+    # Secret accepted in the header (preferred) or a ?key= query param (for tools
+    # like HubSpot's native webhook action that can't set custom headers).
+    supplied = (request.headers.get(_HUBSPOT_SIG_HEADER, "")
+                or request.headers.get(_HUBSPOT_SIG_HEADER.lower(), "")
+                or request.query_params.get("key", ""))
     if not supplied or not _hmac.compare_digest(supplied, _hubspot_secret()):
         raise HTTPException(401, "Invalid or missing signature")
     org   = (req.organization_name or "").strip()
