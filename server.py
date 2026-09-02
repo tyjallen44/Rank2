@@ -104,6 +104,7 @@ _ROLE_MAP: dict[str, tuple[str, str]] = {
 }
 _ROLE_DISPLAY: dict[str, str] = {v[0]: v[1] for v in _ROLE_MAP.values()}
 _ROLE_DISPLAY["admin"] = "Admin"
+_ROLE_DISPLAY["integrations_admin"] = "Integrations Admin"
 
 def _password_role(pw: str) -> tuple[str, str]:
     return _ROLE_MAP.get(pw, ("admin", "Admin"))
@@ -188,6 +189,14 @@ def get_current_user_payload(request: Request, token: Optional[str] = Query(None
 def require_admin(payload: dict = Depends(get_current_user_payload)) -> dict:
     if payload.get("role") != "admin":
         raise HTTPException(403, "Admin access required")
+    return payload
+
+
+def require_integration_admin(payload: dict = Depends(get_current_user_payload)) -> dict:
+    """Super-admin OR the scoped Integrations Admin role. Integration-management
+    endpoints use this; user-management stays behind require_admin (super-admin only)."""
+    if payload.get("role") not in ("admin", "integrations_admin"):
+        raise HTTPException(403, "Integration admin access required")
     return payload
 
 
@@ -1488,6 +1497,308 @@ class InviteUserRequest(BaseModel):
     auth_type: str = "native"
     role: str = "user"
     brand: str = "original"
+
+
+# ══ Public HubSpot webhook — Hospital Network report on request ═══════════════
+import hmac as _hmac
+
+_HUBSPOT_SECRET_KEY      = "hubspot_webhook_secret"
+_HUBSPOT_SIG_HEADER      = "X-Pulse-Signature"
+_PUBLIC_REPORT_DAILY_CAP = 5             # per requester email per calendar day
+_PUBLIC_LINK_TTL_DAYS    = 14
+
+_FREE_EMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "yahoo.com", "ymail.com", "outlook.com",
+    "hotmail.com", "live.com", "aol.com", "icloud.com", "me.com", "mac.com",
+    "proton.me", "protonmail.com", "gmx.com", "mail.com", "zoho.com",
+    "yandex.com", "msn.com", "comcast.net", "verizon.net", "att.net",
+}
+_GENERIC_ORG_TOKENS = {
+    "health", "healthcare", "hospital", "hospitals", "medical", "center",
+    "centers", "system", "systems", "care", "clinic", "clinics", "group",
+    "regional", "memorial", "community", "university", "the", "and", "for",
+    "physicians", "associates", "partners", "network", "services", "inc",
+    "llc", "corporation", "saint", "childrens", "children", "county", "valley",
+    "medicine", "institute", "foundation",
+}
+_MULTI_TLDS = {"co.uk", "org.uk", "ac.uk", "com.au", "co.nz", "co.in"}
+
+
+def _registrable_domain(host: str) -> str:
+    """Best-effort eTLD+1 (e.g. 'mail.dukehealth.org' → 'dukehealth.org')."""
+    host = (host or "").strip().lower()
+    if "//" in host:
+        host = host.split("//", 1)[1]
+    host = host.split("/", 1)[0].split("?", 1)[0].split("@")[-1].split(":")[0]
+    labels = [l for l in host.split(".") if l]
+    if len(labels) < 2:
+        return host
+    last2 = ".".join(labels[-2:])
+    if last2 in _MULTI_TLDS and len(labels) >= 3:
+        return ".".join(labels[-3:])
+    return last2
+
+
+def _brand_tokens_ordered(text: str) -> list:
+    """Distinctive tokens of a name (order preserved), minus generic healthcare words."""
+    import re as _re
+    toks = _re.split(r"[^a-z0-9]+", (text or "").lower())
+    return [t for t in toks if len(t) >= 3 and t not in _GENERIC_ORG_TOKENS]
+
+
+def _domain_core(reg_domain: str) -> str:
+    """The brand portion of a registrable domain (TLD stripped, dots removed):
+    'dukehealth.org' → 'dukehealth', 'bswhealth.org' → 'bswhealth'."""
+    reg = (reg_domain or "").lower()
+    for mt in _MULTI_TLDS:
+        if reg.endswith("." + mt):
+            return reg[: -(len(mt) + 1)].replace(".", "")
+    return reg.rsplit(".", 1)[0].replace(".", "") if "." in reg else reg
+
+
+def _email_domain(email: str) -> str:
+    return _registrable_domain((email or "").split("@")[-1])
+
+
+def _affiliated(reg_domain: str, ordered_tokens: list) -> bool:
+    """Generous match between a domain and an organization's distinctive name
+    tokens: exact, substring (either direction), or initialism (e.g. 'bswhealth'
+    ← Baylor Scott White). Anchored on the org name so it works even when the
+    email domain differs from the public website (duke.edu ↔ Duke Health)."""
+    core = _domain_core(reg_domain)
+    tokens = set(ordered_tokens)
+    if not core or not tokens:
+        return False
+    if core in tokens:                                   # exact label (bjc, nyu, duke)
+        return True
+    for t in tokens:                                     # brand word inside the domain
+        if (len(t) >= 3 and t in core) or (len(core) >= 3 and core in t):
+            return True
+    acronym = "".join(t[0] for t in ordered_tokens)      # initialism (bsw, hca, chi)
+    if len(acronym) >= 2 and acronym in core:
+        return True
+    return False
+
+
+def _email_matches_org(email: str, org_name: str) -> tuple[bool, str]:
+    """Generous affiliation check: does the requester's email plausibly belong to
+    the organization the report is about? Anchored on the ORG NAME (the report
+    subject), NOT the self-submitted URL, so a made-up matching URL/email pair
+    cannot unlock a report for an unrelated hospital. Returns (allowed, reason)."""
+    ed = _email_domain(email)
+    if "@" not in (email or "") or not ed:
+        return False, "invalid email address"
+    if ed in _FREE_EMAIL_DOMAINS:
+        return False, f"{ed} is a personal email provider — affiliation can't be confirmed"
+    if _affiliated(ed, _brand_tokens_ordered(org_name)):
+        return True, f"email domain '{ed}' matches the organization"
+    return False, f"email domain '{ed}' is not clearly affiliated with '{org_name}'"
+
+
+def _hubspot_secret() -> str:
+    """Env-pinned secret wins (read-only); otherwise a DB-stored, rotatable secret
+    generated on first use."""
+    import os, secrets as _secrets
+    env = os.environ.get("HUBSPOT_WEBHOOK_SECRET", "").strip()
+    if env:
+        return env
+    from perception.db import init_db, get_setting, set_setting
+    init_db()
+    val = get_setting(_HUBSPOT_SECRET_KEY)
+    if not val:
+        val = _secrets.token_urlsafe(32)
+        set_setting(_HUBSPOT_SECRET_KEY, val)
+    return val
+
+
+def _hubspot_secret_env_pinned() -> bool:
+    import os
+    return bool(os.environ.get("HUBSPOT_WEBHOOK_SECRET", "").strip())
+
+
+class HubspotNetworkRequest(BaseModel):
+    organization_name: str
+    headquarters: str = ""
+    website_url: str = ""
+    requester_name: str = ""
+    requester_email: str
+    requester_title: str = ""
+
+
+@app.post("/api/public/hubspot/network-request")
+async def public_hubspot_network_request(req: HubspotNetworkRequest, request: Request):
+    """Public webhook (HubSpot Workflow → outbound POST), authenticated by a
+    shared-secret header. Persists the request, returns 200 immediately, and
+    generates + emails the Hospital Network report in the background."""
+    supplied = request.headers.get(_HUBSPOT_SIG_HEADER, "") or request.headers.get(
+        _HUBSPOT_SIG_HEADER.lower(), "")
+    if not supplied or not _hmac.compare_digest(supplied, _hubspot_secret()):
+        raise HTTPException(401, "Invalid or missing signature")
+    org   = (req.organization_name or "").strip()
+    email = (req.requester_email or "").strip().lower()
+    if not org or not email or "@" not in email:
+        raise HTTPException(400, "organization_name and a valid requester_email are required")
+
+    from perception.db import (init_db, create_public_report_request,
+                               count_public_requests_today)
+    init_db()
+    req_id = uuid.uuid4().hex
+    create_public_report_request(
+        req_id, org, (req.headquarters or "").strip(), (req.website_url or "").strip(),
+        (req.requester_name or "").strip(), email, (req.requester_title or "").strip(),
+    )
+    over_cap = count_public_requests_today(email) > _PUBLIC_REPORT_DAILY_CAP
+    _pool.submit(_run_public_report_job, req_id, over_cap)
+    return {"status": "received", "request_id": req_id}
+
+
+def _run_public_report_job(req_id: str, over_cap: bool = False) -> None:
+    """Background: verify affiliation → generate the full Hospital Network report
+    headlessly (auto-discovered roster, no round-trip) → email a secure link. On a
+    failed affiliation check, route to a human follow-up instead."""
+    import os, secrets as _secrets
+    from perception.db import (init_db, get_public_report_request,
+                               update_public_report_request)
+    from perception import email_utils
+    init_db()
+    rec = get_public_report_request(req_id)
+    if not rec:
+        return
+    org, email, name = rec["organization_name"], rec["requester_email"], rec["requester_name"]
+    try:
+        update_public_report_request(req_id, status="verifying")
+        allowed, reason = _email_matches_org(email, org)
+        if over_cap:
+            allowed, reason = False, "daily request cap reached"
+        if not allowed:
+            update_public_report_request(req_id, status="follow_up", match_reason=reason)
+            try:    email_utils.send_public_report_followup(email, name, org)
+            except Exception as _e: print(f"[public] followup email failed: {_e}")
+            try:    email_utils.notify_admin_public_request(org, email, "follow-up", reason)
+            except Exception: pass
+            return
+
+        update_public_report_request(req_id, status="generating", match_reason=reason)
+        from perception.network_analyzer import analyze_network, discover_hospitals_by_name
+        disc = discover_hospitals_by_name(org, rec["headquarters"] or "")
+        result = analyze_network(
+            network_name=org,
+            hq_location=rec["headquarters"] or "",
+            source_url=rec["website_url"] or "",
+            facilities=disc.get("facilities", []),
+            facility_type="hospital",
+            brand="original",
+        )
+        token = _secrets.token_urlsafe(24)
+        update_public_report_request(req_id, status="sent", run_id=result.run_id,
+                                     download_token=token)
+        app_url = os.environ.get("APP_URL", "https://careclimb.com").rstrip("/")
+        email_utils.send_public_report_ready(email, name, org,
+                                             f"{app_url}/api/public/report/{token}")
+        try:    email_utils.notify_admin_public_request(org, email, "sent")
+        except Exception: pass
+    except Exception as exc:
+        update_public_report_request(req_id, status="failed", error_msg=str(exc)[:500])
+        try:    email_utils.notify_admin_public_request(org, email, "failed", str(exc)[:200])
+        except Exception: pass
+
+
+@app.get("/api/public/report/{token}")
+async def public_report_download(token: str):
+    """Serve a requested Hospital Network PDF via its secure, expiring link."""
+    import re as _re
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from perception.db import (init_db, get_public_report_request_by_token, get_connection)
+    init_db()
+    rec = get_public_report_request_by_token(token)
+    if not rec or rec.get("status") != "sent" or not rec.get("run_id"):
+        raise HTTPException(404, "This link is invalid or has expired.")
+    created = rec.get("created_at")
+    if isinstance(created, str):
+        try: created = _dt.fromisoformat(created.replace("Z", "+00:00"))
+        except Exception: created = None
+    if created is not None:
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=_tz.utc)
+        if _dt.now(_tz.utc) - created > _td(days=_PUBLIC_LINK_TTL_DAYS):
+            raise HTTPException(410, "This link has expired.")
+
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT pdf_path, result_json FROM network_runs WHERE run_id = ?",
+            [rec["run_id"]],
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "Report not found.")
+    pdf_path = Path(row[0]) if row[0] else None
+    if not pdf_path or not pdf_path.exists():
+        if not row[1]:
+            raise HTTPException(404, "Report file is no longer available.")
+        from perception.models import NetworkResult
+        from perception.network_pdf import render_network_pdf
+        result = NetworkResult.model_validate_json(row[1])
+        out_dir = Path("reports"); out_dir.mkdir(parents=True, exist_ok=True)
+        slug = _re.sub(r"[^a-z0-9]+", "-", (result.network_name or "network").lower()).strip("-")
+        pdf_path = out_dir / f"{slug}-network-pulse-{_dt.utcnow().strftime('%y%m%d-%H%M')}.pdf"
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, render_network_pdf, result, str(pdf_path))
+        with get_connection() as con:
+            con.execute("UPDATE network_runs SET pdf_path = ? WHERE run_id = ?",
+                        [str(pdf_path), rec["run_id"]])
+    return FileResponse(str(pdf_path), media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{pdf_path.name}"'})
+
+
+# ── Admin: Integrations (webhook secret + activity) ───────────────────────────
+
+@app.get("/api/admin/integrations/webhook")
+async def admin_integration_webhook(request: Request,
+                                    _: dict = Depends(require_integration_admin)):
+    """Webhook config for the Admin → Integrations tab: URL, secret, payload contract."""
+    base = os.environ.get("APP_URL", str(request.base_url).rstrip("/")).rstrip("/")
+    return {
+        "webhook_url": f"{base}/api/public/hubspot/network-request",
+        "signature_header": _HUBSPOT_SIG_HEADER,
+        "secret": _hubspot_secret(),
+        "secret_env_pinned": _hubspot_secret_env_pinned(),
+        "daily_cap": _PUBLIC_REPORT_DAILY_CAP,
+        "link_ttl_days": _PUBLIC_LINK_TTL_DAYS,
+        "sample_payload": {
+            "organization_name": "Duke Health",
+            "headquarters": "Durham, NC",
+            "website_url": "https://www.dukehealth.org",
+            "requester_name": "Jane Smith",
+            "requester_email": "jane.smith@duke.edu",
+            "requester_title": "VP Marketing",
+        },
+    }
+
+
+@app.post("/api/admin/integrations/webhook/rotate")
+async def admin_integration_rotate(_: dict = Depends(require_integration_admin)):
+    """Generate a new webhook secret (disabled when the secret is env-pinned)."""
+    import secrets as _secrets
+    if _hubspot_secret_env_pinned():
+        raise HTTPException(400, "Secret is pinned by the HUBSPOT_WEBHOOK_SECRET env var "
+                                 "and can't be rotated from here.")
+    from perception.db import init_db, set_setting
+    init_db()
+    new = _secrets.token_urlsafe(32)
+    set_setting(_HUBSPOT_SECRET_KEY, new)
+    return {"secret": new}
+
+
+@app.get("/api/admin/integrations/requests")
+async def admin_integration_requests(_: dict = Depends(require_integration_admin)):
+    """Recent public report requests for the Integrations tab activity log."""
+    from perception.db import init_db, list_public_report_requests
+    init_db()
+    rows = list_public_report_requests(limit=100)
+    for r in rows:
+        for k in ("created_at", "updated_at"):
+            if r.get(k) is not None:
+                r[k] = str(r[k])
+    return rows
 
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────

@@ -724,6 +724,39 @@ def init_db() -> None:
     for _c, _t in [("done_count", "INTEGER DEFAULT 0"), ("input_path", "VARCHAR")]:
         if _c not in _nb_cols:
             con.execute(f"ALTER TABLE network_bulk_runs ADD COLUMN {_c} {_t}")
+
+    # ── App settings (key/value) — holds the HubSpot webhook shared secret ─────
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key        VARCHAR PRIMARY KEY,
+            value      VARCHAR,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # ── Public (HubSpot webhook) Hospital Network report requests ─────────────
+    # Lifecycle: received → verifying → generating → sent | follow_up | failed
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS public_report_requests (
+            id                VARCHAR PRIMARY KEY,
+            source            VARCHAR DEFAULT 'hubspot',
+            organization_name VARCHAR NOT NULL,
+            headquarters      VARCHAR,
+            website_url       VARCHAR,
+            requester_name    VARCHAR,
+            requester_email   VARCHAR NOT NULL,
+            requester_title   VARCHAR,
+            status            VARCHAR DEFAULT 'received',
+            resolved_domain   VARCHAR,
+            match_reason      VARCHAR,
+            run_id            VARCHAR,
+            download_token    VARCHAR,
+            error_msg         VARCHAR,
+            created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
 
@@ -1036,6 +1069,111 @@ def delete_network_bulk_run(bulk_id: str) -> None:
     con = get_connection()
     con.execute("DELETE FROM network_bulk_runs WHERE id = ?", [bulk_id])
     con.close()
+
+
+# ── App settings (key/value) ──────────────────────────────────────────────────
+
+def get_setting(key: str) -> Optional[str]:
+    con = get_connection()
+    row = con.execute("SELECT value FROM app_settings WHERE key = ?", [key]).fetchone()
+    con.close()
+    return row[0] if row else None
+
+
+def set_setting(key: str, value: str) -> None:
+    con = get_connection()
+    con.execute(
+        "INSERT INTO app_settings (key, value, updated_at) "
+        "VALUES (?, ?, CURRENT_TIMESTAMP) "
+        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "
+        "updated_at = CURRENT_TIMESTAMP",
+        [key, value],
+    )
+    con.close()
+
+
+# ── Public (HubSpot webhook) report requests ──────────────────────────────────
+
+def create_public_report_request(req_id: str, organization_name: str, headquarters: str,
+                                  website_url: str, requester_name: str,
+                                  requester_email: str, requester_title: str = "",
+                                  source: str = "hubspot") -> None:
+    con = get_connection()
+    con.execute(
+        "INSERT INTO public_report_requests "
+        "(id, source, organization_name, headquarters, website_url, requester_name, "
+        " requester_email, requester_title, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'received')",
+        [req_id, source, organization_name, headquarters, website_url,
+         requester_name, requester_email, requester_title],
+    )
+    con.close()
+
+
+def update_public_report_request(req_id: str, **fields) -> None:
+    """Update any subset of status/resolved_domain/match_reason/run_id/
+    download_token/error_msg, always bumping updated_at."""
+    allowed = ("status", "resolved_domain", "match_reason", "run_id",
+               "download_token", "error_msg")
+    sets, params = [], []
+    for k in allowed:
+        if k in fields:
+            sets.append(f"{k} = ?")
+            params.append(fields[k])
+    if not sets:
+        return
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(req_id)
+    con = get_connection()
+    con.execute(f"UPDATE public_report_requests SET {', '.join(sets)} WHERE id = ?", params)
+    con.close()
+
+
+_PRR_COLS = ["id", "source", "organization_name", "headquarters", "website_url",
+             "requester_name", "requester_email", "requester_title", "status",
+             "resolved_domain", "match_reason", "run_id", "download_token",
+             "error_msg", "created_at", "updated_at"]
+_PRR_SELECT = ", ".join(_PRR_COLS)
+
+
+def get_public_report_request(req_id: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute(
+        f"SELECT {_PRR_SELECT} FROM public_report_requests WHERE id = ?", [req_id]
+    ).fetchone()
+    con.close()
+    return dict(zip(_PRR_COLS, r)) if r else None
+
+
+def get_public_report_request_by_token(token: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute(
+        f"SELECT {_PRR_SELECT} FROM public_report_requests WHERE download_token = ?", [token]
+    ).fetchone()
+    con.close()
+    return dict(zip(_PRR_COLS, r)) if r else None
+
+
+def list_public_report_requests(limit: int = 100) -> list:
+    con = get_connection()
+    rows = con.execute(
+        f"SELECT {_PRR_SELECT} FROM public_report_requests "
+        f"ORDER BY created_at DESC LIMIT ?", [limit]
+    ).fetchall()
+    con.close()
+    return [dict(zip(_PRR_COLS, r)) for r in rows]
+
+
+def count_public_requests_today(requester_email: str) -> int:
+    """How many requests this email has made today — the per-email daily cap."""
+    con = get_connection()
+    r = con.execute(
+        "SELECT COUNT(*) FROM public_report_requests "
+        "WHERE lower(requester_email) = lower(?) AND created_at >= ?",
+        [requester_email, date.today().isoformat()],
+    ).fetchone()
+    con.close()
+    return int(r[0]) if r else 0
 
 
 def delete_event_run(event_id: str) -> None:

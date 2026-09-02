@@ -123,3 +123,51 @@ def send_google_access_approved(email: str, name: Optional[str]) -> None:
     {_btn(APP_URL, f"Sign In to {_BRAND}")}
     """
     _send(email, "Access Approved", _wrap(body))
+
+
+def send_public_report_ready(email: str, name: Optional[str], organization: str,
+                             download_url: str) -> None:
+    """Deliver a requested Hospital Network report as a secure download link."""
+    display = name or "there"
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">Your AI Visibility Report is ready</h2>
+    <p>Hi {display},</p>
+    <p style="margin-bottom:8px">Your Hospital Network AI Visibility report for
+    <strong>{organization}</strong> has been generated. Use the secure link below to
+    download it:</p>
+    <p style="margin:20px 0">{_btn(download_url, "Download Your Report")}</p>
+    <p style="font-size:12px;color:#5A6E72;margin-bottom:0">This link is unique to you and
+    will expire in 14 days. If you have questions about your results, just reply to this email.</p>
+    """
+    _send(email, "Your AI Visibility Report", _wrap(body))
+
+
+def send_public_report_followup(email: str, name: Optional[str], organization: str) -> None:
+    """Sent when we can't confirm the requester's affiliation with the organization —
+    routes them to a specialist instead of auto-generating the report."""
+    display = name or "there"
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">We're preparing your report</h2>
+    <p>Hi {display},</p>
+    <p style="margin-bottom:8px">Thanks for requesting a Hospital Network AI Visibility
+    report for <strong>{organization}</strong>. To make sure it reaches the right person,
+    a specialist from our team will follow up with you shortly to confirm a few details
+    and deliver your report.</p>
+    <p style="font-size:12px;color:#5A6E72;margin-bottom:0">No action is needed on your part —
+    we'll be in touch.</p>
+    """
+    _send(email, "Your report request", _wrap(body))
+
+
+def notify_admin_public_request(organization: str, requester_email: str,
+                                status: str, reason: str = "") -> None:
+    """Notify the admin/sales inbox of a public report request outcome
+    (esp. follow-ups that need a human)."""
+    extra = f"<p style=\"margin:6px 0 0;color:#5A6E72;font-size:13px\">{reason}</p>" if reason else ""
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">Public report request — {status}</h2>
+    <p style="margin:0"><strong>{organization}</strong></p>
+    <p style="margin:4px 0 0">Requester: {requester_email}</p>
+    {extra}
+    """
+    _send(ADMIN_EMAIL, f"Public report request — {status}", _wrap(body))
