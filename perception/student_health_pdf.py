@@ -150,14 +150,22 @@ def _build_html(result: dict) -> str:
         <div><b>{_e(today)}</b><br>generated</div>
       </div>
       <div class="intro">Each clinic is scored 0&ndash;100 on how visibly and favorably AI assistants
-        (ChatGPT, Gemini, Claude) present it when students ask about campus healthcare, then ranked.</div>
+        (ChatGPT, Gemini, Claude) present it when students ask about campus healthcare.
+        Results are then listed in ranked order.</div>
       <table class="rank">
         <thead><tr><th style="text-align:center">#</th><th>Clinic</th><th>Location</th>
           <th style="text-align:center">Pulse</th><th style="text-align:center">Quartile</th>{pillar_ths}</tr></thead>
         <tbody>{body_rows}</tbody>
       </table>
-      <div class="note"><b>Rubric &mdash; Student Health.</b> The Pulse Score is a weighted blend of four
-        pillars tuned to on-campus clinics: <b>Reviews &amp; Reputation</b> (30%), <b>Findability &amp;
-        Identity</b> (25%), <b>Services &amp; Access</b> (25%), and <b>Machine-Readability &amp; Digital
-        Presence</b> (20%). National quartiles: Q1 &ge;75 &middot; Q2 68&ndash;74 &middot; Q3 58&ndash;67 &middot; Q4 &lt;58.</div>
+      <div class="note">
+        <div style="font-weight:700;color:{_TEAL};font-size:11px;margin-bottom:5px">How the Pulse Score works</div>
+        <div style="margin-bottom:7px">The Pulse Score is a weighted blend of four pillars tuned to on-campus clinics:</div>
+        <ul style="margin:0 0 9px 0;padding-left:16px">
+          <li style="margin-bottom:4px"><b>Reviews &amp; Reputation (30%)</b> &mdash; the student ratings and sentiment AI can cite about the clinic.</li>
+          <li style="margin-bottom:4px"><b>Findability &amp; Identity (25%)</b> &mdash; whether AI reliably surfaces the clinic with the correct name and its university.</li>
+          <li style="margin-bottom:4px"><b>Services &amp; Access (25%)</b> &mdash; how well AI knows what the clinic offers and how students get care (hours, walk-in, telehealth).</li>
+          <li style="margin-bottom:0"><b>Machine-Readability &amp; Digital Presence (20%)</b> &mdash; how clear and structured the clinic&rsquo;s website, patient portal, and online details are.</li>
+        </ul>
+        <div><b>National quartiles:</b> Q1 (top) &ge;75 &middot; Q2 68&ndash;74 &middot; Q3 58&ndash;67 &middot; Q4 (bottom) &lt;58.</div>
+      </div>
     </body></html>"""
