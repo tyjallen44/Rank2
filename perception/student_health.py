@@ -181,12 +181,13 @@ def score_clinic(clinic: dict) -> dict:
     reviews_source = "estimate"
     g_rating = g_count = None
     reviews_val = _cl(d.get("reviews_reputation"))
-    read = _google_reviews_for_clinic(clinic)
-    if read is not None:
-        band = scoring.experience_band(read.rating, read.review_count)
+    gr = _google_reviews_for_clinic(clinic)
+    if gr is not None:
+        rating, count = gr
+        band = scoring.experience_band(rating, count)
         if band is not None:
             reviews_val, reviews_source = band, "google"
-            g_rating, g_count = read.rating, read.review_count
+            g_rating, g_count = rating, count
 
     tiers = {
         "clinical_outcomes_safety":   _cl(d.get("services_access")),      # Services & Access
@@ -202,33 +203,72 @@ def score_clinic(clinic: dict) -> dict:
             "google_review_count": g_count}
 
 
-def _google_reviews_for_clinic(clinic: dict):
-    """Resolve a campus clinic's Google listing, trying query variants from most
-    to least specific and returning the first VERIFIED rated read (or None).
+_CLINIC_WORDS = ("health", "clinic", "wellness", "medical", "student")
 
-    Trying the clinic name AS-IS first is what lets a specific name like
-    'BYU Student Health Center' match directly, while the school-qualified
-    variants rescue generically-named clinics ('Student Health Center')."""
-    from .data.places import fetch_google_rating
+
+def _google_reviews_for_clinic(clinic: dict):
+    """Resolve a campus clinic's Google rating → (rating, review_count) or None.
+
+    Unlike the single-provider read (which only inspects the top result), this
+    SCANS all candidates and picks the best clinic-like listing. That matters for
+    dominant campuses: a search for 'BYU Student Health Center' returns the
+    university itself as result #1, so a top-result-only read misses the clinic
+    (ranked #2/#3). We keep only rated listings whose name looks like a clinic
+    (not the university) and that plausibly match the requested clinic."""
+    import httpx
+    from .data import places as _pl
+    key = _pl._api_key()
+    if not key:
+        return None
     name = (clinic.get("clinic_name") or "").strip()
     school = (clinic.get("school") or "").strip()
-    city, state = clinic.get("city"), clinic.get("state")
-    seen, candidates = set(), []
-    for q in (name,
-              f"{school} student health center",
-              f"{school} student health",
-              f"{school} {name}"):
-        q = (q or "").strip()
+    city = (clinic.get("city") or "").strip()
+    state = (clinic.get("state") or "").strip()
+    loc = " ".join(p for p in (city, state) if p)
+    seen, queries = set(), []
+    for q in (f"{name} {loc}", f"{school} student health center {loc}",
+              f"{school} student health {loc}"):
+        q = q.strip()
         if q and q.lower() not in seen:
             seen.add(q.lower())
-            candidates.append(q)
-    for q in candidates:
+            queries.append(q)
+
+    match_targets = [t for t in (name, f"{school} student health center", f"{school} {name}") if t.strip()]
+
+    for q in queries:
         try:
-            read = fetch_google_rating(q, city, state)
-            if read.verified and read.rating is not None:
-                return read
+            resp = httpx.post(
+                _pl._SEARCH_TEXT,
+                headers={"Content-Type": "application/json", "X-Goog-Api-Key": key,
+                         "X-Goog-FieldMask": "places.displayName,places.rating,places.userRatingCount"},
+                json={"textQuery": q}, timeout=20.0,
+            )
+            resp.raise_for_status()
+            cands = resp.json().get("places", [])
         except Exception:
-            pass
+            continue
+        best = None
+        for pl in cands:
+            fn = (pl.get("displayName") or {}).get("text", "")
+            rating = pl.get("rating")
+            if rating is None or not fn:
+                continue
+            low = fn.lower()
+            if not any(w in low for w in _CLINIC_WORDS):   # skip the university / non-clinic listings
+                continue
+            m = "none"
+            for tgt in match_targets:
+                mm = _pl._name_match(tgt, fn)
+                if mm != "none":
+                    m = "strong" if mm == "strong" or m == "strong" else "weak"
+            if m == "none":
+                continue
+            count = pl.get("userRatingCount") or 0
+            rank = (2 if m == "strong" else 1, count)
+            if best is None or rank > best[0]:
+                best = (rank, float(rating), int(count))
+        if best is not None:
+            return best[1], best[2]
     return None
 
 
