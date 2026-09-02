@@ -1177,6 +1177,11 @@ html, body {
           <div class="oc-title">Upload Spreadsheet</div>
           <div class="oc-sub">CSV or Excel with multiple locations</div>
         </div>
+        <div class="oc" id="pp-oc-student" onclick="setPpMode('student')">
+          <div class="oc-icon">🎓</div>
+          <div class="oc-title">Student Health Clinics</div>
+          <div class="oc-sub">Rank campus clinics by state, radius, or conference</div>
+        </div>
       </div>
 
       <!-- Patient Perspective manual form -->
@@ -1341,6 +1346,85 @@ html, body {
             <button class="btn btn-ghost btn-sm" onclick="clearPpCsv()">Clear</button>
           </div>
         </div>
+      </div>
+
+      <!-- Student Health Clinics -->
+      <div id="pp-form-student" class="hidden">
+        <div class="card" style="background:var(--bg);border-color:var(--border)">
+          <div class="fg" style="margin-bottom:16px">
+            <label class="fl">Group clinics by</label>
+            <div class="tg-group">
+              <button class="tg-opt on" id="sh-tg-conference" onclick="shSetGroup('conference')">Conference</button>
+              <button class="tg-opt"    id="sh-tg-state"      onclick="shSetGroup('state')">State</button>
+              <button class="tg-opt"    id="sh-tg-radius"     onclick="shSetGroup('radius')">Radius</button>
+            </div>
+          </div>
+
+          <div id="sh-in-conference" class="fg" style="margin-bottom:16px">
+            <label class="fl">Athletic conference</label>
+            <select id="sh-conference" class="fi">
+              <option value="big12">Big 12</option>
+              <option value="bigten">Big Ten</option>
+              <option value="sec">SEC</option>
+              <option value="acc">ACC</option>
+              <option value="pac12">Pac-12</option>
+              <option value="bigeast">Big East</option>
+              <option value="aac">American (AAC)</option>
+              <option value="mountainwest">Mountain West</option>
+            </select>
+          </div>
+
+          <div id="sh-in-state" class="fg hidden" style="margin-bottom:16px">
+            <label class="fl">State</label>
+            <input id="sh-state" class="fi" type="text" placeholder="Utah (or UT)">
+          </div>
+
+          <div id="sh-in-radius" class="hidden" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 140px;gap:14px">
+            <div class="fg" style="margin:0">
+              <label class="fl">Centered on school</label>
+              <input id="sh-anchor" class="fi" type="text" placeholder="Brigham Young University">
+            </div>
+            <div class="fg" style="margin:0">
+              <label class="fl">Radius (miles)</label>
+              <input id="sh-radius" class="fi" type="number" value="200" min="10" max="1000">
+            </div>
+          </div>
+
+          <div id="sh-resolve-err" class="err hidden mt8"></div>
+          <button class="btn btn-primary" id="sh-resolve-btn" onclick="shResolve()">Find Clinics →</button>
+        </div>
+
+        <!-- Roster confirmation -->
+        <div id="sh-roster" class="hidden mt16">
+          <div class="card" style="background:var(--bg);border-color:var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="font-weight:600;font-size:15px" id="sh-roster-title">Confirm the clinics</div>
+              <button class="btn btn-secondary btn-sm" onclick="shAddRow()">+ Add clinic</button>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Review, edit, or remove before scoring. Each clinic is scored on the Student Health rubric and ranked.</div>
+            <div style="overflow-x:auto">
+              <table class="tbl" style="font-size:12px">
+                <thead><tr><th>Clinic</th><th>University</th><th>City</th><th style="width:60px">State</th><th>Website</th><th style="width:36px"></th></tr></thead>
+                <tbody id="sh-roster-tbody"></tbody>
+              </table>
+            </div>
+            <div class="row-actions mt16">
+              <button class="btn btn-primary" id="sh-run-btn" onclick="shRun()">Score &amp; Rank →</button>
+              <button class="btn btn-ghost btn-sm" onclick="shReset()">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div id="sh-progress" class="hidden mt16">
+          <div class="card">
+            <div style="font-weight:600;margin-bottom:8px" id="sh-progress-head">Scoring…</div>
+            <div id="sh-progress-log" style="font-size:12px;color:var(--muted);max-height:220px;overflow:auto;font-family:monospace;line-height:1.6"></div>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="sh-results" class="hidden mt16"></div>
       </div>
     </div>
 
@@ -4029,10 +4113,129 @@ let _ppGroups  = [];
 
 function setPpMode(m) {
   _ppMode = m;
-  ['manual','csv'].forEach(x => {
+  ['manual','csv','student'].forEach(x => {
     document.getElementById('pp-oc-' + x).classList.toggle('on', x === m);
     document.getElementById('pp-form-' + x).classList.toggle('hidden', x !== m);
   });
+}
+
+// ── Student Health Clinics ─────────────────────────────────────────────────
+let _shGroup = 'conference', _shRoster = [], _shGroupLabel = '';
+
+function shSetGroup(g) {
+  _shGroup = g;
+  ['conference','state','radius'].forEach(x => {
+    document.getElementById('sh-tg-' + x).classList.toggle('on', x === g);
+    document.getElementById('sh-in-' + x).classList.toggle('hidden', x !== g);
+  });
+}
+
+function _shEsc(s){ return (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function _shSet(i,f,v){ if(_shRoster[i]) _shRoster[i][f]=v; }
+
+async function shResolve() {
+  const err = document.getElementById('sh-resolve-err'); err.classList.add('hidden');
+  const body = { mode: _shGroup };
+  if (_shGroup === 'conference') body.conference = document.getElementById('sh-conference').value;
+  else if (_shGroup === 'state') {
+    body.state = document.getElementById('sh-state').value.trim();
+    if (!body.state) { showErr(err, 'Enter a state.'); return; }
+  } else {
+    body.anchor_school = document.getElementById('sh-anchor').value.trim();
+    body.radius_miles = parseInt(document.getElementById('sh-radius').value, 10) || 200;
+    if (!body.anchor_school) { showErr(err, 'Enter a school to center the radius on.'); return; }
+  }
+  const btn = document.getElementById('sh-resolve-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Finding clinics…';
+  try {
+    const r = await api('/api/student-health/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not resolve clinics'));
+    const d = await r.json();
+    _shRoster = (d.schools || []).map(s => ({ school:s.school||'', clinic_name:s.clinic_name||'', city:s.city||'', state:s.state||'', url:s.url||'' }));
+    _shGroupLabel = d.group_label || 'Student Health Clinics';
+    shRenderRoster();
+    document.getElementById('sh-roster').classList.remove('hidden');
+    document.getElementById('sh-results').classList.add('hidden');
+    document.getElementById('sh-roster').scrollIntoView({behavior:'smooth', block:'nearest'});
+  } catch(e) { showErr(err, e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Find Clinics →'; }
+}
+
+function shRenderRoster() {
+  document.getElementById('sh-roster-title').textContent = `Confirm the clinics — ${_shGroupLabel} (${_shRoster.length})`;
+  const inp = (i,f,w) => `<input class="fi" style="font-size:12px;padding:5px 8px${w?';width:'+w:''}" value="${_shEsc(_shRoster[i][f])}" oninput="_shSet(${i},'${f}',this.value)">`;
+  document.getElementById('sh-roster-tbody').innerHTML = _shRoster.map((s,i) => `<tr>
+    <td>${inp(i,'clinic_name')}</td><td>${inp(i,'school')}</td><td>${inp(i,'city')}</td>
+    <td>${inp(i,'state','52px')}</td><td>${inp(i,'url')}</td>
+    <td><button class="btn btn-ghost btn-sm" style="color:#c0392b;padding:2px 8px" onclick="shRemoveRow(${i})">✕</button></td>
+  </tr>`).join('');
+}
+function shRemoveRow(i){ _shRoster.splice(i,1); shRenderRoster(); }
+function shAddRow(){ _shRoster.push({school:'',clinic_name:'',city:'',state:'',url:''}); shRenderRoster(); }
+function shReset(){ ['sh-roster','sh-progress','sh-results'].forEach(id=>document.getElementById(id).classList.add('hidden')); _shRoster=[]; }
+
+async function shRun() {
+  const schools = _shRoster.filter(s => (s.clinic_name||s.school));
+  if (!schools.length) { alert('Add at least one clinic.'); return; }
+  const btn = document.getElementById('sh-run-btn'); btn.disabled = true; btn.textContent = 'Starting…';
+  const log = document.getElementById('sh-progress-log'), head = document.getElementById('sh-progress-head');
+  log.innerHTML = ''; head.textContent = 'Scoring…';
+  document.getElementById('sh-progress').classList.remove('hidden');
+  document.getElementById('sh-results').classList.add('hidden');
+  let runId, jobId;
+  try {
+    const r = await api('/api/student-health/run', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ group_label:_shGroupLabel, mode:_shGroup, schools }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Run failed'));
+    const d = await r.json(); runId = d.run_id; jobId = d.job_id;
+  } catch(e) { head.textContent='Error'; log.innerHTML=`<span style="color:#c0392b">${_shEsc(e.message)}</span>`; btn.disabled=false; btn.textContent='Score & Rank →'; return; }
+
+  const es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
+  es.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'phase') head.textContent = msg.text || 'Scoring…';
+    else if (msg.type === 'text') { log.innerHTML += _shEsc(msg.text) + '<br>'; log.scrollTop = log.scrollHeight; }
+    else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Score & Rank →'; shLoadResults(runId); }
+    else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<span style="color:#c0392b">${_shEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Score & Rank →'; }
+  };
+  es.onerror = () => es.close();
+}
+
+async function shLoadResults(runId) {
+  try {
+    const r = await api('/api/student-health/' + runId);
+    if (!r.ok) throw new Error('Could not load results');
+    const rec = await r.json();
+    shRenderResults(rec.result, runId);
+  } catch(e) { const el=document.getElementById('sh-results'); el.innerHTML=`<div class="err">${_shEsc(e.message)}</div>`; el.classList.remove('hidden'); }
+}
+
+function shRenderResults(result, runId) {
+  const el = document.getElementById('sh-results');
+  document.getElementById('sh-progress').classList.add('hidden');
+  if (!result || !result.rows) { el.innerHTML = '<div class="err">No results.</div>'; el.classList.remove('hidden'); return; }
+  const P = [['credentials_recognition','Find.'],['clinical_outcomes_safety','Svc.'],['patient_experience_reviews','Rev.'],['access_fit','M-R']];
+  const cell = v => { const c = v==null?'#d94f4f':(v<58?'#d94f4f':v<75?'#e09b2a':'#2e9e5b'); return `<span style="color:${c};font-weight:600">${v==null?'—':v}</span>`; };
+  const rows = result.rows.map(r => `<tr>
+    <td style="text-align:center;font-weight:700">${r.rank}</td>
+    <td style="font-weight:600">${_shEsc(r.clinic_name)}<div style="font-size:11px;color:var(--muted)">${_shEsc(r.school)}</div></td>
+    <td style="font-size:12px;color:var(--muted)">${_shEsc(r.city)}${r.state?', '+_shEsc(r.state):''}</td>
+    <td style="text-align:center">${r.pulse_score==null?'<span style="color:#c0392b">Failed</span>':`<span style="font-size:16px;font-weight:700;color:var(--teal)">${r.pulse_score}</span>`}</td>
+    <td style="text-align:center;font-size:12px">${_shEsc(r.quartile)||'—'}</td>
+    ${P.map(([k,_])=>`<td style="text-align:center">${cell((r.tiers||{})[k])}</td>`).join('')}
+  </tr>`).join('');
+  el.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:700;font-size:16px">${_shEsc(result.group_label||'Student Health Clinics')} — Ranked</div>
+      <button class="btn btn-gold btn-sm" onclick="window.location.href='/api/student-health/${runId}/csv?token=${encodeURIComponent(_token)}'">⬇ CSV</button>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th style="text-align:center">#</th><th>Clinic</th><th>Location</th><th style="text-align:center">Pulse</th><th style="text-align:center">Quartile</th>${P.map(([_,l])=>`<th style="text-align:center">${l}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="padding:10px 20px;font-size:11px;color:var(--muted)">Find. = Findability &amp; Identity · Svc. = Services &amp; Access · Rev. = Reviews &amp; Reputation · M-R = Machine-Readability &amp; Digital Presence</div>
+  </div>`;
+  el.classList.remove('hidden');
+  el.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 function onPpDrop(e) {
