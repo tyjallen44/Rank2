@@ -1611,13 +1611,23 @@ def _run_student_health_job(job_id: str, run_id: str, group_label: str,
                            + [(t.get(k) if t.get(k) is not None else "") for k, _lbl in _STUDENT_PILLARS])
 
         scored = sum(1 for row in rows if row.get("pulse_score") is not None)
-        result_json = _json.dumps({"group_label": group_label, "mode": mode, "rows": [
+        result = {"group_label": group_label, "mode": mode, "rows": [
             {"rank": r["rank"], "school": r.get("school"), "clinic_name": r.get("clinic_name"),
              "city": r.get("city"), "state": r.get("state"), "url": r.get("url"),
              "pulse_score": r.get("pulse_score"), "quartile": r.get("quartile"),
              "band_label": r.get("band_label"), "tiers": r.get("tiers"),
-             "ai_says": r.get("ai_says")} for r in rows]})
-        finalize_student_health_run(run_id, scored, str(csv_path), result_json)
+             "ai_says": r.get("ai_says")} for r in rows]}
+        # Branded ranked PDF (best-effort — CSV/results still deliver if it fails).
+        pdf_path = ""
+        try:
+            emit({"type": "phase", "name": "pdf", "text": "Rendering report"})
+            from perception.student_health_pdf import render_student_health_pdf
+            _pp = _STUDENT_HEALTH_DIR / f"{run_id}.pdf"
+            render_student_health_pdf(result, str(_pp))
+            pdf_path = str(_pp)
+        except Exception as _pe:
+            emit({"type": "text", "text": f"(PDF render skipped: {type(_pe).__name__})"})
+        finalize_student_health_run(run_id, scored, str(csv_path), pdf_path, _json.dumps(result))
         job["status"] = "done"
         job["result"] = {"run_id": run_id, "student_health": True,
                          "group_label": group_label, "total": total, "scored": scored}
@@ -1653,6 +1663,17 @@ async def student_health_csv(run_id: str, _: str = Depends(require_auth)):
         raise HTTPException(404, "CSV not found")
     return FileResponse(rec["csv_path"], media_type="text/csv",
                         filename=Path(rec["csv_path"]).name)
+
+
+@app.get("/api/student-health/{run_id}/pdf")
+async def student_health_pdf(run_id: str, _: str = Depends(require_auth)):
+    from perception.db import init_db, get_student_health_run
+    init_db()
+    rec = get_student_health_run(run_id)
+    if not rec or not rec.get("pdf_path") or not Path(rec["pdf_path"]).exists():
+        raise HTTPException(404, "PDF not found")
+    return FileResponse(rec["pdf_path"], media_type="application/pdf",
+                        filename=Path(rec["pdf_path"]).name)
 
 
 @app.get("/api/student-health/{run_id}")

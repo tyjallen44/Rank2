@@ -767,11 +767,17 @@ def init_db() -> None:
             scored      INTEGER DEFAULT 0,
             status      VARCHAR DEFAULT 'running',
             csv_path    VARCHAR,
+            pdf_path    VARCHAR,
             result_json TEXT,
             user_role   VARCHAR DEFAULT 'user',
             created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    _sh_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='student_health_runs'"
+    ).fetchall()}
+    if "pdf_path" not in _sh_cols:
+        con.execute("ALTER TABLE student_health_runs ADD COLUMN pdf_path VARCHAR")
 
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
@@ -1194,12 +1200,12 @@ def create_student_health_run(run_id: str, group_label: str, mode: str,
 
 
 def finalize_student_health_run(run_id: str, scored: int, csv_path: str,
-                                result_json: str) -> None:
+                                pdf_path: str, result_json: str) -> None:
     con = get_connection()
     con.execute(
-        "UPDATE student_health_runs SET scored=?, csv_path=?, result_json=?, status='done' "
-        "WHERE id=?",
-        [scored, csv_path, result_json, run_id],
+        "UPDATE student_health_runs SET scored=?, csv_path=?, pdf_path=?, result_json=?, "
+        "status='done' WHERE id=?",
+        [scored, csv_path, pdf_path, result_json, run_id],
     )
     con.close()
 
@@ -1213,26 +1219,33 @@ def fail_student_health_run(run_id: str) -> None:
 def get_student_health_run(run_id: str) -> Optional[dict]:
     con = get_connection()
     r = con.execute(
-        "SELECT id, group_label, mode, total, scored, status, csv_path, result_json, created_at "
-        "FROM student_health_runs WHERE id = ?", [run_id]
+        "SELECT id, group_label, mode, total, scored, status, csv_path, pdf_path, "
+        "result_json, created_at FROM student_health_runs WHERE id = ?", [run_id]
     ).fetchone()
     con.close()
     if not r:
         return None
     cols = ["id", "group_label", "mode", "total", "scored", "status", "csv_path",
-            "result_json", "created_at"]
+            "pdf_path", "result_json", "created_at"]
     return dict(zip(cols, r))
 
 
 def list_student_health_runs(limit: int = 100) -> list:
     con = get_connection()
     rows = con.execute(
-        "SELECT id, group_label, mode, total, scored, status, created_at "
+        "SELECT id, group_label, mode, total, scored, status, csv_path, pdf_path, created_at "
         "FROM student_health_runs ORDER BY created_at DESC LIMIT ?", [limit]
     ).fetchall()
     con.close()
-    cols = ["id", "group_label", "mode", "total", "scored", "status", "created_at"]
-    return [dict(zip(cols, r)) for r in rows]
+    cols = ["id", "group_label", "mode", "total", "scored", "status", "csv_path",
+            "pdf_path", "created_at"]
+    out = []
+    for r in rows:
+        d = dict(zip(cols, r))
+        d["has_csv"] = bool(d.pop("csv_path", None))
+        d["has_pdf"] = bool(d.pop("pdf_path", None))
+        out.append(d)
+    return out
 
 
 def count_public_requests_today(requester_email: str) -> int:
