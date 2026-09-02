@@ -1600,15 +1600,20 @@ def _run_student_health_job(job_id: str, run_id: str, group_label: str,
         with open(csv_path, "w", newline="", encoding="utf-8") as fh:
             w = _csv.writer(fh)
             w.writerow(["Rank", "School", "Clinic", "City", "State", "URL",
-                        "Pulse_Score", "Quartile"] + [lbl for _k, lbl in _STUDENT_PILLARS])
+                        "Pulse_Score", "Quartile"] + [lbl for _k, lbl in _STUDENT_PILLARS]
+                       + ["Google Reviews"])
             for row in rows:
                 t = row.get("tiers") or {}
                 score = row.get("pulse_score")
+                gr = row.get("google_rating")
+                gr_txt = (f"{gr}★ ({row.get('google_review_count') or 0})"
+                          if gr is not None else "")
                 w.writerow([row["rank"], row.get("school", ""), row.get("clinic_name", ""),
                             row.get("city", ""), row.get("state", ""), row.get("url", ""),
                             score if score is not None else "Failed",
                             _Q_ORDINAL.get(row.get("quartile"), row.get("quartile") or "")]
-                           + [(t.get(k) if t.get(k) is not None else "") for k, _lbl in _STUDENT_PILLARS])
+                           + [(t.get(k) if t.get(k) is not None else "") for k, _lbl in _STUDENT_PILLARS]
+                           + [gr_txt])
 
         scored = sum(1 for row in rows if row.get("pulse_score") is not None)
         result = {"group_label": group_label, "mode": mode, "rows": [
@@ -1616,7 +1621,9 @@ def _run_student_health_job(job_id: str, run_id: str, group_label: str,
              "city": r.get("city"), "state": r.get("state"), "url": r.get("url"),
              "pulse_score": r.get("pulse_score"), "quartile": r.get("quartile"),
              "band_label": r.get("band_label"), "tiers": r.get("tiers"),
-             "ai_says": r.get("ai_says")} for r in rows]}
+             "ai_says": r.get("ai_says"), "reviews_source": r.get("reviews_source"),
+             "google_rating": r.get("google_rating"),
+             "google_review_count": r.get("google_review_count")} for r in rows]}
         # Branded ranked PDF (best-effort — CSV/results still deliver if it fails).
         pdf_path = ""
         try:

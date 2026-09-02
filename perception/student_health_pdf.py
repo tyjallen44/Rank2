@@ -90,11 +90,16 @@ def _build_html(result: dict) -> str:
         score_cell = (f'<span style="font-size:15px;font-weight:700;color:{_bar_color(score)}">{score}</span>'
                       if score is not None else '<span style="color:#c0392b">Failed</span>')
         q = _QUARTILE.get(r.get("quartile"), r.get("quartile") or "—")
-        pills = "".join(
-            f'<td style="text-align:center;font-weight:600;color:{_bar_color(t.get(k))}">'
-            f'{t.get(k) if isinstance(t.get(k), (int, float)) else "—"}</td>'
-            for k, _lbl in _PILLARS
-        )
+        def _pill(k: str) -> str:
+            v = t.get(k)
+            val = v if isinstance(v, (int, float)) else "—"
+            extra = ""
+            if k == "patient_experience_reviews" and r.get("google_rating") is not None:
+                extra = (f'<div style="font-size:8px;color:{_MUTE};font-weight:400">'
+                         f'&#9733;{_e(r.get("google_rating"))} ({_e(r.get("google_review_count") or 0)})</div>')
+            return (f'<td style="text-align:center;font-weight:600;color:{_bar_color(v)}">'
+                    f'{val}{extra}</td>')
+        pills = "".join(_pill(k) for k, _lbl in _PILLARS)
         loc = _e(r.get("city") or "")
         if r.get("state"):
             loc = (loc + ", " + _e(r["state"])) if loc else _e(r["state"])

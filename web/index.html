@@ -4221,7 +4221,7 @@ function shRenderResults(result, runId) {
     <td style="font-size:12px;color:var(--muted)">${_shEsc(r.city)}${r.state?', '+_shEsc(r.state):''}</td>
     <td style="text-align:center">${r.pulse_score==null?'<span style="color:#c0392b">Failed</span>':`<span style="font-size:16px;font-weight:700;color:var(--teal)">${r.pulse_score}</span>`}</td>
     <td style="text-align:center;font-size:12px">${_shEsc(r.quartile)||'—'}</td>
-    ${P.map(([k,_])=>`<td style="text-align:center">${cell((r.tiers||{})[k])}</td>`).join('')}
+    ${P.map(([k,_])=>{ const ex = (k==='patient_experience_reviews' && r.google_rating!=null) ? `<div style="font-size:9px;color:var(--muted);font-weight:400">★${r.google_rating} (${r.google_review_count||0})</div>` : ''; return `<td style="text-align:center">${cell((r.tiers||{})[k])}${ex}</td>`; }).join('')}
   </tr>`).join('');
   el.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)">

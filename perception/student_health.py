@@ -175,16 +175,50 @@ def score_clinic(clinic: dict) -> dict:
         except (TypeError, ValueError):
             return None
 
+    # Reviews & Reputation: prefer a VERIFIED live Google read (real rating +
+    # volume) over the model's estimate — mirrors the hospital rubric. Falls back
+    # to the estimate when no listing is confidently matched.
+    reviews_source = "estimate"
+    g_rating = g_count = None
+    reviews_val = _cl(d.get("reviews_reputation"))
+    try:
+        from .data.places import fetch_google_rating
+        read = fetch_google_rating(_clinic_query_name(clinic),
+                                   clinic.get("city"), clinic.get("state"))
+        if read.verified and read.rating is not None:
+            band = scoring.experience_band(read.rating, read.review_count)
+            if band is not None:
+                reviews_val, reviews_source = band, "google"
+                g_rating, g_count = read.rating, read.review_count
+    except Exception:
+        pass
+
     tiers = {
         "clinical_outcomes_safety":   _cl(d.get("services_access")),      # Services & Access
         "credentials_recognition":    _cl(d.get("findability_identity")), # Findability & Identity
-        "patient_experience_reviews": _cl(d.get("reviews_reputation")),   # Reviews & Reputation
+        "patient_experience_reviews": reviews_val,                        # Reviews & Reputation
         "access_fit":                 _cl(d.get("machine_readability")),  # Machine-Readability
     }
     score = scoring.composite_score(tiers, "practice_student_health")
     q_code, band = scoring.grade_from_score(score)
     return {"pulse_score": score, "tiers": tiers, "quartile": q_code,
-            "band_label": band, "ai_says": (d.get("ai_says") or "").strip()}
+            "band_label": band, "ai_says": (d.get("ai_says") or "").strip(),
+            "reviews_source": reviews_source, "google_rating": g_rating,
+            "google_review_count": g_count}
+
+
+def _clinic_query_name(clinic: dict) -> str:
+    """Build a Google search string that disambiguates a campus clinic — prepend
+    the university when the clinic name doesn't already carry a distinctive token."""
+    import re
+    name = (clinic.get("clinic_name") or "").strip()
+    school = (clinic.get("school") or "").strip()
+    _stop = {"university", "college", "state", "the", "of", "a", "and"}
+    toks = [t for t in re.split(r"[^A-Za-z0-9]+", school)
+            if len(t) >= 4 and t.lower() not in _stop]
+    if name and toks and not any(t.lower() in name.lower() for t in toks):
+        return f"{school} {name}".strip()
+    return name or f"{school} student health center".strip()
 
 
 def _clean(d: dict) -> dict:
