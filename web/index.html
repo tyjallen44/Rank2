@@ -1999,8 +1999,9 @@ html, body {
         <div class="admin-tabs" style="margin-bottom:0">
           <button class="admin-tab active" id="atab-users" onclick="switchAdminTab('users')">Users</button>
           <button class="admin-tab" id="atab-requests" onclick="switchAdminTab('requests')">Access Requests</button>
+          <button class="admin-tab" id="atab-integrations" onclick="switchAdminTab('integrations')">Integrations</button>
         </div>
-        <button class="btn" onclick="adminTestEmail()" style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#9993; Test Email</button>
+        <button class="btn" id="admin-test-email-btn" onclick="adminTestEmail()" style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#9993; Test Email</button>
       </div>
       <div id="admin-email-test-result" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:6px;font-size:13px"></div>
 
@@ -2020,6 +2021,55 @@ html, body {
         <div class="card">
           <div style="font-weight:600;font-size:15px;margin-bottom:16px">Access Requests</div>
           <div id="admin-requests-table"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
+        </div>
+      </div>
+
+      <!-- Integrations panel -->
+      <div id="admin-integrations-panel" style="display:none">
+        <div class="card" style="margin-bottom:16px">
+          <div style="font-weight:600;font-size:15px;margin-bottom:6px">HubSpot Webhook — Hospital Network Report</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.55">
+            Point a HubSpot Workflow (or your site backend) at the endpoint below. When a visitor submits the form,
+            Pulse generates a full Hospital Network report and emails the requester a secure download link — provided
+            their email is affiliated with the organization. Unverified requests are routed to a follow-up instead.
+          </div>
+
+          <div class="fg" style="margin-bottom:14px">
+            <label class="fl">Webhook URL <span style="color:var(--muted);font-weight:400">(HTTP POST · JSON)</span></label>
+            <div style="display:flex;gap:8px">
+              <input id="intg-webhook-url" class="fi" readonly style="font-family:monospace;font-size:12px">
+              <button class="btn btn-secondary btn-sm" onclick="intgCopy('intg-webhook-url', this)">Copy</button>
+            </div>
+          </div>
+
+          <div class="fg" style="margin-bottom:14px">
+            <label class="fl">Shared secret <span style="color:var(--muted);font-weight:400" id="intg-secret-hint">— send in the <code id="intg-header">X-Pulse-Signature</code> header</span></label>
+            <div style="display:flex;gap:8px">
+              <input id="intg-secret" class="fi" readonly type="password" style="font-family:monospace;font-size:12px">
+              <button class="btn btn-secondary btn-sm" onclick="intgToggleSecret()" id="intg-reveal-btn">Reveal</button>
+              <button class="btn btn-secondary btn-sm" onclick="intgCopy('intg-secret', this)">Copy</button>
+              <button class="btn btn-sm" id="intg-rotate-btn" onclick="intgRotate()" style="border:1px solid var(--border);background:#fff;color:#c0392b">Rotate</button>
+            </div>
+            <div id="intg-env-note" style="display:none;font-size:12px;color:var(--muted);margin-top:6px"></div>
+          </div>
+
+          <div class="fg" style="margin-bottom:4px">
+            <label class="fl">Expected JSON payload</label>
+            <pre id="intg-payload" style="background:var(--pale);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12px;overflow:auto;margin:0;line-height:1.5"></pre>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.55">
+            <strong>Required:</strong> <code>organization_name</code>, <code>requester_email</code>.
+            <strong>Optional:</strong> <code>headquarters</code>, <code>website_url</code>, <code>requester_name</code>, <code>requester_title</code>.<br>
+            <span id="intg-policy"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div style="font-weight:600;font-size:15px">Recent Requests</div>
+            <button class="btn btn-secondary btn-sm" onclick="loadIntegrations()">Refresh</button>
+          </div>
+          <div id="intg-activity"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
         </div>
       </div>
     </div>
@@ -3143,6 +3193,7 @@ html, body {
         <option value="salesteam">Sales Team</option>
         <option value="marketing">Marketing</option>
         <option value="partner">Partner</option>
+        <option value="integrations_admin">Integrations Admin</option>
         <option value="admin">Admin</option>
       </select>
     </div>
@@ -3493,7 +3544,7 @@ function showApp() {
   document.getElementById('app').classList.add('visible');
   document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
   const adminBtn = document.getElementById('nav-admin');
-  if (adminBtn) adminBtn.style.display = (_role === 'admin') ? 'flex' : 'none';
+  if (adminBtn) adminBtn.style.display = (_role === 'admin' || _role === 'integrations_admin') ? 'flex' : 'none';
   const isAdmin = (_role === 'admin');
   const irLock    = document.getElementById('ir-override-lock-label');
   const cmpLock   = document.getElementById('cmp-override-lock-label');
@@ -6784,16 +6835,117 @@ async function learnTogglePreview(){
 }
 
 function switchAdminTab(tab) {
-  ['users','requests'].forEach(t => {
-    document.getElementById('atab-' + t).classList.toggle('active', t === tab);
-    document.getElementById('admin-' + t + '-panel').style.display = t === tab ? '' : 'none';
+  ['users','requests','integrations'].forEach(t => {
+    const btn = document.getElementById('atab-' + t);
+    const panel = document.getElementById('admin-' + t + '-panel');
+    if (btn)   btn.classList.toggle('active', t === tab);
+    if (panel) panel.style.display = t === tab ? '' : 'none';
   });
-  if (tab === 'users') loadAdminUsers();
-  else loadAdminRequests();
+  if (tab === 'users')             loadAdminUsers();
+  else if (tab === 'requests')     loadAdminRequests();
+  else if (tab === 'integrations') loadIntegrations();
 }
 
 async function loadAdminPage() {
-  await loadAdminUsers();
+  // Integrations Admins get a scoped view: only the Integrations tab, no user mgmt.
+  const superAdmin = (_role === 'admin');
+  ['atab-users','atab-requests','admin-test-email-btn'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = superAdmin ? '' : 'none';
+  });
+  const sub = document.querySelector('#page-admin .page-sub');
+  if (sub) sub.textContent = superAdmin
+    ? 'Manage user accounts, access requests, and integrations.'
+    : 'Manage your integrations.';
+  switchAdminTab(superAdmin ? 'users' : 'integrations');
+}
+
+// ── Admin → Integrations (HubSpot webhook) ─────────────────────────────────
+let _intgSecret = '';
+async function loadIntegrations() {
+  try {
+    const r = await api('/api/admin/integrations/webhook');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to load integration settings'));
+    const d = await r.json();
+    document.getElementById('intg-webhook-url').value = d.webhook_url;
+    document.getElementById('intg-header').textContent = d.signature_header;
+    _intgSecret = d.secret;
+    const sec = document.getElementById('intg-secret');
+    sec.value = d.secret; sec.type = 'password';
+    document.getElementById('intg-reveal-btn').textContent = 'Reveal';
+    document.getElementById('intg-payload').textContent = JSON.stringify(d.sample_payload, null, 2);
+    document.getElementById('intg-policy').innerHTML =
+      `Verified requests receive the full report via a link that expires in <strong>${d.link_ttl_days} days</strong>. `
+      + `Cost backstop: up to <strong>${d.daily_cap}</strong> requests per email per day.`;
+    const rotate = document.getElementById('intg-rotate-btn');
+    const note = document.getElementById('intg-env-note');
+    if (d.secret_env_pinned) {
+      rotate.style.display = 'none';
+      note.style.display = ''; note.textContent = 'Secret is pinned by the HUBSPOT_WEBHOOK_SECRET environment variable (read-only here).';
+    } else {
+      rotate.style.display = ''; note.style.display = 'none';
+    }
+  } catch(e) {
+    document.getElementById('intg-activity').innerHTML = `<div class="err">${e.message}</div>`;
+    return;
+  }
+  try {
+    const r2 = await api('/api/admin/integrations/requests');
+    renderIntgActivity(r2.ok ? await r2.json() : []);
+  } catch(e) {
+    document.getElementById('intg-activity').innerHTML = `<div class="err">${e.message}</div>`;
+  }
+}
+
+function renderIntgActivity(rows) {
+  const el = document.getElementById('intg-activity');
+  if (!rows || !rows.length) {
+    el.innerHTML = '<div class="empty" style="padding:20px 0"><div>No requests yet.</div></div>'; return;
+  }
+  const esc = s => (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const badge = s => {
+    const map = { sent:['Sent','bg-teal'], follow_up:['Follow-up','bg-gold'],
+      generating:['Generating','bg-muted'], verifying:['Verifying','bg-muted'], received:['Received','bg-muted'] };
+    if (s === 'failed') return '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>';
+    const [lbl,cls] = map[s] || [s,'bg-muted'];
+    return `<span class="badge ${cls}" style="font-size:10px">${lbl}</span>`;
+  };
+  el.innerHTML = `<table class="admin-tbl"><thead><tr>
+      <th>When</th><th>Organization</th><th>Requester</th><th>Status</th><th>Detail</th>
+    </tr></thead><tbody>${rows.map(r => `<tr>
+      <td style="white-space:nowrap;color:var(--muted);font-size:12px">${esc((r.created_at||'').slice(0,16).replace('T',' '))}</td>
+      <td>${esc(r.organization_name)}</td>
+      <td style="font-size:12px">${esc(r.requester_email)}</td>
+      <td>${badge(r.status)}</td>
+      <td style="font-size:12px;color:var(--muted);max-width:280px">${esc(r.match_reason || r.error_msg || '')}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+function intgToggleSecret() {
+  const sec = document.getElementById('intg-secret');
+  const btn = document.getElementById('intg-reveal-btn');
+  const reveal = sec.type === 'password';
+  sec.type = reveal ? 'text' : 'password';
+  btn.textContent = reveal ? 'Hide' : 'Reveal';
+}
+
+function intgCopy(id, btn) {
+  const val = (id === 'intg-secret') ? _intgSecret : document.getElementById(id).value;
+  navigator.clipboard.writeText(val).then(() => {
+    if (btn) { const t = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = t; }, 1200); }
+  }, () => {});
+}
+
+async function intgRotate() {
+  if (!confirm('Rotate the shared secret? The current secret stops working immediately — you must update it in HubSpot.')) return;
+  try {
+    const r = await api('/api/admin/integrations/webhook/rotate', { method:'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Rotate failed'));
+    const d = await r.json();
+    _intgSecret = d.secret;
+    const sec = document.getElementById('intg-secret');
+    sec.value = d.secret; sec.type = 'text';
+    document.getElementById('intg-reveal-btn').textContent = 'Hide';
+  } catch(e) { alert(e.message); }
 }
 
 async function loadAdminUsers() {
@@ -6807,7 +6959,7 @@ async function loadAdminUsers() {
       el.innerHTML = '<div class="empty" style="padding:20px 0"><div>No users yet.</div></div>';
       return;
     }
-    const roles  = ['user','rldatix','customersuccess','salesteam','marketing','partner','admin'];
+    const roles  = ['user','rldatix','customersuccess','salesteam','marketing','partner','integrations_admin','admin'];
     const brands = ['original','extension1','extension2'];
     const brandLabels = {original:'Original', extension1:'Ext 1 — Montecito', extension2:'Ext 2 — Ashleigh Jane'};
     el.innerHTML = `
