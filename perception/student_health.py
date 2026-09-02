@@ -115,6 +115,78 @@ def resolve_roster(mode: str, *, state: Optional[str] = None,
     return {"group_label": "", "schools": [], "note": "No roster returned."}
 
 
+# ── Per-clinic scoring on the Student Health rubric ───────────────────────────
+
+_SCORE_TOOL = {
+    "name": "submit_clinic_scores",
+    "description": "Submit the AI-visibility pillar scores for one student health clinic.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "findability_identity": {"type": "integer", "description": "0-100: how reliably AI assistants surface this clinic with the CORRECT name and clear affiliation to its university when a student asks about campus healthcare."},
+            "services_access":      {"type": "integer", "description": "0-100: how accurately AI knows the clinic's services (primary/urgent care, pharmacy, labs, immunizations, sports medicine, telehealth) and how students access it (hours, walk-in vs appointment, insurance/cost)."},
+            "reviews_reputation":   {"type": "integer", "description": "0-100: strength, volume, and sentiment of student reviews/ratings AI can cite for this clinic."},
+            "machine_readability":  {"type": "integer", "description": "0-100: how structured and crawlable the clinic's digital presence is — clear website, patient portal, online scheduling, consistent name/address/phone."},
+            "ai_says":              {"type": "string",  "description": "1-2 sentences on what AI assistants currently say about this clinic."},
+        },
+        "required": ["findability_identity", "services_access", "reviews_reputation",
+                     "machine_readability", "ai_says"],
+    },
+}
+
+_SCORE_SYSTEM = (
+    "You assess how the leading AI assistants (ChatGPT, Gemini, Claude) currently perceive a "
+    "specific on-campus student health/medical center when a student asks about campus healthcare. "
+    "Score four pillars 0-100 based on how a typical AI assistant would describe and recommend this "
+    "clinic TODAY, from its real public/digital footprint — not its aspirations. Score conservatively "
+    "and comparably across clinics: a generic, hard-to-find clinic with thin online information should "
+    "score low; a well-known clinic with a clear website, patient portal, online scheduling, and solid "
+    "student reviews should score high."
+)
+
+
+def score_clinic(clinic: dict) -> dict:
+    """Score one student health clinic on the four-pillar Student Health rubric.
+
+    Returns {pulse_score, tiers, ai_says, quartile, band_label}. pulse_score is
+    None if scoring could not be produced."""
+    from . import scoring
+    name = (clinic.get("clinic_name") or clinic.get("school") or "").strip()
+    school = (clinic.get("school") or "").strip()
+    loc = ", ".join([p for p in [clinic.get("city", ""), clinic.get("state", "")] if p])
+    url = (clinic.get("url") or "").strip()
+    prompt = (f"Clinic: {name}\nUniversity: {school}\nLocation: {loc}\n"
+              + (f"Website: {url}\n" if url else "")
+              + "Score how AI assistants currently perceive this student health center on the four pillars.")
+    resp = client.messages.create(
+        model=_MODEL, max_tokens=2048, tools=[_SCORE_TOOL],
+        tool_choice={"type": "tool", "name": "submit_clinic_scores"},
+        system=_SCORE_SYSTEM, messages=[{"role": "user", "content": prompt}],
+    )
+    d: dict = {}
+    for block in resp.content:
+        if block.type == "tool_use" and block.name == "submit_clinic_scores":
+            d = block.input if isinstance(block.input, dict) else json.loads(block.input)
+            break
+
+    def _cl(v):
+        try:
+            return max(0, min(100, int(v)))
+        except (TypeError, ValueError):
+            return None
+
+    tiers = {
+        "clinical_outcomes_safety":   _cl(d.get("services_access")),      # Services & Access
+        "credentials_recognition":    _cl(d.get("findability_identity")), # Findability & Identity
+        "patient_experience_reviews": _cl(d.get("reviews_reputation")),   # Reviews & Reputation
+        "access_fit":                 _cl(d.get("machine_readability")),  # Machine-Readability
+    }
+    score = scoring.composite_score(tiers, "practice_student_health")
+    q_code, band = scoring.grade_from_score(score)
+    return {"pulse_score": score, "tiers": tiers, "quartile": q_code,
+            "band_label": band, "ai_says": (d.get("ai_says") or "").strip()}
+
+
 def _clean(d: dict) -> dict:
     schools, seen = [], set()
     for s in d.get("schools", []):
