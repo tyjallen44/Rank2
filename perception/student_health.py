@@ -225,16 +225,22 @@ def _google_reviews_for_clinic(clinic: dict):
     city = (clinic.get("city") or "").strip()
     state = (clinic.get("state") or "").strip()
     loc = " ".join(p for p in (city, state) if p)
+    # Several phrasings — campus clinics often have duplicate listings where one
+    # is unrated; the rated one surfaces under a "reviews"/"health center" phrasing
+    # (e.g. BYU's rated "(SHC)" listing). We collect across all variants.
     seen, queries = set(), []
-    for q in (f"{name} {loc}", f"{school} student health center {loc}",
-              f"{school} student health {loc}"):
-        q = q.strip()
+    no_student = name.replace("Student ", "").replace("student ", "").strip()
+    for q in (f"{name} {loc}", f"{name} reviews {loc}", f"{name} reviews",
+              f"{school} student health center {loc}",
+              (f"{no_student} {loc}" if no_student and no_student != name else "")):
+        q = " ".join(q.split())
         if q and q.lower() not in seen:
             seen.add(q.lower())
             queries.append(q)
 
     match_targets = [t for t in (name, f"{school} student health center", f"{school} {name}") if t.strip()]
 
+    best = None   # (rank, rating, count) — global best across every variant
     for q in queries:
         try:
             resp = httpx.post(
@@ -247,11 +253,10 @@ def _google_reviews_for_clinic(clinic: dict):
             cands = resp.json().get("places", [])
         except Exception:
             continue
-        best = None
-        for pl in cands:
-            fn = (pl.get("displayName") or {}).get("text", "")
-            rating = pl.get("rating")
-            if rating is None or not fn:
+        for pl_c in cands:
+            fn = (pl_c.get("displayName") or {}).get("text", "")
+            rating = pl_c.get("rating")
+            if rating is None or not fn:               # skip unrated (incl. the unrated duplicate)
                 continue
             low = fn.lower()
             if not any(w in low for w in _CLINIC_WORDS):   # skip the university / non-clinic listings
@@ -260,16 +265,14 @@ def _google_reviews_for_clinic(clinic: dict):
             for tgt in match_targets:
                 mm = _pl._name_match(tgt, fn)
                 if mm != "none":
-                    m = "strong" if mm == "strong" or m == "strong" else "weak"
+                    m = "strong" if (mm == "strong" or m == "strong") else "weak"
             if m == "none":
                 continue
-            count = pl.get("userRatingCount") or 0
+            count = pl_c.get("userRatingCount") or 0
             rank = (2 if m == "strong" else 1, count)
             if best is None or rank > best[0]:
                 best = (rank, float(rating), int(count))
-        if best is not None:
-            return best[1], best[2]
-    return None
+    return (best[1], best[2]) if best is not None else None
 
 
 def _clean(d: dict) -> dict:
