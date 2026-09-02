@@ -4165,6 +4165,8 @@ async function shResolve() {
     const d = await r.json();
     _shRoster = (d.schools || []).map(s => ({ school:s.school||'', clinic_name:s.clinic_name||'', city:s.city||'', state:s.state||'', url:s.url||'' }));
     _shGroupLabel = d.group_label || 'Student Health Clinics';
+    // For a radius run, name the file after the anchor CITY (resolved), not the school.
+    if (_shGroup === 'radius' && d.anchor_city) _shSubject = `${d.anchor_city} ${body.radius_miles}mi`;
     shRenderRoster();
     document.getElementById('sh-roster').classList.remove('hidden');
     document.getElementById('sh-results').classList.add('hidden');

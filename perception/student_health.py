@@ -55,6 +55,7 @@ _ROSTER_TOOL = {
                     "required": ["school", "clinic_name", "city", "state"],
                 },
             },
+            "anchor_city": {"type": "string", "description": "For a radius grouping only: the city where the center/anchor school is located (e.g. 'Provo'). Empty for state/conference."},
             "note": {"type": "string", "description": "Any caveats — schools omitted, membership uncertainty, etc."},
         },
         "required": ["group_label", "schools"],
@@ -86,8 +87,9 @@ def _build_prompt(mode: str, state: Optional[str], conference: Optional[str],
                 f"medical/health center. For each, identify that center.")
     if mode == "radius":
         return (f"List the NCAA Division I universities located within approximately {radius_miles} "
-                f"miles of {anchor_school}. Include {anchor_school} itself. For each university, "
-                f"identify its primary on-campus student medical/health center.")
+                f"miles of {anchor_school}. Include {anchor_school} itself. Also set anchor_city to the "
+                f"city where {anchor_school} is located. For each university, identify its primary "
+                f"on-campus student medical/health center.")
     raise ValueError(f"unknown grouping mode: {mode!r}")
 
 
@@ -315,5 +317,6 @@ def _clean(d: dict) -> dict:
     return {
         "group_label": (d.get("group_label") or "").strip(),
         "schools": schools,
+        "anchor_city": (d.get("anchor_city") or "").strip(),
         "note": (d.get("note") or "").strip(),
     }
