@@ -145,12 +145,26 @@ _SCORE_SYSTEM = (
 )
 
 
-def score_clinic(clinic: dict) -> dict:
+def _clinic_key(clinic: dict) -> str:
+    import re
+    s = " ".join(p for p in (clinic.get("school", ""), clinic.get("clinic_name", ""),
+                             clinic.get("city", ""), clinic.get("state", "")) if p).lower()
+    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+
+
+def score_clinic(clinic: dict, override: bool = False) -> dict:
     """Score one student health clinic on the four-pillar Student Health rubric.
 
-    Returns {pulse_score, tiers, ai_says, quartile, band_label}. pulse_score is
-    None if scoring could not be produced."""
+    Returns {pulse_score, tiers, ai_says, quartile, band_label, ...}. Reuses a
+    cached score within 30 days unless override=True. pulse_score is None if
+    scoring could not be produced."""
     from . import scoring
+    from .db import get_cached_clinic_score, upsert_cached_clinic_score
+    _key = _clinic_key(clinic)
+    if not override and _key:
+        cached = get_cached_clinic_score(_key, days=30)
+        if cached and cached.get("pulse_score") is not None:
+            return cached
     name = (clinic.get("clinic_name") or clinic.get("school") or "").strip()
     school = (clinic.get("school") or "").strip()
     loc = ", ".join([p for p in [clinic.get("city", ""), clinic.get("state", "")] if p])
@@ -197,10 +211,17 @@ def score_clinic(clinic: dict) -> dict:
     }
     score = scoring.composite_score(tiers, "practice_student_health")
     q_code, band = scoring.grade_from_score(score)
-    return {"pulse_score": score, "tiers": tiers, "quartile": q_code,
-            "band_label": band, "ai_says": (d.get("ai_says") or "").strip(),
-            "reviews_source": reviews_source, "google_rating": g_rating,
-            "google_review_count": g_count}
+    result = {"pulse_score": score, "tiers": tiers, "quartile": q_code,
+              "band_label": band, "ai_says": (d.get("ai_says") or "").strip(),
+              "reviews_source": reviews_source, "google_rating": g_rating,
+              "google_review_count": g_count}
+    if _key and score is not None:
+        try:
+            import json as _json
+            upsert_cached_clinic_score(_key, _json.dumps(result))
+        except Exception:
+            pass
+    return result
 
 
 _CLINIC_WORDS = ("health", "clinic", "wellness", "medical", "student")

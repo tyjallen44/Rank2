@@ -762,6 +762,7 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS student_health_runs (
             id          VARCHAR PRIMARY KEY,
             group_label VARCHAR,
+            title       VARCHAR,
             mode        VARCHAR,
             total       INTEGER DEFAULT 0,
             scored      INTEGER DEFAULT 0,
@@ -776,8 +777,20 @@ def init_db() -> None:
     _sh_cols = {r[0] for r in con.execute(
         "SELECT column_name FROM information_schema.columns WHERE table_name='student_health_runs'"
     ).fetchall()}
-    if "pdf_path" not in _sh_cols:
-        con.execute("ALTER TABLE student_health_runs ADD COLUMN pdf_path VARCHAR")
+    for _c in ("pdf_path", "title"):
+        if _c not in _sh_cols:
+            con.execute(f"ALTER TABLE student_health_runs ADD COLUMN {_c} VARCHAR")
+
+    # 30-day per-clinic score cache (so re-running a group reuses clinic scores).
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS student_clinic_cache (
+            clinic_key   VARCHAR NOT NULL,
+            generated_at DATE NOT NULL,
+            result_json  TEXT,
+            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (clinic_key, generated_at)
+        )
+    """)
 
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
@@ -1189,12 +1202,42 @@ def list_public_report_requests(limit: int = 100) -> list:
 ## ── Student Health Clinics runs ───────────────────────────────────────────────
 
 def create_student_health_run(run_id: str, group_label: str, mode: str,
-                              total: int, role: str) -> None:
+                              total: int, role: str, title: str = "") -> None:
     con = get_connection()
     con.execute(
-        "INSERT INTO student_health_runs (id, group_label, mode, total, status, user_role) "
-        "VALUES (?, ?, ?, ?, 'running', ?)",
-        [run_id, group_label, mode, total, role],
+        "INSERT INTO student_health_runs (id, group_label, title, mode, total, status, user_role) "
+        "VALUES (?, ?, ?, ?, ?, 'running', ?)",
+        [run_id, group_label, title, mode, total, role],
+    )
+    con.close()
+
+
+def get_cached_clinic_score(clinic_key: str, days: int = 30) -> Optional[dict]:
+    """Most recent cached score for a clinic within `days`, or None."""
+    import json
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    con = get_connection()
+    row = con.execute(
+        "SELECT result_json FROM student_clinic_cache "
+        "WHERE clinic_key = ? AND generated_at >= ? ORDER BY generated_at DESC LIMIT 1",
+        [clinic_key, cutoff],
+    ).fetchone()
+    con.close()
+    if not row or not row[0]:
+        return None
+    try:
+        return json.loads(row[0])
+    except Exception:
+        return None
+
+
+def upsert_cached_clinic_score(clinic_key: str, result_json: str) -> None:
+    con = get_connection()
+    con.execute(
+        "INSERT INTO student_clinic_cache (clinic_key, generated_at, result_json) "
+        "VALUES (?, ?, ?) ON CONFLICT (clinic_key, generated_at) "
+        "DO UPDATE SET result_json = EXCLUDED.result_json",
+        [clinic_key, date.today().isoformat(), result_json],
     )
     con.close()
 
@@ -1219,13 +1262,13 @@ def fail_student_health_run(run_id: str) -> None:
 def get_student_health_run(run_id: str) -> Optional[dict]:
     con = get_connection()
     r = con.execute(
-        "SELECT id, group_label, mode, total, scored, status, csv_path, pdf_path, "
+        "SELECT id, group_label, title, mode, total, scored, status, csv_path, pdf_path, "
         "result_json, created_at FROM student_health_runs WHERE id = ?", [run_id]
     ).fetchone()
     con.close()
     if not r:
         return None
-    cols = ["id", "group_label", "mode", "total", "scored", "status", "csv_path",
+    cols = ["id", "group_label", "title", "mode", "total", "scored", "status", "csv_path",
             "pdf_path", "result_json", "created_at"]
     return dict(zip(cols, r))
 

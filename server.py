@@ -1522,6 +1522,8 @@ class StudentRosterRequest(BaseModel):
 class StudentRunRequest(BaseModel):
     group_label: str = ""
     mode: str = ""
+    subject: str = ""            # state / conference / "anchor NNNmi" — drives the filename
+    override_cache: bool = False
     schools: list[dict]
 
 
@@ -1548,14 +1550,21 @@ async def student_health_run(req: StudentRunRequest,
     init_db()
     run_id = uuid.uuid4().hex[:12]
     label = req.group_label or "Student Health Clinics"
-    create_student_health_run(run_id, label, req.mode or "", len(schools), payload.get("role", ""))
+    import re as _re
+    from datetime import date as _date
+    subj = _re.sub(r"[^A-Za-z0-9]+", "", (req.subject or "")) or "StudentHealth"
+    _t = _date.today()
+    title = f"{subj}_StudentHealthClinics_{_t.day}.{_t.month}.{_t.year}"
+    override = bool(req.override_cache) and payload.get("role") == "admin"
+    create_student_health_run(run_id, label, req.mode or "", len(schools),
+                              payload.get("role", ""), title)
     job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
-    _pool.submit(_run_student_health_job, job_id, run_id, label, req.mode or "", schools)
+    _pool.submit(_run_student_health_job, job_id, run_id, label, req.mode or "", schools, override)
     return {"job_id": job_id, "run_id": run_id, "total": len(schools)}
 
 
 def _run_student_health_job(job_id: str, run_id: str, group_label: str,
-                            mode: str, schools: list) -> None:
+                            mode: str, schools: list, override: bool = False) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
@@ -1575,7 +1584,7 @@ def _run_student_health_job(job_id: str, run_id: str, group_label: str,
             nm = c.get("clinic_name") or c.get("school") or f"row {i}"
             emit({"type": "text", "text": f"▶ {nm}"})
             try:
-                r = score_clinic(c)
+                r = score_clinic(c, override=override)
                 emit({"type": "text", "text": f"✓ {nm} — {r.get('pulse_score')}"})
                 return i, r
             except Exception as exc:
@@ -1668,8 +1677,8 @@ async def student_health_csv(run_id: str, _: str = Depends(require_auth)):
     rec = get_student_health_run(run_id)
     if not rec or not rec.get("csv_path") or not Path(rec["csv_path"]).exists():
         raise HTTPException(404, "CSV not found")
-    return FileResponse(rec["csv_path"], media_type="text/csv",
-                        filename=Path(rec["csv_path"]).name)
+    fname = (rec.get("title") or Path(rec["csv_path"]).stem) + ".csv"
+    return FileResponse(rec["csv_path"], media_type="text/csv", filename=fname)
 
 
 @app.get("/api/student-health/{run_id}/pdf")
@@ -1679,8 +1688,8 @@ async def student_health_pdf(run_id: str, _: str = Depends(require_auth)):
     rec = get_student_health_run(run_id)
     if not rec or not rec.get("pdf_path") or not Path(rec["pdf_path"]).exists():
         raise HTTPException(404, "PDF not found")
-    return FileResponse(rec["pdf_path"], media_type="application/pdf",
-                        filename=Path(rec["pdf_path"]).name)
+    fname = (rec.get("title") or Path(rec["pdf_path"]).stem) + ".pdf"
+    return FileResponse(rec["pdf_path"], media_type="application/pdf", filename=fname)
 
 
 @app.get("/api/student-health/{run_id}")

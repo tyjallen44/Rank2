@@ -1355,13 +1355,13 @@ html, body {
           <div class="fg" style="margin-bottom:16px">
             <label class="fl">Group clinics by</label>
             <div class="tg-group">
-              <button class="tg-opt on" id="sh-tg-conference" onclick="shSetGroup('conference')">Conference</button>
-              <button class="tg-opt"    id="sh-tg-state"      onclick="shSetGroup('state')">State</button>
+              <button class="tg-opt on" id="sh-tg-state"      onclick="shSetGroup('state')">State</button>
               <button class="tg-opt"    id="sh-tg-radius"     onclick="shSetGroup('radius')">Radius</button>
+              <button class="tg-opt"    id="sh-tg-conference" onclick="shSetGroup('conference')">Conference</button>
             </div>
           </div>
 
-          <div id="sh-in-conference" class="fg" style="margin-bottom:16px">
+          <div id="sh-in-conference" class="fg hidden" style="margin-bottom:16px">
             <label class="fl">Athletic conference</label>
             <select id="sh-conference" class="fi">
               <option value="big12">Big 12</option>
@@ -1375,7 +1375,7 @@ html, body {
             </select>
           </div>
 
-          <div id="sh-in-state" class="fg hidden" style="margin-bottom:16px">
+          <div id="sh-in-state" class="fg" style="margin-bottom:16px">
             <label class="fl">State</label>
             <input id="sh-state" class="fi" type="text" placeholder="UTAH (or UT)" oninput="this.value=this.value.toUpperCase()">
           </div>
@@ -1409,6 +1409,10 @@ html, body {
                 <tbody id="sh-roster-tbody"></tbody>
               </table>
             </div>
+            <label class="aggregate-toggle mt10" style="display:none" id="sh-override-label" title="Admin only: ignore the 30-day cache and re-score every clinic from scratch.">
+              <input type="checkbox" id="sh-override">
+              <span class="agg-label">Ignore 30-day cache &mdash; re-score fresh <span style="font-size:11px;color:#888">(Admin only)</span></span>
+            </label>
             <div class="row-actions mt16">
               <button class="btn btn-primary" id="sh-run-btn" onclick="shRun()">Score &amp; Rank →</button>
               <button class="btn btn-ghost btn-sm" onclick="shReset()">Cancel</button>
@@ -3689,6 +3693,8 @@ function showApp() {
   if (npLock)    npLock.style.display    = isAdmin ? '' : 'none';
   if (irSkipPdf) irSkipPdf.style.display = isAdmin ? '' : 'none';
   if (ppRefresh) ppRefresh.style.display = isAdmin ? '' : 'none';
+  const shOverride = document.getElementById('sh-override-label');
+  if (shOverride) shOverride.style.display = isAdmin ? '' : 'none';
   const learnMng = document.getElementById('learn-manage-btn');
   if (learnMng) learnMng.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
@@ -4121,7 +4127,7 @@ function setPpMode(m) {
 }
 
 // ── Student Health Clinics ─────────────────────────────────────────────────
-let _shGroup = 'conference', _shRoster = [], _shGroupLabel = '';
+let _shGroup = 'state', _shRoster = [], _shGroupLabel = '', _shSubject = '';
 
 function shSetGroup(g) {
   _shGroup = g;
@@ -4137,14 +4143,19 @@ function _shSet(i,f,v){ if(_shRoster[i]) _shRoster[i][f]=v; }
 async function shResolve() {
   const err = document.getElementById('sh-resolve-err'); err.classList.add('hidden');
   const body = { mode: _shGroup };
-  if (_shGroup === 'conference') body.conference = document.getElementById('sh-conference').value;
-  else if (_shGroup === 'state') {
+  if (_shGroup === 'conference') {
+    const sel = document.getElementById('sh-conference');
+    body.conference = sel.value;
+    _shSubject = sel.options[sel.selectedIndex].text;
+  } else if (_shGroup === 'state') {
     body.state = document.getElementById('sh-state').value.trim();
     if (!body.state) { showErr(err, 'Enter a state.'); return; }
+    _shSubject = body.state;
   } else {
     body.anchor_school = document.getElementById('sh-anchor').value.trim();
     body.radius_miles = parseInt(document.getElementById('sh-radius').value, 10) || 200;
     if (!body.anchor_school) { showErr(err, 'Enter a school to center the radius on.'); return; }
+    _shSubject = `${body.anchor_school} ${body.radius_miles}mi`;
   }
   const btn = document.getElementById('sh-resolve-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Finding clinics…';
@@ -4185,7 +4196,8 @@ async function shRun() {
   document.getElementById('sh-results').classList.add('hidden');
   let runId, jobId;
   try {
-    const r = await api('/api/student-health/run', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ group_label:_shGroupLabel, mode:_shGroup, schools }) });
+    const override = !!(document.getElementById('sh-override') || {}).checked;
+    const r = await api('/api/student-health/run', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ group_label:_shGroupLabel, mode:_shGroup, subject:_shSubject, override_cache:override, schools }) });
     if (!r.ok) throw new Error(await errDetail(r, 'Run failed'));
     const d = await r.json(); runId = d.run_id; jobId = d.job_id;
   } catch(e) { head.textContent='Error'; log.innerHTML=`<span style="color:#c0392b">${_shEsc(e.message)}</span>`; btn.disabled=false; btn.textContent='Score & Rank →'; return; }
