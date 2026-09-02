@@ -1499,6 +1499,182 @@ class InviteUserRequest(BaseModel):
     brand: str = "original"
 
 
+# ══ Student Health Clinics — Competitors Rankings for on-campus clinics ═══════
+_STUDENT_HEALTH_DIR = REPORTS_DIR / "student_health"
+
+# Student pillar slot → CSV/label, in display order.
+_STUDENT_PILLARS = [
+    ("credentials_recognition",    "Findability & Identity"),
+    ("clinical_outcomes_safety",   "Services & Access"),
+    ("patient_experience_reviews", "Reviews & Reputation"),
+    ("access_fit",                 "Machine-Readability & Digital Presence"),
+]
+
+
+class StudentRosterRequest(BaseModel):
+    mode: str                                # "state" | "radius" | "conference"
+    state: Optional[str] = None
+    conference: Optional[str] = None
+    anchor_school: Optional[str] = None
+    radius_miles: Optional[int] = None
+
+
+class StudentRunRequest(BaseModel):
+    group_label: str = ""
+    mode: str = ""
+    schools: list[dict]
+
+
+@app.post("/api/student-health/resolve")
+async def student_health_resolve(req: StudentRosterRequest,
+                                 _: dict = Depends(get_current_user_payload)):
+    """Resolve the roster of universities → student health clinics for confirmation."""
+    from perception.student_health import resolve_roster
+    loop = asyncio.get_event_loop()
+    roster = await loop.run_in_executor(None, lambda: resolve_roster(
+        req.mode, state=req.state, conference=req.conference,
+        anchor_school=req.anchor_school, radius_miles=req.radius_miles))
+    return roster
+
+
+@app.post("/api/student-health/run")
+async def student_health_run(req: StudentRunRequest,
+                             payload: dict = Depends(get_current_user_payload)):
+    """Score + rank a confirmed roster of student health clinics (background job)."""
+    schools = [s for s in (req.schools or []) if (s.get("clinic_name") or s.get("school"))]
+    if not schools:
+        raise HTTPException(400, "No clinics to score.")
+    from perception.db import init_db, create_student_health_run
+    init_db()
+    run_id = uuid.uuid4().hex[:12]
+    label = req.group_label or "Student Health Clinics"
+    create_student_health_run(run_id, label, req.mode or "", len(schools), payload.get("role", ""))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    _pool.submit(_run_student_health_job, job_id, run_id, label, req.mode or "", schools)
+    return {"job_id": job_id, "run_id": run_id, "total": len(schools)}
+
+
+def _run_student_health_job(job_id: str, run_id: str, group_label: str,
+                            mode: str, schools: list) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+    try:
+        import csv as _csv, json as _json
+        from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
+        from perception.db import init_db, finalize_student_health_run
+        from perception.student_health import score_clinic
+        init_db()
+        _STUDENT_HEALTH_DIR.mkdir(parents=True, exist_ok=True)
+        total = len(schools)
+        emit({"type": "phase", "name": "starting", "text": f"Scoring {total} student health clinics"})
+        results: dict = {}
+
+        def _work(i: int):
+            c = schools[i]
+            nm = c.get("clinic_name") or c.get("school") or f"row {i}"
+            emit({"type": "text", "text": f"▶ {nm}"})
+            try:
+                r = score_clinic(c)
+                emit({"type": "text", "text": f"✓ {nm} — {r.get('pulse_score')}"})
+                return i, r
+            except Exception as exc:
+                emit({"type": "text", "text": f"✗ {nm} — failed ({type(exc).__name__})"})
+                return i, {"pulse_score": None, "tiers": {}, "quartile": "—",
+                           "band_label": "", "ai_says": ""}
+
+        done = 0
+        with _TPE(max_workers=5) as ex:
+            for f in _ac([ex.submit(_work, i) for i in range(total)]):
+                i, r = f.result()
+                results[i] = r
+                done += 1
+                emit({"type": "phase", "name": "scoring", "text": f"Scored {done} of {total}"})
+
+        rows = [{**schools[i], **results.get(i, {})} for i in range(total)]
+        rows.sort(key=lambda x: (x.get("pulse_score") is None, -(x.get("pulse_score") or 0)))
+        for idx, row in enumerate(rows, 1):
+            row["rank"] = idx
+
+        csv_path = _STUDENT_HEALTH_DIR / f"{run_id}.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+            w = _csv.writer(fh)
+            w.writerow(["Rank", "School", "Clinic", "City", "State", "URL",
+                        "Pulse_Score", "Quartile"] + [lbl for _k, lbl in _STUDENT_PILLARS])
+            for row in rows:
+                t = row.get("tiers") or {}
+                score = row.get("pulse_score")
+                w.writerow([row["rank"], row.get("school", ""), row.get("clinic_name", ""),
+                            row.get("city", ""), row.get("state", ""), row.get("url", ""),
+                            score if score is not None else "Failed",
+                            _Q_ORDINAL.get(row.get("quartile"), row.get("quartile") or "")]
+                           + [(t.get(k) if t.get(k) is not None else "") for k, _lbl in _STUDENT_PILLARS])
+
+        scored = sum(1 for row in rows if row.get("pulse_score") is not None)
+        result_json = _json.dumps({"group_label": group_label, "mode": mode, "rows": [
+            {"rank": r["rank"], "school": r.get("school"), "clinic_name": r.get("clinic_name"),
+             "city": r.get("city"), "state": r.get("state"), "url": r.get("url"),
+             "pulse_score": r.get("pulse_score"), "quartile": r.get("quartile"),
+             "band_label": r.get("band_label"), "tiers": r.get("tiers"),
+             "ai_says": r.get("ai_says")} for r in rows]})
+        finalize_student_health_run(run_id, scored, str(csv_path), result_json)
+        job["status"] = "done"
+        job["result"] = {"run_id": run_id, "student_health": True,
+                         "group_label": group_label, "total": total, "scored": scored}
+    except Exception as exc:
+        try:
+            from perception.db import fail_student_health_run
+            fail_student_health_run(run_id)
+        except Exception:
+            pass
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
+@app.get("/api/student-health/runs")
+async def student_health_runs_list(_: str = Depends(require_auth)):
+    from perception.db import init_db, list_student_health_runs
+    init_db()
+    rows = list_student_health_runs()
+    for r in rows:
+        if r.get("created_at") is not None:
+            r["created_at"] = str(r["created_at"])
+    return rows
+
+
+@app.get("/api/student-health/{run_id}/csv")
+async def student_health_csv(run_id: str, _: str = Depends(require_auth)):
+    from perception.db import init_db, get_student_health_run
+    init_db()
+    rec = get_student_health_run(run_id)
+    if not rec or not rec.get("csv_path") or not Path(rec["csv_path"]).exists():
+        raise HTTPException(404, "CSV not found")
+    return FileResponse(rec["csv_path"], media_type="text/csv",
+                        filename=Path(rec["csv_path"]).name)
+
+
+@app.get("/api/student-health/{run_id}")
+async def student_health_get(run_id: str, _: str = Depends(require_auth)):
+    import json as _json
+    from perception.db import init_db, get_student_health_run
+    init_db()
+    rec = get_student_health_run(run_id)
+    if not rec:
+        raise HTTPException(404, "Run not found")
+    result = None
+    if rec.get("result_json"):
+        try:
+            result = _json.loads(rec["result_json"])
+        except Exception:
+            result = None
+    rec.pop("result_json", None)
+    rec["created_at"] = str(rec.get("created_at"))
+    rec["result"] = result
+    return rec
+
+
 # ══ Public HubSpot webhook — Hospital Network report on request ═══════════════
 import hmac as _hmac
 
