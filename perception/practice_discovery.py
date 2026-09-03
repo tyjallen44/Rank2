@@ -78,9 +78,15 @@ _DETECT_TOOL = {
 def detect_service_line(
     entity_name: str, city: str, state: str,
     on_event: Optional[Callable] = None,
+    specialty_hint: str = "",
 ) -> dict:
     """Detect whether `entity_name` is a specialty department / service line of a
     larger hospital or academic health system.
+
+    `specialty_hint` (optional): the intended clinical service line (e.g.
+    "Orthopedics"). When provided — e.g. from a CSV specialty column — it anchors
+    the detection: treat `entity_name` as that service line of its parent hospital
+    system if it plausibly operates one.
 
     Returns {is_service_line, parent_system, service_line, service_line_brand}.
     Fields other than is_service_line are "" when is_service_line is False.
@@ -90,6 +96,15 @@ def detect_service_line(
             on_event(e)
 
     client = _get_client()
+    _hint = (specialty_hint or "").strip()
+    hint_line = (
+        f"\n\nThe intended clinical service line is '{_hint}'. Treat '{entity_name}' as the "
+        f"'{_hint}' service line of its parent hospital/health system when it plausibly operates "
+        f"one — resolve the parent system and use '{_hint}' as the service line. Only set "
+        f"is_service_line false if '{entity_name}' is an INDEPENDENT group with no larger hospital "
+        f"parent, or a whole standalone hospital.\n"
+        if _hint else ""
+    )
     prompt = (
         f"Entity: '{entity_name}' in {city}, {state}.\n\n"
         "Determine whether this entity is a SPECIALTY DEPARTMENT or SERVICE LINE "
@@ -98,7 +113,8 @@ def detect_service_line(
         "'UNC Cardiology' is the cardiology service line of UNC Health. An "
         "INDEPENDENT single-specialty group (e.g. 'OrthoCarolina') is NOT a service "
         "line — it has no larger hospital parent. A whole standalone hospital is "
-        "also NOT a service line.\n\n"
+        "also NOT a service line."
+        f"{hint_line}\n"
         "If it IS a service line, provide the parent system, the clinical service "
         "line, and the patient-facing brand of that service line. Otherwise set "
         "is_service_line false and the rest null.\n\n"

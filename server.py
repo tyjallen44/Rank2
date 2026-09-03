@@ -3114,10 +3114,12 @@ async def event_upload(file: UploadFile = File(...), _: str = Depends(require_au
         state    = (row.get("state") or row.get("State") or "").strip().upper()
         url      = (row.get("url") or row.get("URL") or row.get("Url") or "").strip()
         customer = (row.get("customer") or row.get("Customer") or "").strip()
+        specialty = (row.get("specialty") or row.get("Specialty")
+                     or row.get("service_line") or row.get("Service Line") or "").strip()
         if not name:
             continue
         rows.append({"row_num": i, "input_name": name, "input_city": city, "input_state": state,
-                     "input_url": url, "input_customer": customer})
+                     "input_url": url, "input_customer": customer, "input_specialty": specialty})
 
     if not rows:
         raise HTTPException(400, "No valid rows found. Ensure the CSV has name, city, state columns.")
@@ -3162,6 +3164,7 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
             "input_state":    (e.get("input_state") or "").strip().upper(),
             "input_url":      (e.get("input_url") or "").strip(),
             "input_customer": (e.get("input_customer") or "").strip(),
+            "input_specialty": (e.get("input_specialty") or "").strip(),
             "resolved_name":  _normalize_input(e.get("resolved_name") or e.get("input_name", "")),
             "resolved_addr":  e.get("resolved_addr", ""),
         }
@@ -3296,7 +3299,9 @@ def _run_event_job(
                         _sl = {}
                         try:
                             from perception.practice_discovery import detect_service_line
-                            _sl = detect_service_line(resolved_name, city, state)
+                            _sl = detect_service_line(
+                                resolved_name, city, state,
+                                specialty_hint=(entity.get("input_specialty") or ""))
                         except Exception:
                             _sl = {}
                         _pkwargs = dict(

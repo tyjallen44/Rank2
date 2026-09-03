@@ -740,13 +740,15 @@ html, body {
 #learn-modal.open { display:flex; }
 
 /* ── Bulk "About this report" info modal ──────────────────────── */
-#np-about-modal {
+#np-about-modal, #ir-help-modal, #ev-help-modal {
   display:none;position:fixed;inset:0;
   background:rgba(15,65,70,0.55);z-index:1000;
   align-items:center;justify-content:center;
 }
-#np-about-modal.open { display:flex; }
-#np-about-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
+#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open { display:flex; }
+#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
+.npa-step { font-size:13.5px;color:var(--text);line-height:1.55;margin:0 0 9px;padding-left:26px;position:relative; }
+.npa-step b.n { position:absolute;left:0;top:0;color:var(--teal);font-weight:700; }
 .npa-h { font-size:12px;font-weight:700;color:var(--teal);text-transform:uppercase;
   letter-spacing:.06em;margin:20px 0 8px; }
 .npa-p { font-size:13.5px;color:var(--text);line-height:1.55;margin:0 0 10px; }
@@ -1437,6 +1439,7 @@ html, body {
     <div id="page-individual" class="page">
       <div class="page-title">Deep Diagnostic</div>
       <div class="page-sub">Run a focused diagnostic on a hospital, hospital network, specialty practice within a hospital, or a medical practice: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
+      <div style="margin:-4px 0 16px"><a href="#" onclick="showIrHelp();return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">ℹ How to analyze a specialty practice within a hospital →</a></div>
 
       <!-- Step 1: Search form -->
       <div id="ir-step1" class="card">
@@ -2307,7 +2310,7 @@ html, body {
               <button class="btn btn-ghost btn-sm" onclick="evDownloadEventsDisplay()" style="margin-left:auto">↓ Download EventsDisplay</button>
               <button class="btn btn-ghost btn-sm" onclick="evDownloadTemplate()">↓ Download Template</button>
             </div>
-            <div style="font-size:12px;color:var(--muted);margin-top:8px">Required columns: <strong>name</strong>, <strong>city</strong>, <strong>state</strong> — one row per attendee.</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:8px">Required columns: <strong>name</strong>, <strong>city</strong>, <strong>state</strong> — one row per attendee. Optional <strong>specialty</strong> column: for a hospital service line (e.g. <em>Orthopedics</em>), fill it to analyze that department; leave blank to analyze the whole entity. <a href="#" onclick="showEvHelp();return false" style="color:var(--teal);font-weight:600">How to analyze a specialty practice within a hospital →</a></div>
           </div>
 
           <div style="margin-bottom:16px">
@@ -3363,6 +3366,61 @@ html, body {
     <div class="modal-footer">
       <button class="btn btn-primary btn-sm" onclick="npCloseAbout()">Got it</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Deep Diagnostic: specialty-within-hospital help ────────────────────── -->
+<div id="ir-help-modal" onclick="if(event.target===this)irCloseHelp()">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div class="modal-title" style="margin-bottom:4px">Analyze a Specialty Practice Within a Hospital</div>
+      <button class="btn btn-ghost btn-sm" onclick="irCloseHelp()" style="flex-shrink:0">✕</button>
+    </div>
+    <div class="npa-p" style="margin-top:6px">Deep Diagnostic can score a single hospital <strong>department or service line</strong> — for example <em>Houston Methodist Orthopedics</em> — as its own entity, rolling up all of that department's clinics and scoring it on the practice rubric. Here's how:</div>
+
+    <div class="npa-step"><b class="n">1.</b> In the search form, enter the department in <strong>Organization Name</strong> — name the system + specialty for the cleanest match, e.g. <em>HOUSTON METHODIST ORTHOPEDICS</em>.</div>
+    <div class="npa-step"><b class="n">2.</b> Enter the <strong>Location</strong> (city + state, e.g. <em>HOUSTON / TX</em>).</div>
+    <div class="npa-step"><b class="n">3.</b> Set <strong>Analysis Type</strong> to <strong>Specialty Practice</strong>. <span style="color:var(--muted)">This is the key step — the plain "Hospital / Health System" type skips service-line detection.</span></div>
+    <div class="npa-step"><b class="n">4.</b> Enter the <strong>Specialty</strong> that appears (e.g. <em>ORTHOPEDICS</em>), then click <strong>Search</strong>.</div>
+    <div class="npa-step"><b class="n">5.</b> Pick the candidate that identifies the department, then <strong>Confirm Profile → Discover Locations</strong>.</div>
+    <div class="npa-step"><b class="n">6.</b> A <strong>"Service Line Detected"</strong> card appears — e.g. <em>"the Orthopedics service line of Houston Methodist."</em> Click <strong>Analyze as service line →</strong> to score the department as one rolled-up entity. (Or "No, use as entered" to treat it as a standalone listing.)</div>
+    <div class="npa-step"><b class="n">7.</b> The report runs on the practice rubric and downloads when done.</div>
+
+    <div class="npa-h">If the "Service Line Detected" card doesn't appear</div>
+    <div class="npa-p">The listing didn't resolve to a parent system. Search the department more explicitly — include the system name (e.g. <em>HOUSTON METHODIST ORTHOPEDICS</em>) — so the right candidate surfaces in the results.</div>
+    <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="irCloseHelp()">Got it</button></div>
+  </div>
+</div>
+
+<!-- ── Event Prep: specialty-within-hospital (batch) help ─────────────────── -->
+<div id="ev-help-modal" onclick="if(event.target===this)evCloseHelp()">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div class="modal-title" style="margin-bottom:4px">Analyze Specialty Practices Within Hospitals (Batch)</div>
+      <button class="btn btn-ghost btn-sm" onclick="evCloseHelp()" style="flex-shrink:0">✕</button>
+    </div>
+    <div class="npa-p" style="margin-top:6px">Event Preparation can score a whole <strong>list of hospital service lines</strong> at once — e.g. the orthopedics departments across many systems. Because it's a batch, there's no per-row confirmation: Pulse detects and rolls up each service line automatically.</div>
+
+    <div class="npa-h">Prepare your CSV</div>
+    <div class="npa-p">Required columns: <strong>name</strong>, <strong>city</strong>, <strong>state</strong> — one row per entity. Add an optional <strong>specialty</strong> column and fill it to target a department; leave it blank to analyze the whole entity. Filling it makes service-line detection far more reliable.</div>
+    <div class="npa-p" style="font-family:monospace;font-size:11.5px;background:var(--pale);border:1px solid var(--border);border-radius:6px;padding:10px 12px;white-space:pre">name,city,state,url,specialty
+Houston Methodist Orthopedics,Houston,TX,,Orthopedics
+Duke Health Orthopedics,Durham,NC,,Orthopedics
+Hospital for Special Surgery,New York,NY,,Orthopedics</div>
+
+    <div class="npa-h">Run it</div>
+    <div class="npa-step"><b class="n">1.</b> Open <strong>Event Preparation</strong> and give the event a name.</div>
+    <div class="npa-step"><b class="n">2.</b> Set the entity type to <strong>Specialty Practice</strong>. <span style="color:var(--muted)">This turns on per-row service-line detection for the whole upload.</span></div>
+    <div class="npa-step"><b class="n">3.</b> Choose your CSV (grab <strong>Download Template</strong> for the exact format), then <strong>Upload &amp; Resolve Entities</strong>.</div>
+    <div class="npa-step"><b class="n">4.</b> Review the resolved matches on the <strong>Confirm Entities</strong> step, then run.</div>
+    <div class="npa-step"><b class="n">5.</b> Each department is scored headlessly on the practice rubric — auto-detecting and rolling up the service line (anchored by your <strong>specialty</strong> value when provided).</div>
+    <div class="npa-step"><b class="n">6.</b> Download the enriched <strong>CSV</strong> and the <strong>ZIP</strong> of all report PDFs. The run is saved under <em>Event Runs</em> on the History page, where it can also be resumed if interrupted.</div>
+
+    <div class="npa-h">Tips</div>
+    <div class="npa-li">• Name each row as <em>"[System] [Specialty]"</em> (e.g. <em>Houston Methodist Orthopedics</em>) for the most reliable detection.</div>
+    <div class="npa-li">• The Specialty Practice setting applies to the whole upload — keep a service-line batch separate from a whole-hospitals batch.</div>
+    <div class="npa-li">• A row that can't be resolved to a parent system is scored as a standalone practice instead — filling the specialty column reduces that.</div>
+    <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="evCloseHelp()">Got it</button></div>
   </div>
 </div>
 
@@ -5921,6 +5979,10 @@ function npSetMode(mode) {
 
 function npShowAbout()  { document.getElementById('np-about-modal').classList.add('open'); }
 function npCloseAbout() { document.getElementById('np-about-modal').classList.remove('open'); }
+function showIrHelp()  { document.getElementById('ir-help-modal').classList.add('open'); }
+function irCloseHelp() { document.getElementById('ir-help-modal').classList.remove('open'); }
+function showEvHelp()  { document.getElementById('ev-help-modal').classList.add('open'); }
+function evCloseHelp() { document.getElementById('ev-help-modal').classList.remove('open'); }
 
 function npDownloadTemplate() {
   const csv = 'Entity_ID,Entity_Name,Primary_City,Primary_State\n'
@@ -8165,7 +8227,7 @@ function evDownloadEventsDisplay() {
 }
 
 function evDownloadTemplate() {
-  const content = 'name,city,state,url\n';
+  const content = 'name,city,state,url,specialty\n';
   const blob = new Blob([content], { type: 'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');

@@ -805,6 +805,7 @@ def init_db() -> None:
             input_state    VARCHAR,
             input_url      VARCHAR,
             input_customer VARCHAR,
+            input_specialty VARCHAR,
             resolved_name  VARCHAR,
             resolved_addr  VARCHAR,
             run_id         VARCHAR,
@@ -819,7 +820,7 @@ def init_db() -> None:
     _ee_cols = {r[0] for r in con.execute(
         "SELECT column_name FROM information_schema.columns WHERE table_name='event_entities'"
     ).fetchall()}
-    for _col in ("input_url", "input_customer"):
+    for _col in ("input_url", "input_customer", "input_specialty"):
         if _col not in _ee_cols:
             con.execute(f"ALTER TABLE event_entities ADD COLUMN {_col} VARCHAR")
     con.close()
@@ -910,11 +911,12 @@ def create_event_entities(entities: list) -> None:
     for e in entities:
         con.execute(
             "INSERT INTO event_entities (id, event_id, row_num, input_name, input_city, "
-            "input_state, input_url, input_customer, resolved_name, resolved_addr, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+            "input_state, input_url, input_customer, input_specialty, resolved_name, "
+            "resolved_addr, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
             [e["id"], e["event_id"], e["row_num"], e["input_name"], e["input_city"],
              e["input_state"], e.get("input_url", ""), e.get("input_customer", ""),
-             e["resolved_name"], e["resolved_addr"]],
+             e.get("input_specialty", ""), e["resolved_name"], e["resolved_addr"]],
         )
     con.close()
 
@@ -1008,14 +1010,15 @@ def get_event_entities(event_id: str) -> list:
     con = get_connection()
     rows = con.execute(
         "SELECT id, event_id, row_num, input_name, input_city, input_state, input_url, "
-        "input_customer, resolved_name, resolved_addr, run_id, pulse_score, letter_grade, "
-        "band_label, status, error_msg FROM event_entities WHERE event_id = ? ORDER BY row_num",
+        "input_customer, input_specialty, resolved_name, resolved_addr, run_id, pulse_score, "
+        "letter_grade, band_label, status, error_msg FROM event_entities WHERE event_id = ? "
+        "ORDER BY row_num",
         [event_id],
     ).fetchall()
     con.close()
     cols = ["id", "event_id", "row_num", "input_name", "input_city", "input_state", "input_url",
-            "input_customer", "resolved_name", "resolved_addr", "run_id", "pulse_score",
-            "letter_grade", "band_label", "status", "error_msg"]
+            "input_customer", "input_specialty", "resolved_name", "resolved_addr", "run_id",
+            "pulse_score", "letter_grade", "band_label", "status", "error_msg"]
     return [dict(zip(cols, r)) for r in rows]
 
 
