@@ -792,6 +792,22 @@ def init_db() -> None:
         )
     """)
 
+    # ── Content Analysis (Content Improvement Keys) — verified content findings ─
+    # The shared cache between report 1 (teaser) and report 2 (detail). Keyed by
+    # the base diagnostic run_id; reusable within 30 days by (norm_entity, day).
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS content_findings (
+            run_id          VARCHAR PRIMARY KEY,
+            norm_entity     VARCHAR,
+            generated_at    DATE NOT NULL,
+            schema_version  VARCHAR DEFAULT '1.0',
+            source_snapshot TEXT,
+            findings        TEXT,
+            status          VARCHAR DEFAULT 'verified',
+            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
 
@@ -1292,6 +1308,69 @@ def list_student_health_runs(limit: int = 100) -> list:
         d["has_pdf"] = bool(d.pop("pdf_path", None))
         out.append(d)
     return out
+
+
+## ── Content Analysis (Content Improvement Keys) findings cache ─────────────────
+
+def save_content_findings(run_id: str, norm_entity: str, source_snapshot: dict,
+                          findings: list, status: str = "verified",
+                          schema_version: str = "1.0") -> None:
+    """Persist a Content Analyzer result, keyed by the base diagnostic run_id.
+    Overwrites on re-run of the same run_id."""
+    import json
+    con = get_connection()
+    con.execute(
+        "INSERT INTO content_findings "
+        "(run_id, norm_entity, generated_at, schema_version, source_snapshot, findings, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT (run_id) DO UPDATE SET norm_entity=EXCLUDED.norm_entity, "
+        "generated_at=EXCLUDED.generated_at, schema_version=EXCLUDED.schema_version, "
+        "source_snapshot=EXCLUDED.source_snapshot, findings=EXCLUDED.findings, "
+        "status=EXCLUDED.status",
+        [run_id, norm_entity, date.today().isoformat(), schema_version,
+         json.dumps(source_snapshot or {}), json.dumps(findings or []), status],
+    )
+    con.close()
+
+
+def _row_to_content_findings(r) -> dict:
+    import json
+    cols = ["run_id", "norm_entity", "generated_at", "schema_version",
+            "source_snapshot", "findings", "status", "created_at"]
+    d = dict(zip(cols, r))
+    for k in ("source_snapshot", "findings"):
+        try:
+            d[k] = json.loads(d[k]) if d[k] else ({} if k == "source_snapshot" else [])
+        except Exception:
+            d[k] = {} if k == "source_snapshot" else []
+    return d
+
+
+def get_content_findings(run_id: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute(
+        "SELECT run_id, norm_entity, generated_at, schema_version, source_snapshot, "
+        "findings, status, created_at FROM content_findings WHERE run_id = ?", [run_id]
+    ).fetchone()
+    con.close()
+    return _row_to_content_findings(r) if r else None
+
+
+def get_recent_content_findings(norm_entity: str, days: int = 30) -> Optional[dict]:
+    """Most recent verified findings for an entity within `days`, or None."""
+    ne = _norm_entity_name(norm_entity)
+    if not ne:
+        return None
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    con = get_connection()
+    r = con.execute(
+        "SELECT run_id, norm_entity, generated_at, schema_version, source_snapshot, "
+        "findings, status, created_at FROM content_findings "
+        "WHERE norm_entity = ? AND generated_at >= ? ORDER BY generated_at DESC LIMIT 1",
+        [ne, cutoff],
+    ).fetchone()
+    con.close()
+    return _row_to_content_findings(r) if r else None
 
 
 def count_public_requests_today(requester_email: str) -> int:

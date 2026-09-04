@@ -198,6 +198,38 @@ class ComparisonSummary(BaseModel):
     verdict: str = ""                           # 2–3 paragraph analyst narrative
 
 
+class ContentFinding(BaseModel):
+    """One verified content-visibility finding (Content Improvement Keys).
+
+    Produced by the Content Analyzer from a REAL check (website crawl, Wikidata/
+    Wikipedia API) — never inferred. `status` uses ✓/◐/✗ discipline: verified /
+    partial (not fully assessed) / not_assessed. `draft_content` is reserved for
+    the later remediation phase and stays None in the sandbox."""
+    finding_id: str                              # stable, human-visible: "CIK-001"
+    platform: str                                # website | structured_data | llms_txt | wikidata | wikipedia
+    category: str                                # missing | outdated | inconsistent | opportunity | risk
+    severity: str = "medium"                     # high | medium | low
+    status: str = "verified"                     # verified | partial | not_assessed
+    teaser_summary: str = ""                     # one-line version shown in report 1
+    evidence: list[str] = Field(default_factory=list)   # URLs / quotes / API values
+    current_state: str = ""
+    expected_state: str = ""
+    remediation_type: str = ""                   # website_fix | schema_markup | wikidata_edit | talk_page_request | monitor_respond | directory_update
+    draft_content: Optional[str] = None          # populated only in the remediation phase
+
+
+class ContentFindings(BaseModel):
+    """The full cached result of a Content Analyzer run — the shared contract
+    between report 1 (teaser) and report 2 (detail)."""
+    schema_version: str = "1.0"
+    run_id: str = ""                             # the base diagnostic run this attaches to
+    norm_entity: str = ""
+    generated_at: Optional[date] = None
+    source_snapshot: dict = Field(default_factory=dict)  # {website_urls, wikipedia_article, wikidata_qid, pages_crawled}
+    findings: list[ContentFinding] = Field(default_factory=list)
+    status: str = "verified"                     # verified | partial | not_assessed (whole-run level)
+
+
 class BatteryPromptResult(BaseModel):
     """Per-prompt battery run record for demo eligibility and variance tracking."""
     prompt_id: str
