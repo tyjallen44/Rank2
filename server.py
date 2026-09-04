@@ -1723,6 +1723,7 @@ class ContentAnalysisRequest(BaseModel):
     practice_profile: Optional[str] = None
     report_title: Optional[str] = None
     urls: list[str] = []                     # confirmed/added website URLs
+    override_cache: bool = False             # admin only: re-run the base diagnostic fresh
 
 
 @app.post("/api/content-analysis/run")
@@ -1740,8 +1741,11 @@ async def content_analysis_run(req: ContentAnalysisRequest,
                                 req.entity_type, req.urls,
                                 req.report_title or req.entity_name.strip(),
                                 payload.get("role", ""))
+    req_d = req.dict()
+    # Gate the cache override to admins (like every other report type).
+    req_d["override_cache"] = bool(req.override_cache) and payload.get("role") == "admin"
     job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
-    _pool.submit(_job_content_analysis, job_id, ca_id, req.dict(),
+    _pool.submit(_job_content_analysis, job_id, ca_id, req_d,
                  payload.get("brand", "original"))
     return {"job_id": job_id, "ca_id": ca_id}
 
@@ -1759,9 +1763,12 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
         entity_name = (req.get("entity_name") or "").strip()
         city, state = req.get("city", ""), req.get("state", "")
         entity_type = req.get("entity_type") or "hospital"
+        override = bool(req.get("override_cache"))
 
-        # 1. Base Deep Diagnostic — reuse-if-fresh, else run (analyzer caches internally).
-        emit({"type": "phase", "name": "diagnostic", "text": "Running the Deep Diagnostic"})
+        # 1. Base Deep Diagnostic — reuse-if-fresh, else run (analyzer caches
+        #    internally). Admin override forces a fully fresh base run.
+        emit({"type": "phase", "name": "diagnostic",
+              "text": "Refreshing the Deep Diagnostic" if override else "Running the Deep Diagnostic"})
         if entity_type == "practice":
             from perception.practice_analyzer import analyze_practice
             result = analyze_practice(
@@ -1770,6 +1777,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
                 practice_profile=req.get("practice_profile"),
                 output_dir=REPORTS_DIR, on_event=emit, brand=brand,
                 report_title=req.get("report_title"),
+                force_rerun=override, override_today_lock=override,
             )
         else:
             from perception.analyzer import analyze_location
@@ -1778,6 +1786,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
                 entity_name=entity_name, individual_report=True,
                 entity_type="hospital", output_dir=REPORTS_DIR, on_event=emit,
                 brand=brand, report_title=req.get("report_title"),
+                force_rerun=override, override_today_lock=override,
             )
         set_run_role(result.run_id, job["role"])
 

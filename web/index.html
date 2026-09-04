@@ -1479,6 +1479,10 @@ html, body {
             <label class="fl">Specialty (optional)</label>
             <input id="ca-specialty" class="fi" type="text" placeholder="e.g. Orthopedics">
           </div>
+          <label class="aggregate-toggle mt10" style="display:none" id="ca-override-label" title="Admin only: re-run the base Deep Diagnostic from scratch instead of reusing a recent cached result. The content checks always run fresh.">
+            <input type="checkbox" id="ca-override">
+            <span class="agg-label">Refresh — ignore cache on the base diagnostic <span style="font-size:11px;color:#888">(Admin only)</span></span>
+          </label>
           <div id="ca-search-err" class="err hidden mt8"></div>
           <button class="btn btn-primary" id="ca-find-btn" onclick="caFind()">Find Entity →</button>
         </div>
@@ -3922,6 +3926,8 @@ function showApp() {
   if (ppRefresh) ppRefresh.style.display = isAdmin ? '' : 'none';
   const shOverride = document.getElementById('sh-override-label');
   if (shOverride) shOverride.style.display = isAdmin ? '' : 'none';
+  const caOverride = document.getElementById('ca-override-label');
+  if (caOverride) caOverride.style.display = isAdmin ? '' : 'none';
   const learnMng = document.getElementById('learn-manage-btn');
   if (learnMng) learnMng.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
@@ -6187,9 +6193,10 @@ async function caRun() {
   document.getElementById('ca-progress').classList.remove('hidden');
   let caId, jobId;
   try {
+    const override = !!(document.getElementById('ca-override') || {}).checked;
     const r = await api('/api/content-analysis/run', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ entity_name:(_caPicked && _caPicked.name) || _caName, city:_caCity, state:_caState,
-        entity_type:_caType, specialty:_caSpecialty || null, urls }) });
+        entity_type:_caType, specialty:_caSpecialty || null, urls, override_cache:override }) });
     if (!r.ok) throw new Error(await errDetail(r, 'Run failed'));
     const d = await r.json(); caId = d.ca_id; jobId = d.job_id;
   } catch(e) { head.textContent='Error'; log.innerHTML=`<span style="color:#c0392b">${_caEsc(e.message)}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; return; }
