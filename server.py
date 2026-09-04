@@ -1811,7 +1811,18 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
         except Exception as _pe:
             emit({"type": "text", "text": f"(augmented report render failed: {type(_pe).__name__}) — using base report"})
             report1 = result.pdf_path or ""
+
+        # 5. Report 2 = the detailed content report (the CIP format).
         report2 = ""
+        try:
+            from perception.content_report_pdf import render_content_report_pdf
+            _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
+            loc = ", ".join([p for p in [city, state] if p])
+            render_content_report_pdf(entity_name, loc, findings, str(_r2),
+                                      report_title=req.get("report_title") or entity_name)
+            report2 = str(_r2)
+        except Exception as _pe2:
+            emit({"type": "text", "text": f"(content report render failed: {type(_pe2).__name__})"})
 
         finalize_content_analysis_run(ca_id, result.run_id, findings.status,
                                       len(findings.findings), report1, report2)
