@@ -808,6 +808,26 @@ def init_db() -> None:
         )
     """)
 
+    # Content Analysis sandbox run records (History surfacing + downloads).
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS content_analysis_runs (
+            id             VARCHAR PRIMARY KEY,
+            entity_name    VARCHAR,
+            location       VARCHAR,
+            entity_type    VARCHAR DEFAULT 'hospital',
+            urls           TEXT,
+            report_title   VARCHAR,
+            base_run_id    VARCHAR,
+            findings_status VARCHAR,
+            finding_count  INTEGER DEFAULT 0,
+            report1_path   VARCHAR,
+            report2_path   VARCHAR,
+            status         VARCHAR DEFAULT 'running',
+            user_role      VARCHAR DEFAULT 'user',
+            created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
 
@@ -1371,6 +1391,82 @@ def get_recent_content_findings(norm_entity: str, days: int = 30) -> Optional[di
     ).fetchone()
     con.close()
     return _row_to_content_findings(r) if r else None
+
+
+## ── Content Analysis sandbox runs ─────────────────────────────────────────────
+
+def create_content_analysis_run(ca_id: str, entity_name: str, location: str,
+                                entity_type: str, urls: list, report_title: str,
+                                role: str) -> None:
+    import json
+    con = get_connection()
+    con.execute(
+        "INSERT INTO content_analysis_runs "
+        "(id, entity_name, location, entity_type, urls, report_title, status, user_role) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'running', ?)",
+        [ca_id, entity_name, location, entity_type, json.dumps(urls or []),
+         report_title, role],
+    )
+    con.close()
+
+
+def finalize_content_analysis_run(ca_id: str, base_run_id: str, findings_status: str,
+                                  finding_count: int, report1_path: str,
+                                  report2_path: str) -> None:
+    con = get_connection()
+    con.execute(
+        "UPDATE content_analysis_runs SET base_run_id=?, findings_status=?, "
+        "finding_count=?, report1_path=?, report2_path=?, status='done' WHERE id=?",
+        [base_run_id, findings_status, finding_count, report1_path, report2_path, ca_id],
+    )
+    con.close()
+
+
+def fail_content_analysis_run(ca_id: str) -> None:
+    con = get_connection()
+    con.execute("UPDATE content_analysis_runs SET status='failed' WHERE id=?", [ca_id])
+    con.close()
+
+
+_CAR_COLS = ["id", "entity_name", "location", "entity_type", "urls", "report_title",
+             "base_run_id", "findings_status", "finding_count", "report1_path",
+             "report2_path", "status", "user_role", "created_at"]
+
+
+def get_content_analysis_run(ca_id: str) -> Optional[dict]:
+    import json
+    con = get_connection()
+    r = con.execute(
+        f"SELECT {', '.join(_CAR_COLS)} FROM content_analysis_runs WHERE id = ?", [ca_id]
+    ).fetchone()
+    con.close()
+    if not r:
+        return None
+    d = dict(zip(_CAR_COLS, r))
+    try:
+        d["urls"] = json.loads(d["urls"]) if d["urls"] else []
+    except Exception:
+        d["urls"] = []
+    return d
+
+
+def list_content_analysis_runs(limit: int = 100) -> list:
+    con = get_connection()
+    rows = con.execute(
+        "SELECT id, entity_name, location, entity_type, findings_status, finding_count, "
+        "report1_path, report2_path, status, created_at "
+        "FROM content_analysis_runs ORDER BY created_at DESC LIMIT ?", [limit]
+    ).fetchall()
+    con.close()
+    cols = ["id", "entity_name", "location", "entity_type", "findings_status",
+            "finding_count", "report1_path", "report2_path", "status", "created_at"]
+    out = []
+    for r in rows:
+        d = dict(zip(cols, r))
+        d["has_report1"] = bool(d.pop("report1_path", None))
+        d["has_report2"] = bool(d.pop("report2_path", None))
+        out.append(d)
+    return out
 
 
 def count_public_requests_today(requester_email: str) -> int:

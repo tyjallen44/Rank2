@@ -1712,6 +1712,162 @@ async def student_health_get(run_id: str, _: str = Depends(require_auth)):
     return rec
 
 
+# ══ Content Analysis sandbox — verified content-visibility, two reports ═══════
+
+class ContentAnalysisRequest(BaseModel):
+    entity_name: str
+    city: str = ""
+    state: str = ""
+    entity_type: str = "hospital"            # "hospital" | "practice"
+    specialty: Optional[str] = None
+    practice_profile: Optional[str] = None
+    report_title: Optional[str] = None
+    urls: list[str] = []                     # confirmed/added website URLs
+
+
+@app.post("/api/content-analysis/run")
+async def content_analysis_run(req: ContentAnalysisRequest,
+                               payload: dict = Depends(get_current_user_payload)):
+    """Run the contained Content Analysis: reuse-or-run the base Deep Diagnostic,
+    then the verified Content Analyzer, producing two downloadable reports."""
+    if not req.entity_name.strip():
+        raise HTTPException(400, "entity_name is required")
+    from perception.db import init_db, create_content_analysis_run
+    init_db()
+    ca_id = uuid.uuid4().hex[:12]
+    loc = ", ".join([p for p in [req.city.strip(), req.state.strip()] if p])
+    create_content_analysis_run(ca_id, req.entity_name.strip(), loc,
+                                req.entity_type, req.urls,
+                                req.report_title or req.entity_name.strip(),
+                                payload.get("role", ""))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    _pool.submit(_job_content_analysis, job_id, ca_id, req.dict(),
+                 payload.get("brand", "original"))
+    return {"job_id": job_id, "ca_id": ca_id}
+
+
+def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+    try:
+        from perception.db import (init_db, set_run_role, save_content_findings,
+                                   finalize_content_analysis_run, _norm_entity_name)
+        from perception.content_analyzer import analyze_content
+        init_db()
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        entity_name = (req.get("entity_name") or "").strip()
+        city, state = req.get("city", ""), req.get("state", "")
+        entity_type = req.get("entity_type") or "hospital"
+
+        # 1. Base Deep Diagnostic — reuse-if-fresh, else run (analyzer caches internally).
+        emit({"type": "phase", "name": "diagnostic", "text": "Running the Deep Diagnostic"})
+        if entity_type == "practice":
+            from perception.practice_analyzer import analyze_practice
+            result = analyze_practice(
+                entity_name=entity_name, city=city, state=state,
+                specialty=req.get("specialty"), aggregate=True,
+                practice_profile=req.get("practice_profile"),
+                output_dir=REPORTS_DIR, on_event=emit, brand=brand,
+                report_title=req.get("report_title"),
+            )
+        else:
+            from perception.analyzer import analyze_location
+            result = analyze_location(
+                city=city, state=state, specialty=req.get("specialty"),
+                entity_name=entity_name, individual_report=True,
+                entity_type="hospital", output_dir=REPORTS_DIR, on_event=emit,
+                brand=brand, report_title=req.get("report_title"),
+            )
+        set_run_role(result.run_id, job["role"])
+
+        # 2. Website URLs: user-confirmed, else the resolved provider's site.
+        urls = [u for u in (req.get("urls") or []) if (u or "").strip()]
+        if not urls and result.rankings and result.rankings[0].website_url:
+            urls = [result.rankings[0].website_url]
+
+        # 3. Verified content analysis.
+        emit({"type": "phase", "name": "content", "text": "Checking website, Wikidata, and Wikipedia"})
+        findings = analyze_content(entity_name, urls, city, state, entity_kind=entity_type)
+        findings.run_id = result.run_id
+        save_content_findings(
+            result.run_id, _norm_entity_name(entity_name),
+            findings.source_snapshot,
+            [f.model_dump() for f in findings.findings],
+            findings.status,
+        )
+        for f in findings.findings:
+            emit({"type": "text", "text": f"• [{f.severity}] {f.teaser_summary}"})
+
+        # 4. Reports. Step 3: report 1 = the base Deep Diagnostic PDF (content
+        #    section appended in step 4); report 2 (detail) arrives in step 5.
+        report1 = result.pdf_path or ""
+        report2 = ""
+
+        finalize_content_analysis_run(ca_id, result.run_id, findings.status,
+                                      len(findings.findings), report1, report2)
+        emit({"type": "phase", "name": "saving", "text": "Done"})
+        job["status"] = "done"
+        job["result"] = {"ca_id": ca_id, "content_analysis": True,
+                         "run_id": result.run_id, "finding_count": len(findings.findings),
+                         "findings_status": findings.status}
+    except Exception as exc:
+        try:
+            from perception.db import fail_content_analysis_run
+            fail_content_analysis_run(ca_id)
+        except Exception:
+            pass
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
+@app.get("/api/content-analysis/runs")
+async def content_analysis_runs_list(_: str = Depends(require_auth)):
+    from perception.db import init_db, list_content_analysis_runs
+    init_db()
+    rows = list_content_analysis_runs()
+    for r in rows:
+        if r.get("created_at") is not None:
+            r["created_at"] = str(r["created_at"])
+    return rows
+
+
+@app.get("/api/content-analysis/{ca_id}")
+async def content_analysis_get(ca_id: str, _: str = Depends(require_auth)):
+    from perception.db import init_db, get_content_analysis_run, get_content_findings
+    init_db()
+    rec = get_content_analysis_run(ca_id)
+    if not rec:
+        raise HTTPException(404, "Run not found")
+    rec["created_at"] = str(rec.get("created_at"))
+    rec["findings"] = None
+    if rec.get("base_run_id"):
+        cf = get_content_findings(rec["base_run_id"])
+        if cf:
+            rec["findings"] = cf.get("findings")
+            rec["source_snapshot"] = cf.get("source_snapshot")
+    return rec
+
+
+@app.get("/api/content-analysis/{ca_id}/report{n}")
+async def content_analysis_report(ca_id: str, n: int, _: str = Depends(require_auth)):
+    from perception.db import init_db, get_content_analysis_run
+    init_db()
+    rec = get_content_analysis_run(ca_id)
+    if not rec:
+        raise HTTPException(404, "Run not found")
+    path = rec.get("report1_path") if n == 1 else rec.get("report2_path")
+    if not path or not Path(path).exists():
+        raise HTTPException(404, "Report not available")
+    import re as _re
+    stem = _re.sub(r"[^A-Za-z0-9]+", "-", (rec.get("report_title") or "content")).strip("-")
+    label = "Deep-Diagnostic" if n == 1 else "Content-Report"
+    return FileResponse(path, media_type="application/pdf",
+                        filename=f"{stem}_{label}.pdf")
+
+
 # ══ Public HubSpot webhook — Hospital Network report on request ═══════════════
 import hmac as _hmac
 
