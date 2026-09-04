@@ -1888,6 +1888,76 @@ async def content_analysis_report(ca_id: str, n: int, _: str = Depends(require_a
                         filename=f"{stem}_{label}.pdf")
 
 
+@app.post("/api/content-analysis/{ca_id}/draft")
+async def content_analysis_draft(ca_id: str, payload: dict = Depends(get_current_user_payload)):
+    """Phase-3 remediation: draft publication-ready content for each finding and
+    regenerate Report 2 with it. Facts-only, [VERIFY:]-placeholder guardrail."""
+    from perception.db import init_db, get_content_analysis_run, get_content_findings
+    init_db()
+    rec = get_content_analysis_run(ca_id)
+    if not rec:
+        raise HTTPException(404, "Run not found")
+    if rec.get("status") != "done" or not rec.get("base_run_id"):
+        raise HTTPException(400, "Run isn't complete yet.")
+    if not get_content_findings(rec["base_run_id"]):
+        raise HTTPException(400, "No findings to draft.")
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    _pool.submit(_job_content_draft, job_id, ca_id)
+    return {"job_id": job_id, "ca_id": ca_id}
+
+
+def _job_content_draft(job_id: str, ca_id: str) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+    try:
+        from perception.db import (init_db, get_content_analysis_run, get_content_findings,
+                                   save_content_findings, set_content_analysis_drafted)
+        from perception.content_drafting import draft_findings
+        from perception.content_report_pdf import render_content_report_pdf
+        from perception.models import ContentFindings, ContentFinding
+        init_db()
+        rec = get_content_analysis_run(ca_id)
+        cf = get_content_findings(rec["base_run_id"])
+        findings = cf.get("findings") or []
+        snap = cf.get("source_snapshot") or {}
+
+        emit({"type": "phase", "name": "drafting", "text": "Drafting publication-ready content"})
+        facts = {"website_urls": snap.get("website_urls"), "specialty": None,
+                 "wikidata_qid": snap.get("wikidata_qid"),
+                 "wikipedia_article": snap.get("wikipedia_article")}
+        drafts = draft_findings(rec["entity_name"], rec.get("location", ""),
+                                rec.get("entity_type", "hospital"), facts, findings)
+        for f in findings:
+            if f.get("finding_id") in drafts:
+                f["draft_content"] = drafts[f["finding_id"]]
+                emit({"type": "text", "text": f"✓ drafted {f['finding_id']} ({f.get('platform')})"})
+
+        # Persist drafts back into the cache (deterministic re-render).
+        save_content_findings(rec["base_run_id"], cf.get("norm_entity", ""),
+                              snap, findings, cf.get("status", "verified"))
+
+        # Regenerate Report 2 with drafts.
+        emit({"type": "phase", "name": "pdf", "text": "Rebuilding the Content Improvement Plan"})
+        model = ContentFindings(
+            run_id=rec["base_run_id"], source_snapshot=snap,
+            status=cf.get("status", "verified"),
+            findings=[ContentFinding(**f) for f in findings],
+        )
+        _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
+        render_content_report_pdf(rec["entity_name"], rec.get("location", ""), model,
+                                  str(_r2), report_title=rec.get("report_title") or rec["entity_name"])
+        set_content_analysis_drafted(ca_id, str(_r2))
+        job["status"] = "done"
+        job["result"] = {"ca_id": ca_id, "content_analysis": True, "drafted": True,
+                         "drafted_count": len(drafts)}
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
 # ══ Public HubSpot webhook — Hospital Network report on request ═══════════════
 import hmac as _hmac
 

@@ -822,11 +822,17 @@ def init_db() -> None:
             finding_count  INTEGER DEFAULT 0,
             report1_path   VARCHAR,
             report2_path   VARCHAR,
+            drafted        BOOLEAN DEFAULT FALSE,
             status         VARCHAR DEFAULT 'running',
             user_role      VARCHAR DEFAULT 'user',
             created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    _car_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='content_analysis_runs'"
+    ).fetchall()}
+    if "drafted" not in _car_cols:
+        con.execute("ALTER TABLE content_analysis_runs ADD COLUMN drafted BOOLEAN DEFAULT FALSE")
 
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
@@ -1430,7 +1436,16 @@ def fail_content_analysis_run(ca_id: str) -> None:
 
 _CAR_COLS = ["id", "entity_name", "location", "entity_type", "urls", "report_title",
              "base_run_id", "findings_status", "finding_count", "report1_path",
-             "report2_path", "status", "user_role", "created_at"]
+             "report2_path", "drafted", "status", "user_role", "created_at"]
+
+
+def set_content_analysis_drafted(ca_id: str, report2_path: str) -> None:
+    con = get_connection()
+    con.execute(
+        "UPDATE content_analysis_runs SET drafted=TRUE, report2_path=? WHERE id=?",
+        [report2_path, ca_id],
+    )
+    con.close()
 
 
 def get_content_analysis_run(ca_id: str) -> Optional[dict]:
@@ -1454,12 +1469,12 @@ def list_content_analysis_runs(limit: int = 100) -> list:
     con = get_connection()
     rows = con.execute(
         "SELECT id, entity_name, location, entity_type, findings_status, finding_count, "
-        "report1_path, report2_path, status, created_at "
+        "report1_path, report2_path, drafted, status, created_at "
         "FROM content_analysis_runs ORDER BY created_at DESC LIMIT ?", [limit]
     ).fetchall()
     con.close()
     cols = ["id", "entity_name", "location", "entity_type", "findings_status",
-            "finding_count", "report1_path", "report2_path", "status", "created_at"]
+            "finding_count", "report1_path", "report2_path", "drafted", "status", "created_at"]
     out = []
     for r in rows:
         d = dict(zip(cols, r))

@@ -6176,6 +6176,28 @@ async function caLoadResults(caId) {
   } catch(e) { const el=document.getElementById('ca-results'); el.innerHTML=`<div class="err">${_caEsc(e.message)}</div>`; el.classList.remove('hidden'); }
 }
 
+async function caDraft(caId) {
+  const btn = document.getElementById('ca-draft-btn');
+  const log = document.getElementById('ca-draft-log');
+  if (btn) { btn.disabled = true; btn.textContent = 'Drafting…'; }
+  if (log) log.innerHTML = '';
+  let jobId;
+  try {
+    const r = await api('/api/content-analysis/' + caId + '/draft', { method:'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Draft failed'));
+    jobId = (await r.json()).job_id;
+  } catch(e) { if (log) log.innerHTML = `<span style="color:#c0392b">${_caEsc(e.message)}</span>`; if (btn){btn.disabled=false;btn.textContent='✎ Generate Full Content Plan (drafts)';} return; }
+  const es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
+  es.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'phase' && log) { log.innerHTML += '<b>' + _caEsc(msg.text) + '</b><br>'; log.scrollTop = log.scrollHeight; }
+    else if (msg.type === 'text' && log) { log.innerHTML += _caEsc(msg.text) + '<br>'; log.scrollTop = log.scrollHeight; }
+    else if (msg.type === 'done') { es.close(); caLoadResults(caId); }
+    else if (msg.type === 'error') { es.close(); if (log) log.innerHTML += `<span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; if (btn){btn.disabled=false;btn.textContent='✎ Generate Full Content Plan (drafts)';} }
+  };
+  es.onerror = () => es.close();
+}
+
 function caRenderResults(rec, caId) {
   document.getElementById('ca-progress').classList.add('hidden');
   const el = document.getElementById('ca-results');
@@ -6197,6 +6219,13 @@ function caRenderResults(rec, caId) {
     </div>
     ${findings.length ? `<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>ID</th><th>Platform</th><th>Finding</th><th>Severity</th></tr></thead><tbody>${rows}</tbody></table></div>`
       : '<div style="padding:20px;color:var(--muted);font-size:13px">No content issues detected, or sources could not be assessed.</div>'}
+    ${findings.length ? `<div style="padding:14px 20px;border-top:1px solid var(--border);background:var(--pale)">
+      ${rec.drafted
+        ? '<span style="font-size:13px;color:var(--teal);font-weight:600">✓ Drafted content included in the Content Report.</span> <span style="font-size:12px;color:var(--muted)">Re-download it above.</span>'
+        : `<button class="btn btn-primary btn-sm" id="ca-draft-btn" onclick="caDraft('${caId}')">✎ Generate Full Content Plan (drafts)</button>
+           <span style="font-size:12px;color:var(--muted);margin-left:10px">Drafts publication-ready fixes for each finding (facts-only; anything unknown is left as a [VERIFY] placeholder).</span>`}
+      <div id="ca-draft-log" style="font-size:12px;color:var(--muted);margin-top:8px;font-family:monospace;line-height:1.6"></div>
+    </div>` : ''}
   </div>
   <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="caReset()">Run Another</button></div>`;
   el.classList.remove('hidden');
@@ -7017,7 +7046,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
     const caRows = contentRuns.map(c => {
       const date = (c.created_at || '').slice(0, 10);
       const type = c.entity_type === 'practice' ? 'Practice' : 'Hospital';
-      const result = c.status === 'running' ? 'Analyzing…' : `${c.finding_count} finding${c.finding_count===1?'':'s'}`;
+      const result = c.status === 'running' ? 'Analyzing…' : `${c.finding_count} finding${c.finding_count===1?'':'s'}${c.drafted ? ' · drafted' : ''}`;
       const badge = c.status === 'done'
         ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
         : c.status === 'failed'
