@@ -157,10 +157,9 @@ def _build_html(entity_name: str, location: str, findings, report_title: str) ->
       .method b {{ color:{_TEAL}; }}
     </style></head><body>
       <div class="band">
-        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">CONTENT IMPROVEMENT<br>PLAN</div></div>
-        <div class="kick">Content Analysis &middot; Detailed Findings</div>
-        <h1>{_e(title)}</h1>
-        <div class="sub">{_e(location)}</div>
+        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI VISIBILITY<br>REPORT</div></div>
+        <h1>Content Analysis &mdash; Detailed Findings and Improvement Prescriptions</h1>
+        <div class="sub">{_e(title)}{(" &middot; " + _e(location)) if location else ""}</div>
       </div>
       <div class="meta">
         <b>{summary}</b><br>
