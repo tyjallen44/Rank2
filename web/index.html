@@ -1439,7 +1439,77 @@ html, body {
     <div id="page-individual" class="page">
       <div class="page-title">Deep Diagnostic</div>
       <div class="page-sub">Run a focused diagnostic on a hospital, hospital network, specialty practice within a hospital, or a medical practice: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
-      <div style="margin:-4px 0 16px"><a href="#" onclick="showIrHelp();return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">ℹ How to analyze a specialty practice within a hospital →</a></div>
+      <div style="margin:-4px 0 12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <a href="#" onclick="showIrHelp();return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">ℹ How to analyze a specialty practice within a hospital →</a>
+        <button class="btn btn-secondary btn-sm" onclick="caOpen()" style="margin-left:auto">🔎 Content Analysis</button>
+      </div>
+
+      <!-- ── Content Analysis (contained sandbox) ─────────────────────────── -->
+      <div id="ca-panel" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:700;color:var(--teal)">Content Analysis</div>
+          <button class="btn btn-ghost btn-sm" onclick="caClose()">← Back to Deep Diagnostic</button>
+        </div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
+          Verifies where AI assistants get their picture of a provider — website structured data, llms.txt,
+          Wikidata, Wikipedia — and produces a Deep Diagnostic plus a detailed Content Improvement report.
+        </div>
+
+        <!-- Step 1: identify entity -->
+        <div id="ca-search" class="card" style="background:var(--bg);border-color:var(--border)">
+          <div class="fg" style="margin-bottom:14px">
+            <label class="fl">Organization Name</label>
+            <input id="ca-name" class="fi" type="text" placeholder="e.g. Duke Health" oninput="this.value=this.value.toUpperCase()">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 120px;gap:14px;margin-bottom:14px">
+            <div class="fg" style="margin:0"><label class="fl">City</label>
+              <input id="ca-city" class="fi" type="text" placeholder="Durham" oninput="this.value=this.value.toUpperCase()"></div>
+            <div class="fg" style="margin:0"><label class="fl">State</label>
+              <input id="ca-state" class="fi" type="text" maxlength="2" placeholder="NC" oninput="this.value=this.value.toUpperCase()"></div>
+          </div>
+          <div class="fg" style="margin-bottom:14px">
+            <label class="fl">Type</label>
+            <div class="tg-group">
+              <button class="tg-opt on" id="ca-tg-hospital" onclick="caSetType('hospital')">Hospital / Health System</button>
+              <button class="tg-opt"    id="ca-tg-practice" onclick="caSetType('practice')">Specialty Practice</button>
+            </div>
+          </div>
+          <div id="ca-spec-wrap" class="fg hidden" style="margin-bottom:14px">
+            <label class="fl">Specialty (optional)</label>
+            <input id="ca-specialty" class="fi" type="text" placeholder="e.g. Orthopedics">
+          </div>
+          <div id="ca-search-err" class="err hidden mt8"></div>
+          <button class="btn btn-primary" id="ca-find-btn" onclick="caFind()">Find Entity →</button>
+        </div>
+
+        <!-- Step 2: candidates -->
+        <div id="ca-candidates" class="hidden mt16"></div>
+
+        <!-- Step 3: URLs -->
+        <div id="ca-urls" class="hidden mt16">
+          <div class="card" style="background:var(--bg);border-color:var(--border)">
+            <div style="font-weight:600;margin-bottom:4px" id="ca-url-entity"></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Confirm or add the website URL(s) to analyze. Leave blank to use the resolved provider site.</div>
+            <div id="ca-url-list"></div>
+            <button class="btn btn-secondary btn-sm" onclick="caAddUrl()" style="margin-top:8px">+ Add URL</button>
+            <div class="row-actions mt16">
+              <button class="btn btn-primary" id="ca-run-btn" onclick="caRun()">Run Content Analysis →</button>
+              <button class="btn btn-ghost btn-sm" onclick="caReset()">Start Over</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div id="ca-progress" class="hidden mt16">
+          <div class="card">
+            <div style="font-weight:600;margin-bottom:8px" id="ca-progress-head">Analyzing…</div>
+            <div id="ca-progress-log" style="font-size:12px;color:var(--muted);max-height:240px;overflow:auto;font-family:monospace;line-height:1.6"></div>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="ca-results" class="hidden mt16"></div>
+      </div>
 
       <!-- Step 1: Search form -->
       <div id="ir-step1" class="card">
@@ -5984,6 +6054,155 @@ function irCloseHelp() { document.getElementById('ir-help-modal').classList.remo
 function showEvHelp()  { document.getElementById('ev-help-modal').classList.add('open'); }
 function evCloseHelp() { document.getElementById('ev-help-modal').classList.remove('open'); }
 
+// ── Content Analysis (contained sandbox) ────────────────────────────────────
+let _caType = 'hospital', _caCands = [], _caPicked = null, _caUrls = [];
+let _caName = '', _caCity = '', _caState = '', _caSpecialty = '';
+const _caEsc = s => (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function caOpen() {
+  document.getElementById('ir-step1').classList.add('hidden');
+  document.getElementById('ca-panel').classList.remove('hidden');
+}
+function caClose() {
+  document.getElementById('ca-panel').classList.add('hidden');
+  document.getElementById('ir-step1').classList.remove('hidden');
+}
+function caSetType(t) {
+  _caType = t;
+  document.getElementById('ca-tg-hospital').classList.toggle('on', t === 'hospital');
+  document.getElementById('ca-tg-practice').classList.toggle('on', t === 'practice');
+  document.getElementById('ca-spec-wrap').classList.toggle('hidden', t !== 'practice');
+}
+function caReset() {
+  ['ca-candidates','ca-urls','ca-progress','ca-results'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('ca-search').classList.remove('hidden');
+  _caCands = []; _caPicked = null; _caUrls = [];
+}
+
+async function caFind() {
+  const err = document.getElementById('ca-search-err'); err.classList.add('hidden');
+  _caName = document.getElementById('ca-name').value.trim();
+  _caCity = document.getElementById('ca-city').value.trim();
+  _caState = document.getElementById('ca-state').value.trim().toUpperCase();
+  _caSpecialty = (_caType === 'practice') ? document.getElementById('ca-specialty').value.trim() : '';
+  if (!_caName) { showErr(err, 'Enter an organization name.'); return; }
+  if (!_caCity || _caState.length !== 2) { showErr(err, 'Enter a city and 2-letter state.'); return; }
+  const btn = document.getElementById('ca-find-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Finding…';
+  try {
+    const r = await api('/api/search/entity', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name:_caName, city:_caCity, state:_caState }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Search failed'));
+    const d = await r.json();
+    _caCands = d.candidates || [];
+    _caCity = d.city || _caCity; _caState = d.state || _caState;
+    caRenderCandidates();
+  } catch(e) { showErr(err, e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Find Entity →'; }
+}
+
+function caRenderCandidates() {
+  const el = document.getElementById('ca-candidates');
+  if (!_caCands.length) {
+    // No candidates — proceed with the typed name directly.
+    caPick({ name: _caName });
+    return;
+  }
+  el.innerHTML = `<div class="card" style="background:var(--bg);border-color:var(--border)">
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Select the entity to analyze:</div>
+    ${_caCands.map((c,i) => `<div onclick="caPickIdx(${i})" style="cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px" onmouseenter="this.style.background='var(--pale)'" onmouseleave="this.style.background=''">
+      <div style="font-weight:600;font-size:13px;color:var(--teal)">${_caEsc(c.name)}</div>
+      ${c.address ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${_caEsc(c.address)}</div>` : ''}
+    </div>`).join('')}
+    <button class="btn btn-ghost btn-sm" onclick="caPick({name:'${_caEsc(_caName).replace(/'/g,"\\'")}'})">None of these — use “${_caEsc(_caName)}”</button>
+  </div>`;
+  el.classList.remove('hidden');
+}
+function caPickIdx(i) { caPick(_caCands[i]); }
+function caPick(c) {
+  _caPicked = c;
+  _caUrls = c && c.website_url ? [c.website_url] : [];
+  document.getElementById('ca-candidates').classList.add('hidden');
+  document.getElementById('ca-url-entity').textContent = (c && c.name) || _caName;
+  caRenderUrls();
+  document.getElementById('ca-urls').classList.remove('hidden');
+  document.getElementById('ca-urls').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function caRenderUrls() {
+  const el = document.getElementById('ca-url-list');
+  if (!_caUrls.length) _caUrls = [''];
+  el.innerHTML = _caUrls.map((u,i) => `<div style="display:flex;gap:8px;margin-bottom:8px">
+    <input class="fi" style="flex:1" placeholder="https://example.org" value="${_caEsc(u)}" oninput="_caUrls[${i}]=this.value">
+    <button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="caRemoveUrl(${i})">✕</button>
+  </div>`).join('');
+}
+function caAddUrl() { _caUrls.push(''); caRenderUrls(); }
+function caRemoveUrl(i) { _caUrls.splice(i,1); caRenderUrls(); }
+
+async function caRun() {
+  const urls = _caUrls.map(u => (u||'').trim()).filter(Boolean);
+  const btn = document.getElementById('ca-run-btn'); btn.disabled = true; btn.textContent = 'Starting…';
+  const head = document.getElementById('ca-progress-head'), log = document.getElementById('ca-progress-log');
+  head.textContent = 'Analyzing…'; log.innerHTML = '';
+  document.getElementById('ca-urls').classList.add('hidden');
+  document.getElementById('ca-results').classList.add('hidden');
+  document.getElementById('ca-progress').classList.remove('hidden');
+  let caId, jobId;
+  try {
+    const r = await api('/api/content-analysis/run', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ entity_name:(_caPicked && _caPicked.name) || _caName, city:_caCity, state:_caState,
+        entity_type:_caType, specialty:_caSpecialty || null, urls }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Run failed'));
+    const d = await r.json(); caId = d.ca_id; jobId = d.job_id;
+  } catch(e) { head.textContent='Error'; log.innerHTML=`<span style="color:#c0392b">${_caEsc(e.message)}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; return; }
+
+  const es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
+  es.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'phase') head.textContent = msg.text || 'Analyzing…';
+    else if (msg.type === 'text') { log.innerHTML += _caEsc(msg.text) + '<br>'; log.scrollTop = log.scrollHeight; }
+    else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Content Analysis →'; caLoadResults(caId); }
+    else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
+  };
+  es.onerror = () => es.close();
+}
+
+async function caLoadResults(caId) {
+  try {
+    const r = await api('/api/content-analysis/' + caId);
+    if (!r.ok) throw new Error('Could not load results');
+    caRenderResults(await r.json(), caId);
+  } catch(e) { const el=document.getElementById('ca-results'); el.innerHTML=`<div class="err">${_caEsc(e.message)}</div>`; el.classList.remove('hidden'); }
+}
+
+function caRenderResults(rec, caId) {
+  document.getElementById('ca-progress').classList.add('hidden');
+  const el = document.getElementById('ca-results');
+  const sevColor = s => s==='high'?'#d94f4f':s==='medium'?'#e09b2a':'#7a9095';
+  const findings = rec.findings || [];
+  const rows = findings.map(f => `<tr>
+    <td style="padding:6px 8px;border-bottom:1px solid var(--pale);font-family:monospace;font-size:11px;color:var(--muted)">${_caEsc(f.finding_id)}</td>
+    <td style="padding:6px 8px;border-bottom:1px solid var(--pale);font-size:12px;color:var(--teal)">${_caEsc(f.platform)}</td>
+    <td style="padding:6px 8px;border-bottom:1px solid var(--pale);font-size:12px">${_caEsc(f.teaser_summary)}</td>
+    <td style="padding:6px 8px;border-bottom:1px solid var(--pale)"><span style="background:${sevColor(f.severity)};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;text-transform:uppercase">${_caEsc(f.severity)}</span></td>
+  </tr>`).join('');
+  el.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:700;font-size:15px">Content Analysis — ${_caEsc(rec.entity_name)} <span style="font-weight:400;color:var(--muted);font-size:13px">(${findings.length} finding${findings.length===1?'':'s'})</span></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-gold btn-sm" onclick="window.location.href='/api/content-analysis/${caId}/report1?token=${encodeURIComponent(_token)}'">⬇ Deep Diagnostic</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.location.href='/api/content-analysis/${caId}/report2?token=${encodeURIComponent(_token)}'">⬇ Content Report</button>
+      </div>
+    </div>
+    ${findings.length ? `<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>ID</th><th>Platform</th><th>Finding</th><th>Severity</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : '<div style="padding:20px;color:var(--muted);font-size:13px">No content issues detected, or sources could not be assessed.</div>'}
+  </div>
+  <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="caReset()">Run Another</button></div>`;
+  el.classList.remove('hidden');
+  el.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
 function npDownloadTemplate() {
   const csv = 'Entity_ID,Entity_Name,Primary_City,Primary_State\n'
             + 'ENT-001,Mayo Clinic,Rochester,MN\n'
@@ -6509,27 +6728,31 @@ let _cachedEvents = [];
 let _evHistExpanded = false;   // both History run-sections start collapsed
 let _nbHistExpanded = false;
 let _shHistExpanded = false;
+let _caHistExpanded = false;
 let _cachedBulkRuns = [];
 let _cachedStudentRuns = [];
+let _cachedContentRuns = [];
 
 async function loadHistory() {
   const el = document.getElementById('history-body');
   el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
   try {
-    const [runsResp, eventsResp, bulkResp, shResp] = await Promise.all([
+    const [runsResp, eventsResp, bulkResp, shResp, caResp] = await Promise.all([
       api('/api/history'),
       api('/api/events'),
       api('/api/network/bulk/runs'),
       api('/api/student-health/runs'),
+      api('/api/content-analysis/runs'),
     ]);
     _historyRuns = await runsResp.json();
     const events  = await eventsResp.json();
     const bulkRuns = await bulkResp.json();
     const studentRuns = shResp.ok ? await shResp.json() : [];
+    const contentRuns = caResp.ok ? await caResp.json() : [];
     _historySortField = 'date';
     _historySortDir = 'desc';
     _historySearch = '';
-    renderHistory(events, bulkRuns, studentRuns);
+    renderHistory(events, bulkRuns, studentRuns, contentRuns);
   } catch(e) {
     el.innerHTML = `<div class="err">${e.message}</div>`;
   }
@@ -6567,13 +6790,15 @@ function _fmtRunDate(run) {
   return run.generated_at || '—';
 }
 
-function renderHistory(events, bulkRuns, studentRuns) {
+function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
   if (events !== undefined) _cachedEvents = events;
   if (bulkRuns !== undefined) _cachedBulkRuns = bulkRuns;
   if (studentRuns !== undefined) _cachedStudentRuns = studentRuns;
+  if (contentRuns !== undefined) _cachedContentRuns = contentRuns;
   events = _cachedEvents;
   bulkRuns = _cachedBulkRuns;
   studentRuns = _cachedStudentRuns;
+  contentRuns = _cachedContentRuns;
   const searchWasFocused = document.activeElement && document.activeElement.id === 'history-search';
   const el = document.getElementById('history-body');
 
@@ -6785,7 +7010,50 @@ function renderHistory(events, bulkRuns, studentRuns) {
       </div>`;
   }
 
-  if (!_historyRuns.length && !evHtml && !nbHtml && !shHtml) {
+  // ── Content Analysis Runs section ─────────────────────────────────────────
+  let caHtml = '';
+  if (contentRuns && contentRuns.length) {
+    const caEsc = s => (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const caRows = contentRuns.map(c => {
+      const date = (c.created_at || '').slice(0, 10);
+      const type = c.entity_type === 'practice' ? 'Practice' : 'Hospital';
+      const result = c.status === 'running' ? 'Analyzing…' : `${c.finding_count} finding${c.finding_count===1?'':'s'}`;
+      const badge = c.status === 'done'
+        ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
+        : c.status === 'failed'
+          ? `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>`
+          : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
+      const r1 = c.has_report1 ? `<button class="btn btn-gold btn-sm" onclick="window.location.href='/api/content-analysis/${c.id}/report1?token=${encodeURIComponent(_token)}'">⬇ Diagnostic</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
+      const r2 = c.has_report2 ? `<button class="btn btn-secondary btn-sm" onclick="window.location.href='/api/content-analysis/${c.id}/report2?token=${encodeURIComponent(_token)}'">⬇ Content</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
+      return `<tr><td>${date}</td><td style="font-weight:600">${caEsc(c.entity_name)}</td><td style="font-size:13px;color:var(--muted)">${caEsc(c.location)}</td><td><span class="badge bg-muted" style="font-size:10px">${type}</span></td><td style="font-size:13px;color:var(--muted)">${result}</td><td>${badge}</td><td>${r1}</td><td>${r2}</td></tr>`;
+    }).join('');
+    const caCount = contentRuns.length;
+    caHtml = `
+      <div style="margin-bottom:24px">
+        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Content Analysis Runs</div>
+        <div id="ca-hist-collapsed" onclick="caToggleHistory()" style="cursor:pointer;padding:14px 18px;border-radius:8px;border:1.5px solid var(--border);background:var(--pale);transition:background 0.15s" onmouseenter="this.style.background='#e8f0ee'" onmouseleave="this.style.background='var(--pale)'">
+          <div style="display:flex;align-items:center;gap:14px">
+            <span style="font-size:22px;color:var(--teal-mid);line-height:1">≡</span>
+            <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--body)">${caCount} Content Analysis Run${caCount === 1 ? '' : 's'}</div></div>
+            <button class="btn btn-primary btn-sm" style="pointer-events:none;flex-shrink:0">View All ▼</button>
+          </div>
+        </div>
+        <div id="ca-hist-body">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:12px;color:var(--muted)">${caCount} run${caCount === 1 ? '' : 's'}</span>
+            <button class="btn btn-ghost btn-sm" onclick="caToggleHistory()">Hide Content Analysis Runs ▲</button>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table class="tbl">
+              <thead><tr><th>Date</th><th>Entity</th><th>Location</th><th>Type</th><th>Result</th><th>Status</th><th>Diagnostic</th><th>Content Report</th></tr></thead>
+              <tbody>${caRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if (!_historyRuns.length && !evHtml && !nbHtml && !shHtml && !caHtml) {
     el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
     return;
   }
@@ -6816,7 +7084,7 @@ function renderHistory(events, bulkRuns, studentRuns) {
     return `<th onclick="historySort('${field}')" style="cursor:pointer;user-select:none${align ? ';text-align:' + align : ''}">${label}${icon}</th>`;
   };
 
-  el.innerHTML = evHtml + nbHtml + shHtml + `
+  el.innerHTML = evHtml + nbHtml + shHtml + caHtml + `
     <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">All Reports</div>
     <div style="margin-bottom:16px">
       <input id="history-search" type="text" class="input"
@@ -6905,6 +7173,11 @@ function shToggleHistory() {
   _applyEvHistState();
 }
 
+function caToggleHistory() {
+  _caHistExpanded = !_caHistExpanded;
+  _applyEvHistState();
+}
+
 function _applyEvHistState() {
   const body      = document.getElementById('ev-hist-body');
   const collapsed = document.getElementById('ev-hist-collapsed');
@@ -6923,6 +7196,12 @@ function _applyEvHistState() {
   if (shBody) {
     shBody.style.display = _shHistExpanded ? '' : 'none';
     if (shCollapsed) shCollapsed.style.display = _shHistExpanded ? 'none' : '';
+  }
+  const caBody      = document.getElementById('ca-hist-body');
+  const caCollapsed = document.getElementById('ca-hist-collapsed');
+  if (caBody) {
+    caBody.style.display = _caHistExpanded ? '' : 'none';
+    if (caCollapsed) caCollapsed.style.display = _caHistExpanded ? 'none' : '';
   }
 }
 
@@ -6955,16 +7234,20 @@ async function evResume(id) {
 let _histPollTimer = null;
 async function _pollHistory() {
   try {
-    const [eventsResp, bulkResp, shResp] = await Promise.all([
+    const [eventsResp, bulkResp, shResp, caResp] = await Promise.all([
       api('/api/events'), api('/api/network/bulk/runs'), api('/api/student-health/runs'),
+      api('/api/content-analysis/runs'),
     ]);
-    renderHistory(await eventsResp.json(), await bulkResp.json(), shResp.ok ? await shResp.json() : undefined);
+    renderHistory(await eventsResp.json(), await bulkResp.json(),
+      shResp.ok ? await shResp.json() : undefined,
+      caResp.ok ? await caResp.json() : undefined);
   } catch (e) { /* transient — try again next tick */ }
 }
 function _scheduleHistPoll() {
   const anyRunning = (_cachedEvents || []).some(e => e.status !== 'complete')
     || (_cachedBulkRuns || []).some(b => b.status === 'running')
-    || (_cachedStudentRuns || []).some(s => s.status === 'running');
+    || (_cachedStudentRuns || []).some(s => s.status === 'running')
+    || (_cachedContentRuns || []).some(c => c.status === 'running');
   if (anyRunning && !_histPollTimer) {
     _histPollTimer = setInterval(_pollHistory, 8000);
   } else if (!anyRunning && _histPollTimer) {
