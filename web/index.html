@@ -740,13 +740,13 @@ html, body {
 #learn-modal.open { display:flex; }
 
 /* ── Bulk "About this report" info modal ──────────────────────── */
-#np-about-modal, #ir-help-modal, #ev-help-modal {
+#np-about-modal, #ir-help-modal, #ev-help-modal, #ca-about-modal {
   display:none;position:fixed;inset:0;
   background:rgba(15,65,70,0.55);z-index:1000;
   align-items:center;justify-content:center;
 }
-#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open { display:flex; }
-#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
+#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open, #ca-about-modal.open { display:flex; }
+#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card, #ca-about-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
 .npa-step { font-size:13.5px;color:var(--text);line-height:1.55;margin:0 0 9px;padding-left:26px;position:relative; }
 .npa-step b.n { position:absolute;left:0;top:0;color:var(--teal);font-weight:700; }
 .npa-h { font-size:12px;font-weight:700;color:var(--teal);text-transform:uppercase;
@@ -1450,10 +1450,11 @@ html, body {
           <div style="font-size:15px;font-weight:700;color:var(--teal)">Content Analysis</div>
           <button class="btn btn-ghost btn-sm" onclick="caClose()">← Back to Deep Diagnostic</button>
         </div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px">
           Verifies where AI assistants get their picture of a provider — website structured data, llms.txt,
           Wikidata, Wikipedia — and produces a Deep Diagnostic plus a detailed Content Improvement report.
         </div>
+        <div style="margin-bottom:14px"><a href="#" onclick="caShowAbout();return false" style="font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">ℹ What is Content Analysis? →</a></div>
 
         <!-- Step 1: identify entity -->
         <div id="ca-search" class="card" style="background:var(--bg);border-color:var(--border)">
@@ -3491,6 +3492,39 @@ Hospital for Special Surgery,New York,NY,,Orthopedics</div>
     <div class="npa-li">• The Specialty Practice setting applies to the whole upload — keep a service-line batch separate from a whole-hospitals batch.</div>
     <div class="npa-li">• A row that can't be resolved to a parent system is scored as a standalone practice instead — filling the specialty column reduces that.</div>
     <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="evCloseHelp()">Got it</button></div>
+  </div>
+</div>
+
+<!-- ── Content Analysis: about ────────────────────────────────────────────── -->
+<div id="ca-about-modal" onclick="if(event.target===this)caCloseAbout()">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div class="modal-title" style="margin-bottom:4px">What is Content Analysis?</div>
+      <button class="btn btn-ghost btn-sm" onclick="caCloseAbout()" style="flex-shrink:0">✕</button>
+    </div>
+    <div class="npa-p" style="margin-top:6px">
+      AI assistants (ChatGPT, Gemini, Claude) build their picture of a provider from many sources
+      beyond its website — and if those sources are missing, outdated, or hard to read, the provider
+      shows up weakly no matter how good the care is. Content Analysis <strong>checks those sources
+      directly</strong> and shows you exactly where the gaps are.
+    </div>
+
+    <div class="npa-h">What it checks (from live checks, not estimates)</div>
+    <div class="npa-li"><strong>Website structured data</strong> — schema.org markup that lets AI parse your organization, providers, and locations.</div>
+    <div class="npa-li"><strong>llms.txt &amp; AI-crawler access</strong> — whether you guide AI assistants to your content, and whether your robots.txt is accidentally blocking them.</div>
+    <div class="npa-li"><strong>Wikidata</strong> — whether a structured knowledge entry exists and is complete.</div>
+    <div class="npa-li" style="margin-bottom:8px"><strong>Wikipedia</strong> — whether an article exists and whether its facts are current.</div>
+
+    <div class="npa-h">What you get</div>
+    <div class="npa-li"><strong>1. Deep Diagnostic</strong> — the standard AI Visibility report, with a <em>Content Improvement Keys</em> summary of the findings added.</div>
+    <div class="npa-li" style="margin-bottom:8px"><strong>2. Content Improvement report</strong> — every finding in detail, with the evidence and the recommended fix. Optionally, click <em>Generate Full Content Plan</em> to add publication-ready drafts (schema markup, Wikidata edits, a Wikipedia talk-page request, and more).</div>
+
+    <div class="npa-h">Good to know</div>
+    <div class="npa-li">Every finding is <strong>verified</strong> by a real check — nothing is guessed. Anything that can't be confirmed is marked accordingly.</div>
+    <div class="npa-li">Drafted content uses <strong>only known facts</strong>; anything unknown is left as a <code>[VERIFY]</code> placeholder for a person to complete — and no citations are ever invented.</div>
+    <div class="npa-li">This analysis <strong>does not change the Pulse Score</strong> — it's about the content behind your visibility.</div>
+
+    <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="caCloseAbout()">Got it</button></div>
   </div>
 </div>
 
@@ -6058,6 +6092,9 @@ function evCloseHelp() { document.getElementById('ev-help-modal').classList.remo
 let _caType = 'hospital', _caCands = [], _caPicked = null, _caUrls = [];
 let _caName = '', _caCity = '', _caState = '', _caSpecialty = '';
 const _caEsc = s => (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function caShowAbout()  { document.getElementById('ca-about-modal').classList.add('open'); }
+function caCloseAbout() { document.getElementById('ca-about-modal').classList.remove('open'); }
 
 function caOpen() {
   document.getElementById('ir-step1').classList.add('hidden');
