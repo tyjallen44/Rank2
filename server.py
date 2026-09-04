@@ -1799,9 +1799,18 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
         for f in findings.findings:
             emit({"type": "text", "text": f"• [{f.severity}] {f.teaser_summary}"})
 
-        # 4. Reports. Step 3: report 1 = the base Deep Diagnostic PDF (content
-        #    section appended in step 4); report 2 (detail) arrives in step 5.
-        report1 = result.pdf_path or ""
+        # 4. Report 1 = Deep Diagnostic + Content Improvement Keys section.
+        #    (Report 2, the detailed content report, arrives in step 5.)
+        emit({"type": "phase", "name": "pdf", "text": "Building the report"})
+        report1 = ""
+        try:
+            from perception.pdf import render_content_deep_dive
+            _r1 = REPORTS_DIR / f"content_{ca_id}_report1.pdf"
+            render_content_deep_dive(result, _r1, findings, brand=brand)
+            report1 = str(_r1)
+        except Exception as _pe:
+            emit({"type": "text", "text": f"(augmented report render failed: {type(_pe).__name__}) — using base report"})
+            report1 = result.pdf_path or ""
         report2 = ""
 
         finalize_content_analysis_run(ca_id, result.run_id, findings.status,

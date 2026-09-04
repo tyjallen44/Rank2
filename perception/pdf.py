@@ -114,6 +114,136 @@ def _logo_data_uri() -> str:
     return ""
 
 
+def _content_keys_section(findings) -> str:
+    """Content Improvement Keys — the teaser section appended to Report 1.
+
+    Self-contained inline styles (no dependency on the report's CSS) so it can be
+    injected into the deep-dive HTML without touching the shared builder.
+    `findings` is a ContentFindings object (may be empty / not_assessed)."""
+    items = list(getattr(findings, "findings", []) or [])
+    status = getattr(findings, "status", "not_assessed")
+    snap = getattr(findings, "source_snapshot", {}) or {}
+
+    sev_color = {"high": "#d94f4f", "medium": "#e09b2a", "low": "#7a9095"}
+    st_dot = {"verified": ("#2e9e5b", "Verified"),
+              "partial": ("#e09b2a", "Partial"),
+              "not_assessed": ("#9aa8ac", "Not assessed")}
+    plat_label = {"structured_data": "Structured data", "website": "Website",
+                  "llms_txt": "llms.txt", "wikidata": "Wikidata", "wikipedia": "Wikipedia"}
+
+    if not items:
+        body = ('<p style="font-size:10.5pt;color:#3a5a60;margin:0">'
+                'No content-visibility issues were detected, or the sources could not be '
+                'assessed at analysis time. A full Content Improvement Plan can re-check on request.</p>')
+        counts_strip = ""
+    else:
+        # counts by severity + platforms touched
+        by_sev = {"high": 0, "medium": 0, "low": 0}
+        plats = set()
+        for f in items:
+            by_sev[f.severity] = by_sev.get(f.severity, 0) + 1
+            plats.add(plat_label.get(f.platform, f.platform))
+        counts_strip = (
+            f'<div style="background:#f1f7f6;border:1px solid #d0e4e8;border-radius:6px;'
+            f'padding:10px 14px;margin:0 0 14px;font-size:9.5pt;color:#3a5a60">'
+            f'<strong>{len(items)} item{"s" if len(items)!=1 else ""} identified</strong> — '
+            f'{by_sev.get("high",0)} high, {by_sev.get("medium",0)} medium, {by_sev.get("low",0)} low, '
+            f'across {", ".join(sorted(plats))}.</div>'
+        )
+        shown = items[:8]
+        rows = []
+        for f in shown:
+            sc = sev_color.get(f.severity, "#7a9095")
+            dot_c, dot_l = st_dot.get(f.status, ("#9aa8ac", f.status))
+            rows.append(
+                f'<tr>'
+                f'<td style="padding:7px 8px;border-bottom:1px solid #eef3f2;font-family:monospace;'
+                f'font-size:8pt;color:#7a9095;white-space:nowrap">{_e(f.finding_id)}</td>'
+                f'<td style="padding:7px 8px;border-bottom:1px solid #eef3f2;font-size:8.5pt;'
+                f'color:#177B6E;white-space:nowrap">{_e(plat_label.get(f.platform, f.platform))}</td>'
+                f'<td style="padding:7px 8px;border-bottom:1px solid #eef3f2;font-size:9pt;color:#2b3a3d">{_e(f.teaser_summary)}</td>'
+                f'<td style="padding:7px 8px;border-bottom:1px solid #eef3f2;white-space:nowrap">'
+                f'<span style="background:{sc};color:#fff;font-size:7.5pt;font-weight:700;'
+                f'padding:2px 7px;border-radius:9px;text-transform:uppercase">{_e(f.severity)}</span></td>'
+                f'<td style="padding:7px 8px;border-bottom:1px solid #eef3f2;font-size:8pt;'
+                f'color:#5a6e72;white-space:nowrap"><span style="color:{dot_c}">&#9679;</span> {dot_l}</td>'
+                f'</tr>'
+            )
+        more = (f'<div style="font-size:8.5pt;color:#7a9095;margin-top:8px">'
+                f'Showing the top 8 of {len(items)} items by severity — the full Content '
+                f'Improvement Plan details every one.</div>') if len(items) > 8 else ""
+        body = (
+            counts_strip +
+            '<table style="width:100%;border-collapse:collapse;margin:0">'
+            '<thead><tr style="background:#0F4146;color:#fff">'
+            '<th style="text-align:left;padding:7px 8px;font-size:8pt;text-transform:uppercase;letter-spacing:.04em">ID</th>'
+            '<th style="text-align:left;padding:7px 8px;font-size:8pt;text-transform:uppercase;letter-spacing:.04em">Platform</th>'
+            '<th style="text-align:left;padding:7px 8px;font-size:8pt;text-transform:uppercase;letter-spacing:.04em">Finding</th>'
+            '<th style="text-align:left;padding:7px 8px;font-size:8pt;text-transform:uppercase;letter-spacing:.04em">Severity</th>'
+            '<th style="text-align:left;padding:7px 8px;font-size:8pt;text-transform:uppercase;letter-spacing:.04em">Status</th>'
+            '</tr></thead><tbody>' + "".join(rows) + '</tbody></table>' + more
+        )
+
+    from datetime import date as _date
+    pages = snap.get("pages_crawled", 0)
+    src_note = (f'<div style="font-size:8pt;color:#9aa8ac;margin-top:6px">Verified from '
+                f'{pages} page(s) crawled plus live Wikidata and Wikipedia checks '
+                f'on {_date.today():%m/%d/%Y}.</div>') if pages else ""
+
+    cta = (
+        '<div style="margin-top:16px;background:#EEF7F1;border-left:4px solid #177B6E;'
+        'border-radius:6px;padding:12px 16px">'
+        '<div style="font-size:10pt;font-weight:700;color:#0F4146;margin-bottom:3px">'
+        'Request your Content Improvement Plan</div>'
+        '<div style="font-size:9pt;color:#3a5a60;line-height:1.5">A detailed, prioritized '
+        'remediation roadmap for every item above — including publication-ready content '
+        'where platform policies allow.</div></div>'
+    )
+
+    return (
+        '<div style="page-break-before:always;padding:0 40px">'
+        '<div style="font-size:13pt;font-weight:700;color:#0F4146;margin:0 0 4px">Content Improvement Keys</div>'
+        '<p style="font-size:9.5pt;color:#3a5a60;line-height:1.5;margin:0 0 14px">'
+        'AI assistants form their picture of a provider from many sources beyond your website. '
+        'This section identifies — from live checks, not estimates — where those sources are missing, '
+        'outdated, or inconsistent.</p>'
+        + body + src_note + cta +
+        '</div>'
+    )
+
+
+def render_content_deep_dive(result: AnalysisResult, pdf_path: Path, findings,
+                             brand: str = "original") -> None:
+    """Report 1 for the Content Analysis sandbox: the standard Deep Diagnostic
+    with the Content Improvement Keys section appended. Reuses the shared HTML
+    builder untouched and injects the section before </body>."""
+    from playwright.sync_api import sync_playwright
+    cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
+    html = _build_html(result, cfg)
+    section = _content_keys_section(findings)
+    html = html.replace("</body>", section + "</body>", 1) if "</body>" in html else html + section
+    _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html, wait_until="networkidle")
+        page.pdf(
+            path=str(pdf_path), format="Letter",
+            margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
+            print_background=True, display_header_footer=True,
+            header_template="<span></span>",
+            footer_template=(
+                '<div style="width:100%;font-family:Arial,sans-serif;'
+                'font-size:9px;color:#7a9095;display:flex;justify-content:space-between;'
+                'align-items:center;padding:0 48px 8px;box-sizing:border-box">'
+                f'<span>{_cached_lbl}</span>'
+                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
+                "</div>"
+            ),
+        )
+        browser.close()
+
+
 def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") -> None:
     """Render a structured AnalysisResult to a branded PDF using Playwright."""
     from playwright.sync_api import sync_playwright
