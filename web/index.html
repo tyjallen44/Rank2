@@ -1844,9 +1844,56 @@ html, body {
     <div id="page-network" class="page">
       <div class="page-title">Hospital Network</div>
       <div class="page-sub">AI Visibility report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
+      <div style="margin:-4px 0 12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="ncaOpen()" style="margin-left:auto">🔎 Content Analysis</button>
+      </div>
+
+      <!-- ── Content Analysis (network, contained sandbox) ────────────────── -->
+      <div id="nca-panel" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:700;color:var(--teal)">Content Analysis — Hospital Network</div>
+          <button class="btn btn-ghost btn-sm" onclick="ncaClose()">← Back to Hospital Network</button>
+        </div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
+          Verifies the network's content and reputation across <strong>all its hospitals</strong> — system-website
+          structured data, llms.txt, Wikidata/Wikipedia, and per-facility Google reputation — and produces a Network
+          report plus a detailed Content Improvement report.
+        </div>
+
+        <div id="nca-search" class="card" style="background:var(--bg);border-color:var(--border)">
+          <div class="fg" style="margin-bottom:14px">
+            <label class="fl">Network Name</label>
+            <input id="nca-name" class="fi" type="text" placeholder="e.g. Atrium Health">
+          </div>
+          <div class="fg" style="margin-bottom:14px">
+            <label class="fl">Headquarters (City, State)</label>
+            <input id="nca-hq" class="fi" type="text" placeholder="Charlotte, NC">
+          </div>
+          <div class="fg" style="margin-bottom:6px">
+            <label class="fl">System website URL(s)</label>
+            <div id="nca-url-list"></div>
+            <button class="btn btn-secondary btn-sm" onclick="ncaAddUrl()" style="margin-top:6px">+ Add URL</button>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px">The main system site is checked for schema.org, llms.txt, and AI-crawler access. Leave blank to use the discovered roster source.</div>
+          </div>
+          <label class="aggregate-toggle mt10" style="display:none" id="nca-override-label" title="Admin only: re-run the base network report from scratch instead of reusing a recent cached result.">
+            <input type="checkbox" id="nca-override">
+            <span class="agg-label">Refresh — ignore cache on the base network report <span style="font-size:11px;color:#888">(Admin only)</span></span>
+          </label>
+          <div id="nca-search-err" class="err hidden mt8"></div>
+          <button class="btn btn-primary mt16" id="nca-run-btn" onclick="ncaRun()">Run Content Analysis →</button>
+        </div>
+
+        <div id="nca-progress" class="hidden mt16">
+          <div class="card">
+            <div style="font-weight:600;margin-bottom:8px" id="nca-progress-head">Analyzing…</div>
+            <div id="nca-progress-log" style="font-size:12px;color:var(--muted);max-height:260px;overflow:auto;font-family:monospace;line-height:1.6"></div>
+          </div>
+        </div>
+        <div id="nca-results" class="hidden mt16"></div>
+      </div>
 
       <!-- Mode: single guided report vs bulk headless CSV scoring -->
-      <div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
+      <div id="np-mode-toggle" style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
         <button class="tg-opt on" id="np-mode-single" onclick="npSetMode('single')">Single Network</button>
         <button class="tg-opt"    id="np-mode-bulk"   onclick="npSetMode('bulk')">Bulk List (CSV)</button>
       </div>
@@ -3928,6 +3975,8 @@ function showApp() {
   if (shOverride) shOverride.style.display = isAdmin ? '' : 'none';
   const caOverride = document.getElementById('ca-override-label');
   if (caOverride) caOverride.style.display = isAdmin ? '' : 'none';
+  const ncaOverride = document.getElementById('nca-override-label');
+  if (ncaOverride) ncaOverride.style.display = isAdmin ? '' : 'none';
   const learnMng = document.getElementById('learn-manage-btn');
   if (learnMng) learnMng.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
@@ -6212,15 +6261,17 @@ async function caRun() {
   es.onerror = () => es.close();
 }
 
-async function caLoadResults(caId) {
+async function caLoadResults(caId, prefix) {
+  prefix = prefix || 'ca';
   try {
     const r = await api('/api/content-analysis/' + caId);
     if (!r.ok) throw new Error('Could not load results');
-    caRenderResults(await r.json(), caId);
-  } catch(e) { const el=document.getElementById('ca-results'); el.innerHTML=`<div class="err">${_caEsc(e.message)}</div>`; el.classList.remove('hidden'); }
+    caRenderResults(await r.json(), caId, prefix);
+  } catch(e) { const el=document.getElementById(prefix+'-results'); el.innerHTML=`<div class="err">${_caEsc(e.message)}</div>`; el.classList.remove('hidden'); }
 }
 
-async function caDraft(caId) {
+async function caDraft(caId, prefix) {
+  prefix = prefix || 'ca';
   const btn = document.getElementById('ca-draft-btn');
   const log = document.getElementById('ca-draft-log');
   if (btn) { btn.disabled = true; btn.textContent = 'Drafting…'; }
@@ -6236,15 +6287,16 @@ async function caDraft(caId) {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'phase' && log) { log.innerHTML += '<b>' + _caEsc(msg.text) + '</b><br>'; log.scrollTop = log.scrollHeight; }
     else if (msg.type === 'text' && log) { log.innerHTML += _caEsc(msg.text) + '<br>'; log.scrollTop = log.scrollHeight; }
-    else if (msg.type === 'done') { es.close(); caLoadResults(caId); }
+    else if (msg.type === 'done') { es.close(); caLoadResults(caId, prefix); }
     else if (msg.type === 'error') { es.close(); if (log) log.innerHTML += `<span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; if (btn){btn.disabled=false;btn.textContent='✎ Generate Full Content Plan (drafts)';} }
   };
   es.onerror = () => es.close();
 }
 
-function caRenderResults(rec, caId) {
-  document.getElementById('ca-progress').classList.add('hidden');
-  const el = document.getElementById('ca-results');
+function caRenderResults(rec, caId, prefix) {
+  prefix = prefix || 'ca';
+  document.getElementById(prefix+'-progress').classList.add('hidden');
+  const el = document.getElementById(prefix+'-results');
   const sevColor = s => s==='high'?'#d94f4f':s==='medium'?'#e09b2a':'#7a9095';
   const findings = rec.findings || [];
   const rows = findings.map(f => `<tr>
@@ -6266,14 +6318,70 @@ function caRenderResults(rec, caId) {
     ${findings.length ? `<div style="padding:14px 20px;border-top:1px solid var(--border);background:var(--pale)">
       ${rec.drafted
         ? '<span style="font-size:13px;color:var(--teal);font-weight:600">✓ Drafted content included in the Content Report.</span> <span style="font-size:12px;color:var(--muted)">Re-download it above.</span>'
-        : `<button class="btn btn-primary btn-sm" id="ca-draft-btn" onclick="caDraft('${caId}')">✎ Generate Full Content Plan (drafts)</button>
+        : `<button class="btn btn-primary btn-sm" id="ca-draft-btn" onclick="caDraft('${caId}','${prefix}')">✎ Generate Full Content Plan (drafts)</button>
            <span style="font-size:12px;color:var(--muted);margin-left:10px">Drafts publication-ready fixes for each finding (facts-only; anything unknown is left as a [VERIFY] placeholder).</span>`}
       <div id="ca-draft-log" style="font-size:12px;color:var(--muted);margin-top:8px;font-family:monospace;line-height:1.6"></div>
     </div>` : ''}
   </div>
-  <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="caReset()">Run Another</button></div>`;
+  <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="${prefix==='nca'?'ncaReset()':'caReset()'}">Run Another</button></div>`;
   el.classList.remove('hidden');
   el.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// ── Content Analysis (Hospital Network) ─────────────────────────────────────
+let _ncaUrls = [];
+function ncaOpen() {
+  ['np-mode-toggle', 'np-step1', 'np-bulk'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.add('hidden'); });
+  document.getElementById('nca-panel').classList.remove('hidden');
+  if (!_ncaUrls.length) { _ncaUrls = ['']; ncaRenderUrls(); }
+}
+function ncaClose() {
+  document.getElementById('nca-panel').classList.add('hidden');
+  ['np-mode-toggle', 'np-step1'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.remove('hidden'); });
+}
+function ncaReset() {
+  ['nca-progress', 'nca-results'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('nca-search').classList.remove('hidden');
+}
+function ncaRenderUrls() {
+  const el = document.getElementById('nca-url-list');
+  if (!_ncaUrls.length) _ncaUrls = [''];
+  el.innerHTML = _ncaUrls.map((u, i) => `<div style="display:flex;gap:8px;margin-bottom:8px">
+    <input class="fi" style="flex:1" placeholder="https://www.example.org" value="${_caEsc(u)}" oninput="_ncaUrls[${i}]=this.value">
+    <button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="ncaRemoveUrl(${i})">✕</button></div>`).join('');
+}
+function ncaAddUrl() { _ncaUrls.push(''); ncaRenderUrls(); }
+function ncaRemoveUrl(i) { _ncaUrls.splice(i, 1); ncaRenderUrls(); }
+
+async function ncaRun() {
+  const err = document.getElementById('nca-search-err'); err.classList.add('hidden');
+  const name = document.getElementById('nca-name').value.trim();
+  const hq = document.getElementById('nca-hq').value.trim();
+  if (!name) { showErr(err, 'Enter a network name.'); return; }
+  const urls = _ncaUrls.map(u => (u || '').trim()).filter(Boolean);
+  const override = !!(document.getElementById('nca-override') || {}).checked;
+  const btn = document.getElementById('nca-run-btn'); btn.disabled = true; btn.textContent = 'Starting…';
+  const head = document.getElementById('nca-progress-head'), log = document.getElementById('nca-progress-log');
+  head.textContent = 'Analyzing…'; log.innerHTML = '';
+  document.getElementById('nca-search').classList.add('hidden');
+  document.getElementById('nca-results').classList.add('hidden');
+  document.getElementById('nca-progress').classList.remove('hidden');
+  let caId, jobId;
+  try {
+    const r = await api('/api/content-analysis/network/run', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ network_name:name, hq_location:hq, urls, override_cache:override }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Run failed'));
+    const d = await r.json(); caId = d.ca_id; jobId = d.job_id;
+  } catch(e) { head.textContent='Error'; log.innerHTML=`<span style="color:#c0392b">${_caEsc(e.message)}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; return; }
+  const es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
+  es.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'phase') head.textContent = msg.text || 'Analyzing…';
+    else if (msg.type === 'text') { log.innerHTML += _caEsc(msg.text) + '<br>'; log.scrollTop = log.scrollHeight; }
+    else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Content Analysis →'; caLoadResults(caId, 'nca'); }
+    else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
+  };
+  es.onerror = () => es.close();
 }
 
 function npDownloadTemplate() {
