@@ -297,10 +297,70 @@ def _check_wikipedia(client: httpx.Client, entity_name: str) -> tuple:
                   remediation_type="talk_page_request", evidence=[url])], title)
 
 
+# ── Reputation (location basis) ───────────────────────────────────────────────
+
+def _check_reputation(rep: dict) -> list:
+    """Location-basis reputation findings from the base diagnostic's verified
+    Google data (per-location ratings/volume + footprint consistency). Helps
+    local search + AI visibility — SocialClimb's domain. Provider-basis findings
+    are a separate (later) layer."""
+    findings: list = []
+    if not rep:
+        return findings
+    fp = rep.get("footprint") or {}
+    consistency = (fp.get("consistency") or "").lower()
+    if "fragment" in consistency or "unclaim" in consistency:
+        findings.append(dict(
+            platform="reputation", category="risk", severity="high", status="verified",
+            teaser_summary="Google Business Profiles are fragmented or unclaimed across locations — a direct drag on local search and AI recommendations.",
+            current_state=f"Listing consistency: {fp.get('consistency')}."
+                          + (f" Ratings range {fp.get('rating_range')}." if fp.get("rating_range") else ""),
+            expected_state="Every location has a single, claimed, consistent Google Business Profile.",
+            remediation_type="listing_management", evidence=[]))
+
+    locs = rep.get("locations") or []
+    weak = []
+    for l in locs:
+        r = l.get("google_rating")
+        c = l.get("google_review_count")
+        if r is None:
+            continue
+        if r < 4.0 or (c is not None and c < 25):
+            weak.append(l)
+    for l in weak[:8]:
+        r = l.get("google_rating")
+        c = l.get("google_review_count") or 0
+        sev = "high" if (r is not None and r < 3.5) else "medium"
+        cat = "risk" if (r is not None and r < 4.0) else "opportunity"
+        findings.append(dict(
+            platform="reputation", category=cat, severity=sev, status="verified",
+            teaser_summary=f"{l.get('name') or 'A location'} has a weak Google reputation ({r}★, {c} reviews) — patients and AI both weight this.",
+            current_state=f"{l.get('name')}: {r}★ from {c} review(s)"
+                          + (f" — {l.get('address')}" if l.get("address") else ""),
+            expected_state="4.5★+ with steady, recent review volume.",
+            remediation_type="reputation_program",
+            evidence=[l.get("address") or l.get("name") or ""]))
+
+    # Single-location entities: no consolidated_locations, but an aggregate read.
+    if not locs and rep.get("aggregate_rating") is not None:
+        r = rep["aggregate_rating"]
+        c = rep.get("aggregate_count") or 0
+        if r < 4.0 or c < 25:
+            findings.append(dict(
+                platform="reputation",
+                category="risk" if r < 4.0 else "opportunity",
+                severity="high" if r < 3.5 else "medium", status="verified",
+                teaser_summary=f"Google reputation is weak ({r}★, {c} reviews) — a drag on local visibility.",
+                current_state=f"{r}★ from {c} review(s).",
+                expected_state="4.5★+ with steady, recent review volume.",
+                remediation_type="reputation_program", evidence=[]))
+    return findings
+
+
 # ── Orchestrator ──────────────────────────────────────────────────────────────
 
 def analyze_content(entity_name: str, website_urls: list, city: str = "", state: str = "",
-                    entity_kind: str = "hospital") -> ContentFindings:
+                    entity_kind: str = "hospital", reputation: dict = None) -> ContentFindings:
     """Run the verified content checks and return a ContentFindings object.
 
     Never raises: any component failure yields not_assessed findings and a
@@ -342,6 +402,13 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
             snapshot["wikipedia_article"] = title
         except Exception:
             partial = True
+
+    # Reputation (location basis) — from the base diagnostic's verified data; no
+    # network calls here, so it runs outside the HTTP client block.
+    try:
+        raw += _check_reputation(reputation)
+    except Exception:
+        partial = True
 
     # Assign stable IDs, severity-sort (high→low), wrap in models.
     sev_rank = {"high": 0, "medium": 1, "low": 2}

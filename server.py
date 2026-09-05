@@ -1795,9 +1795,27 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
         if not urls and result.rankings and result.rankings[0].website_url:
             urls = [result.rankings[0].website_url]
 
-        # 3. Verified content analysis.
-        emit({"type": "phase", "name": "content", "text": "Checking website, Wikidata, and Wikipedia"})
-        findings = analyze_content(entity_name, urls, city, state, entity_kind=entity_type)
+        # 3. Verified content analysis. Reputation (location basis) reuses the
+        #    base diagnostic's verified Google data — no new crawling.
+        rep = None
+        prov = result.rankings[0] if result.rankings else None
+        if prov is not None:
+            fp = prov.google_footprint
+            agg = fp.system_aggregate if fp else None
+            rep = {
+                "locations": [
+                    {"name": l.name, "google_rating": l.google_rating,
+                     "google_review_count": l.google_review_count, "address": l.address}
+                    for l in (prov.consolidated_locations or [])
+                ],
+                "footprint": {"rating_range": (fp.rating_range if fp else ""),
+                              "consistency": (fp.consistency if fp else "")},
+                "aggregate_rating": (agg.rating if agg else None),
+                "aggregate_count": (agg.total_reviews if agg else None),
+            }
+        emit({"type": "phase", "name": "content", "text": "Checking website, Wikidata, Wikipedia, and reputation"})
+        findings = analyze_content(entity_name, urls, city, state,
+                                   entity_kind=entity_type, reputation=rep)
         findings.run_id = result.run_id
         save_content_findings(
             result.run_id, _norm_entity_name(entity_name),

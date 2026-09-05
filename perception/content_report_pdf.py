@@ -23,11 +23,14 @@ _STATUS = {"verified": ("#2e9e5b", "Verified"),
            "partial": ("#e09b2a", "Partial"),
            "not_assessed": ("#9aa8ac", "Not assessed")}
 _PLATFORM = {"structured_data": "Structured data (schema.org)", "website": "Website",
-             "llms_txt": "llms.txt", "wikidata": "Wikidata", "wikipedia": "Wikipedia"}
+             "llms_txt": "llms.txt", "wikidata": "Wikidata", "wikipedia": "Wikipedia",
+             "reputation": "Reputation & Listings"}
 _REMEDIATION = {"schema_markup": "Add schema.org markup", "website_fix": "Website fix",
                 "wikidata_edit": "Wikidata edit (we can draft, you publish)",
                 "talk_page_request": "Wikipedia talk-page request",
-                "directory_update": "Directory update", "monitor_respond": "Monitor & respond"}
+                "directory_update": "Directory update", "monitor_respond": "Monitor & respond",
+                "reputation_program": "Reputation / review-generation program (SocialClimb)",
+                "listing_management": "Google Business Profile / listings management (SocialClimb)"}
 
 
 def _e(s) -> str:
