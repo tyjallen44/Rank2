@@ -1802,6 +1802,14 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
         if prov is not None:
             fp = prov.google_footprint
             agg = fp.system_aggregate if fp else None
+            fd = fp.front_door if fp else None
+            # Single-entity fallback: the front-door Google read is populated even
+            # for a non-aggregate individual report; the system aggregate only
+            # populates for multi-location/aggregate runs.
+            agg_rating = (agg.rating if (agg and agg.rating is not None) else None)
+            agg_count = (agg.total_reviews if (agg and agg.rating is not None) else None)
+            if agg_rating is None and fd and getattr(fd, "verified", False) and fd.rating is not None:
+                agg_rating, agg_count = fd.rating, fd.count
             rep = {
                 "locations": [
                     {"name": l.name, "google_rating": l.google_rating,
@@ -1810,8 +1818,8 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
                 ],
                 "footprint": {"rating_range": (fp.rating_range if fp else ""),
                               "consistency": (fp.consistency if fp else "")},
-                "aggregate_rating": (agg.rating if agg else None),
-                "aggregate_count": (agg.total_reviews if agg else None),
+                "aggregate_rating": agg_rating,
+                "aggregate_count": agg_count,
             }
         emit({"type": "phase", "name": "content", "text": "Checking website, Wikidata, Wikipedia, and reputation"})
         findings = analyze_content(entity_name, urls, city, state,
