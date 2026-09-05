@@ -302,8 +302,8 @@ def _check_wikipedia(client: httpx.Client, entity_name: str) -> tuple:
 def _check_reputation(rep: dict) -> list:
     """Location-basis reputation findings from the base diagnostic's verified
     Google data (per-location ratings/volume + footprint consistency). Helps
-    local search + AI visibility — SocialClimb's domain. Provider-basis findings
-    are a separate (later) layer."""
+    local search + AI visibility — RLDatix Reputation Management's domain.
+    Provider-basis findings are a separate (later) layer."""
     findings: list = []
     if not rep:
         return findings

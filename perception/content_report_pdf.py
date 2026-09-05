@@ -29,8 +29,8 @@ _REMEDIATION = {"schema_markup": "Add schema.org markup", "website_fix": "Websit
                 "wikidata_edit": "Wikidata edit (we can draft, you publish)",
                 "talk_page_request": "Wikipedia talk-page request",
                 "directory_update": "Directory update", "monitor_respond": "Monitor & respond",
-                "reputation_program": "Reputation / review-generation program (SocialClimb)",
-                "listing_management": "Google Business Profile / listings management (SocialClimb)"}
+                "reputation_program": "Reputation / review-generation program (RLDatix Reputation Management)",
+                "listing_management": "Google Business Profile / listings management (RLDatix Reputation Management)"}
 
 
 def _e(s) -> str:
