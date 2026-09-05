@@ -1996,6 +1996,144 @@ def _job_content_draft(job_id: str, ca_id: str) -> None:
         _put(loop, queue, None)
 
 
+# ── Content Analysis for a Hospital Network (all facilities) ──────────────────
+
+class ContentNetworkRequest(BaseModel):
+    network_name: str
+    hq_location: str = ""
+    urls: list[str] = []                     # confirmed system website URL(s)
+    report_title: Optional[str] = None
+    override_cache: bool = False             # admin only
+
+
+@app.post("/api/content-analysis/network/run")
+async def content_analysis_network_run(req: ContentNetworkRequest,
+                                       payload: dict = Depends(get_current_user_payload)):
+    """Content Analysis for a whole hospital network: verified system-website
+    checks + Wikidata/Wikipedia + per-facility reputation across all hospitals."""
+    if not req.network_name.strip():
+        raise HTTPException(400, "network_name is required")
+    from perception.db import init_db, create_content_analysis_run
+    init_db()
+    ca_id = uuid.uuid4().hex[:12]
+    create_content_analysis_run(ca_id, req.network_name.strip(), req.hq_location.strip(),
+                                "network", req.urls,
+                                req.report_title or req.network_name.strip(),
+                                payload.get("role", ""))
+    req_d = req.dict()
+    req_d["override_cache"] = bool(req.override_cache) and payload.get("role") == "admin"
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    _pool.submit(_job_content_analysis_network, job_id, ca_id, req_d,
+                 payload.get("brand", "original"))
+    return {"job_id": job_id, "ca_id": ca_id}
+
+
+def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+    try:
+        from perception.db import (init_db, get_recent_network_run, set_run_role,
+                                   save_content_findings, finalize_content_analysis_run,
+                                   _norm_entity_name)
+        from perception.models import NetworkResult
+        from perception.content_analyzer import analyze_content
+        init_db()
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        network_name = (req.get("network_name") or "").strip()
+        hq = (req.get("hq_location") or "").strip()
+        override = bool(req.get("override_cache"))
+        urls = [u for u in (req.get("urls") or []) if (u or "").strip()]
+        city, state = "", ""
+        if "," in hq:
+            city, state = [p.strip() for p in hq.split(",", 1)]
+        else:
+            city = hq
+
+        # 1. Base network report — reuse-if-fresh, else discover + run.
+        cached = None if override else get_recent_network_run(network_name, days=30)
+        if cached and cached.get("result_json"):
+            emit({"type": "phase", "name": "network", "text": f"Using recent network analysis for {network_name}"})
+            result = NetworkResult.model_validate_json(cached["result_json"])
+        else:
+            from perception.network_analyzer import analyze_network, discover_hospitals_by_name
+            emit({"type": "phase", "name": "discover", "text": f"Discovering {network_name}'s hospitals"})
+            disc = discover_hospitals_by_name(network_name, hq)
+            result = analyze_network(
+                network_name=network_name, hq_location=hq,
+                source_url=(urls[0] if urls else ""),
+                facilities=disc.get("facilities", []), on_event=emit,
+                brand=brand, ignore_cache=override,
+            )
+        set_run_role(result.run_id, job["role"])
+
+        # 2. Per-facility reputation (already collected on every NetworkFacility).
+        facs = result.facilities or []
+        locs = [{"name": f.name, "google_rating": f.google_rating,
+                 "google_review_count": f.google_review_count,
+                 "address": ", ".join([p for p in [f.city, f.state] if p])}
+                for f in facs if f.google_rating is not None]
+        rated = [f.google_rating for f in facs if f.google_rating is not None]
+        rr = f"{min(rated):.1f}–{max(rated):.1f}★ across {len(rated)} facilities" if rated else ""
+        rep = {"locations": locs,
+               "footprint": {"rating_range": rr,
+                             "consistency": "fragmented, multi-listing" if len(facs) > 1 else ""},
+               "aggregate_rating": None, "aggregate_count": None}
+
+        # 3. Verified content analysis — system website + Wikidata/Wikipedia +
+        #    per-facility reputation.
+        if not urls and result.source_url:
+            urls = [result.source_url]
+        emit({"type": "phase", "name": "content",
+              "text": "Checking system website, Wikidata, Wikipedia, and per-facility reputation"})
+        findings = analyze_content(network_name, urls, city, state,
+                                   entity_kind="hospital", reputation=rep)
+        findings.run_id = result.run_id
+        save_content_findings(result.run_id, _norm_entity_name(network_name),
+                              findings.source_snapshot,
+                              [f.model_dump() for f in findings.findings], findings.status)
+        for f in findings.findings:
+            emit({"type": "text", "text": f"• [{f.severity}] {f.teaser_summary}"})
+
+        # 4. Report 1 = Network report + Content Keys; Report 2 = detailed report.
+        emit({"type": "phase", "name": "pdf", "text": "Building the reports"})
+        report1 = ""
+        try:
+            from perception.network_pdf import render_content_network
+            _r1 = REPORTS_DIR / f"content_{ca_id}_report1.pdf"
+            render_content_network(result, str(_r1), findings, brand=brand)
+            report1 = str(_r1)
+        except Exception as _pe:
+            emit({"type": "text", "text": f"(network report render failed: {type(_pe).__name__})"})
+            report1 = result.pdf_path or ""
+        report2 = ""
+        try:
+            from perception.content_report_pdf import render_content_report_pdf
+            _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
+            render_content_report_pdf(network_name, hq, findings, str(_r2),
+                                      report_title=req.get("report_title") or network_name)
+            report2 = str(_r2)
+        except Exception as _pe2:
+            emit({"type": "text", "text": f"(content report render failed: {type(_pe2).__name__})"})
+
+        finalize_content_analysis_run(ca_id, result.run_id, findings.status,
+                                      len(findings.findings), report1, report2)
+        emit({"type": "phase", "name": "saving", "text": "Done"})
+        job["status"] = "done"
+        job["result"] = {"ca_id": ca_id, "content_analysis": True, "network": True,
+                         "run_id": result.run_id, "finding_count": len(findings.findings)}
+    except Exception as exc:
+        try:
+            from perception.db import fail_content_analysis_run
+            fail_content_analysis_run(ca_id)
+        except Exception:
+            pass
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
 # ══ Public HubSpot webhook — Hospital Network report on request ═══════════════
 import hmac as _hmac
 

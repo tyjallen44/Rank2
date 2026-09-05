@@ -67,6 +67,45 @@ def render_network_pdf(
         browser.close()
 
 
+def render_content_network(result: NetworkResult, pdf_path: str, findings,
+                           brand: str = "original") -> None:
+    """Report 1 for the network Content Analysis sandbox: the standard Hospital
+    Network report with the Content Improvement Keys section appended. Reuses the
+    network HTML builder untouched and injects the section before </body>."""
+    from playwright.sync_api import sync_playwright
+    from .pdf import _content_keys_section
+    cfg = dict(_BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"]))
+    cfg["primary"] = _NETWORK_PRIMARY
+    cfg["accent"]  = _NETWORK_ACCENT
+    cfg["pale"]    = _NETWORK_PALE
+    landscape = len(result.facilities) > 20
+    html = _build_network_html(result, cfg, teaser=False)
+    section = _content_keys_section(findings)
+    html = html.replace("</body>", section + "</body>", 1) if "</body>" in html else html + section
+    from .pdf import _fmt_cached
+    _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html, wait_until="networkidle")
+        page.pdf(
+            path=str(pdf_path), format="A4", landscape=landscape,
+            margin={"top": "0", "bottom": "0.65in", "left": "0", "right": "0"},
+            print_background=True, display_header_footer=True,
+            header_template="<span></span>",
+            footer_template=(
+                '<div style="width:100%;font-family:Arial,Helvetica,sans-serif;'
+                'font-size:8px;color:#8a9aaa;display:flex;justify-content:space-between;'
+                'align-items:center;padding:0 48px 10px;box-sizing:border-box">'
+                '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+                f'<span>{_cached_lbl}</span>'
+                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
+                '</div>'
+            ),
+        )
+        browser.close()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # HTML builder
 # ─────────────────────────────────────────────────────────────────────────────
