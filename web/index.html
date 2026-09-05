@@ -6293,6 +6293,24 @@ async function caDraft(caId, prefix) {
   es.onerror = () => es.close();
 }
 
+async function caDraftFromHistory(caId, btn) {
+  if (!confirm('Generate the full content plan (drafts) for this run? This adds publication-ready content to the Content Report.')) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Drafting…'; }
+  try {
+    const r = await api('/api/content-analysis/' + caId + '/draft', { method: 'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Draft failed'));
+    const jobId = (await r.json()).job_id;
+    const es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
+    es.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'phase' && btn) { btn.textContent = (msg.text || 'Drafting…').slice(0, 20) + '…'; }
+      else if (msg.type === 'done') { es.close(); loadHistory(); }
+      else if (msg.type === 'error') { es.close(); if (btn) { btn.disabled = false; btn.textContent = '✎ Generate Plan'; } alert('Draft failed: ' + (msg.error || 'error')); }
+    };
+    es.onerror = () => es.close();
+  } catch(e) { if (btn) { btn.disabled = false; btn.textContent = '✎ Generate Plan'; } alert(e.message); }
+}
+
 function caRenderResults(rec, caId, prefix) {
   prefix = prefix || 'ca';
   document.getElementById(prefix+'-progress').classList.add('hidden');
@@ -7206,7 +7224,12 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
       const r1 = c.has_report1 ? `<button class="btn btn-gold btn-sm" onclick="window.location.href='/api/content-analysis/${c.id}/report1?token=${encodeURIComponent(_token)}'">⬇ Diagnostic</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
       const r2 = c.has_report2 ? `<button class="btn btn-secondary btn-sm" onclick="window.location.href='/api/content-analysis/${c.id}/report2?token=${encodeURIComponent(_token)}'">⬇ Content</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
-      return `<tr><td>${date}</td><td style="font-weight:600">${caEsc(c.entity_name)}</td><td style="font-size:13px;color:var(--muted)">${caEsc(c.location)}</td><td><span class="badge bg-muted" style="font-size:10px">${type}</span></td><td style="font-size:13px;color:var(--muted)">${result}</td><td>${badge}</td><td>${r1}</td><td>${r2}</td></tr>`;
+      const plan = c.status !== 'done'
+        ? `<span style="color:var(--muted);font-size:13px">—</span>`
+        : c.drafted
+          ? `<span style="font-size:12px;color:var(--teal);font-weight:600">✓ Drafted</span>`
+          : `<button class="btn btn-primary btn-sm" onclick="caDraftFromHistory('${c.id}', this)">✎ Generate Plan</button>`;
+      return `<tr><td>${date}</td><td style="font-weight:600">${caEsc(c.entity_name)}</td><td style="font-size:13px;color:var(--muted)">${caEsc(c.location)}</td><td><span class="badge bg-muted" style="font-size:10px">${type}</span></td><td style="font-size:13px;color:var(--muted)">${result}</td><td>${badge}</td><td>${r1}</td><td>${r2}</td><td>${plan}</td></tr>`;
     }).join('');
     const caCount = contentRuns.length;
     caHtml = `
@@ -7226,7 +7249,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
-              <thead><tr><th>Date</th><th>Entity</th><th>Location</th><th>Type</th><th>Result</th><th>Status</th><th>Diagnostic</th><th>Content Report</th></tr></thead>
+              <thead><tr><th>Date</th><th>Entity</th><th>Location</th><th>Type</th><th>Result</th><th>Status</th><th>Diagnostic</th><th>Content Report</th><th>Full Plan</th></tr></thead>
               <tbody>${caRows}</tbody>
             </table>
           </div>

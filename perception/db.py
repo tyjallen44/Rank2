@@ -1480,6 +1480,7 @@ def list_content_analysis_runs(limit: int = 100) -> list:
         d = dict(zip(cols, r))
         d["has_report1"] = bool(d.pop("report1_path", None))
         d["has_report2"] = bool(d.pop("report2_path", None))
+        d["drafted"] = bool(d.get("drafted"))
         out.append(d)
     return out
 
