@@ -1781,9 +1781,12 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
             )
         else:
             from perception.analyzer import analyze_location
+            # aggregate=True so the base run consolidates the system's locations,
+            # giving the reputation layer per-location Google data (ratings,
+            # volume, fragmented/unclaimed listings) — not just the front door.
             result = analyze_location(
                 city=city, state=state, specialty=req.get("specialty"),
-                entity_name=entity_name, individual_report=True,
+                entity_name=entity_name, individual_report=True, aggregate=True,
                 entity_type="hospital", output_dir=REPORTS_DIR, on_event=emit,
                 brand=brand, report_title=req.get("report_title"),
                 force_rerun=override, override_today_lock=override,
