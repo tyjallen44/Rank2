@@ -1835,7 +1835,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
             findings.status,
         )
         for f in findings.findings:
-            emit({"type": "text", "text": f"• [{f.severity}] {f.teaser_summary}"})
+            emit({"type": "text", "text": f"\n• [{f.severity}] {f.teaser_summary}"})
 
         # 4. Report 1 = Deep Diagnostic + Content Improvement Keys section.
         #    (Report 2, the detailed content report, arrives in step 5.)
@@ -1847,7 +1847,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
             render_content_deep_dive(result, _r1, findings, brand=brand)
             report1 = str(_r1)
         except Exception as _pe:
-            emit({"type": "text", "text": f"(augmented report render failed: {type(_pe).__name__}) — using base report"})
+            emit({"type": "text", "text": f"\n(augmented report render failed: {type(_pe).__name__}) — using base report"})
             report1 = result.pdf_path or ""
 
         # 5. Report 2 = the detailed content report (the CIP format).
@@ -1860,7 +1860,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
                                       report_title=req.get("report_title") or entity_name)
             report2 = str(_r2)
         except Exception as _pe2:
-            emit({"type": "text", "text": f"(content report render failed: {type(_pe2).__name__})"})
+            emit({"type": "text", "text": f"\n(content report render failed: {type(_pe2).__name__})"})
 
         finalize_content_analysis_run(ca_id, result.run_id, findings.status,
                                       len(findings.findings), report1, report2)
@@ -1966,10 +1966,27 @@ def _job_content_draft(job_id: str, ca_id: str) -> None:
                  "wikipedia_article": snap.get("wikipedia_article")}
         drafts = draft_findings(rec["entity_name"], rec.get("location", ""),
                                 rec.get("entity_type", "hospital"), facts, findings)
+        draftable_ct = sum(1 for f in findings
+                           if (f.get("remediation_type") or "") and f.get("status") != "not_assessed")
         for f in findings:
             if f.get("finding_id") in drafts:
                 f["draft_content"] = drafts[f["finding_id"]]
                 emit({"type": "text", "text": f"✓ drafted {f['finding_id']} ({f.get('platform')})"})
+
+        # If every draftable finding failed to produce content, the run failed
+        # (e.g. the drafting call errored or truncated). Don't mark the run
+        # "drafted" or regenerate the report — leave the button available to
+        # retry, and surface the failure instead of silently reporting success.
+        if draftable_ct and not drafts:
+            emit({"type": "text", "text": "⚠ Drafting produced no content — the model call failed or was truncated. Nothing was saved; please try again."})
+            job["status"] = "error"
+            job["error"] = "Drafting produced no content — please retry."
+            return
+        if draftable_ct and len(drafts) < draftable_ct:
+            missing = [f.get("finding_id") for f in findings
+                       if (f.get("remediation_type") or "") and f.get("status") != "not_assessed"
+                       and f.get("finding_id") not in drafts]
+            emit({"type": "text", "text": f"⚠ Partial: {len(drafts)}/{draftable_ct} drafted. Missing: {', '.join(missing)}"})
 
         # Persist drafts back into the cache (deterministic re-render).
         save_content_findings(rec["base_run_id"], cf.get("norm_entity", ""),
@@ -2093,7 +2110,7 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
                               findings.source_snapshot,
                               [f.model_dump() for f in findings.findings], findings.status)
         for f in findings.findings:
-            emit({"type": "text", "text": f"• [{f.severity}] {f.teaser_summary}"})
+            emit({"type": "text", "text": f"\n• [{f.severity}] {f.teaser_summary}"})
 
         # 4. Report 1 = Network report + Content Keys; Report 2 = detailed report.
         emit({"type": "phase", "name": "pdf", "text": "Building the reports"})
@@ -2104,7 +2121,7 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
             render_content_network(result, str(_r1), findings, brand=brand)
             report1 = str(_r1)
         except Exception as _pe:
-            emit({"type": "text", "text": f"(network report render failed: {type(_pe).__name__})"})
+            emit({"type": "text", "text": f"\n(network report render failed: {type(_pe).__name__})"})
             report1 = result.pdf_path or ""
         report2 = ""
         try:
@@ -2114,7 +2131,7 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
                                       report_title=req.get("report_title") or network_name)
             report2 = str(_r2)
         except Exception as _pe2:
-            emit({"type": "text", "text": f"(content report render failed: {type(_pe2).__name__})"})
+            emit({"type": "text", "text": f"\n(content report render failed: {type(_pe2).__name__})"})
 
         finalize_content_analysis_run(ca_id, result.run_id, findings.status,
                                       len(findings.findings), report1, report2)

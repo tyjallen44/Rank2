@@ -247,6 +247,25 @@ html, body {
 .fi::placeholder { color: #a8bfc2; }
 .fi-sm { padding: 8px 12px; font-size: 14px; }
 
+/* ── Uppercase data-entry fields (display only; typed values are preserved) ── */
+.fi, .input,
+input[type="text"], input[type="date"], input[type="number"], select {
+  text-transform: uppercase;
+}
+.fi::placeholder, .input::placeholder,
+input[type="text"]::placeholder, input[type="number"]::placeholder {
+  text-transform: uppercase;
+}
+/* Exact-case fields: credentials, emails, URLs, and long-form text */
+input[type="password"], input[type="email"], input[type="url"], textarea,
+#intg-webhook-url {
+  text-transform: none !important;
+}
+input[type="password"]::placeholder, input[type="email"]::placeholder,
+input[type="url"]::placeholder, textarea::placeholder {
+  text-transform: none !important;
+}
+
 /* ── Toggle ──────────────────────────────────────────────────── */
 .tg-group {
   display: flex; background: var(--pale);
@@ -1508,7 +1527,7 @@ html, body {
         <div id="ca-progress" class="hidden mt16">
           <div class="card">
             <div style="font-weight:600;margin-bottom:8px" id="ca-progress-head">Analyzing…</div>
-            <div id="ca-progress-log" style="font-size:12px;color:var(--muted);max-height:240px;overflow:auto;font-family:monospace;line-height:1.6"></div>
+            <div id="ca-progress-log" style="font-size:12px;color:var(--muted);max-height:240px;overflow:auto;font-family:monospace;line-height:1.6;white-space:pre-wrap;word-break:break-word"></div>
           </div>
         </div>
 
@@ -1886,7 +1905,7 @@ html, body {
         <div id="nca-progress" class="hidden mt16">
           <div class="card">
             <div style="font-weight:600;margin-bottom:8px" id="nca-progress-head">Analyzing…</div>
-            <div id="nca-progress-log" style="font-size:12px;color:var(--muted);max-height:260px;overflow:auto;font-family:monospace;line-height:1.6"></div>
+            <div id="nca-progress-log" style="font-size:12px;color:var(--muted);max-height:260px;overflow:auto;font-family:monospace;line-height:1.6;white-space:pre-wrap;word-break:break-word"></div>
           </div>
         </div>
         <div id="nca-results" class="hidden mt16"></div>
@@ -6225,7 +6244,7 @@ function caRenderUrls() {
   const el = document.getElementById('ca-url-list');
   if (!_caUrls.length) _caUrls = [''];
   el.innerHTML = _caUrls.map((u,i) => `<div style="display:flex;gap:8px;margin-bottom:8px">
-    <input class="fi" style="flex:1" placeholder="https://example.org" value="${_caEsc(u)}" oninput="_caUrls[${i}]=this.value">
+    <input class="fi" type="url" style="flex:1" placeholder="https://example.org" value="${_caEsc(u)}" oninput="_caUrls[${i}]=this.value">
     <button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="caRemoveUrl(${i})">✕</button>
   </div>`).join('');
 }
@@ -6254,9 +6273,9 @@ async function caRun() {
   es.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'phase') head.textContent = msg.text || 'Analyzing…';
-    else if (msg.type === 'text') { log.innerHTML += _caEsc(msg.text) + '<br>'; log.scrollTop = log.scrollHeight; }
+    else if (msg.type === 'text') { log.appendChild(document.createTextNode(msg.text)); log.scrollTop = log.scrollHeight; }
     else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Content Analysis →'; caLoadResults(caId); }
-    else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
+    else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<br><span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
   };
   es.onerror = () => es.close();
 }
@@ -6326,9 +6345,21 @@ function caRenderResults(rec, caId, prefix) {
   el.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)">
       <div style="font-weight:700;font-size:15px">Content Analysis — ${_caEsc(rec.entity_name)} <span style="font-weight:400;color:var(--muted);font-size:13px">(${findings.length} finding${findings.length===1?'':'s'})</span></div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-gold btn-sm" onclick="window.location.href='/api/content-analysis/${caId}/report1?token=${encodeURIComponent(_token)}'">⬇ Deep Diagnostic</button>
-        <button class="btn btn-secondary btn-sm" onclick="window.location.href='/api/content-analysis/${caId}/report2?token=${encodeURIComponent(_token)}'">⬇ Content Report</button>
+    </div>
+    <div style="display:flex;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="flex:1;min-width:240px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:1.5px solid var(--gold,#c8a04a);border-radius:8px;padding:10px 14px;background:#fdfaf2">
+        <div>
+          <div style="font-weight:700;font-size:13px;color:var(--teal)">📊 Deep Dive <span style="font-size:11px;font-weight:600;color:var(--muted)">· Report 1</span></div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Full Pulse diagnostic — score, pillars &amp; executive summary</div>
+        </div>
+        <button class="btn btn-gold btn-sm" title="Full Pulse deep-dive report: AI visibility score, four-pillar breakdown, and executive summary" onclick="window.location.href='/api/content-analysis/${caId}/report1?token=${encodeURIComponent(_token)}'">⬇ Deep Dive</button>
+      </div>
+      <div style="flex:1;min-width:240px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--pale)">
+        <div>
+          <div style="font-weight:700;font-size:13px;color:var(--teal)">📝 Content Report <span style="font-size:11px;font-weight:600;color:var(--muted)">· Report 2</span></div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Detailed findings &amp; improvement prescriptions</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" title="Detailed content findings and improvement prescriptions (CIK items)" onclick="window.location.href='/api/content-analysis/${caId}/report2?token=${encodeURIComponent(_token)}'">⬇ Content Report</button>
       </div>
     </div>
     ${findings.length ? `<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>ID</th><th>Platform</th><th>Finding</th><th>Severity</th></tr></thead><tbody>${rows}</tbody></table></div>`
@@ -6365,7 +6396,7 @@ function ncaRenderUrls() {
   const el = document.getElementById('nca-url-list');
   if (!_ncaUrls.length) _ncaUrls = [''];
   el.innerHTML = _ncaUrls.map((u, i) => `<div style="display:flex;gap:8px;margin-bottom:8px">
-    <input class="fi" style="flex:1" placeholder="https://www.example.org" value="${_caEsc(u)}" oninput="_ncaUrls[${i}]=this.value">
+    <input class="fi" type="url" style="flex:1" placeholder="https://www.example.org" value="${_caEsc(u)}" oninput="_ncaUrls[${i}]=this.value">
     <button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="ncaRemoveUrl(${i})">✕</button></div>`).join('');
 }
 function ncaAddUrl() { _ncaUrls.push(''); ncaRenderUrls(); }
@@ -6395,9 +6426,9 @@ async function ncaRun() {
   es.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'phase') head.textContent = msg.text || 'Analyzing…';
-    else if (msg.type === 'text') { log.innerHTML += _caEsc(msg.text) + '<br>'; log.scrollTop = log.scrollHeight; }
+    else if (msg.type === 'text') { log.appendChild(document.createTextNode(msg.text)); log.scrollTop = log.scrollHeight; }
     else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Content Analysis →'; caLoadResults(caId, 'nca'); }
-    else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
+    else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<br><span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
   };
   es.onerror = () => es.close();
 }
@@ -7222,8 +7253,8 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
         : c.status === 'failed'
           ? `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>`
           : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
-      const r1 = c.has_report1 ? `<button class="btn btn-gold btn-sm" onclick="window.location.href='/api/content-analysis/${c.id}/report1?token=${encodeURIComponent(_token)}'">⬇ Diagnostic</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
-      const r2 = c.has_report2 ? `<button class="btn btn-secondary btn-sm" onclick="window.location.href='/api/content-analysis/${c.id}/report2?token=${encodeURIComponent(_token)}'">⬇ Content</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
+      const r1 = c.has_report1 ? `<button class="btn btn-gold btn-sm" title="Full Pulse deep-dive: AI visibility score, four-pillar breakdown, and executive summary" onclick="window.location.href='/api/content-analysis/${c.id}/report1?token=${encodeURIComponent(_token)}'">⬇ Deep Dive</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
+      const r2 = c.has_report2 ? `<button class="btn btn-secondary btn-sm" title="Detailed content findings and improvement prescriptions" onclick="window.location.href='/api/content-analysis/${c.id}/report2?token=${encodeURIComponent(_token)}'">⬇ Content</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
       const plan = c.status !== 'done'
         ? `<span style="color:var(--muted);font-size:13px">—</span>`
         : c.drafted
@@ -7249,7 +7280,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
-              <thead><tr><th>Date</th><th>Entity</th><th>Location</th><th>Type</th><th>Result</th><th>Status</th><th>Diagnostic</th><th>Content Report</th><th>Full Plan</th></tr></thead>
+              <thead><tr><th>Date</th><th>Entity</th><th>Location</th><th>Type</th><th>Result</th><th>Status</th><th>Deep Dive</th><th>Content Report</th><th>Full Plan</th></tr></thead>
               <tbody>${caRows}</tbody>
             </table>
           </div>

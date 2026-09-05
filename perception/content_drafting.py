@@ -82,10 +82,66 @@ _SYSTEM = (
 )
 
 
+# Draft in small batches so a large report (e.g. a hospital network with a
+# finding per facility) never exhausts a single response's token budget and
+# truncates mid-JSON — the failure mode that silently produced empty drafts.
+_BATCH_SIZE = 4
+_MAX_TOKENS = 16000
+
+
+def _draft_batch(facts_lines: list, batch: list) -> tuple[dict, bool]:
+    """One API call for a small batch. Returns ({finding_id: draft_content},
+    truncated) where `truncated` is True if the response hit the token cap."""
+    find_lines = [
+        f"[{f.get('finding_id')}] platform={f.get('platform')} "
+        f"remediation_type={f.get('remediation_type')}\n"
+        f"  issue: {f.get('teaser_summary')}\n"
+        f"  current: {f.get('current_state')}\n  expected: {f.get('expected_state')}"
+        for f in batch
+    ]
+    prompt = ("FACTS (the ONLY facts you may treat as true):\n" + "\n".join(facts_lines)
+              + "\n\nFINDINGS TO DRAFT:\n" + "\n\n".join(find_lines)
+              + "\n\nDraft publication-ready content for each finding. Remember: facts only, "
+                "[VERIFY: ...] for anything unknown, no invented citations.")
+    resp = client.messages.create(
+        model=_MODEL, max_tokens=_MAX_TOKENS, tools=[_DRAFT_TOOL],
+        tool_choice={"type": "tool", "name": "submit_drafts"},
+        system=_SYSTEM, messages=[{"role": "user", "content": prompt}],
+    )
+    out = {}
+    for block in resp.content:
+        if block.type == "tool_use" and block.name == "submit_drafts":
+            d = block.input if isinstance(block.input, dict) else json.loads(block.input)
+            for item in d.get("drafts", []):
+                fid = item.get("finding_id")
+                dc = (item.get("draft_content") or "").strip()
+                if fid and dc:
+                    out[fid] = dc
+    return out, (resp.stop_reason == "max_tokens")
+
+
+def _draft_recursive(facts_lines: list, batch: list) -> dict:
+    """Draft a batch; if the response still truncates, split in half and retry
+    each side until it fits (or a single finding can't be split further)."""
+    try:
+        out, truncated = _draft_batch(facts_lines, batch)
+    except Exception:
+        return {}
+    if truncated and len(batch) > 1:
+        mid = len(batch) // 2
+        merged = {}
+        merged.update(_draft_recursive(facts_lines, batch[:mid]))
+        merged.update(_draft_recursive(facts_lines, batch[mid:]))
+        return merged
+    return out
+
+
 def draft_findings(entity_name: str, location: str, entity_kind: str,
                    facts: dict, findings: list) -> dict:
     """Return {finding_id: draft_content} for the given findings. Never raises —
-    returns {} on failure so the caller can proceed without drafts."""
+    a failed batch contributes nothing rather than aborting the whole run.
+    Findings are drafted in batches of _BATCH_SIZE so large reports don't
+    truncate; see _draft_recursive for the split-on-truncation safety net."""
     draftable = [f for f in findings if (f.get("remediation_type") or "")
                  and f.get("status") != "not_assessed"]
     if not draftable:
@@ -99,35 +155,7 @@ def draft_findings(entity_name: str, location: str, entity_kind: str,
         if v:
             facts_lines.append(f"- {label}: {v if not isinstance(v, list) else ', '.join(v)}")
 
-    find_lines = []
-    for f in draftable:
-        find_lines.append(
-            f"[{f.get('finding_id')}] platform={f.get('platform')} "
-            f"remediation_type={f.get('remediation_type')}\n"
-            f"  issue: {f.get('teaser_summary')}\n"
-            f"  current: {f.get('current_state')}\n  expected: {f.get('expected_state')}"
-        )
-
-    prompt = ("FACTS (the ONLY facts you may treat as true):\n" + "\n".join(facts_lines)
-              + "\n\nFINDINGS TO DRAFT:\n" + "\n\n".join(find_lines)
-              + "\n\nDraft publication-ready content for each finding. Remember: facts only, "
-                "[VERIFY: ...] for anything unknown, no invented citations.")
-
-    try:
-        resp = client.messages.create(
-            model=_MODEL, max_tokens=8192, tools=[_DRAFT_TOOL],
-            tool_choice={"type": "tool", "name": "submit_drafts"},
-            system=_SYSTEM, messages=[{"role": "user", "content": prompt}],
-        )
-    except Exception:
-        return {}
     out = {}
-    for block in resp.content:
-        if block.type == "tool_use" and block.name == "submit_drafts":
-            d = block.input if isinstance(block.input, dict) else json.loads(block.input)
-            for item in d.get("drafts", []):
-                fid = item.get("finding_id")
-                dc = (item.get("draft_content") or "").strip()
-                if fid and dc:
-                    out[fid] = dc
+    for i in range(0, len(draftable), _BATCH_SIZE):
+        out.update(_draft_recursive(facts_lines, draftable[i:i + _BATCH_SIZE]))
     return out
