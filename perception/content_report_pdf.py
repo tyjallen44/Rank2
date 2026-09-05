@@ -37,6 +37,61 @@ def _e(s) -> str:
     return html.escape(str(s if s is not None else ""))
 
 
+# Display normalization so the header reads in proper title case, matching the
+# Deep Diagnostic (which uses the analyzed canonical name). Applied to the
+# entity/report title and the location — never to user content elsewhere.
+import re as _re
+
+_SMALL_WORDS = {"a", "an", "and", "the", "of", "for", "to", "at", "in", "on",
+                "by", "or", "nor", "vs", "de", "la"}
+
+
+def _cap_word(w: str, first: bool) -> str:
+    if not any(ch.isalpha() for ch in w):
+        return w                              # leave hashes/numbers/punct alone
+    if w.isupper() and sum(ch.isalpha() for ch in w) <= 4:
+        return w                              # preserve acronyms/state codes (USA, MD, NC)
+    if not first and w.lower() in _SMALL_WORDS:
+        return w.lower()
+    if w.isupper():
+        w = w.lower()                         # ATRIUM -> atrium, then capitalize below
+
+    def _capfirst(s: str) -> str:
+        for i, ch in enumerate(s):
+            if ch.isalpha():
+                return s[:i] + ch.upper() + s[i + 1:]
+        return s
+    # capitalize each hyphen-separated part; keep internal caps (McDonald, RLDatix)
+    return "-".join(_capfirst(part) for part in w.split("-"))
+
+
+def _display_name(s: str) -> str:
+    """Title-case an entity/report name, preserving acronyms and casing small words."""
+    s = (s or "").strip()
+    if not s:
+        return s
+    out, seen = [], False
+    for tok in _re.split(r"(\s+)", s):
+        if not tok.strip():
+            out.append(tok)
+            continue
+        out.append(_cap_word(tok, not seen))
+        seen = True
+    return "".join(out)
+
+
+def _display_location(s: str) -> str:
+    """Normalize 'Charlotte , nc' -> 'Charlotte, NC' (spacing, title case, state code)."""
+    s = (s or "").strip()
+    if not s:
+        return s
+    s = _re.sub(r"\s*,\s*", ", ", s)
+    parts = [_display_name(p) for p in s.split(", ")]
+    if parts and _re.fullmatch(r"[A-Za-z]{2}", parts[-1]):
+        parts[-1] = parts[-1].upper()
+    return ", ".join(parts)
+
+
 def _logo_html() -> str:
     import base64
     p = Path(__file__).parent / "assets" / "logo-white.svg"
@@ -111,7 +166,8 @@ def _build_html(entity_name: str, location: str, findings, report_title: str) ->
     items = list(getattr(findings, "findings", []) or [])
     items = [f.model_dump() if hasattr(f, "model_dump") else f for f in items]
     snap = getattr(findings, "source_snapshot", {}) or {}
-    title = report_title or entity_name
+    title = _display_name(report_title or entity_name)
+    location = _display_location(location)
 
     by_sev = {"high": 0, "medium": 0, "low": 0}
     for f in items:

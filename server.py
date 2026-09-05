@@ -2127,8 +2127,9 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
         try:
             from perception.content_report_pdf import render_content_report_pdf
             _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
-            render_content_report_pdf(network_name, hq, findings, str(_r2),
-                                      report_title=req.get("report_title") or network_name)
+            _net_name = result.network_canonical_name or network_name
+            render_content_report_pdf(_net_name, hq, findings, str(_r2),
+                                      report_title=req.get("report_title") or _net_name)
             report2 = str(_r2)
         except Exception as _pe2:
             emit({"type": "text", "text": f"\n(content report render failed: {type(_pe2).__name__})"})
