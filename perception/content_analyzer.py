@@ -30,7 +30,13 @@ _TIMEOUT = 8.0
 # when a site (e.g. behind Cloudflare) returns 403 to the plain HTTP client.
 _BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-_BROWSER_TIMEOUT_MS = 30000
+_BROWSER_TIMEOUT_MS = 20000     # per-navigation cap
+_BROWSER_LAUNCH_MS = 20000      # cap the launch so it can never hang the job
+_BROWSER_SETTLE_MS = 2000       # brief wait for a JS challenge to resolve
+# Flags required to render a heavy external page reliably in a container
+# (Cloud Run): --no-sandbox (no user namespaces) and --disable-dev-shm-usage
+# (the default 64MB /dev/shm is too small and otherwise causes hangs/crashes).
+_BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
 
 
 class _BrowserFetcher:
@@ -52,7 +58,8 @@ class _BrowserFetcher:
         try:
             from playwright.sync_api import sync_playwright
             self._pw = sync_playwright().start()
-            self._browser = self._pw.chromium.launch()
+            self._browser = self._pw.chromium.launch(args=_BROWSER_ARGS,
+                                                     timeout=_BROWSER_LAUNCH_MS)
             self._ctx = self._browser.new_context(user_agent=_BROWSER_UA)
             return True
         except Exception:
@@ -68,7 +75,7 @@ class _BrowserFetcher:
         try:
             page = self._ctx.new_page()
             resp = page.goto(url, wait_until="domcontentloaded", timeout=_BROWSER_TIMEOUT_MS)
-            page.wait_for_timeout(2500)   # allow a JS challenge to resolve
+            page.wait_for_timeout(_BROWSER_SETTLE_MS)   # allow a JS challenge to resolve
             status = resp.status if resp else None
             if resp and resp.status == 200:
                 html = page.content()
@@ -242,7 +249,16 @@ def _crawl_site(client: httpx.Client, url: str, page_budget: int,
         if snap["pages"] >= page_budget:
             break
         seen.add(href)
-        h = _fetch(client, href, browser)
+        # Prefer the browser context's request when active (fast, reuses any
+        # challenge cookies) so we never pay for a fresh page navigation per
+        # sub-page; otherwise plain HTTP only (no per-page browser fallback).
+        h = None
+        if browser is not None and browser.active:
+            res = browser.fetch_text(href)
+            if res is not None and res[0] == 200 and "<html" in res[1].lower():
+                h = res[1]
+        else:
+            h = _fetch(client, href)
         if h:
             snap["pages"] += 1
             snap["schema_types"] |= _schema_types(h)
