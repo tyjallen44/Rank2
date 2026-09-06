@@ -102,6 +102,29 @@ class _BrowserFetcher:
         except Exception:
             return None
 
+    def fetch_rendered_html(self, url: str, settle_ms: int = 3500) -> "str | None":
+        """Navigate a page and return its rendered HTML after client-side JS runs
+        — for directory search pages whose result cards load dynamically. Fail-soft:
+        returns None on block/timeout/launch failure (never raises)."""
+        if not self._ensure():
+            return None
+        page = None
+        try:
+            page = self._ctx.new_page()
+            resp = page.goto(url, wait_until="domcontentloaded", timeout=_BROWSER_TIMEOUT_MS)
+            page.wait_for_timeout(settle_ms)
+            if resp and resp.status == 200:
+                return page.content()
+            return None
+        except Exception:
+            return None
+        finally:
+            if page is not None:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+
     @property
     def active(self) -> bool:
         return self._ctx is not None
@@ -547,11 +570,14 @@ def _check_reputation(rep: dict) -> list:
 # ── Orchestrator ──────────────────────────────────────────────────────────────
 
 def analyze_content(entity_name: str, website_urls: list, city: str = "", state: str = "",
-                    entity_kind: str = "hospital", reputation: dict = None) -> ContentFindings:
+                    entity_kind: str = "hospital", reputation: dict = None,
+                    on_event=None) -> ContentFindings:
     """Run the verified content checks and return a ContentFindings object.
 
     Never raises: any component failure yields not_assessed findings and a
-    whole-run status that reflects what could/couldn't be checked."""
+    whole-run status that reflects what could/couldn't be checked. `on_event`,
+    when provided, streams sub-step progress (used for the longer directory pass)."""
+    emit = on_event or (lambda e: None)
     urls = [_norm_url(u) for u in (website_urls or []) if (u or "").strip()][:_MAX_SITES]
     raw: list = []
     snapshot = {"website_urls": urls, "wikipedia_article": None,
@@ -560,10 +586,10 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
 
     browser = _BrowserFetcher()   # lazy: Chromium launches only if a site is blocked
     with _client() as client:
-        # Website(s)
-        snaps = []
-        budget = _MAX_PAGES_TOTAL
         try:
+            # Website(s)
+            snaps = []
+            budget = _MAX_PAGES_TOTAL
             for u in urls:
                 per = min(_MAX_PAGES_PER_SITE, max(1, budget))
                 s = _crawl_site(client, u, per, browser)
@@ -571,28 +597,35 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
                 snaps.append(s)
                 if budget <= 0:
                     break
-        finally:
-            browser.close()
-        snapshot["pages_crawled"] = sum(s["pages"] for s in snaps)
-        if urls:
+            snapshot["pages_crawled"] = sum(s["pages"] for s in snaps)
+            if urls:
+                try:
+                    raw += _check_website(snaps, entity_kind)
+                except Exception:
+                    partial = True
+            # Wikidata
             try:
-                raw += _check_website(snaps, entity_kind)
+                wd, qid = _check_wikidata(client, entity_name, urls[0] if urls else "", entity_kind)
+                raw += wd
+                snapshot["wikidata_qid"] = qid
             except Exception:
                 partial = True
-        # Wikidata
-        try:
-            wd, qid = _check_wikidata(client, entity_name, urls[0] if urls else "", entity_kind)
-            raw += wd
-            snapshot["wikidata_qid"] = qid
-        except Exception:
-            partial = True
-        # Wikipedia
-        try:
-            wp, title = _check_wikipedia(client, entity_name, entity_kind)
-            raw += wp
-            snapshot["wikipedia_article"] = title
-        except Exception:
-            partial = True
+            # Wikipedia
+            try:
+                wp, title = _check_wikipedia(client, entity_name, entity_kind)
+                raw += wp
+                snapshot["wikipedia_article"] = title
+            except Exception:
+                partial = True
+            # Healthcare directories: NOT wired at the org level. Feasibility
+            # probing (Phase 2a) found these directories are physician-indexed
+            # with fuzzy fallback — a practice/org search returns loosely-related
+            # doctors, so org-level "presence" can't be reliably determined (real
+            # orgs like Novant Health read as "not found"). Reliable detection is
+            # per-provider; see directory_analyzer + docs/provider-directory-analysis.md
+            # (moved to Phase 2c). on_event is kept as plumbing for that pass.
+        finally:
+            browser.close()
 
     # Reputation (location basis) — from the base diagnostic's verified data; no
     # network calls here, so it runs outside the HTTP client block.

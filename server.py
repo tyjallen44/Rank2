@@ -1826,7 +1826,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
             }
         emit({"type": "phase", "name": "content", "text": "Checking website, Wikidata, Wikipedia, and reputation"})
         findings = analyze_content(entity_name, urls, city, state,
-                                   entity_kind=entity_type, reputation=rep)
+                                   entity_kind=entity_type, reputation=rep, on_event=emit)
         findings.run_id = result.run_id
         save_content_findings(
             result.run_id, _norm_entity_name(entity_name),
@@ -2104,7 +2104,7 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
         emit({"type": "phase", "name": "content",
               "text": "Checking system website, Wikidata, Wikipedia, and per-facility reputation"})
         findings = analyze_content(network_name, urls, city, state,
-                                   entity_kind="hospital", reputation=rep)
+                                   entity_kind="hospital", reputation=rep, on_event=emit)
         findings.run_id = result.run_id
         save_content_findings(result.run_id, _norm_entity_name(network_name),
                               findings.source_snapshot,

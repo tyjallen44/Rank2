@@ -24,7 +24,7 @@ _STATUS = {"verified": ("#2e9e5b", "Verified"),
            "not_assessed": ("#9aa8ac", "Not assessed")}
 _PLATFORM = {"structured_data": "Structured data (schema.org)", "website": "Website",
              "llms_txt": "llms.txt", "wikidata": "Wikidata", "wikipedia": "Wikipedia",
-             "reputation": "Reputation & Listings"}
+             "reputation": "Reputation & Listings", "directory": "Provider Directories"}
 _REMEDIATION = {"schema_markup": "Add schema.org markup", "website_fix": "Website fix",
                 "wikidata_edit": "Wikidata edit (we can draft, you publish)",
                 "talk_page_request": "Wikipedia talk-page request",
