@@ -390,8 +390,21 @@ def _check_website(snaps: list, entity_kind: str) -> list:
 
 # ── Wikidata ──────────────────────────────────────────────────────────────────
 
-def _check_wikidata(client: httpx.Client, entity_name: str, known_website: str) -> tuple:
+def _name_matches(entity_name: str, candidate: str) -> bool:
+    """True if a search hit plausibly refers to this entity — it must share a
+    distinctive (>=4-char) token with the entity name. Guards against a generic
+    name (e.g. 'Summit Medical Group') matching an unrelated knowledge item."""
+    ename = (entity_name or "").lower()
+    return any(tok in ename for tok in (candidate or "").lower().split() if len(tok) >= 4)
+
+
+def _check_wikidata(client: httpx.Client, entity_name: str, known_website: str,
+                    entity_kind: str = "hospital") -> tuple:
     api = "https://www.wikidata.org/w/api.php"
+    # For an ambulatory/specialty practice, absence of a Wikidata item is low
+    # priority (most practices have none, and it's a minor AI-visibility lever
+    # relative to directories/GBP); for a hospital/system it matters more.
+    _absent_sev = "low" if entity_kind == "practice" else "medium"
     try:
         r = client.get(api, params={"action": "wbsearchentities", "search": entity_name,
                                     "language": "en", "format": "json", "limit": 1})
@@ -401,11 +414,13 @@ def _check_wikidata(client: httpx.Client, entity_name: str, known_website: str) 
                       status="not_assessed",
                       teaser_summary="Wikidata could not be checked at analysis time.",
                       remediation_type="wikidata_edit", evidence=[])], None)
-    if not hits:
-        return ([dict(platform="wikidata", category="opportunity", severity="medium",
+    # Require a plausible name match, or treat as "no item" — never adopt an
+    # unrelated QID (which would also feed the drafting engine a wrong entity).
+    if not hits or not _name_matches(entity_name, hits[0].get("label", "")):
+        return ([dict(platform="wikidata", category="opportunity", severity=_absent_sev,
                       status="verified",
                       teaser_summary="No Wikidata entity — AI models miss a key structured knowledge source about you.",
-                      current_state=f"No Wikidata item matches '{entity_name}'.",
+                      current_state=f"No Wikidata item clearly matches '{entity_name}'.",
                       expected_state="A Wikidata item with instance-of, location, official website, and parent org.",
                       remediation_type="wikidata_edit", evidence=[api])], None)
     qid = hits[0]["id"]
@@ -432,7 +447,8 @@ def _check_wikidata(client: httpx.Client, entity_name: str, known_website: str) 
 
 # ── Wikipedia ─────────────────────────────────────────────────────────────────
 
-def _check_wikipedia(client: httpx.Client, entity_name: str) -> tuple:
+def _check_wikipedia(client: httpx.Client, entity_name: str,
+                     entity_kind: str = "hospital") -> tuple:
     api = "https://en.wikipedia.org/w/api.php"
     try:
         r = client.get(api, params={"action": "query", "list": "search",
@@ -452,9 +468,8 @@ def _check_wikipedia(client: httpx.Client, entity_name: str) -> tuple:
                       remediation_type="talk_page_request", evidence=[api])], None)
     title = hits[0]["title"]
     url = "https://en.wikipedia.org/wiki/" + title.replace(" ", "_")
-    # Simple relevance guard: share a distinctive token with the entity name.
-    ename = entity_name.lower()
-    if not any(tok in ename for tok in title.lower().split() if len(tok) >= 4):
+    # Relevance guard: the article must share a distinctive token with the name.
+    if not _name_matches(entity_name, title):
         return ([dict(platform="wikipedia", category="opportunity", severity="low",
                       status="verified",
                       teaser_summary="No clearly-matching Wikipedia article — worth assessing notability.",
@@ -566,14 +581,14 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
                 partial = True
         # Wikidata
         try:
-            wd, qid = _check_wikidata(client, entity_name, urls[0] if urls else "")
+            wd, qid = _check_wikidata(client, entity_name, urls[0] if urls else "", entity_kind)
             raw += wd
             snapshot["wikidata_qid"] = qid
         except Exception:
             partial = True
         # Wikipedia
         try:
-            wp, title = _check_wikipedia(client, entity_name)
+            wp, title = _check_wikipedia(client, entity_name, entity_kind)
             raw += wp
             snapshot["wikipedia_article"] = title
         except Exception:
