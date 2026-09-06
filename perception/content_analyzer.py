@@ -59,20 +59,24 @@ class _BrowserFetcher:
             self._failed = True
             return False
 
-    def fetch_html(self, url: str) -> str | None:
+    def fetch_html(self, url: str) -> "tuple[str | None, int | None]":
+        """Return (html_or_None, http_status_or_None). status distinguishes a
+        bot-block (e.g. 403) from a genuine connection failure (status None)."""
         if not self._ensure():
-            return None
+            return None, None
         page = None
         try:
             page = self._ctx.new_page()
             resp = page.goto(url, wait_until="domcontentloaded", timeout=_BROWSER_TIMEOUT_MS)
             page.wait_for_timeout(2500)   # allow a JS challenge to resolve
+            status = resp.status if resp else None
             if resp and resp.status == 200:
                 html = page.content()
-                return html if "<html" in html.lower() else None
-            return None
+                if "<html" in html.lower():
+                    return html, status
+            return None, status
         except Exception:
-            return None
+            return None, None
         finally:
             if page is not None:
                 try:
@@ -135,17 +139,53 @@ def _norm_url(url: str) -> str:
 
 # ── Website crawl ─────────────────────────────────────────────────────────────
 
+# HTTP statuses that indicate an up-but-blocking site (WAF / bot protection),
+# as opposed to a connection failure (which surfaces as an exception / None).
+_BLOCK_STATUSES = {401, 403, 406, 409, 429, 503}
+
+
 def _fetch(client: httpx.Client, url: str, browser: "_BrowserFetcher | None" = None) -> str | None:
     try:
         r = client.get(url)
         if r.status_code == 200 and "text/html" in r.headers.get("content-type", ""):
             return r.text
     except Exception:
-        r = None
+        pass
     # Plain HTTP failed or was blocked (e.g. Cloudflare 403) — try a real browser.
     if browser is not None:
-        return browser.fetch_html(url)
+        return browser.fetch_html(url)[0]
     return None
+
+
+def _fetch_home(client: httpx.Client, url: str,
+                browser: "_BrowserFetcher | None") -> "tuple[str | None, str]":
+    """Fetch the homepage, returning (html_or_None, reason). reason is one of:
+    'ok', 'blocked' (up but WAF/bot-blocks automated readers), 'unreachable'
+    (connection failed / DNS / timeout), 'no_html' (responded but not HTML)."""
+    http_status = None
+    try:
+        r = client.get(url)
+        http_status = r.status_code
+        if r.status_code == 200 and "text/html" in r.headers.get("content-type", ""):
+            return r.text, "ok"
+    except Exception:
+        http_status = None   # connection-level failure
+
+    if browser is not None:
+        html, bstatus = browser.fetch_html(url)
+        if html is not None:
+            return html, "ok"
+        if bstatus in _BLOCK_STATUSES or http_status in _BLOCK_STATUSES:
+            return None, "blocked"
+        if bstatus is not None or http_status is not None:
+            return None, "no_html"     # got an HTTP response, just not usable HTML
+        return None, "unreachable"     # neither client nor browser could connect
+
+    if http_status in _BLOCK_STATUSES:
+        return None, "blocked"
+    if http_status is not None:
+        return None, "no_html"
+    return None, "unreachable"
 
 
 def _schema_types(html: str) -> set:
@@ -175,8 +215,9 @@ def _crawl_site(client: httpx.Client, url: str, page_budget: int,
                 browser: "_BrowserFetcher | None" = None) -> dict:
     """Fetch homepage + a few key linked same-domain pages. Returns a snapshot."""
     origin = _origin(url)
-    home = _fetch(client, _norm_url(url), browser)
+    home, reason = _fetch_home(client, _norm_url(url), browser)
     snap = {"url": url, "origin": origin, "reachable": home is not None,
+            "fetch_status": reason,
             "schema_types": set(), "pages": 0, "home_text_len": 0,
             "llms_txt": None, "robots_blocks_ai": None, "robots_blocks_all": None}
     if home is None:
@@ -243,13 +284,35 @@ def _check_website(snaps: list, entity_kind: str) -> list:
     findings: list = []
     reachable = [s for s in snaps if s["reachable"]]
     if not reachable:
-        findings.append(dict(platform="website", category="risk", severity="high",
-                             status="not_assessed",
-                             teaser_summary="The website could not be reached for analysis.",
-                             current_state="No provided URL responded with HTML.",
-                             expected_state="A reachable public website.",
-                             remediation_type="website_fix",
-                             evidence=[s["url"] for s in snaps]))
+        reasons = {s.get("fetch_status") for s in snaps}
+        if "blocked" in reasons:
+            # The site is up but its WAF/bot protection turns away non-browser
+            # clients — a genuine AI-visibility problem, since AI crawlers that
+            # don't execute JavaScript get the same 403. This IS a verified finding.
+            findings.append(dict(
+                platform="website", category="risk", severity="high",
+                status="verified",
+                teaser_summary="Your website blocks automated readers — AI assistants likely can't crawl it either.",
+                current_state=("The site is online but returns a bot-block (e.g. HTTP 403 from a "
+                               "Cloudflare/WAF challenge) to clients that don't execute JavaScript. "
+                               "AI crawlers (GPTBot, ClaudeBot, PerplexityBot, Google-Extended) are "
+                               "turned away the same way, so your content can't be read or cited."),
+                expected_state=("Public, non-sensitive pages are reachable by legitimate AI crawlers — "
+                                "allow known AI user-agents through your WAF/bot-management rules while "
+                                "keeping login, portal, and PHI paths protected."),
+                remediation_type="website_fix",
+                evidence=[s["url"] for s in snaps]))
+        else:
+            # Connection failed / DNS / timeout — the site may be down or the URL wrong.
+            findings.append(dict(
+                platform="website", category="risk", severity="high",
+                status="not_assessed",
+                teaser_summary="The website could not be reached for analysis.",
+                current_state=("No provided URL responded (connection failed, timed out, or the domain "
+                               "did not resolve). The site may be down or the URL may be incorrect."),
+                expected_state="A reachable public website.",
+                remediation_type="website_fix",
+                evidence=[s["url"] for s in snaps]))
         return findings
 
     all_types = set().union(*[s["schema_types"] for s in reachable])
