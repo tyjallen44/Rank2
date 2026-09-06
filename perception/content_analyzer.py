@@ -25,6 +25,84 @@ from .models import ContentFinding, ContentFindings
 
 _UA = "PulseContentAnalyzer/1.0 (+https://careclimb.com; RLDatix AI Visibility)"
 _TIMEOUT = 8.0
+
+# Realistic desktop-Chrome UA + timeout for the headless-browser fallback used
+# when a site (e.g. behind Cloudflare) returns 403 to the plain HTTP client.
+_BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+_BROWSER_TIMEOUT_MS = 30000
+
+
+class _BrowserFetcher:
+    """Lazy headless-Chromium fallback for sites that block the plain HTTP client
+    (Cloudflare/WAF 403 to non-JS clients). Chromium launches only on first use,
+    so unblocked runs pay nothing; one browser is reused for the whole analysis.
+    Once a page nav clears a JS challenge, the context holds clearance cookies, so
+    text files (llms.txt/robots.txt) are fetched via the same context's request."""
+
+    def __init__(self):
+        self._pw = self._browser = self._ctx = None
+        self._failed = False   # a launch failure disables further attempts this run
+
+    def _ensure(self) -> bool:
+        if self._ctx is not None:
+            return True
+        if self._failed:
+            return False
+        try:
+            from playwright.sync_api import sync_playwright
+            self._pw = sync_playwright().start()
+            self._browser = self._pw.chromium.launch()
+            self._ctx = self._browser.new_context(user_agent=_BROWSER_UA)
+            return True
+        except Exception:
+            self._failed = True
+            return False
+
+    def fetch_html(self, url: str) -> str | None:
+        if not self._ensure():
+            return None
+        page = None
+        try:
+            page = self._ctx.new_page()
+            resp = page.goto(url, wait_until="domcontentloaded", timeout=_BROWSER_TIMEOUT_MS)
+            page.wait_for_timeout(2500)   # allow a JS challenge to resolve
+            if resp and resp.status == 200:
+                html = page.content()
+                return html if "<html" in html.lower() else None
+            return None
+        except Exception:
+            return None
+        finally:
+            if page is not None:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+
+    def fetch_text(self, url: str) -> "tuple[int, str] | None":
+        """Fetch a text file via the browser context (reuses challenge cookies).
+        Returns (status_code, body) or None if the context isn't open/failed."""
+        if self._ctx is None:
+            return None
+        try:
+            r = self._ctx.request.get(url, timeout=_BROWSER_TIMEOUT_MS)
+            return r.status, r.text()
+        except Exception:
+            return None
+
+    @property
+    def active(self) -> bool:
+        return self._ctx is not None
+
+    def close(self) -> None:
+        for closer in (getattr(self._browser, "close", None),
+                       getattr(self._pw, "stop", None)):
+            try:
+                if closer:
+                    closer()
+            except Exception:
+                pass
 _MAX_PAGES_TOTAL = 12
 _MAX_PAGES_PER_SITE = 6
 _MAX_SITES = 4
@@ -57,13 +135,16 @@ def _norm_url(url: str) -> str:
 
 # ── Website crawl ─────────────────────────────────────────────────────────────
 
-def _fetch(client: httpx.Client, url: str) -> str | None:
+def _fetch(client: httpx.Client, url: str, browser: "_BrowserFetcher | None" = None) -> str | None:
     try:
         r = client.get(url)
         if r.status_code == 200 and "text/html" in r.headers.get("content-type", ""):
             return r.text
     except Exception:
-        return None
+        r = None
+    # Plain HTTP failed or was blocked (e.g. Cloudflare 403) — try a real browser.
+    if browser is not None:
+        return browser.fetch_html(url)
     return None
 
 
@@ -90,10 +171,11 @@ def _schema_types(html: str) -> set:
     return {str(t) for t in types}
 
 
-def _crawl_site(client: httpx.Client, url: str, page_budget: int) -> dict:
+def _crawl_site(client: httpx.Client, url: str, page_budget: int,
+                browser: "_BrowserFetcher | None" = None) -> dict:
     """Fetch homepage + a few key linked same-domain pages. Returns a snapshot."""
     origin = _origin(url)
-    home = _fetch(client, _norm_url(url))
+    home = _fetch(client, _norm_url(url), browser)
     snap = {"url": url, "origin": origin, "reachable": home is not None,
             "schema_types": set(), "pages": 0, "home_text_len": 0,
             "llms_txt": None, "robots_blocks_ai": None, "robots_blocks_all": None}
@@ -119,30 +201,41 @@ def _crawl_site(client: httpx.Client, url: str, page_budget: int) -> dict:
         if snap["pages"] >= page_budget:
             break
         seen.add(href)
-        h = _fetch(client, href)
+        h = _fetch(client, href, browser)
         if h:
             snap["pages"] += 1
             snap["schema_types"] |= _schema_types(h)
 
+    # Fetch a text file (llms.txt/robots.txt), preferring the browser context if
+    # it's active so Cloudflare-protected sites return the real file, not a 403.
+    def _get_text(path: str):
+        if browser is not None and browser.active:
+            res = browser.fetch_text(origin + path)
+            if res is not None:
+                return res
+        try:
+            r = client.get(origin + path)
+            return r.status_code, r.text
+        except Exception:
+            return None
+
     # llms.txt
-    try:
-        r = client.get(origin + "/llms.txt")
-        snap["llms_txt"] = (r.status_code == 200 and len(r.text.strip()) > 0)
-    except Exception:
-        snap["llms_txt"] = None
+    res = _get_text("/llms.txt")
+    if res is not None:
+        code, body = res
+        snap["llms_txt"] = (code == 200 and len(body.strip()) > 0)
 
     # robots.txt AI-crawler posture
-    try:
-        r = client.get(origin + "/robots.txt")
-        if r.status_code == 200:
-            txt = r.text.lower()
+    res = _get_text("/robots.txt")
+    if res is not None:
+        code, body = res
+        if code == 200:
+            txt = body.lower()
             snap["robots_blocks_ai"] = [b for b in _AI_CRAWLERS
                                         if re.search(rf"user-agent:\s*{re.escape(b)}", txt)
                                         and re.search(r"disallow:\s*/", txt)]
             snap["robots_blocks_all"] = bool(
                 re.search(r"user-agent:\s*\*\s*\ndisallow:\s*/\s*$", txt, re.M))
-    except Exception:
-        pass
     return snap
 
 
@@ -371,17 +464,21 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
                 "wikidata_qid": None, "pages_crawled": 0}
     partial = False
 
+    browser = _BrowserFetcher()   # lazy: Chromium launches only if a site is blocked
     with _client() as client:
         # Website(s)
         snaps = []
         budget = _MAX_PAGES_TOTAL
-        for u in urls:
-            per = min(_MAX_PAGES_PER_SITE, max(1, budget))
-            s = _crawl_site(client, u, per)
-            budget -= s["pages"]
-            snaps.append(s)
-            if budget <= 0:
-                break
+        try:
+            for u in urls:
+                per = min(_MAX_PAGES_PER_SITE, max(1, budget))
+                s = _crawl_site(client, u, per, browser)
+                budget -= s["pages"]
+                snaps.append(s)
+                if budget <= 0:
+                    break
+        finally:
+            browser.close()
         snapshot["pages_crawled"] = sum(s["pages"] for s in snaps)
         if urls:
             try:
