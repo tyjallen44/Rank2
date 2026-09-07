@@ -618,12 +618,12 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
             except Exception:
                 partial = True
             # Healthcare directories: NOT wired at the org level. Feasibility
-            # probing (Phase 2a) found these directories are physician-indexed
-            # with fuzzy fallback — a practice/org search returns loosely-related
-            # doctors, so org-level "presence" can't be reliably determined (real
-            # orgs like Novant Health read as "not found"). Reliable detection is
-            # per-provider; see directory_analyzer + docs/provider-directory-analysis.md
-            # (moved to Phase 2c). on_event is kept as plumbing for that pass.
+            # probing found these directories are physician-indexed with fuzzy
+            # fallback — a practice/org search returns loosely-related doctors, so
+            # org-level "presence" can't be reliably determined (real orgs like
+            # Novant Health read as "not found"). Step 2 pivoted to service-line
+            # listing/reputation analysis; see docs/service-line-listing-analysis.md.
+            # on_event is kept as plumbing for that (longer) pass.
         finally:
             browser.close()
 
