@@ -251,6 +251,103 @@ hints + the extraction prompt until all three pass on the sample.
 - Do we want a `min_confidence` filter, or surface `other`/low-confidence lines too
   (flagged) so nothing is silently dropped?
 
+## Phase B — Implementation spec (listing & location resolution)
+
+**Goal:** for each service line from Phase A, resolve the **flagship** listing + a
+**bounded sample of locations** offering that line (as Google Business Profile /
+Places entities with rating + reviews + place_id), and **surface service lines
+that have no findable listing** ("invisible lines"). Feeds Phase C's scoring.
+
+### Module & API
+New `perception/service_line_locations.py`:
+```
+resolve_service_line_listings(system_name, hq_location, service_line_set,
+                              on_event=None, per_line_cap=6, cache=True)
+    -> ServiceLineListingSet
+```
+Never raises; always returns; streams progress per line.
+
+### Data model (`perception/models.py`)
+```
+class Listing(BaseModel):
+    place_id: Optional[str]
+    name: str
+    formatted_address: str = ""
+    city: str = ""; state: str = ""
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    maps_url: Optional[str] = None
+    types: list[str] = []
+    role: str = "location"          # flagship | location
+    affiliation: str = "medium"     # high|medium|low  (name match to the system)
+    source: str = "places_search"   # places_search | landing_page
+
+class ServiceLineListings(BaseModel):
+    canonical_key: str; canonical_label: str
+    landing_url: Optional[str] = None
+    flagship: Optional[Listing] = None
+    locations: list[Listing] = []   # bounded sample, excludes flagship
+    sampled: int = 0
+    estimated_total: Optional[int] = None
+    coverage: str = "full"          # full | partial | none  (none = invisible line)
+
+class ServiceLineListingSet(BaseModel):
+    system_name: str
+    lines: list[ServiceLineListings] = []
+```
+
+### Places helper (`perception/data/places.py`, new)
+```
+def text_search(query, *, max_results=10, api_key=None, timeout=20.0) -> list[dict]
+# [{place_id, name, formatted_address, rating, review_count, types, maps_url}]
+```
+Centralizes the Text Search call + field mask (reuse `_SEARCH_TEXT`, the mask,
+`_is_healthcare`, `_name_match` already in the module). `fetch_provider` only
+returns the top match; Phase B needs the full candidate list.
+
+### Algorithm (per service line)
+1. **Queries** from system + service line + HQ metro:
+   - flagship: `"{raw_name} {metro}"` (named institute, e.g. "Sanger Heart & Vascular Institute Charlotte NC")
+   - locations: `"{system_name} {canonical_label} {metro}"`
+2. **Flagship** — `text_search(flagship_query)`; pick best candidate that is
+   healthcare (`_is_healthcare`) with a high `_name_match` to raw_name/system.
+   No confident match → `flagship=None` (many lines are clinics with no named center).
+3. **Location sample** — `text_search(location_query, max_results=10)` →
+   **filter** to healthcare + **affiliated** (see below) → **dedupe** by place_id,
+   drop the flagship → **cap** to `per_line_cap`, record `estimated_total` from the
+   affiliated candidate count (disclosed sample). v1 selection: nearest-to-HQ first.
+4. **Coverage** — `none` if flagship None AND locations empty (**invisible line**,
+   surfaced not dropped); `partial` if capped/`estimated_total`>`sampled` or no API
+   key; else `full`.
+
+### Affiliation matching (avoid competitors — top risk)
+Reuse `_name_match`. A candidate is affiliated if its name shares tokens with **any
+of**: system name, the resolved flagship name, or the service line `raw_name`. This
+catches sub-brands (Atrium's "Sanger", "Levine") that don't contain "Atrium".
+Known fuzziness: sub-brand tokens can over-match; low-confidence affiliations are
+kept but flagged `affiliation=low`, never silently dropped.
+
+### Cost / caching / reliability
+- ~2 Places Text Search calls per line (flagship + locations) → ~40 for a 20-line
+  system. Bounded by caps; **cache per (system, canonical_key) ~14–30 days**.
+- No silent failure: invisible lines → coverage=none; capped samples disclose
+  `sampled` vs `estimated_total`; missing API key → coverage=partial + reason;
+  never raises; per-line progress events.
+
+### Acceptance test
+Phase A→B on Atrium + Novant. Verify: (a) flagships resolve for named institutes
+(Sanger Heart, Levine Cancer); (b) location samples are the **system's own**
+locations (no competitors) — the key manual eyeball; (c) any invisible line surfaces
+as coverage=none; (d) ratings/review counts populate.
+
+### Open decisions for Phase B
+- `per_line_cap` default = 6 locations (+ flagship) — OK?
+- Accept flagship/sub-brand tokens for affiliation (needed for recall on Sanger/
+  Levine-style brands, slight false-affiliation risk) — OK?
+- Site-derived locations (parse the landing page's "find a location" links) —
+  include in v1, or defer and lead with Places only (my lean: defer)?
+- Location selection when population > cap: nearest-to-HQ (my lean) vs highest-review.
+
 ## Retired
 - Per-physician roster discovery and per-physician directory lookups.
 - Org-level consumer-directory *findings* (dropped in 2a as unreliable). Kept
