@@ -383,3 +383,37 @@ class ServiceLineSet(BaseModel):
     lines: list[ServiceLine] = Field(default_factory=list)
     hubs_crawled: list[str] = Field(default_factory=list)
     coverage: str = "full"                   # full | partial | none
+
+
+class Listing(BaseModel):
+    """A Google Business Profile / Places listing for a service line (Phase B)."""
+    place_id: Optional[str] = None
+    name: str
+    formatted_address: str = ""
+    city: str = ""
+    state: str = ""
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    maps_url: Optional[str] = None
+    types: list[str] = Field(default_factory=list)
+    role: str = "location"                   # flagship | location
+    affiliation: str = "medium"              # high | medium | low
+    source: str = "places_search"            # places_search | landing_page
+
+
+class ServiceLineListings(BaseModel):
+    canonical_key: str
+    canonical_label: str
+    landing_url: Optional[str] = None
+    flagship: Optional[Listing] = None
+    locations: list[Listing] = Field(default_factory=list)   # bounded sample, excl. flagship
+    sampled: int = 0
+    estimated_total: Optional[int] = None
+    coverage: str = "full"                   # full | partial | none (none = invisible line)
+
+
+class ServiceLineListingSet(BaseModel):
+    system_name: str
+    lines: list[ServiceLineListings] = Field(default_factory=list)

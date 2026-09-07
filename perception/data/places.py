@@ -52,6 +52,12 @@ def _city_from_address(address: str) -> str | None:
     return filtered[-1] if filtered else None
 
 
+def _state_from_address(address: str) -> str | None:
+    """US state code from a formatted address ('… , NC 28203, USA')."""
+    m = re.search(r",\s*([A-Z]{2})\s+\d{5}", address or "")
+    return m.group(1) if m else None
+
+
 def city_match_ratio(input_city: str, address: str) -> float:
     """Return similarity ratio (0–1) between input_city and the city parsed from address.
 
@@ -331,6 +337,56 @@ def fetch_provider(
         rating_high=max(ratings) if ratings else None,
     )
     return read, footprint
+
+
+def text_search(query: str, *, max_results: int = 10, api_key: str | None = None,
+                timeout: float = 20.0) -> list[dict]:
+    """Places Text Search → the full normalized candidate list (vs fetch_provider,
+    which returns only the top match). Never raises; returns [] on error/no-key.
+    Each item: {place_id, name, formatted_address, city, state, lat, lng, rating,
+    review_count, types, maps_url, business_status}."""
+    key = _api_key(api_key)
+    if not key or not (query or "").strip():
+        return []
+    try:
+        resp = httpx.post(
+            _SEARCH_TEXT,
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": key,
+                "X-Goog-FieldMask": (
+                    "places.id,places.displayName,places.rating,"
+                    "places.userRatingCount,places.businessStatus,"
+                    "places.googleMapsUri,places.types,"
+                    "places.formattedAddress,places.location"
+                ),
+            },
+            json={"textQuery": query, "pageSize": max_results},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        places = resp.json().get("places", [])
+    except (httpx.HTTPError, ValueError):
+        return []
+    out = []
+    for p in places:
+        addr = p.get("formattedAddress") or ""
+        loc = p.get("location") or {}
+        out.append({
+            "place_id": p.get("id"),
+            "name": (p.get("displayName") or {}).get("text", ""),
+            "formatted_address": addr,
+            "city": _city_from_address(addr) or "",
+            "state": _state_from_address(addr) or "",
+            "lat": loc.get("latitude"),
+            "lng": loc.get("longitude"),
+            "rating": p.get("rating"),
+            "review_count": p.get("userRatingCount"),
+            "types": p.get("types") or [],
+            "maps_url": p.get("googleMapsUri") or None,
+            "business_status": p.get("businessStatus"),
+        })
+    return out
 
 
 @dataclass

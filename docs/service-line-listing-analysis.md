@@ -340,6 +340,20 @@ Phase A→B on Atrium + Novant. Verify: (a) flagships resolve for named institut
 locations (no competitors) — the key manual eyeball; (c) any invisible line surfaces
 as coverage=none; (d) ratings/review counts populate.
 
+### Acceptance results (2026-09-07, Atrium Health)
+Phase A→B end-to-end (18 lines, ~104s A + ~25s B):
+- **Location affiliation is the win:** every sampled location came back genuinely
+  "Atrium Health …" branded (high) — zero competitors — because affiliation matches
+  BRAND tokens, not clinical words. Ratings/review counts populated; nearest-to-HQ
+  ordering working; `estimated_total` disclosed on capped lines.
+- **Bug found & fixed:** flagship resolution originally matched only the specialty
+  word, so it wrongly picked independents ("Charlotte Dermatology", "Charlotte
+  Surgery Center", "Carolina Endocrinology", "Dr. Alamarie – Pain"). Flagship now
+  ALSO requires brand affiliation; verified those 4 are rejected while genuine
+  flagships (Sanger Heart, Levine Cancer, Transplant Center) are accepted.
+- Not yet built here: per-(system, service line) caching (spec'd; deferred to when
+  wired into the report flow).
+
 ### Open decisions for Phase B
 - `per_line_cap` default = 6 locations (+ flagship) — OK?
 - Accept flagship/sub-brand tokens for affiliation (needed for recall on Sanger/
