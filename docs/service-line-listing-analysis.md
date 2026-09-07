@@ -362,6 +362,115 @@ Phase A→B end-to-end (18 lines, ~104s A + ~25s B):
   include in v1, or defer and lead with Places only (my lean: defer)?
 - Location selection when population > cap: nearest-to-HQ (my lean) vs highest-review.
 
+## Phase C — Implementation spec (managed-presence detection + rubric scoring)
+
+**Goal:** for each service line (with its Phase-B flagship + location sample), score
+**patient-attraction capability** on the agreed 4-dimension rubric and determine a
+**management status** (managed / partial / unmanaged / invisible), with evidence.
+
+**Input:** the `ServiceLineListingSet` (Phase B) + each line's `landing_url` (Phase A).
+Biggest phase → **sub-phased**: **C1** = per-listing enrichment + completeness /
+reputation / content scoring; **C2** = AI-surfacing probe + findability + management
+status + overall score.
+
+### Module & API
+New `perception/service_line_scoring.py`:
+```
+score_service_lines(listing_set, hq_location, on_event=None,
+                    details_per_line=2, ai_probe=True, cache=True)
+    -> ServiceLineScorecardSet
+```
+Never raises; per-line progress; caches per (system, canonical_key) ~14–30 days.
+
+### New Places helper (`perception/data/places.py`)
+```
+def place_details(place_id, *, api_key=None, timeout=20.0) -> dict
+```
+Places v1 GET `/v1/places/{id}` with a field mask for: `primaryType,types,
+nationalPhoneNumber,websiteUri,regularOpeningHours,editorialSummary,photos,
+rating,userRatingCount,reviews` (reviews give `publishTime` for recency). Never
+raises → `{}` on error. Called only for the flagship + top `details_per_line`
+locations (cost bound).
+
+### Data model (`perception/models.py`)
+```
+class DimensionScore(BaseModel):
+    key: str                 # findability | completeness | reputation | content
+    score: Optional[int]     # 0-100, or None if not_assessed
+    status: str              # verified | partial | not_assessed
+    signals: list[str]       # evidence bullets
+
+class ServiceLineScorecard(BaseModel):
+    canonical_key: str; canonical_label: str
+    management_status: str   # managed | partial | unmanaged | invisible
+    overall_score: Optional[int]
+    dimensions: list[DimensionScore]
+    listings_scored: int
+    notes: list[str]
+
+class ServiceLineScorecardSet(BaseModel):
+    system_name: str
+    scorecards: list[ServiceLineScorecard]
+```
+
+### Rubric (concrete, verifiable signals)
+**Findability (C2)** — has a dedicated landing page (crawl `landing_url`, resolves &
+service-line-specific) · has a GBP (Phase B flagship or ≥1 location) · surfaces when
+an AI is asked "best {line} in {metro}" (bounded probe, see C2). Score = weighted mix
+of the three; components that can't be checked are excluded and the rest renormalized.
+
+**Listing completeness (C1)** — on the flagship (or representative location) via
+`place_details`: primaryType/category · hours · phone · website · description
+(editorialSummary) · ≥3 photos · appointment/booking link. Score = % of fields present.
+
+**Reputation (C1)** — blend across sampled locations: rating (40%) · review volume,
+log-scaled (30%) · recency of the newest reviews (20%) · **review-response rate (10%)**.
+NOTE: the Places API does not expose owner responses, so response-rate is `not_assessed`
+in v1 (renormalize) unless we add an optional Maps place-page scrape (Playwright) — see
+open decisions. Rating/volume/recency are fully verified from the API.
+
+**Content quality (C1)** — crawl `landing_url` (reuse `content_analyzer` crawler +
+schema extraction): schema.org Medical* present (30) · online-scheduling/booking CTA
+(30) · condition/procedure content depth (25) · provider/team presence (15).
+
+### Management status (derived, with evidence)
+- **invisible** — Phase B coverage=none (no listings).
+- **unmanaged** — listings exist but completeness low AND no landing page AND stale reviews.
+- **managed** — complete listings + landing page + recent reviews (+ responses if measurable).
+- **partial** — anything in between.
+Framed as *signals of active management* with evidence, never a bare claim (Google
+doesn't expose "claimed" status).
+
+### Overall score
+Weighted blend of the four dimensions (proposed default weights: findability 30,
+completeness 25, reputation 25, content 20 — see open decisions). `not_assessed`
+dimensions are excluded and weights renormalized; disclosed in the scorecard.
+
+### AI-surfacing probe (C2)
+Reuse the existing battery/prompt pattern, but bounded: 1–2 queries per line
+("best {label} in {metro}", "top {specialty} near {metro}") → check if the system
+(brand tokens) is named. Fail-soft; counts toward findability only.
+
+### Cost / runtime / reliability
+Per line: 1 landing-page crawl + ~2 `place_details` + 1–2 AI probes. For a 20-line
+system this is minutes → **live progress is mandatory** (per line + per step), plus
+the watchdog + runtime cap + disclosed partial sampling already required. Cache per
+(system, canonical_key). No silent failure: `not_assessed` dimensions are shown, never
+silently zeroed; invisible lines carry through from Phase B.
+
+### Acceptance test
+Phase A→B→C on Atrium + one smaller system. Verify: (a) completeness/reputation/content
+scores are sane and backed by real signals (spot-check a flagship's GBP + landing page);
+(b) an under-managed line scores lower than a flagship institute; (c) any invisible line
+is flagged; (d) management-status labels match a human eyeball on 3–4 lines.
+
+### Open decisions for Phase C
+- Overall weights (default 30/25/25/20) — adjust?
+- Review-response-rate: add the optional Maps place-page scrape (Playwright, best-effort)
+  to get it, or leave it `not_assessed` in v1 (my lean: leave it v1, add later)?
+- AI-surfacing probe count per line (1 vs 2), and is C2 in-scope now or after C1 ships?
+- `details_per_line` = 2 (flagship + top 2 locations) — OK for the cost bound?
+
 ## Retired
 - Per-physician roster discovery and per-physician directory lookups.
 - Org-level consumer-directory *findings* (dropped in 2a as unreliable). Kept
