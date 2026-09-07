@@ -111,11 +111,24 @@ class _BrowserFetcher:
         page = None
         try:
             page = self._ctx.new_page()
-            resp = page.goto(url, wait_until="domcontentloaded", timeout=_BROWSER_TIMEOUT_MS)
+            page.goto(url, wait_until="domcontentloaded", timeout=_BROWSER_TIMEOUT_MS)
             page.wait_for_timeout(settle_ms)
-            if resp and resp.status == 200:
-                return page.content()
-            return None
+
+            def _usable(h: str) -> bool:
+                low = h.lower()
+                return ("<html" in low and len(h) > 3000
+                        and not any(s in low for s in ("just a moment", "attention required",
+                                                       "verify you are human",
+                                                       "enable javascript and cookies")))
+            # Return the rendered page if it genuinely loaded — even when the initial
+            # response was a Cloudflare 403 challenge that JS then resolved. If it's
+            # still showing an interstitial, give the JS challenge one longer chance.
+            html = page.content()
+            if _usable(html):
+                return html
+            page.wait_for_timeout(6000)
+            html = page.content()
+            return html if _usable(html) else None
         except Exception:
             return None
         finally:

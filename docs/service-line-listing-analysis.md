@@ -221,6 +221,30 @@ eyeball: (a) **precision** — no nav junk (Careers/Billing) in the list;
 are present; (c) **URL validity** — landing URLs resolve same-domain. Tune hub
 hints + the extraction prompt until all three pass on the sample.
 
+### Implementation notes (as built)
+- `perception/service_line_discovery.py` + `ServiceLine`/`ServiceLineSet` models.
+- **All hub fetches are browser-rendered** (`_BrowserFetcher.fetch_rendered_html`),
+  not raw HTTP — most system sites are SPAs whose services list is client-rendered,
+  so the httpx shell was empty. `fetch_rendered_html` now also returns a page that
+  genuinely loaded even if the initial response was a Cloudflare 403 challenge that
+  JS resolved (with one longer retry), and rejects interstitials.
+- **Word-boundary alias matching** (compiled regex) — fixes short-alias false
+  positives (`ent` in "urgent", `eye` in "eyewear").
+- **Hub ranking** prefers the shallow services *index* over deep condition pages
+  (path-depth bonus + exact-basename bonus), so extraction sees the full list.
+- Runtime ~70–90s/system (≤5 browser renders + 1–2 LLM calls); acceptable per the
+  longer-runtime decision, and streams progress.
+
+### Acceptance results (2026-09-07)
+- **Atrium Health:** 21 service lines, high precision (no junk), all majors present,
+  URLs on ~19/21. ✅
+- **Novant Health (SPA):** 23 lines, clean, all majors, URLs on all. ✅
+- **USA Health:** `coverage=none` — its Cloudflare challenge intermittently serves an
+  interstitial the headless browser doesn't clear (probabilistic; the same site
+  cleared earlier in testing). Handled honestly (disclosed, never fabricated). Known
+  limitation for hard-Cloudflare sites; could be hardened later (retry/backoff) if it
+  proves common.
+
 ### Open decisions for Phase A
 - Taxonomy is a fixed code constant for v1 (not admin-editable) — OK?
 - `max_hubs` bound (default 4) and per-hub link cap — acceptable?

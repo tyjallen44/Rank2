@@ -364,3 +364,22 @@ class NetworkResult(BaseModel):
     pdf_path: Optional[str] = None
     teaser_pdf_path: Optional[str] = None
     entity_type: str = "hospital_network"
+
+
+class ServiceLine(BaseModel):
+    """A clinical service line offered by a health system (Phase A of the
+    service-line listing analysis). `raw_name` is preserved as shown on their
+    site; `canonical_key` normalizes it for cross-system benchmarking."""
+    raw_name: str
+    canonical_key: str                       # taxonomy key, or "other"
+    canonical_label: str
+    landing_url: Optional[str] = None        # validated, same-domain
+    source_url: str = ""                     # hub page it was found on
+    confidence: str = "medium"               # high (alias) | medium (llm) | low
+
+
+class ServiceLineSet(BaseModel):
+    system_name: str
+    lines: list[ServiceLine] = Field(default_factory=list)
+    hubs_crawled: list[str] = Field(default_factory=list)
+    coverage: str = "full"                   # full | partial | none
