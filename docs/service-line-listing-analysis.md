@@ -115,6 +115,118 @@ never guessed.
 - Location-sample selection + caps (representativeness vs. cost).
 - Runtime on large systems — bounded via caps + progress UX.
 
+## Phase A — Implementation spec (service-line discovery + normalization)
+
+**Goal:** from a system name + website, produce a normalized, deduped list of the
+service lines it offers, each with a landing URL — reliable enough for Phases B–D
+to build on. Standalone and independently verifiable.
+
+### Module & API
+New `perception/service_line_discovery.py`:
+```
+discover_service_lines(system_name, urls, hq_location="", on_event=None,
+                       max_hubs=4, cache=True) -> ServiceLineSet
+```
+- `urls`: confirmed system website URL(s) (same source the content flow already uses).
+- `on_event`: progress hook (same signature as `analyze_content`'s).
+- Never raises; returns whatever it could enumerate + a `coverage` flag.
+
+### Data model (`perception/models.py`)
+```
+class ServiceLine(BaseModel):
+    raw_name: str                 # exactly as shown on their site
+    canonical_key: str            # "cardiology"  (taxonomy key, or "other")
+    canonical_label: str          # "Cardiology / Heart & Vascular"
+    landing_url: Optional[str]    # their service-line page (validated, same-domain)
+    source_url: str               # hub page it was found on
+    confidence: str               # high (alias match) | medium (llm) | low
+
+class ServiceLineSet(BaseModel):
+    system_name: str
+    lines: list[ServiceLine]
+    hubs_crawled: list[str]
+    coverage: str                 # full | partial | none  (partial => disclose in report)
+```
+
+### Algorithm
+1. **Fetch homepage** via the existing crawler (`_fetch` + `_BrowserFetcher`
+   fallback — reuse `content_analyzer`, don't re-implement).
+2. **Locate service hubs (A1).** From homepage links, keep same-domain hrefs/anchor
+   text matching service-hub hints (bounded to `max_hubs`):
+   `services, specialties, specialty, centers, center, institute(s), conditions,
+    treatments, care, areas-of-care, medical-services, health-services,
+    centers-of-excellence, find-care, our-services, clinical-services`.
+3. **Extract candidates (A2).** For each hub page: Playwright-render → `inner_text` +
+   link list (anchor text + same-domain href). Feed to Claude via a
+   `submit_service_lines` tool (mirrors `network_analyzer._load_hospital_roster`)
+   returning `[{name, url}]`. Claude filters clinical service lines from nav noise
+   (About/Careers/Billing/Locations). **Validate** each returned `url` against the
+   actually-crawled links so landing URLs are real, not hallucinated.
+4. **Normalize (A3).** For each raw name: (a) deterministic alias match against
+   `_CANONICAL_SERVICE_LINES` (token/substring, high precision) → confidence=high;
+   (b) unmatched → one batched Claude call mapping raw names to the nearest key or
+   `other` → confidence=medium. Preserve `raw_name` (we show their name, benchmark
+   by key).
+5. **Dedupe** by `canonical_key` (merge multiple raw names to one line, keep the
+   best landing URL); return `ServiceLineSet`. Cache per normalized system name
+   (~14–30 days).
+
+### Canonical taxonomy (`_CANONICAL_SERVICE_LINES`, v1 ~28 keys)
+key → label → representative aliases:
+- cardiology → Cardiology / Heart & Vascular → heart, cardiac, cardiovascular, vascular, sanger heart
+- orthopedics → Orthopedics → ortho, bone & joint, musculoskeletal, spine, joint replacement, sports medicine
+- oncology → Cancer / Oncology → cancer, hematology, tumor, radiation oncology
+- neuroscience → Neurology & Neurosurgery → neuro, brain & spine, stroke, neurosurgery
+- womens_health → Women's Health → ob/gyn, obstetrics, gynecology, maternity, women's, midwifery
+- pediatrics → Pediatrics → children's, peds, pediatric
+- primary_care → Primary Care → family medicine, internal medicine, general practice
+- gastroenterology → Gastroenterology → gi, digestive, digestive health
+- urology → Urology → urologic
+- pulmonology → Pulmonology → lung, respiratory, pulmonary
+- nephrology → Nephrology → kidney, renal
+- endocrinology → Endocrinology → diabetes, hormone, thyroid
+- ent → ENT / Otolaryngology → ear nose throat, otolaryngology, head & neck
+- ophthalmology → Ophthalmology → eye, vision
+- dermatology → Dermatology → skin
+- rheumatology → Rheumatology → arthritis
+- general_surgery → Surgery → surgical services, general surgery
+- transplant → Transplant → organ transplant
+- behavioral_health → Behavioral Health → psychiatry, mental health, behavioral
+- rehabilitation → Rehabilitation → rehab, physical therapy, pm&r, physiatry
+- emergency → Emergency & Trauma → er, emergency, trauma
+- urgent_care → Urgent Care → walk-in
+- imaging → Imaging / Radiology → radiology, diagnostic imaging
+- bariatrics → Bariatrics / Weight Loss → weight loss, metabolic surgery
+- pain_management → Pain Management → pain
+- wound_care → Wound Care → hyperbaric
+- infectious_disease → Infectious Disease → id
+- sleep_medicine → Sleep Medicine → sleep
+(+ `other` catch-all; list is a curated code constant for v1, revisit later.)
+
+### LLM tool schema (extraction)
+`submit_service_lines(lines: [{name: str, url: str|null}])`, `tool_choice` forced,
+`max_tokens ~4096`. Batch per hub page. Normalization uses a second forced tool
+`map_service_lines(mappings: [{raw: str, key: str}])`.
+
+### Reliability / progress (per the cross-cutting rules)
+- Each fetch/LLM call timeout-bounded and fail-soft; a blocked hub → skip, set
+  `coverage=partial`. If no hub found and homepage yields nothing → `coverage=none`.
+- Progress events: "Locating services directory…", "Found N candidate service
+  lines", "Normalizing…", and the final count. Never hang; always return.
+
+### Acceptance test (before wiring into later phases)
+Run against ≥3 real systems (e.g. Atrium Health, Novant Health, USA Health) and
+eyeball: (a) **precision** — no nav junk (Careers/Billing) in the list;
+(b) **recall** — the major lines (cardiology/ortho/oncology/neuro/women's/primary)
+are present; (c) **URL validity** — landing URLs resolve same-domain. Tune hub
+hints + the extraction prompt until all three pass on the sample.
+
+### Open decisions for Phase A
+- Taxonomy is a fixed code constant for v1 (not admin-editable) — OK?
+- `max_hubs` bound (default 4) and per-hub link cap — acceptable?
+- Do we want a `min_confidence` filter, or surface `other`/low-confidence lines too
+  (flagged) so nothing is silently dropped?
+
 ## Retired
 - Per-physician roster discovery and per-physician directory lookups.
 - Org-level consumer-directory *findings* (dropped in 2a as unreliable). Kept
