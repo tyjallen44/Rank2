@@ -164,6 +164,7 @@ def analyze_network(
     on_event: Optional[Callable] = None,
     ignore_cache: bool = False,
     teaser: bool = False,
+    content_summary: bool = False,
 ) -> NetworkResult:
     """Run a Network AI Visibility analysis for a multi-state healthcare network.
 
@@ -340,6 +341,46 @@ def analyze_network(
         facilities=facility_objects,
     )
 
+    # ── Lightweight content summary (opt-in) ─────────────────────────────────
+    # Website (schema/llms.txt) + Wikidata + Wikipedia + grouped reputation — no
+    # service-line audit, no drafting. Fail-soft: never blocks the report.
+    content_findings = None
+    if content_summary:
+        try:
+            emit({"type": "phase", "name": "content",
+                  "text": "Checking system website, Wikidata, Wikipedia, and reputation"})
+            from .content_analyzer import analyze_content
+            from .db import save_content_findings, _norm_entity_name
+            city, state = ("", "")
+            if "," in (hq_location or ""):
+                city, state = [p.strip() for p in hq_location.split(",", 1)]
+            else:
+                city = hq_location or ""
+            facs = result.facilities or []
+            locs = [{"name": f.name, "google_rating": f.google_rating,
+                     "google_review_count": f.google_review_count,
+                     "address": ", ".join([p for p in [f.city, f.state] if p])}
+                    for f in facs if f.google_rating is not None]
+            rated = [f.google_rating for f in facs if f.google_rating is not None]
+            rr = (f"{min(rated):.1f}–{max(rated):.1f}★ across {len(rated)} facilities"
+                  if rated else "")
+            rep = {"locations": locs,
+                   "footprint": {"rating_range": rr,
+                                 "consistency": "fragmented, multi-listing" if len(facs) > 1 else ""},
+                   "aggregate_rating": None, "aggregate_count": None}
+            urls = [u for u in [source_url or result.source_url] if u]
+            content_findings = analyze_content(network_name, urls, city, state,
+                                               entity_kind="hospital", reputation=rep, on_event=emit)
+            content_findings.run_id = result.run_id
+            result.content_findings_json = content_findings.model_dump_json()
+            save_content_findings(result.run_id, _norm_entity_name(network_name),
+                                  content_findings.source_snapshot,
+                                  [f.model_dump() for f in content_findings.findings],
+                                  content_findings.status)
+        except Exception as _ce:
+            emit({"type": "text", "text": f"\n(content summary skipped: {type(_ce).__name__})"})
+            content_findings = None
+
     # ── Phase: pdf ───────────────────────────────────────────────────────────
     emit({"type": "phase", "name": "pdf",
           "text": "Rendering Hospital Network PDF"})
@@ -352,7 +393,7 @@ def analyze_network(
         _ts = datetime.utcnow().strftime("%y%m%d-%H%M")
         pdf_filename = titlecase_filename(f"{slug}-hospital-network-{_ts}") + ".pdf"
         pdf_path = output_dir / pdf_filename
-        render_network_pdf(result, str(pdf_path), brand=brand)
+        render_network_pdf(result, str(pdf_path), brand=brand, findings=content_findings)
         result.pdf_path = str(pdf_path)
         if teaser:
             teaser_filename = titlecase_filename(f"{slug}-hospital-network-teaser-{_ts}") + ".pdf"

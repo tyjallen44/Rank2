@@ -365,6 +365,7 @@ class NetworkResult(BaseModel):
     pdf_path: Optional[str] = None
     teaser_pdf_path: Optional[str] = None
     entity_type: str = "hospital_network"
+    content_findings_json: Optional[str] = None  # lightweight content summary (opt-in), travels with the result
 
 
 class ServiceLine(BaseModel):

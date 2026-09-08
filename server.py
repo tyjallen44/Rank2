@@ -1113,6 +1113,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             on_event=emit,
             ignore_cache=ignore_cache,
             teaser=teaser,
+            content_summary=True,   # standard report includes the content summary + CTA
         )
         job["status"] = "done"
         job["result"] = {
@@ -2480,6 +2481,7 @@ def _run_public_report_job(req_id: str, over_cap: bool = False) -> None:
             facilities=disc.get("facilities", []),
             facility_type="hospital",
             brand="original",
+            content_summary=True,   # public report includes the content summary + CTA
         )
         token = _secrets.token_urlsafe(24)
         update_public_report_request(req_id, status="sent", run_id=result.run_id,
@@ -2526,14 +2528,20 @@ async def public_report_download(token: str):
     if not pdf_path or not pdf_path.exists():
         if not row[1]:
             raise HTTPException(404, "Report file is no longer available.")
-        from perception.models import NetworkResult
+        from perception.models import NetworkResult, ContentFindings
         from perception.network_pdf import render_network_pdf
         result = NetworkResult.model_validate_json(row[1])
+        _findings = None
+        if result.content_findings_json:
+            try:
+                _findings = ContentFindings.model_validate_json(result.content_findings_json)
+            except Exception:
+                _findings = None
         out_dir = Path("reports"); out_dir.mkdir(parents=True, exist_ok=True)
         slug = _re.sub(r"[^a-z0-9]+", "-", (result.network_name or "network").lower()).strip("-")
         pdf_path = out_dir / f"{slug}-network-pulse-{_dt.utcnow().strftime('%y%m%d-%H%M')}.pdf"
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, render_network_pdf, result, str(pdf_path))
+        await loop.run_in_executor(None, lambda: render_network_pdf(result, str(pdf_path), findings=_findings))
         with get_connection() as con:
             con.execute("UPDATE network_runs SET pdf_path = ? WHERE run_id = ?",
                         [str(pdf_path), rec["run_id"]])
