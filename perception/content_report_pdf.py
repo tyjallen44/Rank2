@@ -24,7 +24,8 @@ _STATUS = {"verified": ("#2e9e5b", "Verified"),
            "not_assessed": ("#9aa8ac", "Not assessed")}
 _PLATFORM = {"structured_data": "Structured data (schema.org)", "website": "Website",
              "llms_txt": "llms.txt", "wikidata": "Wikidata", "wikipedia": "Wikipedia",
-             "reputation": "Reputation & Listings", "directory": "Provider Directories"}
+             "reputation": "Reputation & Listings", "directory": "Provider Directories",
+             "service_line": "Service Lines"}
 _REMEDIATION = {"schema_markup": "Add schema.org markup", "website_fix": "Website fix",
                 "wikidata_edit": "Wikidata edit (we can draft, you publish)",
                 "talk_page_request": "Wikipedia talk-page request",
@@ -102,10 +103,12 @@ def _logo_html() -> str:
 
 
 def render_content_report_pdf(entity_name: str, location: str, findings, pdf_path: str,
-                              report_title: str = "") -> None:
-    """Render Report 2 (detailed content findings) to a branded PDF."""
+                              report_title: str = "", service_line=None) -> None:
+    """Render Report 2 (detailed content findings) to a branded PDF. `service_line`,
+    when given, is (ServiceLineSummary, [ServiceLineScorecard]) and adds the
+    Service-Line Listing Management section (Report 2 only)."""
     from playwright.sync_api import sync_playwright
-    html_str = _build_html(entity_name, location, findings, report_title)
+    html_str = _build_html(entity_name, location, findings, report_title, service_line)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -162,7 +165,61 @@ def _finding_block(f: dict) -> str:
     </div>"""
 
 
-def _build_html(entity_name: str, location: str, findings, report_title: str) -> str:
+_SL_STATUS_COLOR = {"managed": "#2e9e5b", "partial": "#e09b2a",
+                    "unmanaged": "#d94f4f", "invisible": "#8a1f1f"}
+
+
+def _grade_color(v) -> str:
+    if v is None:
+        return "#9aa8ac"
+    if v >= 75:
+        return "#2e9e5b"
+    if v >= 55:
+        return "#e09b2a"
+    return "#d94f4f"
+
+
+def _sl_cell(v) -> str:
+    txt = "&mdash;" if v is None else str(v)
+    return (f'<td style="text-align:center;font-weight:700;padding:6px 8px;'
+            f'border-bottom:1px solid #eef4f2;color:{_grade_color(v)}">{txt}</td>')
+
+
+def _service_line_section(summary, scorecards) -> str:
+    """Report 2 'Service-Line Listing Management' section: summary box + scorecard table."""
+    if not scorecards:
+        return ""
+    avg = f" &middot; avg patient-attraction score <b>{summary.avg_overall}</b>" if summary.avg_overall is not None else ""
+    counts = (f'{summary.managed} managed &middot; {summary.partial} partial &middot; '
+              f'{summary.unmanaged} unmanaged &middot; {summary.invisible} invisible')
+    cross = "".join(f"<li>{_e(c)}</li>" for c in (summary.cross_cutting or []))
+    cross_html = f'<ul class="slcross">{cross}</ul>' if cross else ""
+    note = f'<div class="slnote">{_e(summary.sampling_note)}</div>' if summary.sampling_note else ""
+
+    rows = ""
+    for c in scorecards:
+        dims = {d.key: d.score for d in c.dimensions}
+        sc = _SL_STATUS_COLOR.get(c.management_status, "#5a6e72")
+        rows += (
+            f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eef4f2;font-size:9pt">{_e(c.canonical_label)}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eef4f2;font-size:8pt;font-weight:700;'
+            f'text-transform:uppercase;letter-spacing:.03em;color:{sc}">{_e(c.management_status)}</td>'
+            f'{_sl_cell(c.overall_score)}{_sl_cell(dims.get("findability"))}{_sl_cell(dims.get("completeness"))}'
+            f'{_sl_cell(dims.get("reputation"))}{_sl_cell(dims.get("content"))}</tr>')
+
+    return f"""<div class="slwrap">
+      <div class="slh">Service-Line Listing Management</div>
+      <div class="slbox"><b>{summary.total_lines} service line{'s' if summary.total_lines != 1 else ''} analyzed</b> &mdash; {counts}{avg}.{note}{cross_html}</div>
+      <table class="sltbl">
+        <thead><tr><th style="text-align:left">Service line</th><th style="text-align:left">Status</th>
+        <th>Overall</th><th>Find</th><th>Complete</th><th>Reput</th><th>Content</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </div>"""
+
+
+def _build_html(entity_name: str, location: str, findings, report_title: str,
+                service_line=None) -> str:
     items = list(getattr(findings, "findings", []) or [])
     items = [f.model_dump() if hasattr(f, "model_dump") else f for f in items]
     snap = getattr(findings, "source_snapshot", {}) or {}
@@ -183,6 +240,10 @@ def _build_html(entity_name: str, location: str, findings, report_title: str) ->
 
     urls = ", ".join(snap.get("website_urls", []) or []) or "&mdash;"
     pages = snap.get("pages_crawled", 0)
+    sl_section = ""
+    if service_line:
+        _summary, _cards = service_line
+        sl_section = _service_line_section(_summary, _cards)
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
       * {{ box-sizing:border-box; margin:0; padding:0; }}
@@ -214,6 +275,15 @@ def _build_html(entity_name: str, location: str, findings, report_title: str) ->
       .method {{ margin:12px 44px 24px; padding:12px 16px; background:{_PALE}; border-radius:8px;
                  font-size:9pt; color:{_MUTE}; line-height:1.55; }}
       .method b {{ color:{_TEAL}; }}
+      .slwrap {{ padding:6px 44px 8px; }}
+      .slh {{ font-size:13pt; font-weight:700; color:{_TEAL}; margin:10px 0 8px; }}
+      .slbox {{ background:#f5faf8; border:1px solid #d7e7e2; border-radius:8px;
+                padding:12px 16px; font-size:9.5pt; color:{_INK}; line-height:1.5; }}
+      .slnote {{ font-size:8.5pt; color:{_MUTE}; margin-top:4px; }}
+      .slcross {{ margin:8px 0 0 18px; }} .slcross li {{ font-size:9pt; color:{_INK}; line-height:1.5; }}
+      .sltbl {{ width:100%; border-collapse:collapse; margin-top:12px; }}
+      .sltbl th {{ background:#eef6f3; font-size:7.5pt; font-weight:700; text-transform:uppercase;
+                   letter-spacing:.04em; color:{_MUTE}; padding:7px 8px; text-align:center; }}
     </style></head><body>
       <div class="band">
         <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI VISIBILITY<br>REPORT</div></div>
@@ -228,6 +298,7 @@ def _build_html(entity_name: str, location: str, findings, report_title: str) ->
         assistants read are missing, outdated, or inconsistent — with the evidence behind it and the
         recommended remediation. Items appear in the same order and with the same IDs as the summary in
         your Deep Diagnostic.</div>
+      {sl_section}
       <div class="wrap">{blocks}</div>
       <div class="method"><b>How to read this.</b> Findings are drawn from live checks of your website
         (schema.org structured data, llms.txt, AI-crawler access), Wikidata, and Wikipedia — not estimates.
