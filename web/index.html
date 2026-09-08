@@ -2238,7 +2238,10 @@ input[type="url"]::placeholder, textarea::placeholder {
           <button class="admin-tab" id="atab-requests" onclick="switchAdminTab('requests')">Access Requests</button>
           <button class="admin-tab" id="atab-integrations" onclick="switchAdminTab('integrations')">Integrations</button>
         </div>
-        <button class="btn" id="admin-test-email-btn" onclick="adminTestEmail()" style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#9993; Test Email</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn" id="admin-clear-sl-btn" onclick="adminClearServiceLineCache()" title="Clear all cached service-line audits so the next network run recomputes fresh." style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#128465; Clear Service-Line Cache</button>
+          <button class="btn" id="admin-test-email-btn" onclick="adminTestEmail()" style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#9993; Test Email</button>
+        </div>
       </div>
       <div id="admin-email-test-result" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:6px;font-size:13px"></div>
 
@@ -7628,6 +7631,26 @@ function _drawZipMap(prefix, mapId, infoId, lat, lon, centerZip, radiusMiles, ra
 }
 
 // ── Admin page ────────────────────────────────────────────────────────────
+
+async function adminClearServiceLineCache() {
+  const el = document.getElementById('admin-email-test-result');
+  el.style.display = ''; el.style.background = '#f0f8ff'; el.style.border = '1px solid #b0d4f1'; el.style.color = '#0F4146';
+  el.textContent = 'Clearing service-line cache…';
+  try {
+    const r = await api('/api/admin/service-line-cache/clear', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const d = await r.json();
+    if (!r.ok) {
+      el.style.background = '#fdecea'; el.style.border = '1px solid #f5c6cb';
+      el.innerHTML = `<strong>✗ Error ${r.status}:</strong> ${d.detail || JSON.stringify(d)}`;
+    } else {
+      el.style.background = '#e8f5e9'; el.style.border = '1px solid #a5d6a7';
+      el.innerHTML = `<strong>✓ Cleared ${d.cleared} cached service-line audit(s).</strong> The next network audit will recompute fresh.`;
+    }
+  } catch (e) {
+    el.style.background = '#fdecea'; el.style.border = '1px solid #f5c6cb';
+    el.innerHTML = `<strong>✗ Failed:</strong> ${e.message}`;
+  }
+}
 
 async function adminTestEmail() {
   const el = document.getElementById('admin-email-test-result');

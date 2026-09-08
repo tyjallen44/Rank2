@@ -1482,6 +1482,20 @@ def get_recent_service_line_analysis(system_norm: str, days: int = 21) -> Option
     return row[0] if row else None
 
 
+def clear_service_line_cache(system_norm: Optional[str] = None) -> int:
+    """Delete cached service-line analyses (all, or one system). Returns count cleared."""
+    con = get_connection()
+    if system_norm:
+        n = con.execute("SELECT COUNT(*) FROM service_line_analysis WHERE system_norm = ?",
+                        [system_norm]).fetchone()[0]
+        con.execute("DELETE FROM service_line_analysis WHERE system_norm = ?", [system_norm])
+    else:
+        n = con.execute("SELECT COUNT(*) FROM service_line_analysis").fetchone()[0]
+        con.execute("DELETE FROM service_line_analysis")
+    con.close()
+    return int(n or 0)
+
+
 def get_content_analysis_run(ca_id: str) -> Optional[dict]:
     import json
     con = get_connection()

@@ -1427,6 +1427,14 @@ async def network_bulk_delete(bulk_id: str, _: dict = Depends(require_admin)):
     return {"ok": True}
 
 
+@app.post("/api/admin/service-line-cache/clear")
+async def clear_service_line_cache_endpoint(_: dict = Depends(require_admin)):
+    """Admin: clear the whole service-line audit cache (handy while iterating)."""
+    from perception.db import init_db, clear_service_line_cache
+    init_db()
+    return {"cleared": clear_service_line_cache()}
+
+
 @app.get("/api/network/bulk/{bulk_id}/csv")
 async def network_bulk_csv(bulk_id: str, _: str = Depends(require_auth)):
     safe = "".join(ch for ch in bulk_id if ch.isalnum())
