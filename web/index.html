@@ -1902,8 +1902,12 @@ input[type="url"]::placeholder, textarea::placeholder {
             <input type="checkbox" id="nca-service-line">
             <span class="agg-label">Include deep service-line listing audit <span style="font-size:11px;color:#888">(adds several minutes)</span></span>
           </label>
+          <label class="aggregate-toggle mt10" id="nca-autodraft-label" title="When the analysis finishes, automatically generate the full content plan (drafted, publish-ready remediation) so you land directly on the finished detailed report.">
+            <input type="checkbox" id="nca-autodraft" checked>
+            <span class="agg-label">Also generate the full content plan (drafts) automatically</span>
+          </label>
           <div id="nca-search-err" class="err hidden mt8"></div>
-          <button class="btn btn-primary mt16" id="nca-run-btn" onclick="ncaRun()">Run Content Analysis →</button>
+          <button class="btn btn-primary mt16" id="nca-run-btn" onclick="ncaRun()">Run Detailed Content Analysis →</button>
         </div>
 
         <div id="nca-progress" class="hidden mt16">
@@ -6411,7 +6415,15 @@ let _ncaUrls = [];
 function ncaOpen() {
   ['np-mode-toggle', 'np-step1', 'np-bulk'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.add('hidden'); });
   document.getElementById('nca-panel').classList.remove('hidden');
-  if (!_ncaUrls.length) { _ncaUrls = ['']; ncaRenderUrls(); }
+  // Pre-fill from the Hospital Network form so you don't retype what you just ran.
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  const npName = v('np-name'), npHq = v('np-hq'), npUrl = v('np-url');
+  const nameEl = document.getElementById('nca-name'), hqEl = document.getElementById('nca-hq');
+  if (npName && nameEl && !nameEl.value.trim()) nameEl.value = npName;
+  if (npHq && hqEl && !hqEl.value.trim()) hqEl.value = npHq;
+  if (npUrl && (!_ncaUrls.some(u => (u || '').trim()))) _ncaUrls = [npUrl];
+  if (!_ncaUrls.length) _ncaUrls = [''];
+  ncaRenderUrls();
 }
 function ncaClose() {
   document.getElementById('nca-panel').classList.add('hidden');
@@ -6441,6 +6453,7 @@ async function ncaRun() {
   const urls = _ncaUrls.map(u => (u || '').trim()).filter(Boolean);
   const override = !!(document.getElementById('nca-override') || {}).checked;
   const serviceLine = !!(document.getElementById('nca-service-line') || {}).checked;
+  const autodraft = !!(document.getElementById('nca-autodraft') || {}).checked;
   const btn = document.getElementById('nca-run-btn'); btn.disabled = true; btn.textContent = 'Starting…';
   const head = document.getElementById('nca-progress-head'), log = document.getElementById('nca-progress-log');
   head.textContent = 'Analyzing…'; log.innerHTML = '';
@@ -6459,7 +6472,10 @@ async function ncaRun() {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'phase') head.textContent = msg.text || 'Analyzing…';
     else if (msg.type === 'text') { log.appendChild(document.createTextNode(msg.text)); log.scrollTop = log.scrollHeight; }
-    else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Content Analysis →'; _completedPages.add('network'); caLoadResults(caId, 'nca'); }
+    else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Detailed Content Analysis →'; _completedPages.add('network');
+      if (autodraft) { caLoadResults(caId, 'nca').then(() => caDraft(caId, 'nca')); }
+      else { caLoadResults(caId, 'nca'); }
+    }
     else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<br><span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
   };
   es.onerror = () => es.close();
