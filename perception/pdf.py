@@ -197,8 +197,9 @@ def _content_keys_section(findings) -> str:
         '<div style="font-size:10pt;font-weight:700;color:#0F4146;margin-bottom:3px">'
         'Request your Content Improvement Plan</div>'
         '<div style="font-size:9pt;color:#3a5a60;line-height:1.5">A detailed, prioritized '
-        'remediation roadmap for every item above — including publication-ready content '
-        'where platform policies allow.</div></div>'
+        'remediation roadmap for every item above — publication-ready content where it applies '
+        '(schema, llms.txt, Wikidata), plus operational action plans for the rest '
+        '(reputation, listings).</div></div>'
     )
 
     return (
