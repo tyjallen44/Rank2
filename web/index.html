@@ -1895,9 +1895,15 @@ input[type="url"]::placeholder, textarea::placeholder {
             <label class="fl">Network Name</label>
             <input id="nca-name" class="fi" type="text" placeholder="e.g. Atrium Health">
           </div>
-          <div class="fg" style="margin-bottom:14px">
-            <label class="fl">Headquarters (City, State)</label>
-            <input id="nca-hq" class="fi" type="text" placeholder="Charlotte, NC">
+          <div style="display:grid;grid-template-columns:1fr 120px;gap:14px;margin-bottom:14px">
+            <div class="fg" style="margin:0">
+              <label class="fl">Headquarters City</label>
+              <input id="nca-city" class="fi" type="text" placeholder="Charlotte">
+            </div>
+            <div class="fg" style="margin:0">
+              <label class="fl">State</label>
+              <input id="nca-state" class="fi" type="text" placeholder="NC" maxlength="2">
+            </div>
           </div>
           <div class="fg" style="margin-bottom:6px">
             <label class="fl">System website URL(s)</label>
@@ -6451,6 +6457,16 @@ function launchDetailedCA() {
   ncaOpen();
 }
 
+function _ncaHq() {
+  const c = (document.getElementById('nca-city')?.value || '').trim();
+  const s = (document.getElementById('nca-state')?.value || '').trim();
+  return [c, s].filter(Boolean).join(', ');
+}
+function _splitHq(hq) {
+  const p = (hq || '').split(',');
+  return { city: (p[0] || '').trim(), state: (p[1] || '').trim() };
+}
+
 function ncaOpen() {
   ['np-mode-toggle', 'np-step1', 'np-bulk'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.add('hidden'); });
   document.getElementById('nca-panel').classList.remove('hidden');
@@ -6459,9 +6475,12 @@ function ncaOpen() {
   const v = id => (document.getElementById(id)?.value || '').trim();
   const src = window._lastNetworkCA || {};
   const npName = (src.name || v('np-name')), npHq = (src.hq || _npHq()), npUrl = (src.url || v('np-url'));
-  const nameEl = document.getElementById('nca-name'), hqEl = document.getElementById('nca-hq');
+  const { city, state } = _splitHq(npHq);
+  const nameEl = document.getElementById('nca-name');
+  const cityEl = document.getElementById('nca-city'), stateEl = document.getElementById('nca-state');
   if (npName && nameEl && !nameEl.value.trim()) nameEl.value = npName;
-  if (npHq && hqEl && !hqEl.value.trim()) hqEl.value = npHq;
+  if (city && cityEl && !cityEl.value.trim()) cityEl.value = city;
+  if (state && stateEl && !stateEl.value.trim()) stateEl.value = state;
   if (npUrl && (!_ncaUrls.some(u => (u || '').trim()))) _ncaUrls = [npUrl];
   if (!_ncaUrls.length) _ncaUrls = [''];
   ncaRenderUrls();
@@ -6489,7 +6508,7 @@ function ncaRemoveUrl(i) { _ncaUrls.splice(i, 1); ncaRenderUrls(); }
 async function ncaRun() {
   const err = document.getElementById('nca-search-err'); err.classList.add('hidden');
   const name = document.getElementById('nca-name').value.trim();
-  const hq = document.getElementById('nca-hq').value.trim();
+  const hq = _ncaHq();
   if (!name) { showErr(err, 'Enter a network name.'); return; }
   const urls = _ncaUrls.map(u => (u || '').trim()).filter(Boolean);
   const override = !!(document.getElementById('nca-override') || {}).checked;
