@@ -550,7 +550,28 @@ def _check_reputation(rep: dict) -> list:
             continue
         if r < 4.0 or (c is not None and c < 25):
             weak.append(l)
-    for l in weak[:8]:
+    weak_total = len(weak)
+    weak = weak[:12]                             # table shows at most 12 rows
+    if len(weak) >= 2:
+        # Group multiple weak locations into ONE finding — one review-generation
+        # program applies to all of them, so it's drafted + printed once with a
+        # per-facility table (meta.rows) instead of a near-identical page each.
+        rows = [{"name": l.get("name") or "A location", "location": l.get("address") or "",
+                 "rating": l.get("google_rating"),
+                 "reviews": l.get("google_review_count") or 0} for l in weak]
+        ratings = [x["rating"] for x in rows if x["rating"] is not None]
+        rng = f" ratings {min(ratings):.1f}–{max(ratings):.1f}★." if ratings else ""
+        cap = f" Showing the {len(rows)} lowest-rated." if weak_total > len(rows) else ""
+        findings.append(dict(
+            platform="reputation", category="risk", severity="high", status="verified",
+            teaser_summary=f"{weak_total} locations have a weak Google reputation — patients and AI both weight this.",
+            current_state=f"{weak_total} facilities are below target;{rng}{cap} See the per-location table.",
+            expected_state="4.5★+ with steady, recent review volume at each location.",
+            remediation_type="reputation_program",
+            evidence=[r["location"] or r["name"] for r in rows],
+            meta={"group": "reputation_program", "rows": rows}))
+    elif len(weak) == 1:
+        l = weak[0]
         r = l.get("google_rating")
         c = l.get("google_review_count") or 0
         sev = "high" if (r is not None and r < 3.5) else "medium"

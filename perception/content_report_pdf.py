@@ -130,20 +130,47 @@ def render_content_report_pdf(entity_name: str, location: str, findings, pdf_pat
         browser.close()
 
 
+def _rating_color(r) -> str:
+    if r is None:
+        return _MUTE
+    if r < 3.5:
+        return "#d94f4f"
+    if r < 4.0:
+        return "#e09b2a"
+    return "#2e9e5b"
+
+
 def _finding_block(f: dict) -> str:
     sev = f.get("severity", "low")
     sc = _SEV.get(sev, "#7a9095")
     dot_c, dot_l = _STATUS.get(f.get("status", "verified"), ("#9aa8ac", f.get("status", "")))
-    ev = f.get("evidence") or []
-    ev_html = ""
-    if ev:
+    rows = (f.get("meta") or {}).get("rows") or []
+    if rows:
+        # Grouped finding (e.g. many weak-reputation locations): a per-location
+        # table replaces the evidence list, and the single drafted template below
+        # applies to every row — printed once, not once per location.
+        trs = "".join(
+            f'<tr><td style="padding:5px 8px;border-bottom:1px solid #eef4f2;font-size:9pt">{_e(r.get("name"))}</td>'
+            f'<td style="padding:5px 8px;border-bottom:1px solid #eef4f2;font-size:9pt;color:{_MUTE}">{_e(r.get("location")) or "&mdash;"}</td>'
+            f'<td style="padding:5px 8px;border-bottom:1px solid #eef4f2;text-align:center;font-weight:700;color:{_rating_color(r.get("rating"))}">'
+            f'{(str(r.get("rating")) + "&#9733;") if r.get("rating") is not None else "&mdash;"}</td>'
+            f'<td style="padding:5px 8px;border-bottom:1px solid #eef4f2;text-align:center;font-size:9pt">{r.get("reviews") or 0}</td></tr>'
+            for r in rows)
+        ev_html = (f'<div class="lbl">Locations ({len(rows)})</div>'
+                   f'<table class="rgtbl"><thead><tr><th style="text-align:left">Facility</th>'
+                   f'<th style="text-align:left">Location</th><th>Current</th><th>Reviews</th></tr></thead>'
+                   f'<tbody>{trs}</tbody></table>')
+    else:
+        ev = f.get("evidence") or []
         ev_html = ('<div class="lbl">Evidence</div><ul class="ev">'
-                   + "".join(f'<li>{_e(x)}</li>' for x in ev) + '</ul>')
+                   + "".join(f'<li>{_e(x)}</li>' for x in ev) + '</ul>') if ev else ""
     rem = _REMEDIATION.get(f.get("remediation_type", ""), f.get("remediation_type", ""))
     draft = f.get("draft_content")
     draft_html = ""
     if draft:
-        draft_html = (f'<div class="lbl">Drafted content (ready to publish)</div>'
+        _lbl = ("Drafted content — one template for all locations above (swap [FACILITY]/[CITY] per location)"
+                if rows else "Drafted content (ready to publish)")
+        draft_html = (f'<div class="lbl">{_lbl}</div>'
                       f'<pre class="draft">{_e(draft)}</pre>')
     return f"""
     <div class="finding">
@@ -284,6 +311,9 @@ def _build_html(entity_name: str, location: str, findings, report_title: str,
       .sltbl {{ width:100%; border-collapse:collapse; margin-top:12px; }}
       .sltbl th {{ background:#eef6f3; font-size:7.5pt; font-weight:700; text-transform:uppercase;
                    letter-spacing:.04em; color:{_MUTE}; padding:7px 8px; text-align:center; }}
+      .rgtbl {{ width:100%; border-collapse:collapse; margin:4px 0 6px; }}
+      .rgtbl th {{ background:#f0f6f7; font-size:7pt; font-weight:700; text-transform:uppercase;
+                   letter-spacing:.04em; color:{_MUTE}; padding:5px 8px; text-align:center; }}
     </style></head><body>
       <div class="band">
         <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI VISIBILITY<br>REPORT</div></div>
