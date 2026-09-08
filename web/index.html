@@ -7093,6 +7093,27 @@ function _fmtRunDate(run) {
   return run.generated_at || '—';
 }
 
+// Generic per-row Downloads dropdown, shared by every History section.
+//   uid   : unique id for this row
+//   files : [[label, url|null]]  (null url => plain info line)
+//   acts  : [[label, onclickJs]]
+function _dlMenu(uid, files, acts) {
+  files = files || []; acts = acts || [];
+  const nFiles = files.filter(f => f[1]).length;
+  if (!nFiles && !files.length && !acts.length) return `<span style="color:var(--muted);font-size:13px">—</span>`;
+  if (!files.length && !acts.length) return `<span style="color:var(--muted);font-size:13px">—</span>`;
+  const mid = 'dlm-' + uid;
+  const fileItems = files.map(([lbl, url]) => url
+    ? `<a class="dlm-item" href="${url}">⬇ ${lbl}</a>`
+    : `<div class="dlm-info">${lbl}</div>`).join('');
+  const sep = (files.length && acts.length) ? '<div class="dlm-sep"></div>' : '';
+  const actItems = acts.map(([lbl, fn]) => `<a class="dlm-item dlm-act" onclick="${fn};if(event){event.stopPropagation()}">${lbl}</a>`).join('');
+  return `<div class="dlm" id="${mid}">
+    <button class="btn btn-gold btn-sm" onclick="toggleDlm('${mid}',event)">⬇ Downloads${nFiles ? ` (${nFiles})` : ''} ▾</button>
+    <div class="dlm-pop hidden">${fileItems}${sep}${actItems}</div>
+  </div>`;
+}
+
 function _dlCell(run, caRuns) {
   const isNet = run.report_type === 'network' || run.entity_type === 'hospital_network';
   const tok = encodeURIComponent(_token);
@@ -7113,18 +7134,7 @@ function _dlCell(run, caRuns) {
     if (c.status === 'done' && !c.drafted) acts.push(['Generate Full Content Plan', `caDraftFromHistory('${c.id}', this)`]);
     if (c.status === 'done') acts.push(['Rebuild content report', `caRerender('${c.id}', this)`]);
   });
-  if (!files.length && !acts.length) return `<span style="color:var(--muted);font-size:13px">—</span>`;
-  const nFiles = files.filter(f => f[1]).length;
-  const mid = 'dlm-' + run.run_id;
-  const fileItems = files.map(([lbl, url]) => url
-    ? `<a class="dlm-item" href="${url}">⬇ ${lbl}</a>`
-    : `<div class="dlm-info">${lbl}</div>`).join('');
-  const sep = (files.length && acts.length) ? '<div class="dlm-sep"></div>' : '';
-  const actItems = acts.map(([lbl, fn]) => `<a class="dlm-item dlm-act" onclick="${fn};if(event){event.stopPropagation()}">${lbl}</a>`).join('');
-  return `<div class="dlm" id="${mid}">
-    <button class="btn btn-gold btn-sm" onclick="toggleDlm('${mid}',event)">⬇ Downloads${nFiles ? ` (${nFiles})` : ''} ▾</button>
-    <div class="dlm-pop hidden">${fileItems}${sep}${actItems}</div>
-  </div>`;
+  return _dlMenu(run.run_id, files, acts);
 }
 
 function toggleDlm(mid, ev) {
@@ -7170,12 +7180,10 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
              <span class="badge bg-muted" style="font-size:10px">Running</span>
              <button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 9px" onclick="evResume('${ev.id}')" title="Re-run any entities that never finished">↻ Resume</button>
            </div>`;
-      const csvBtn = ev.has_csv
-        ? `<button class="btn btn-gold btn-sm" onclick="evDlCsvById('${ev.id}')">⬇ CSV</button>`
-        : `<span style="color:var(--muted);font-size:12px">—</span>`;
-      const zipBtn = ev.has_zip
-        ? `<button class="btn btn-secondary btn-sm" onclick="evDlZipById('${ev.id}')">⬇ ZIP</button>`
-        : `<span style="color:var(--muted);font-size:12px">—</span>`;
+      const dlEv = _dlMenu(ev.id, [
+        ...(ev.has_csv ? [['Enriched CSV', `/api/event/${ev.id}/csv?token=${encodeURIComponent(_token)}`]] : []),
+        ...(ev.has_zip ? [['Report Bundle (ZIP)', `/api/event/${ev.id}/zip?token=${encodeURIComponent(_token)}`]] : []),
+      ]);
       const adminBtns = _role === 'admin' ? `
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="evStartEditMeta('${ev.id}')" style="font-size:11px;padding:3px 8px">Edit</button>
@@ -7189,7 +7197,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           </label>
           <button class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="evDeleteById('${ev.id}','${(ev.event_name||'').replace(/'/g,"\\'")}')">Delete</button>
         </div>` : '';
-      const EVCOLS = _role === 'admin' ? 9 : 8;
+      const EVCOLS = _role === 'admin' ? 8 : 7;
       const editRow = (_role === 'admin' && _evEditingId === ev.id) ? `
         <tr><td colspan="${EVCOLS}" style="background:#f0f7f7;padding:16px 20px;border-top:1px solid var(--pale)" onclick="event.stopPropagation()">
           <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
@@ -7214,8 +7222,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
         <td><span class="badge bg-muted">${type}</span></td>
         <td style="font-size:13px;color:var(--muted)">${count}</td>
         <td>${statusBadge}</td>
-        <td>${csvBtn}</td>
-        <td>${zipBtn}</td>
+        <td>${dlEv}</td>
         ${_role === 'admin' ? `<td>${adminBtns}</td>` : ''}
       </tr>${editRow}`;
     }).join('');
@@ -7253,7 +7260,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
             <table class="tbl">
               <thead><tr>
                 <th>Date</th><th>Event Name</th><th>Event Date</th><th>Type</th>
-                <th>Entities</th><th>Status</th><th>CSV</th><th>All Reports (ZIP)</th>
+                <th>Entities</th><th>Status</th><th>Downloads</th>
                 ${_role === 'admin' ? '<th></th>' : ''}
               </tr></thead>
               <tbody>${evRows}</tbody>
@@ -7279,13 +7286,12 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
                <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>${resumeBtn}</div>`
           : `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
                <span class="badge bg-muted" style="font-size:10px">Running</span>${resumeBtn}</div>`;
-      const csvBtn = b.status === 'done'
-        ? `<button class="btn btn-ghost btn-sm" onclick="window.location.href='/api/network/bulk/${b.id}/csv?token=${encodeURIComponent(_token)}'">⬇ CSV</button>`
-        : `<span style="color:var(--muted);font-size:13px">—</span>`;
+      const dlNb = _dlMenu(b.id, b.status === 'done'
+        ? [['Scores CSV', `/api/network/bulk/${b.id}/csv?token=${encodeURIComponent(_token)}`]] : []);
       const delCell = _role === 'admin'
         ? `<td><button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="nbDelete('${b.id}')">Delete</button></td>` : '';
       return `<tr><td>${date}</td><td>${b.label || ''}</td><td>${b.total}</td>
-        <td>${result}</td><td>${statusBadge}</td><td>${csvBtn}</td>${delCell}</tr>`;
+        <td>${result}</td><td>${statusBadge}</td><td>${dlNb}</td>${delCell}</tr>`;
     }).join('');
     const nbCount = bulkRuns.length;
     nbHtml = `
@@ -7305,7 +7311,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
-              <thead><tr><th>Date</th><th>List</th><th>Systems</th><th>Result</th><th>Status</th><th>CSV</th>${_role === 'admin' ? '<th></th>' : ''}</tr></thead>
+              <thead><tr><th>Date</th><th>List</th><th>Systems</th><th>Result</th><th>Status</th><th>Downloads</th>${_role === 'admin' ? '<th></th>' : ''}</tr></thead>
               <tbody>${nbRows}</tbody>
             </table>
           </div>
@@ -7327,15 +7333,13 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
         : s.status === 'failed'
           ? `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>`
           : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
-      const pdfBtn = s.has_pdf
-        ? `<button class="btn btn-gold btn-sm" onclick="window.location.href='/api/student-health/${s.id}/pdf?token=${encodeURIComponent(_token)}'">⬇ PDF</button>`
-        : `<span style="color:var(--muted);font-size:13px">—</span>`;
-      const csvBtn = s.has_csv
-        ? `<button class="btn btn-ghost btn-sm" onclick="window.location.href='/api/student-health/${s.id}/csv?token=${encodeURIComponent(_token)}'">⬇ CSV</button>`
-        : `<span style="color:var(--muted);font-size:13px">—</span>`;
+      const dlSh = _dlMenu(s.id, [
+        ...(s.has_pdf ? [['Ranked Report (PDF)', `/api/student-health/${s.id}/pdf?token=${encodeURIComponent(_token)}`]] : []),
+        ...(s.has_csv ? [['Scores CSV', `/api/student-health/${s.id}/csv?token=${encodeURIComponent(_token)}`]] : []),
+      ]);
       return `<tr><td>${date}</td><td style="font-weight:600">${_shEsc(s.group_label || '')}</td>
         <td><span class="badge bg-muted" style="font-size:10px">${mode}</span></td><td>${s.total}</td>
-        <td style="font-size:13px;color:var(--muted)">${result}</td><td>${statusBadge}</td><td>${pdfBtn}</td><td>${csvBtn}</td></tr>`;
+        <td style="font-size:13px;color:var(--muted)">${result}</td><td>${statusBadge}</td><td>${dlSh}</td></tr>`;
     }).join('');
     const shCount = studentRuns.length;
     shHtml = `
@@ -7355,7 +7359,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
-              <thead><tr><th>Date</th><th>Group</th><th>By</th><th>Clinics</th><th>Result</th><th>Status</th><th>Report</th><th>CSV</th></tr></thead>
+              <thead><tr><th>Date</th><th>Group</th><th>By</th><th>Clinics</th><th>Result</th><th>Status</th><th>Downloads</th></tr></thead>
               <tbody>${shRows}</tbody>
             </table>
           </div>
@@ -7363,56 +7367,10 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
       </div>`;
   }
 
-  // ── Content Analysis Runs section ─────────────────────────────────────────
+  // ── Content Analysis Runs ─────────────────────────────────────────────────
+  // Retired as a separate accordion: content-analysis runs now surface inline on
+  // their base report row's Downloads menu (option b). caHtml stays empty.
   let caHtml = '';
-  if (contentRuns && contentRuns.length) {
-    const caEsc = s => (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    const caRows = contentRuns.map(c => {
-      const date = (c.created_at || '').slice(0, 10);
-      const type = c.entity_type === 'practice' ? 'Practice' : 'Hospital';
-      const result = c.status === 'running' ? 'Analyzing…' : `${c.finding_count} finding${c.finding_count===1?'':'s'}${c.drafted ? ' · drafted' : ''}`;
-      const badge = c.status === 'done'
-        ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
-        : c.status === 'failed'
-          ? `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>`
-          : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
-      const r1 = c.has_report1 ? `<button class="btn btn-gold btn-sm" title="Full Pulse deep-dive: AI visibility score, four-pillar breakdown, and executive summary" onclick="window.location.href='/api/content-analysis/${c.id}/report1?token=${encodeURIComponent(_token)}'">⬇ Deep Dive</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
-      const r2 = c.has_report2 ? `<button class="btn btn-secondary btn-sm" title="Detailed content findings and improvement prescriptions" onclick="window.location.href='/api/content-analysis/${c.id}/report2?token=${encodeURIComponent(_token)}'">⬇ Content</button>` : `<span style="color:var(--muted);font-size:13px">—</span>`;
-      const plan = c.status !== 'done'
-        ? `<span style="color:var(--muted);font-size:13px">—</span>`
-        : c.drafted
-          ? `<span style="font-size:12px;color:var(--teal);font-weight:600">✓ Drafted</span>`
-          : `<button class="btn btn-primary btn-sm" onclick="caDraftFromHistory('${c.id}', this)">✎ Generate Plan</button>`;
-      const rr = c.status === 'done'
-        ? `<button class="btn btn-ghost btn-sm" title="Rebuild this report's PDF from cached data — no re-analysis" onclick="caRerender('${c.id}', this)">↻ Rebuild</button>`
-        : `<span style="color:var(--muted);font-size:13px">—</span>`;
-      return `<tr><td>${date}</td><td style="font-weight:600">${caEsc(c.entity_name)}</td><td style="font-size:13px;color:var(--muted)">${caEsc(c.location)}</td><td><span class="badge bg-muted" style="font-size:10px">${type}</span></td><td style="font-size:13px;color:var(--muted)">${result}</td><td>${badge}</td><td>${r1}</td><td>${r2}</td><td>${plan}</td><td>${rr}</td></tr>`;
-    }).join('');
-    const caCount = contentRuns.length;
-    caHtml = `
-      <div style="margin-bottom:24px">
-        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Content Analysis Runs</div>
-        <div id="ca-hist-collapsed" onclick="caToggleHistory()" style="cursor:pointer;padding:14px 18px;border-radius:8px;border:1.5px solid var(--border);background:var(--pale);transition:background 0.15s" onmouseenter="this.style.background='#e8f0ee'" onmouseleave="this.style.background='var(--pale)'">
-          <div style="display:flex;align-items:center;gap:14px">
-            <span style="font-size:22px;color:var(--teal-mid);line-height:1">≡</span>
-            <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--body)">${caCount} Content Analysis Run${caCount === 1 ? '' : 's'}</div></div>
-            <button class="btn btn-primary btn-sm" style="pointer-events:none;flex-shrink:0">View All ▼</button>
-          </div>
-        </div>
-        <div id="ca-hist-body">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-size:12px;color:var(--muted)">${caCount} run${caCount === 1 ? '' : 's'}</span>
-            <button class="btn btn-ghost btn-sm" onclick="caToggleHistory()">Hide Content Analysis Runs ▲</button>
-          </div>
-          <div class="card" style="padding:0;overflow:hidden">
-            <table class="tbl">
-              <thead><tr><th>Date</th><th>Entity</th><th>Location</th><th>Type</th><th>Result</th><th>Status</th><th>Deep Dive</th><th>Content Report</th><th>Full Plan</th><th>Rebuild</th></tr></thead>
-              <tbody>${caRows}</tbody>
-            </table>
-          </div>
-        </div>
-      </div>`;
-  }
 
   if (!_historyRuns.length && !evHtml && !nbHtml && !shHtml && !caHtml) {
     el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
