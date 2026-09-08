@@ -1934,6 +1934,65 @@ async def content_analysis_report(ca_id: str, n: int, _: str = Depends(require_a
                         filename=f"{stem}_{label}.pdf")
 
 
+def _rerender_content_reports(ca_id: str) -> dict:
+    """Rebuild a content-analysis run's PDF(s) from cached findings + service-line
+    scorecards — no crawl/network/audit/LLM. Runs sync (Playwright); call in a
+    thread. Returns {"report1": bool, "report2": bool}."""
+    import json as _json
+    from perception.db import (get_content_analysis_run, get_content_findings,
+                               get_recent_service_line_analysis, get_recent_network_run,
+                               _norm_entity_name)
+    from perception.models import (ContentFinding, ContentFindings, ServiceLineSummary,
+                                   ServiceLineScorecardSet, NetworkResult)
+    rec = get_content_analysis_run(ca_id)
+    if not rec:
+        raise ValueError("Run not found")
+    cf = get_content_findings(rec.get("base_run_id"))
+    if not cf:
+        raise ValueError("No cached findings for this run")
+    findings = ContentFindings(
+        run_id=rec.get("base_run_id") or "", source_snapshot=cf.get("source_snapshot") or {},
+        status=cf.get("status", "verified"),
+        findings=[ContentFinding(**f) for f in (cf.get("findings") or [])])
+    name = rec.get("entity_name") or ""
+    loc = rec.get("location") or ""
+    title = rec.get("report_title") or name
+    out = {"report1": False, "report2": False}
+
+    sl_payload = None
+    _cached = get_recent_service_line_analysis(_norm_entity_name(name), days=3650)
+    if _cached:
+        _d = _json.loads(_cached)
+        sl_payload = (ServiceLineSummary(**_d["summary"]),
+                      ServiceLineScorecardSet(**_d["cards"]).scorecards)
+
+    if rec.get("report2_path"):
+        from perception.content_report_pdf import render_content_report_pdf
+        render_content_report_pdf(name, loc, findings, rec["report2_path"],
+                                  report_title=title, service_line=sl_payload)
+        out["report2"] = True
+    if rec.get("report1_path") and rec.get("entity_type") == "network":
+        nr = get_recent_network_run(name, days=3650)
+        if nr and nr.get("result_json"):
+            from perception.network_pdf import render_content_network
+            render_content_network(NetworkResult.model_validate_json(nr["result_json"]),
+                                   rec["report1_path"], findings)
+            out["report1"] = True
+    return out
+
+
+@app.post("/api/content-analysis/{ca_id}/rerender")
+async def content_analysis_rerender(ca_id: str, _: str = Depends(require_auth)):
+    """Rebuild this run's report PDF(s) from cached data (no re-analysis)."""
+    from perception.db import init_db
+    init_db()
+    try:
+        out = await asyncio.get_event_loop().run_in_executor(_pool, _rerender_content_reports, ca_id)
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+    return out
+
+
 @app.post("/api/content-analysis/{ca_id}/draft")
 async def content_analysis_draft(ca_id: str, payload: dict = Depends(get_current_user_payload)):
     """Phase-3 remediation: draft publication-ready content for each finding and
