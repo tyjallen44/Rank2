@@ -33,6 +33,11 @@ _REMEDIATION = {"schema_markup": "Add schema.org markup", "website_fix": "Websit
                 "reputation_program": "Reputation / review-generation program (RLDatix Reputation Management)",
                 "listing_management": "Google Business Profile / listings management (RLDatix Reputation Management)"}
 
+# Remediation types whose drafted output is literal content the client PUBLISHES
+# (website/knowledge-graph). Everything else is an operational plan to implement,
+# so it must NOT be labeled "ready to publish".
+_PUBLISHABLE_REMEDIATION = {"schema_markup", "website_fix", "wikidata_edit", "talk_page_request"}
+
 
 def _e(s) -> str:
     return html.escape(str(s if s is not None else ""))
@@ -168,8 +173,14 @@ def _finding_block(f: dict) -> str:
     draft = f.get("draft_content")
     draft_html = ""
     if draft:
-        _lbl = ("Drafted content — one template for all locations above (swap [FACILITY]/[CITY] per location)"
-                if rows else "Drafted content (ready to publish)")
+        publishable = f.get("remediation_type", "") in _PUBLISHABLE_REMEDIATION
+        if rows:
+            # grouped operational program (e.g. weak-reputation locations)
+            _lbl = "Recommended program — one template for all locations above (swap [FACILITY]/[CITY] per location)"
+        elif publishable:
+            _lbl = "Drafted content (ready to publish)"
+        else:
+            _lbl = "Recommended action plan (for your team to implement)"
         draft_html = (f'<div class="lbl">{_lbl}</div>'
                       f'<pre class="draft">{_e(draft)}</pre>')
     return f"""
@@ -333,6 +344,8 @@ def _build_html(entity_name: str, location: str, findings, report_title: str,
       <div class="method"><b>How to read this.</b> Findings are drawn from live checks of your website
         (schema.org structured data, llms.txt, AI-crawler access), Wikidata, and Wikipedia — not estimates.
         Status: <b>Verified</b> = confirmed by direct check; <b>Partial</b> = checked but needs human
-        confirmation; <b>Not assessed</b> = the source couldn't be reached at analysis time. Drafted,
-        publication-ready content for each item is available in the full remediation engagement.</div>
+        confirmation; <b>Not assessed</b> = the source couldn't be reached at analysis time.
+        <b>Drafted content (ready to publish)</b> is copy you can put live (schema markup, llms.txt,
+        Wikidata/Wikipedia edits); a <b>Recommended action plan</b> is an operational playbook for your
+        team (e.g. reputation programs, Google Business Profile fixes) — steps to implement, not copy to publish.</div>
     </body></html>"""
