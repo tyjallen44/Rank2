@@ -1977,19 +1977,6 @@ input[type="url"]::placeholder, textarea::placeholder {
           <label class="fl">Website URL <span style="font-weight:400;color:var(--muted)">(optional — helps AI find recently added locations)</span></label>
           <input id="np-url" class="fi" type="url" placeholder="https://example.com/locations">
         </div>
-        <div id="np-step1-err" class="err hidden mt8"></div>
-        <button class="btn btn-primary" id="np-find-btn" onclick="npFindFacilities()">Find Hospitals via AI →</button>
-      </div>
-
-      <!-- Step 2: Roster confirmation -->
-      <div id="np-step2" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px" id="np-step2-title">Confirm Roster</div>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px" id="np-step2-desc">
-          Review the facilities found by AI. Uncheck any that should be excluded from the analysis.
-        </p>
-        <div id="np-roster-summary" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
-        <div id="np-roster-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
-        <div id="np-step2-err" class="err hidden mt8"></div>
         <label class="aggregate-toggle mt10" style="display:none" id="np-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
           <input type="checkbox" id="np-ignore-cache">
           <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
@@ -2003,6 +1990,19 @@ input[type="url"]::placeholder, textarea::placeholder {
           <input type="checkbox" id="np-service-line">
           <span class="agg-label">Include deep service-line listing audit <span style="font-size:11px;color:#888">(internal · adds several minutes)</span></span>
         </label>
+        <div id="np-step1-err" class="err hidden mt8"></div>
+        <button class="btn btn-primary" id="np-find-btn" onclick="npFindFacilities()">Find Hospitals via AI →</button>
+      </div>
+
+      <!-- Step 2: Roster confirmation -->
+      <div id="np-step2" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px" id="np-step2-title">Confirm Roster</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px" id="np-step2-desc">
+          Review the facilities found by AI. Uncheck any that should be excluded from the analysis.
+        </p>
+        <div id="np-roster-summary" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
+        <div id="np-roster-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+        <div id="np-step2-err" class="err hidden mt8"></div>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-secondary" onclick="npReset()">← Back</button>
           <button class="btn btn-primary" id="np-run-btn" onclick="npRunAnalysis()">Run Hospital Network →</button>
