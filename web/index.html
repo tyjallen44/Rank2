@@ -4193,6 +4193,8 @@ function resetPage(p) {
 
   } else if (p === 'network') {
     npReset();
+    ncaReset();   // clear a finished Content Analysis so returning starts fresh
+    ncaClose();   // and show the base Hospital Network page, not the last report
   }
 }
 
@@ -6397,6 +6399,8 @@ function ncaClose() {
 }
 function ncaReset() {
   ['nca-progress', 'nca-results'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  const res = document.getElementById('nca-results'); if (res) res.innerHTML = '';
+  const log = document.getElementById('nca-progress-log'); if (log) log.textContent = '';
   document.getElementById('nca-search').classList.remove('hidden');
 }
 function ncaRenderUrls() {
@@ -6435,7 +6439,7 @@ async function ncaRun() {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'phase') head.textContent = msg.text || 'Analyzing…';
     else if (msg.type === 'text') { log.appendChild(document.createTextNode(msg.text)); log.scrollTop = log.scrollHeight; }
-    else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Content Analysis →'; caLoadResults(caId, 'nca'); }
+    else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Content Analysis →'; _completedPages.add('network'); caLoadResults(caId, 'nca'); }
     else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<br><span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
   };
   es.onerror = () => es.close();
