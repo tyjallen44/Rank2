@@ -366,6 +366,17 @@ input[type="url"]::placeholder, textarea::placeholder {
 .tbl td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
 .tbl tr:last-child td { border-bottom: none; }
 .tbl tr:hover td { background: var(--blue-light); }
+/* Per-row Downloads dropdown (History) */
+.dlm { position: relative; display: inline-block; }
+.dlm-pop { position: fixed; background: #fff; border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,0.14); min-width: 210px;
+  z-index: 200; padding: 6px; }
+.dlm-item { display: block; padding: 7px 10px; font-size: 13px; color: var(--body);
+  text-decoration: none; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.dlm-item:hover { background: var(--pale); }
+.dlm-act { color: var(--teal); font-weight: 600; }
+.dlm-info { padding: 6px 10px; font-size: 12px; color: var(--muted); }
+.dlm-sep { height: 1px; background: var(--border); margin: 5px 4px; }
 .badge {
   display: inline-block; padding: 2px 9px;
   border-radius: 20px; font-size: 11px; font-weight: 700;
@@ -7082,6 +7093,56 @@ function _fmtRunDate(run) {
   return run.generated_at || '—';
 }
 
+function _dlCell(run, caRuns) {
+  const isNet = run.report_type === 'network' || run.entity_type === 'hospital_network';
+  const tok = encodeURIComponent(_token);
+  const files = [];   // [label, url]  (url null => info line)
+  const acts = [];    // [label, onclickJs]
+  if (run.has_pdf) files.push(['Report (PDF)', (isNet ? `/api/network/${run.run_id}/pdf` : `/api/reports/${run.run_id}/pdf`) + `?token=${tok}`]);
+  if (isNet && run.has_teaser_pdf) files.push(['Teaser (PDF)', `/api/network/${run.run_id}/teaser-pdf?token=${tok}`]);
+  if (run.has_briefing_pdf) files.push(['Briefing (PDF)', `/api/reports/${run.run_id}/briefing-pdf?token=${tok}`]);
+  (caRuns || []).forEach(c => {
+    if (c.has_report1) files.push(['Deep Diagnostic (PDF)', `/api/content-analysis/${c.id}/report1?token=${tok}`]);
+    if (c.has_report2) files.push(['Content Report (PDF)', `/api/content-analysis/${c.id}/report2?token=${tok}`]);
+  });
+  if (run.entity_type === 'community_health') {
+    if (run.mqcr != null) files.push([`MQCR: ${Math.round(run.mqcr * 100)}%`, null]);
+    else acts.push(['Run MQCR Battery', `startBatteryFromHistory('${run.run_id}', this)`]);
+  }
+  (caRuns || []).forEach(c => {
+    if (c.status === 'done' && !c.drafted) acts.push(['Generate Full Content Plan', `caDraftFromHistory('${c.id}', this)`]);
+    if (c.status === 'done') acts.push(['Rebuild content report', `caRerender('${c.id}', this)`]);
+  });
+  if (!files.length && !acts.length) return `<span style="color:var(--muted);font-size:13px">—</span>`;
+  const nFiles = files.filter(f => f[1]).length;
+  const mid = 'dlm-' + run.run_id;
+  const fileItems = files.map(([lbl, url]) => url
+    ? `<a class="dlm-item" href="${url}">⬇ ${lbl}</a>`
+    : `<div class="dlm-info">${lbl}</div>`).join('');
+  const sep = (files.length && acts.length) ? '<div class="dlm-sep"></div>' : '';
+  const actItems = acts.map(([lbl, fn]) => `<a class="dlm-item dlm-act" onclick="${fn};if(event){event.stopPropagation()}">${lbl}</a>`).join('');
+  return `<div class="dlm" id="${mid}">
+    <button class="btn btn-gold btn-sm" onclick="toggleDlm('${mid}',event)">⬇ Downloads${nFiles ? ` (${nFiles})` : ''} ▾</button>
+    <div class="dlm-pop hidden">${fileItems}${sep}${actItems}</div>
+  </div>`;
+}
+
+function toggleDlm(mid, ev) {
+  if (ev) ev.stopPropagation();
+  const wrap = document.getElementById(mid);
+  if (!wrap) return;
+  const pop = wrap.querySelector('.dlm-pop');
+  const isOpen = !pop.classList.contains('hidden');
+  document.querySelectorAll('.dlm-pop').forEach(p => p.classList.add('hidden'));
+  if (isOpen) return;
+  const r = wrap.querySelector('button').getBoundingClientRect();
+  pop.style.top = (r.bottom + 4) + 'px';
+  pop.style.left = Math.max(8, Math.min(r.right - 210, window.innerWidth - 220)) + 'px';
+  pop.classList.remove('hidden');
+}
+document.addEventListener('click', () => document.querySelectorAll('.dlm-pop').forEach(p => p.classList.add('hidden')));
+window.addEventListener('scroll', () => document.querySelectorAll('.dlm-pop').forEach(p => p.classList.add('hidden')), true);
+
 function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
   if (events !== undefined) _cachedEvents = events;
   if (bulkRuns !== undefined) _cachedBulkRuns = bulkRuns;
@@ -7378,6 +7439,13 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
     return 0;
   });
 
+  // Link content-analysis runs to their base report row (option b): the network/
+  // deep-diagnostic row absorbs its content-analysis items in the Downloads menu.
+  const _caByBase = {};
+  (contentRuns || []).forEach(c => {
+    if (c && c.base_run_id) (_caByBase[c.base_run_id] = _caByBase[c.base_run_id] || []).push(c);
+  });
+
   const th = (label, field, align) => {
     const active = _historySortField === field;
     const icon = active ? (_historySortDir === 'asc' ? ' ↑' : ' ↓') : '<span style="opacity:0.3;font-size:11px"> ↕</span>';
@@ -7401,9 +7469,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           ${th('Name', 'name')}
           ${th('Type', 'type')}
           ${th('Analyzed', 'providers', 'right')}
-          <th>Report</th>
-          <th>Briefing</th>
-          <th>Battery</th>
+          <th>Downloads</th>
         </tr></thead>
         <tbody>
           ${runs.length ? runs.map(run => {
@@ -7421,11 +7487,6 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
                   : run.specialty
                     ? `<span class="badge bg-gold">${run.specialty}</span>`
                     : `<span class="badge bg-muted">Hospitals</span>`;
-            const pdfBtn = run.has_pdf
-              ? (isNetwork
-                  ? `<button class="btn btn-gold btn-sm" onclick="dlNetworkPdf('${run.run_id}')">⬇ PDF</button>`
-                  : `<button class="btn btn-gold btn-sm" onclick="dlPdf('${run.run_id}')">⬇ PDF</button>`)
-              : `<span style="color:var(--muted);font-size:13px">—</span>`;
             const analyzedCount = run.entity_type === 'community_health' ? '1'
               : isNetwork ? `${run.provider_count} loc.`
               : run.provider_count;
@@ -7435,15 +7496,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
               <td style="font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_historyFilename(run)}">${_historyFilename(run)}</td>
               <td>${typeBadge}</td>
               <td style="text-align:right">${analyzedCount}</td>
-              <td>${pdfBtn}</td>
-              <td>${run.has_briefing_pdf
-                ? `<button class="btn btn-ghost btn-sm" onclick="dlBriefingPdf('${run.run_id}')">⬇ Briefing</button>`
-                : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
-              <td>${run.entity_type === 'community_health'
-                ? (run.mqcr != null
-                    ? `<span style="font-size:12px;font-weight:600;color:#1a8f4a">${Math.round(run.mqcr * 100)}%</span>`
-                    : `<button class="btn btn-secondary btn-sm" onclick="startBatteryFromHistory('${run.run_id}', this)">Run Battery</button>`)
-                : `<span style="color:var(--muted);font-size:13px">—</span>`}</td>
+              <td>${_dlCell(run, _caByBase[run.run_id] || [])}</td>
             </tr>`;
           }).join('')
           : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
