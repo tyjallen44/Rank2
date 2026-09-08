@@ -1470,7 +1470,7 @@ def save_service_line_analysis(system_norm: str, system_name: str, data_json: st
     con.close()
 
 
-def get_recent_service_line_analysis(system_norm: str, days: int = 21) -> Optional[str]:
+def get_recent_service_line_analysis(system_norm: str, days: int = 30) -> Optional[str]:
     """Return the cached service-line analysis JSON for a system if fresh, else None."""
     cutoff = (date.today() - timedelta(days=days)).isoformat()
     con = get_connection()

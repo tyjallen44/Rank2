@@ -2077,7 +2077,7 @@ def _job_content_draft(job_id: str, ca_id: str) -> None:
             import json as _json
             from perception.db import (get_recent_service_line_analysis, _norm_entity_name)
             from perception.models import ServiceLineScorecardSet, ServiceLineSummary
-            _cached = get_recent_service_line_analysis(_norm_entity_name(rec["entity_name"]), days=21)
+            _cached = get_recent_service_line_analysis(_norm_entity_name(rec["entity_name"]), days=30)
             if _cached:
                 _d = _json.loads(_cached)
                 _sl_payload = (ServiceLineSummary(**_d["summary"]),
@@ -2219,7 +2219,7 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
                 sys_norm = _norm_entity_name(_net_name)
                 # Admin "Refresh — ignore cache" busts the service-line cache too;
                 # the fresh result below re-saves and refreshes it.
-                cached = None if override else get_recent_service_line_analysis(sys_norm, days=21)
+                cached = None if override else get_recent_service_line_analysis(sys_norm, days=30)
                 if cached:
                     emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
                     _d = _json.loads(cached)

@@ -568,7 +568,7 @@ produce the expected findings, and the whole pass streams progress and finishes.
 - D1 `service_line_report.py` (build_summary + derive_findings), D2 scorecard section
   in `content_report_pdf` (Report 2 only), D3 wired into `_job_content_analysis_network`
   behind the opt-in `service_line_audit` toggle (frontend checkbox), with the
-  `service_line_analysis` cache table (21-day), findings merged severity-sorted into the
+  `service_line_analysis` cache table (30-day), findings merged severity-sorted into the
   CIK list, and the section preserved on draft-regeneration.
 - Validated in isolation: D1 finding derivation, D2/D3 render (scorecard + merged
   findings), the DB cache round-trip. A full in-app network run (analyze_network + the

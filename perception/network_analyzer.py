@@ -399,7 +399,7 @@ def analyze_network(
             _slname = result.network_canonical_name or network_name
             _slnorm = _norm_entity_name(_slname)
             _slurls = [u for u in [source_url or result.source_url] if u]
-            _cached = None if ignore_cache else get_recent_service_line_analysis(_slnorm, days=21)
+            _cached = None if ignore_cache else get_recent_service_line_analysis(_slnorm, days=30)
             if _cached:
                 emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
                 _d = _sljson.loads(_cached)
