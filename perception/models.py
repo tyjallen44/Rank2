@@ -425,6 +425,7 @@ class DimensionScore(BaseModel):
     score: Optional[int] = None              # 0-100, or None if not_assessed
     status: str = "verified"                 # verified | partial | not_assessed
     signals: list[str] = Field(default_factory=list)
+    meta: dict = Field(default_factory=dict)  # structured flags for finding derivation (Phase D)
 
 
 class ServiceLineScorecard(BaseModel):
@@ -440,3 +441,17 @@ class ServiceLineScorecard(BaseModel):
 class ServiceLineScorecardSet(BaseModel):
     system_name: str
     scorecards: list[ServiceLineScorecard] = Field(default_factory=list)
+
+
+class ServiceLineSummary(BaseModel):
+    """System-level rollup of the service-line scorecards (Phase D)."""
+    total_lines: int = 0
+    managed: int = 0
+    partial: int = 0
+    unmanaged: int = 0
+    invisible: int = 0
+    avg_overall: Optional[int] = None
+    best: Optional[str] = None
+    worst: Optional[str] = None
+    cross_cutting: list[str] = Field(default_factory=list)
+    sampling_note: str = ""

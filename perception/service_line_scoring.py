@@ -91,7 +91,8 @@ def _score_completeness(details: list) -> DimensionScore:
     if missing:
         sig.append(f"Missing: {', '.join(missing)}.")
     return DimensionScore(key="completeness", score=_clamp(len(present) / 6 * 100),
-                          status="verified", signals=sig)
+                          status="verified", signals=sig,
+                          meta={"present": present, "missing": missing})
 
 
 def _score_reputation(line, details: list) -> DimensionScore:
@@ -115,7 +116,9 @@ def _score_reputation(line, details: list) -> DimensionScore:
            (f"Sampled reviews go back ~{days}d (Google returns most-relevant, not newest)."
             if days is not None else "Review recency unavailable."),
            "Review-response rate not assessed (not exposed by the Places API)."]
-    return DimensionScore(key="reputation", score=score, status="verified", signals=sig)
+    return DimensionScore(key="reputation", score=score, status="verified", signals=sig,
+                          meta={"avg_rating": round(avg, 1), "total_reviews": total,
+                                "listings": len(ratings)})
 
 
 def _score_content(landing_url, browser) -> DimensionScore:
@@ -137,7 +140,9 @@ def _score_content(landing_url, browser) -> DimensionScore:
     sig = [f"schema.org medical markup: {'yes' if has_schema else 'no'}.",
            f"online-scheduling CTA: {'yes' if has_book else 'no'}.",
            f"~{words} words; provider/team links: {'yes' if has_prov else 'no'}."]
-    return DimensionScore(key="content", score=_clamp(score), status="verified", signals=sig)
+    return DimensionScore(key="content", score=_clamp(score), status="verified", signals=sig,
+                          meta={"has_schema": has_schema, "has_booking": has_book,
+                                "has_providers": has_prov, "words": words})
 
 
 def _ai_surfaces(system_brand: set, label: str, metro: str):
@@ -171,7 +176,9 @@ def _score_findability(line, content_dim, ai_surfaced) -> DimensionScore:
            else "AI surfacing: not assessed."]
     return DimensionScore(key="findability", score=score,
                           status=("verified" if ai_surfaced is not None else "partial"),
-                          signals=sig)
+                          signals=sig,
+                          meta={"has_page": has_page, "has_gbp": has_gbp,
+                                "ai_surfaced": ai_surfaced})
 
 
 def _blend(dims: list):

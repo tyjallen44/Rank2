@@ -564,12 +564,12 @@ Full A→D on Atrium: generate the report section + findings, eyeball that the s
 table matches the Phase-C numbers, the summary counts are right, invisible/weak lines
 produce the expected findings, and the whole pass streams progress and finishes.
 
-### Open decisions for Phase D
-- Always-on vs. opt-in toggle for the (multi-minute) service-line pass?
-- Persistence: new `service_line_analysis` table vs. JSON column on `content_analysis_runs`?
-- Per-line findings vs. fully aggregated — how many individual findings is too many
-  (proposed: invisible + reputation-drag per line; schema + completeness aggregated)?
-- Does the scorecard belong in Report 2 (detailed) only, or also a summary in Report 1?
+### Resolved decisions for Phase D (2026-09-07)
+- **Gating:** opt-in toggle ("Include deep service-line listing audit"), not always-on.
+- **Persistence:** new `service_line_analysis` table, cached by system name (~14–30d).
+- **Finding granularity:** invisible + reputation-drag per line; schema + completeness
+  (+ AI-invisibility) aggregated into single findings.
+- **Placement:** scorecard section in **Report 2 only** (no Report 1 summary box).
 
 ## Retired
 - Per-physician roster discovery and per-physician directory lookups.
