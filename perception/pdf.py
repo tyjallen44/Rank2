@@ -217,6 +217,62 @@ def _content_keys_section(findings) -> str:
     )
 
 
+def _service_line_keys_section(summary, scorecards) -> str:
+    """Compact Service-Line Listing Management section for injection into a
+    report (self-contained inline styles). `summary` is a ServiceLineSummary,
+    `scorecards` a list of ServiceLineScorecard."""
+    if not scorecards:
+        return ""
+
+    def _gc(v):
+        if v is None:
+            return "#9aa8ac"
+        return "#2e9e5b" if v >= 75 else ("#e09b2a" if v >= 55 else "#d94f4f")
+
+    st_color = {"managed": "#2e9e5b", "partial": "#e09b2a",
+                "unmanaged": "#d94f4f", "invisible": "#8a1f1f"}
+
+    def _cell(v):
+        txt = "&mdash;" if v is None else str(v)
+        return (f'<td style="text-align:center;font-weight:700;padding:5px 7px;'
+                f'border-bottom:1px solid #eef4f2;color:{_gc(v)}">{txt}</td>')
+
+    rows = ""
+    for c in scorecards:
+        dims = {d.key: d.score for d in c.dimensions}
+        sc = st_color.get(c.management_status, "#5a6e72")
+        rows += (
+            f'<tr><td style="padding:5px 7px;border-bottom:1px solid #eef4f2;font-size:8.5pt">{_e(c.canonical_label)}</td>'
+            f'<td style="padding:5px 7px;border-bottom:1px solid #eef4f2;font-size:7.5pt;font-weight:700;'
+            f'text-transform:uppercase;letter-spacing:.03em;color:{sc}">{_e(c.management_status)}</td>'
+            f'{_cell(c.overall_score)}{_cell(dims.get("findability"))}{_cell(dims.get("completeness"))}'
+            f'{_cell(dims.get("reputation"))}{_cell(dims.get("content"))}</tr>')
+
+    avg = (f' &middot; avg patient-attraction score <strong>{summary.avg_overall}</strong>'
+           if summary.avg_overall is not None else "")
+    cross = "".join(f"<li>{_e(x)}</li>" for x in (summary.cross_cutting or []))
+    cross_html = f'<ul style="margin:8px 0 0 18px">{cross}</ul>' if cross else ""
+    th = ('font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.04em;'
+          'color:#5a6e72;padding:6px 7px;background:#eef6f3')
+
+    return (
+        '<div style="page-break-before:always;padding:0 40px">'
+        '<div style="font-size:13pt;font-weight:700;color:#0F4146;margin:0 0 4px">Service-Line Listing Management</div>'
+        f'<div style="background:#f5faf8;border:1px solid #d7e7e2;border-radius:6px;padding:10px 14px;'
+        f'font-size:9.5pt;color:#2b3a3d;line-height:1.5;margin:0 0 12px">'
+        f'<strong>{summary.total_lines} service line{"s" if summary.total_lines != 1 else ""} analyzed</strong> — '
+        f'{summary.managed} managed &middot; {summary.partial} partial &middot; {summary.unmanaged} unmanaged '
+        f'&middot; {summary.invisible} invisible{avg}.'
+        f'<div style="font-size:8.5pt;color:#5a6e72;margin-top:4px">{_e(summary.sampling_note)}</div>{cross_html}</div>'
+        '<table style="width:100%;border-collapse:collapse">'
+        f'<thead><tr><th style="text-align:left;{th}">Service line</th><th style="text-align:left;{th}">Status</th>'
+        f'<th style="{th}">Overall</th><th style="{th}">Find</th><th style="{th}">Complete</th>'
+        f'<th style="{th}">Reput</th><th style="{th}">Content</th></tr></thead>'
+        f'<tbody>{rows}</tbody></table>'
+        '</div>'
+    )
+
+
 def render_content_deep_dive(result: AnalysisResult, pdf_path: Path, findings,
                              brand: str = "original") -> None:
     """Report 1 for the Content Analysis sandbox: the standard Deep Diagnostic

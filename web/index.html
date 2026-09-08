@@ -1999,6 +1999,10 @@ input[type="url"]::placeholder, textarea::placeholder {
           <span class="agg-label">Also generate a teaser report</span>
         </label>
         <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Produces a second PDF with facility details and strategic recommendations blurred — ideal for prospect outreach.</div>
+        <label class="aggregate-toggle" style="margin-top:10px" title="Internal: enumerate the system's service lines and score each one's listings for patient attraction. Adds several minutes; appends a scorecard section to the report.">
+          <input type="checkbox" id="np-service-line">
+          <span class="agg-label">Include deep service-line listing audit <span style="font-size:11px;color:#888">(internal · adds several minutes)</span></span>
+        </label>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-secondary" onclick="npReset()">← Back</button>
           <button class="btn btn-primary" id="np-run-btn" onclick="npRunAnalysis()">Run Hospital Network →</button>
@@ -4371,6 +4375,7 @@ async function npRunAnalysis() {
 
   const ignoreCache = document.getElementById('np-ignore-cache')?.checked || false;
   const teaser = document.getElementById('np-teaser-toggle')?.checked || false;
+  const serviceLine = document.getElementById('np-service-line')?.checked || false;
   const btn = document.getElementById('np-run-btn');
   btn.disabled = true;
   btn.textContent = 'Starting…';
@@ -4379,7 +4384,7 @@ async function npRunAnalysis() {
     const res = await fetch('/api/network/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
-      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache, teaser }),
+      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache, teaser, service_line_audit: serviceLine }),
     });
     if (!res.ok) throw new Error(await res.text());
     const { job_id } = await res.json();

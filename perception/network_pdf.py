@@ -28,10 +28,12 @@ def render_network_pdf(
     brand: str = "original",
     teaser: bool = False,
     findings=None,
+    service_line=None,
 ) -> None:
     """Render a Network Pulse report to a branded PDF. When `findings` (a
     ContentFindings) is given and this isn't a teaser, the Content Improvement
-    Keys summary + CTA are appended — the standard report's content section."""
+    Keys summary + CTA are appended. When `service_line` = (summary, scorecards)
+    is given, the Service-Line Listing Management section is appended too."""
     from playwright.sync_api import sync_playwright
 
     # Always use navy/gold for network reports; ignore brand's primary/accent
@@ -42,10 +44,15 @@ def render_network_pdf(
 
     landscape = len(result.facilities) > 20
     html = _build_network_html(result, cfg, teaser=teaser)
-    if findings is not None and not teaser:
-        from .pdf import _content_keys_section
-        section = _content_keys_section(findings)
-        html = html.replace("</body>", section + "</body>", 1) if "</body>" in html else html + section
+    if not teaser:
+        from .pdf import _content_keys_section, _service_line_keys_section
+        inject = ""
+        if findings is not None:
+            inject += _content_keys_section(findings)
+        if service_line is not None:
+            inject += _service_line_keys_section(service_line[0], service_line[1])
+        if inject:
+            html = html.replace("</body>", inject + "</body>", 1) if "</body>" in html else html + inject
 
     with sync_playwright() as p:
         browser = p.chromium.launch()

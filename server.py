@@ -1075,6 +1075,7 @@ class NetworkAnalyzeRequest(BaseModel):
     brand: str = "original"
     ignore_cache: bool = False   # admin only: bypass same-day cache and regenerate
     teaser: bool = False
+    service_line_audit: bool = False   # internal: add the service-line scorecard section
 
 
 @app.post("/api/network/analyze")
@@ -1086,7 +1087,7 @@ async def network_analyze(req: NetworkAnalyzeRequest, payload: dict = Depends(ge
     job_id = _new_job(role, brand)
     _pool.submit(_job_network_analyze, job_id, req.network_name, req.hq_location,
                  req.source_url, req.facilities, req.facility_type, brand, ignore_cache,
-                 req.teaser)
+                 req.teaser, req.service_line_audit)
     return {"job_id": job_id}
 
 
@@ -1095,7 +1096,8 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
                           facility_type: str = "hospital",
                           brand: str = "original",
                           ignore_cache: bool = False,
-                          teaser: bool = False) -> None:
+                          teaser: bool = False,
+                          service_line_audit: bool = False) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
@@ -1114,6 +1116,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             ignore_cache=ignore_cache,
             teaser=teaser,
             content_summary=True,   # standard report includes the content summary + CTA
+            service_line_audit=service_line_audit,   # internal opt-in: scorecard section
         )
         job["status"] = "done"
         job["result"] = {

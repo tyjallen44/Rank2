@@ -165,6 +165,7 @@ def analyze_network(
     ignore_cache: bool = False,
     teaser: bool = False,
     content_summary: bool = False,
+    service_line_audit: bool = False,
 ) -> NetworkResult:
     """Run a Network AI Visibility analysis for a multi-state healthcare network.
 
@@ -381,6 +382,44 @@ def analyze_network(
             emit({"type": "text", "text": f"\n(content summary skipped: {type(_ce).__name__})"})
             content_findings = None
 
+    # ── Service-line listing audit (opt-in; internal only) ───────────────────
+    # Deep, multi-minute pass — enumerate service lines, score their listings.
+    # Reuses the 21-day cache. Fail-soft: never blocks the report.
+    sl_payload = None
+    if service_line_audit:
+        try:
+            import json as _sljson
+            from .service_line_discovery import discover_service_lines
+            from .service_line_locations import resolve_service_line_listings
+            from .service_line_scoring import score_service_lines
+            from .service_line_report import build_summary
+            from .models import ServiceLineScorecardSet, ServiceLineSummary
+            from .db import (get_recent_service_line_analysis, save_service_line_analysis,
+                             _norm_entity_name)
+            _slname = result.network_canonical_name or network_name
+            _slnorm = _norm_entity_name(_slname)
+            _slurls = [u for u in [source_url or result.source_url] if u]
+            _cached = None if ignore_cache else get_recent_service_line_analysis(_slnorm, days=21)
+            if _cached:
+                emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
+                _d = _sljson.loads(_cached)
+                cards = ServiceLineScorecardSet(**_d["cards"])
+                summ = ServiceLineSummary(**_d["summary"])
+            else:
+                emit({"type": "phase", "name": "service_line",
+                      "text": "Service-line listing audit — this can take several minutes"})
+                _sl = discover_service_lines(_slname, _slurls, hq_location, on_event=emit)
+                _lst = resolve_service_line_listings(_slname, hq_location, _sl, on_event=emit)
+                cards = score_service_lines(_lst, hq_location, on_event=emit)
+                summ = build_summary(cards,
+                    sampling_note=f"flagship + up to 6 locations/line; {len(cards.scorecards)} service lines scored")
+                save_service_line_analysis(_slnorm, _slname,
+                    _sljson.dumps({"cards": cards.model_dump(), "summary": summ.model_dump()}))
+            sl_payload = (summ, cards.scorecards)
+        except Exception as _se:
+            emit({"type": "text", "text": f"\n(service-line audit skipped: {type(_se).__name__})"})
+            sl_payload = None
+
     # ── Phase: pdf ───────────────────────────────────────────────────────────
     emit({"type": "phase", "name": "pdf",
           "text": "Rendering Hospital Network PDF"})
@@ -393,7 +432,8 @@ def analyze_network(
         _ts = datetime.utcnow().strftime("%y%m%d-%H%M")
         pdf_filename = titlecase_filename(f"{slug}-hospital-network-{_ts}") + ".pdf"
         pdf_path = output_dir / pdf_filename
-        render_network_pdf(result, str(pdf_path), brand=brand, findings=content_findings)
+        render_network_pdf(result, str(pdf_path), brand=brand,
+                           findings=content_findings, service_line=sl_payload)
         result.pdf_path = str(pdf_path)
         if teaser:
             teaser_filename = titlecase_filename(f"{slug}-hospital-network-teaser-{_ts}") + ".pdf"
