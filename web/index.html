@@ -1898,6 +1898,10 @@ input[type="url"]::placeholder, textarea::placeholder {
             <input type="checkbox" id="nca-override">
             <span class="agg-label">Refresh — ignore cache on the base network report <span style="font-size:11px;color:#888">(Admin only)</span></span>
           </label>
+          <label class="aggregate-toggle mt10" id="nca-sl-label" title="Enumerates the system's service lines and scores each one's listings for patient-attraction (findability, completeness, reputation, content). Adds several minutes; results appear as a scorecard in the Content Report.">
+            <input type="checkbox" id="nca-service-line">
+            <span class="agg-label">Include deep service-line listing audit <span style="font-size:11px;color:#888">(adds several minutes)</span></span>
+          </label>
           <div id="nca-search-err" class="err hidden mt8"></div>
           <button class="btn btn-primary mt16" id="nca-run-btn" onclick="ncaRun()">Run Content Analysis →</button>
         </div>
@@ -6409,6 +6413,7 @@ async function ncaRun() {
   if (!name) { showErr(err, 'Enter a network name.'); return; }
   const urls = _ncaUrls.map(u => (u || '').trim()).filter(Boolean);
   const override = !!(document.getElementById('nca-override') || {}).checked;
+  const serviceLine = !!(document.getElementById('nca-service-line') || {}).checked;
   const btn = document.getElementById('nca-run-btn'); btn.disabled = true; btn.textContent = 'Starting…';
   const head = document.getElementById('nca-progress-head'), log = document.getElementById('nca-progress-log');
   head.textContent = 'Analyzing…'; log.innerHTML = '';
@@ -6418,7 +6423,7 @@ async function ncaRun() {
   let caId, jobId;
   try {
     const r = await api('/api/content-analysis/network/run', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ network_name:name, hq_location:hq, urls, override_cache:override }) });
+      body: JSON.stringify({ network_name:name, hq_location:hq, urls, override_cache:override, service_line_audit:serviceLine }) });
     if (!r.ok) throw new Error(await errDetail(r, 'Run failed'));
     const d = await r.json(); caId = d.ca_id; jobId = d.job_id;
   } catch(e) { head.textContent='Error'; log.innerHTML=`<span style="color:#c0392b">${_caEsc(e.message)}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; return; }

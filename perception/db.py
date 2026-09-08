@@ -834,6 +834,17 @@ def init_db() -> None:
     if "drafted" not in _car_cols:
         con.execute("ALTER TABLE content_analysis_runs ADD COLUMN drafted BOOLEAN DEFAULT FALSE")
 
+    # Service-line listing analysis cache (Phase D) — one cached result per system,
+    # keyed by normalized name, reused across network runs for ~2-4 weeks.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS service_line_analysis (
+            system_norm  VARCHAR PRIMARY KEY,
+            system_name  VARCHAR,
+            data_json    TEXT,
+            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # ── Network Pulse tables ──────────────────────────────────────────────────
     init_network_db(con)
 
@@ -1446,6 +1457,29 @@ def set_content_analysis_drafted(ca_id: str, report2_path: str) -> None:
         [report2_path, ca_id],
     )
     con.close()
+
+
+def save_service_line_analysis(system_norm: str, system_name: str, data_json: str) -> None:
+    """Cache the service-line analysis for a system (one row per system, upsert)."""
+    con = get_connection()
+    con.execute("DELETE FROM service_line_analysis WHERE system_norm = ?", [system_norm])
+    con.execute(
+        "INSERT INTO service_line_analysis (system_norm, system_name, data_json) VALUES (?, ?, ?)",
+        [system_norm, system_name, data_json],
+    )
+    con.close()
+
+
+def get_recent_service_line_analysis(system_norm: str, days: int = 21) -> Optional[str]:
+    """Return the cached service-line analysis JSON for a system if fresh, else None."""
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    con = get_connection()
+    row = con.execute(
+        "SELECT data_json FROM service_line_analysis WHERE system_norm = ? AND created_at >= ?",
+        [system_norm, cutoff],
+    ).fetchone()
+    con.close()
+    return row[0] if row else None
 
 
 def get_content_analysis_run(ca_id: str) -> Optional[dict]:

@@ -1999,9 +1999,24 @@ def _job_content_draft(job_id: str, ca_id: str) -> None:
             status=cf.get("status", "verified"),
             findings=[ContentFinding(**f) for f in findings],
         )
+        # Preserve the Service-Line Listing Management section on redraft, if the
+        # system has a cached service-line analysis.
+        _sl_payload = None
+        try:
+            import json as _json
+            from perception.db import (get_recent_service_line_analysis, _norm_entity_name)
+            from perception.models import ServiceLineScorecardSet, ServiceLineSummary
+            _cached = get_recent_service_line_analysis(_norm_entity_name(rec["entity_name"]), days=21)
+            if _cached:
+                _d = _json.loads(_cached)
+                _sl_payload = (ServiceLineSummary(**_d["summary"]),
+                               ServiceLineScorecardSet(**_d["cards"]).scorecards)
+        except Exception:
+            _sl_payload = None
         _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
         render_content_report_pdf(rec["entity_name"], rec.get("location", ""), model,
-                                  str(_r2), report_title=rec.get("report_title") or rec["entity_name"])
+                                  str(_r2), report_title=rec.get("report_title") or rec["entity_name"],
+                                  service_line=_sl_payload)
         set_content_analysis_drafted(ca_id, str(_r2))
         job["status"] = "done"
         job["result"] = {"ca_id": ca_id, "content_analysis": True, "drafted": True,
@@ -2021,6 +2036,7 @@ class ContentNetworkRequest(BaseModel):
     urls: list[str] = []                     # confirmed system website URL(s)
     report_title: Optional[str] = None
     override_cache: bool = False             # admin only
+    service_line_audit: bool = False         # opt-in: deep service-line listing audit
 
 
 @app.post("/api/content-analysis/network/run")
@@ -2112,6 +2128,57 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
         for f in findings.findings:
             emit({"type": "text", "text": f"\n• [{f.severity}] {f.teaser_summary}"})
 
+        _net_name = result.network_canonical_name or network_name
+
+        # 3b. Service-line listing analysis (opt-in "deep audit"; can take minutes).
+        sl_payload = None                        # (summary, scorecards) for Report 2
+        if req.get("service_line_audit"):
+            try:
+                import json as _json
+                from perception.service_line_discovery import discover_service_lines
+                from perception.service_line_locations import resolve_service_line_listings
+                from perception.service_line_scoring import score_service_lines
+                from perception.service_line_report import build_summary, derive_findings
+                from perception.models import (ContentFinding, ServiceLineScorecardSet,
+                                               ServiceLineSummary)
+                from perception.db import (get_recent_service_line_analysis,
+                                           save_service_line_analysis)
+                emit({"type": "phase", "name": "service_line",
+                      "text": "Service-line listing audit — this can take several minutes; safe to leave open"})
+                sys_norm = _norm_entity_name(_net_name)
+                cached = get_recent_service_line_analysis(sys_norm, days=21)
+                if cached:
+                    emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
+                    _d = _json.loads(cached)
+                    cards = ServiceLineScorecardSet(**_d["cards"])
+                    summ = ServiceLineSummary(**_d["summary"])
+                else:
+                    sl = discover_service_lines(_net_name, urls, hq, on_event=emit)
+                    lst = resolve_service_line_listings(_net_name, hq, sl, on_event=emit)
+                    cards = score_service_lines(lst, hq, on_event=emit)
+                    summ = build_summary(cards,
+                        sampling_note=f"flagship + up to 6 locations/line; {len(cards.scorecards)} service lines scored")
+                    save_service_line_analysis(sys_norm, _net_name,
+                        _json.dumps({"cards": cards.model_dump(), "summary": summ.model_dump()}))
+                sl_payload = (summ, cards.scorecards)
+
+                # Merge derived findings into the CIK list (severity-sorted, renumbered).
+                derived = derive_findings(cards)
+                if derived:
+                    combined = [f.model_dump() for f in findings.findings] + derived
+                    _sev = {"high": 0, "medium": 1, "low": 2}
+                    combined.sort(key=lambda f: _sev.get(f.get("severity", "low"), 3))
+                    for i, f in enumerate(combined, 1):
+                        f["finding_id"] = f"CIK-{i:03d}"
+                        f.setdefault("evidence", [])
+                    findings.findings = [ContentFinding(**f) for f in combined]
+                    save_content_findings(result.run_id, _norm_entity_name(network_name),
+                                          findings.source_snapshot,
+                                          [f.model_dump() for f in findings.findings], findings.status)
+                emit({"type": "text", "text": f"\nService-line audit complete ({summ.total_lines} lines)."})
+            except Exception as _sle:
+                emit({"type": "text", "text": f"\n(service-line audit skipped: {type(_sle).__name__})"})
+
         # 4. Report 1 = Network report + Content Keys; Report 2 = detailed report.
         emit({"type": "phase", "name": "pdf", "text": "Building the reports"})
         report1 = ""
@@ -2127,9 +2194,9 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
         try:
             from perception.content_report_pdf import render_content_report_pdf
             _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
-            _net_name = result.network_canonical_name or network_name
             render_content_report_pdf(_net_name, hq, findings, str(_r2),
-                                      report_title=req.get("report_title") or _net_name)
+                                      report_title=req.get("report_title") or _net_name,
+                                      service_line=sl_payload)
             report2 = str(_r2)
         except Exception as _pe2:
             emit({"type": "text", "text": f"\n(content report render failed: {type(_pe2).__name__})"})

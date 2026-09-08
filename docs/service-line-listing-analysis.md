@@ -564,6 +564,16 @@ Full A→D on Atrium: generate the report section + findings, eyeball that the s
 table matches the Phase-C numbers, the summary counts are right, invisible/weak lines
 produce the expected findings, and the whole pass streams progress and finishes.
 
+### As built (Phases A–D complete, 2026-09-07)
+- D1 `service_line_report.py` (build_summary + derive_findings), D2 scorecard section
+  in `content_report_pdf` (Report 2 only), D3 wired into `_job_content_analysis_network`
+  behind the opt-in `service_line_audit` toggle (frontend checkbox), with the
+  `service_line_analysis` cache table (21-day), findings merged severity-sorted into the
+  CIK list, and the section preserved on draft-regeneration.
+- Validated in isolation: D1 finding derivation, D2/D3 render (scorecard + merged
+  findings), the DB cache round-trip. A full in-app network run (analyze_network + the
+  A→D pass, ~10–15 min) is best validated live via the toggle.
+
 ### Resolved decisions for Phase D (2026-09-07)
 - **Gating:** opt-in toggle ("Include deep service-line listing audit"), not always-on.
 - **Persistence:** new `service_line_analysis` table, cached by system name (~14–30d).
