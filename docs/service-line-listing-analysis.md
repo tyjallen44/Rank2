@@ -486,6 +486,91 @@ Phase A→B→C end-to-end, ~102s for 4 lines:
 - AI-surfacing probe count per line (1 vs 2), and is C2 in-scope now or after C1 ships?
 - `details_per_line` = 2 (flagship + top 2 locations) — OK for the cost bound?
 
+## Phase D — Implementation spec (aggregation + reporting + wiring)
+
+**Goal:** turn the Phase-C scorecards into (1) a **per-service-line scorecard section**
++ a **system-level "Service-Line Listing Management" summary** in the network Content
+report, (2) a bounded set of **actionable CIK findings** (with drafted remediation), and
+(3) wire the whole A→D pass into the network content job with live progress + caching.
+Sub-phased: **D1** aggregate + finding derivation + persistence · **D2** report rendering
+· **D3** job wiring + caching + progress.
+
+### D1 — Aggregate + derived findings
+Aggregate model (`perception/models.py`):
+```
+class ServiceLineSummary(BaseModel):
+    total_lines: int
+    managed: int; partial: int; unmanaged: int; invisible: int
+    avg_overall: Optional[int]
+    best: Optional[str]; worst: Optional[str]
+    cross_cutting: list[str]      # e.g. "8 of 18 service pages lack schema.org markup"
+    sampling_note: str            # "flagship + up to 6 locations/line; sampled X of ~Y"
+```
+Computed from the `ServiceLineScorecardSet` in a new
+`perception/service_line_report.py` (`build_summary`, `derive_findings`).
+
+**Finding derivation** (scorecard → `ContentFinding`s; platform `service_line`;
+aggregate similar gaps so the list stays readable — one cross-cutting finding, not 18):
+- **Invisible line** (coverage=none) → HIGH, per line, remediation `listing_management`:
+  "No findable listing for {line} — patients & AI can't discover this service."
+- **Reputation drag** (reputation dim < 40) → per line, `reputation_program`.
+- **Schema gap** (content: no medical schema) → ONE aggregated finding listing the
+  lines, `schema_markup`.
+- **Listing completeness gap** (common missing field, e.g. description) → ONE
+  aggregated finding, `listing_management`.
+- **AI-invisibility** (findability AI probe = no) → per line (if metro assessed).
+These feed the existing findings list, so the existing drafting engine writes
+remediation for them for free.
+
+### D2 — Rendering (reuse the shared surfaces)
+- **Report 2** (`content_report_pdf._build_html`): add a new **"Service-Line Listing
+  Management"** section (before the findings `wrap`) = summary box (managed/partial/
+  unmanaged/invisible counts, avg score, sampling note) + a **scorecard table**:
+  `Service line | Status | Overall | Find | Complete | Reput | Content`, score cells
+  color-graded. Pass the `ServiceLineScorecardSet` + `ServiceLineSummary` in as a new
+  optional arg (default None → section omitted, so single-entity reports are unaffected).
+- **Report 1** (`network_pdf.render_content_network`): add a compact one-box summary to
+  the keys area ("X of N service lines actively managed · W invisible · avg
+  listing-attraction score N").
+- The derived findings render in the existing CIK list/section automatically.
+
+### D3 — Wiring into the network content job
+In `_job_content_analysis_network` (server.py), after the existing content analysis:
+```
+emit phase "Service-line listing analysis"
+sl   = discover_service_lines(canonical_name, urls, hq, on_event=emit)      # A
+lst  = resolve_service_line_listings(canonical_name, hq, sl, on_event=emit) # B
+cards= score_service_lines(lst, hq, on_event=emit)                          # C
+summ = build_summary(cards); findings += derive_findings(cards)             # D1
+# pass cards+summ to the renderers (D2); persist for History/re-download
+```
+- **Caching (D3):** check a cached service-line result (normalized system name,
+  ~14–30 days) before running A→C; store the `ServiceLineScorecardSet` JSON (new
+  `service_line_analysis` table or a JSON column on `content_analysis_runs`).
+- **Progress/watchdog:** the modules already stream `on_event`; add the header
+  counter + elapsed clock + "safe to leave open" copy, a total-runtime cap that
+  finalizes with a disclosed partial set, and the guarantee the job always emits
+  done/error (per the earlier hang).
+- **Gating (open decision):** always-on for network content runs (adds minutes) vs. an
+  opt-in "deep service-line audit" toggle.
+
+### No silent failure (carried through)
+Invisible lines shown; partial coverage + sampled/estimated_total disclosed in the
+summary; `not_assessed` dimensions rendered, not zeroed; a capped/timed-out run
+finalizes with a disclosed partial set.
+
+### Acceptance test
+Full A→D on Atrium: generate the report section + findings, eyeball that the scorecard
+table matches the Phase-C numbers, the summary counts are right, invisible/weak lines
+produce the expected findings, and the whole pass streams progress and finishes.
+
+### Open decisions for Phase D
+- Always-on vs. opt-in toggle for the (multi-minute) service-line pass?
+- Persistence: new `service_line_analysis` table vs. JSON column on `content_analysis_runs`?
+- Per-line findings vs. fully aggregated — how many individual findings is too many
+  (proposed: invisible + reputation-drag per line; schema + completeness aggregated)?
+- Does the scorecard belong in Report 2 (detailed) only, or also a summary in Report 1?
+
 ## Retired
 - Per-physician roster discovery and per-physician directory lookups.
 - Org-level consumer-directory *findings* (dropped in 2a as unreliable). Kept
