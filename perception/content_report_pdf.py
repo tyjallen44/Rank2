@@ -9,6 +9,7 @@ phase and rendered when present; in the sandbox it's absent.
 from __future__ import annotations
 
 import html
+import re
 from datetime import date
 from pathlib import Path
 
@@ -43,6 +44,21 @@ _PUBLISHABLE_REMEDIATION = {"schema_markup", "website_fix", "wikidata_edit", "ta
 
 def _e(s) -> str:
     return html.escape(str(s if s is not None else ""))
+
+
+# Each finding block carries a hidden, page-searchable marker so a second render
+# pass can find the exact printed page a finding lands on (Chromium doesn't expose
+# page numbers at build time). The marker (e.g. ZZCIK001ZZ) is unique to the block
+# and does NOT appear in the Contents list, so it never false-matches the cover.
+_SL_ANCHOR = "ZZSERVICELINEZZ"
+
+
+def _anchor_token(fid) -> str:
+    return "ZZ" + re.sub(r"[^A-Za-z0-9]", "", str(fid or "").upper()) + "ZZ"
+
+
+def _hidden_marker(token: str) -> str:
+    return f'<span style="color:#fff;font-size:1px;line-height:0">{token}</span>'
 
 
 # Display normalization so the header reads in proper title case, matching the
@@ -109,31 +125,77 @@ def _logo_html() -> str:
     return '<div style="color:#fff;font-weight:700;font-size:20px">Pulse</div>'
 
 
+def _page_map(pdf_path, items, has_service_line: bool) -> dict:
+    """After a first render, read the produced PDF and locate the printed page each
+    finding block (and the service-line section) landed on, by searching per-page
+    text for the block's hidden marker. Returns {finding_id/_SL_ANCHOR: page_no}.
+    Best-effort: any item we can't locate is simply omitted."""
+    try:
+        from pypdf import PdfReader
+    except Exception:
+        return {}
+    try:
+        reader = PdfReader(str(pdf_path))
+        norm = []
+        for pg in reader.pages:
+            try:
+                norm.append(re.sub(r"[^A-Za-z0-9]", "", (pg.extract_text() or "")).upper())
+            except Exception:
+                norm.append("")
+    except Exception:
+        return {}
+    out = {}
+    tokens = [(f.get("finding_id"), _anchor_token(f.get("finding_id"))) for f in items]
+    if has_service_line:
+        tokens.append((_SL_ANCHOR, _SL_ANCHOR))
+    for key, tok in tokens:
+        for i, page_text in enumerate(norm):
+            if tok in page_text:
+                out[key] = i + 1
+                break
+    return out
+
+
 def render_content_report_pdf(entity_name: str, location: str, findings, pdf_path: str,
                               report_title: str = "", service_line=None) -> None:
     """Render Report 2 (detailed content findings) to a branded PDF. `service_line`,
     when given, is (ServiceLineSummary, [ServiceLineScorecard]) and adds the
-    Service-Line Listing Management section (Report 2 only)."""
+    Service-Line Listing Management section (Report 2 only).
+
+    Rendered in two passes: the first lays out the report so we can read back which
+    page each finding lands on; the second fills those page numbers into the cover
+    Contents list. The finding layout is identical between passes (only the tiny
+    page-number strings change), so the located pages stay valid."""
     from playwright.sync_api import sync_playwright
-    html_str = _build_html(entity_name, location, findings, report_title, service_line)
+    raw = list(getattr(findings, "findings", []) or [])
+    items = [f.model_dump() if hasattr(f, "model_dump") else f for f in raw]
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
-        page.set_content(html_str, wait_until="networkidle")
-        page.pdf(
-            path=str(pdf_path), format="Letter",
-            margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
-            print_background=True, display_header_footer=True,
-            header_template="<span></span>",
-            footer_template=(
-                '<div style="width:100%;font-family:Arial,sans-serif;font-size:8px;'
-                'color:#8a9aaa;display:flex;justify-content:space-between;align-items:center;'
-                'padding:0 44px 10px;box-sizing:border-box">'
-                '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
-                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
-                '</div>'
-            ),
-        )
+
+        def _emit(page_map):
+            page.set_content(
+                _build_html(entity_name, location, findings, report_title, service_line, page_map),
+                wait_until="networkidle")
+            page.pdf(
+                path=str(pdf_path), format="Letter",
+                margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
+                print_background=True, display_header_footer=True,
+                header_template="<span></span>",
+                footer_template=(
+                    '<div style="width:100%;font-family:Arial,sans-serif;font-size:8px;'
+                    'color:#8a9aaa;display:flex;justify-content:space-between;align-items:center;'
+                    'padding:0 44px 10px;box-sizing:border-box">'
+                    '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+                    '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
+                    '</div>'
+                ),
+            )
+
+        _emit(None)  # measurement pass
+        pm = _page_map(pdf_path, items, bool(service_line)) if items else {}
+        if pm:
+            _emit(pm)  # final pass with real page numbers
         browser.close()
 
 
@@ -187,6 +249,7 @@ def _finding_block(f: dict) -> str:
                       f'<pre class="draft">{_e(draft)}</pre>')
     return f"""
     <div class="finding">
+      {_hidden_marker(_anchor_token(f.get("finding_id")))}
       <div class="fhead">
         <span class="fid">{_e(f.get("finding_id"))}</span>
         <span class="sev" style="background:{sc}">{_e(sev)}</span>
@@ -248,6 +311,7 @@ def _service_line_section(summary, scorecards) -> str:
             f'{_sl_cell(dims.get("reputation"))}{_sl_cell(dims.get("content"))}</tr>')
 
     return f"""<div class="slwrap">
+      {_hidden_marker(_SL_ANCHOR)}
       <div class="slh">Service-Line Listing Management</div>
       <div class="slbox"><b>{summary.total_lines} service line{'s' if summary.total_lines != 1 else ''} analyzed</b> &mdash; {counts}{avg}.{note}{cross_html}</div>
       <table class="sltbl">
@@ -258,8 +322,49 @@ def _service_line_section(summary, scorecards) -> str:
     </div>"""
 
 
+def _contents_section(items, has_service_line: bool, page_map) -> str:
+    """The cover-page Contents list: every item from the Deep Diagnostic summary,
+    with the page it's addressed on. `page_map` is {finding_id: page_no} (and
+    _SL_ANCHOR for the service-line section) once the first render pass has located
+    each block; None on the measurement pass (page numbers show as a dash)."""
+    if not items and not has_service_line:
+        return ""
+
+    def _pg(key) -> str:
+        n = (page_map or {}).get(key)
+        return f"p.&nbsp;{n}" if n else "&mdash;"
+
+    rows = ""
+    for f in items:
+        sev = f.get("severity", "low")
+        sc = _SEV.get(sev, "#7a9095")
+        plat = _PLATFORM.get(f.get("platform"), f.get("platform")) or ""
+        rows += (
+            f'<div class="toc-row">'
+            f'<span class="toc-id">{_e(f.get("finding_id"))}</span>'
+            f'<span class="toc-sev" style="background:{sc}">{_e(sev)}</span>'
+            f'<span class="toc-title">{_e(f.get("teaser_summary"))}'
+            f'<span class="toc-plat">{_e(plat)}</span></span>'
+            f'<span class="toc-pg">{_pg(f.get("finding_id"))}</span></div>')
+    if has_service_line:
+        rows += (
+            f'<div class="toc-row">'
+            f'<span class="toc-id">&mdash;</span>'
+            f'<span class="toc-sev" style="background:{_TEAL2}">deep&nbsp;dive</span>'
+            f'<span class="toc-title">Service-Line Listing Management'
+            f'<span class="toc-plat">Per service line: findability, completeness, reputation, content</span></span>'
+            f'<span class="toc-pg">{_pg(_SL_ANCHOR)}</span></div>')
+
+    n = len(items) + (1 if has_service_line else 0)
+    return f"""<div class="toc">
+      <div class="toc-lead">The {n} item{'s' if n != 1 else ''} below map to your Deep Diagnostic summary.
+        Here's where each one is addressed in detail:</div>
+      <div class="toc-list">{rows}</div>
+    </div>"""
+
+
 def _build_html(entity_name: str, location: str, findings, report_title: str,
-                service_line=None) -> str:
+                service_line=None, page_map=None) -> str:
     items = list(getattr(findings, "findings", []) or [])
     items = [f.model_dump() if hasattr(f, "model_dump") else f for f in items]
     snap = getattr(findings, "source_snapshot", {}) or {}
@@ -284,6 +389,7 @@ def _build_html(entity_name: str, location: str, findings, report_title: str,
     if service_line:
         _summary, _cards = service_line
         sl_section = _service_line_section(_summary, _cards)
+    toc = _contents_section(items, bool(sl_section), page_map)
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
       * {{ box-sizing:border-box; margin:0; padding:0; }}
@@ -297,6 +403,18 @@ def _build_html(entity_name: str, location: str, findings, report_title: str,
                border-bottom:1px solid #d7e7e2; line-height:1.6; }}
       .meta b {{ color:{_TEAL}; }}
       .intro {{ padding:16px 44px 4px; font-size:11pt; color:{_INK}; line-height:1.55; }}
+      .toc {{ padding:12px 44px 20px; page-break-after:always; }}
+      .toc-lead {{ font-size:10.5pt; color:{_INK}; line-height:1.5; margin-bottom:14px; }}
+      .toc-list {{ border-top:2px solid {_TEAL}; }}
+      .toc-row {{ display:flex; align-items:center; gap:11px; padding:9px 2px;
+                  border-bottom:1px solid #e8f0ee; page-break-inside:avoid; }}
+      .toc-id {{ font-family:monospace; font-size:8.5pt; color:{_MUTE}; min-width:56px; }}
+      .toc-sev {{ color:#fff; font-size:7pt; font-weight:700; padding:2px 8px; border-radius:9px;
+                  text-transform:uppercase; white-space:nowrap; }}
+      .toc-title {{ flex:1; font-size:10pt; font-weight:600; color:{_TEAL}; line-height:1.35; }}
+      .toc-plat {{ display:block; font-size:8pt; font-weight:600; color:{_TEAL2};
+                   text-transform:none; margin-top:2px; }}
+      .toc-pg {{ font-size:9.5pt; font-weight:700; color:{_INK}; white-space:nowrap; min-width:42px; text-align:right; }}
       .wrap {{ padding:8px 44px 24px; }}
       .finding {{ border:1px solid #e2ece9; border-radius:8px; padding:14px 16px; margin:12px 0;
                   page-break-inside:avoid; }}
@@ -337,10 +455,11 @@ def _build_html(entity_name: str, location: str, findings, report_title: str,
         <b>{summary}</b><br>
         Sources analyzed: {_e(urls)} &middot; {pages} page(s) crawled &middot; live Wikidata &amp; Wikipedia checks &middot; {date.today():%B %-d, %Y}
       </div>
-      <div class="intro">Each item below is a verified content-visibility finding — where the sources AI
-        assistants read are missing, outdated, or inconsistent — with the evidence behind it and the
-        recommended remediation. Items appear in the same order and with the same IDs as the summary in
-        your Deep Diagnostic.</div>
+      <div class="intro">This report goes deep on every content-visibility finding from your Deep
+        Diagnostic — where the sources AI assistants read are missing, outdated, or inconsistent — with the
+        evidence behind each one and the specific fix. Findings keep the same order and IDs as your Deep
+        Diagnostic summary.</div>
+      {toc}
       {sl_section}
       <div class="wrap">{blocks}</div>
       <div class="method"><b>How to read this.</b> Findings are drawn from live checks of your website

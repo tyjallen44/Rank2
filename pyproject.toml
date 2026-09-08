@@ -27,6 +27,7 @@ dependencies = [
     "uvicorn[standard]>=0.29.0",
     "python-multipart>=0.0.9",
     "pyspellchecker>=0.8",
+    "pypdf>=4.0",
 ]
 
 [project.optional-dependencies]
