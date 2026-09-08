@@ -1981,11 +1981,19 @@ input[type="url"]::placeholder, textarea::placeholder {
               oninput="this.value=this.value.toUpperCase()"
               onkeydown="if(event.key==='Enter')npFindFacilities()">
           </div>
-          <div class="fg" style="margin:0">
-            <label class="fl">Headquarters (City, State)</label>
-            <input id="np-hq" class="fi" type="text" placeholder="Charlotte, NC"
-              oninput="this.value=this.value.toUpperCase()"
-              onkeydown="if(event.key==='Enter')npFindFacilities()">
+          <div style="display:grid;grid-template-columns:1fr 120px;gap:14px">
+            <div class="fg" style="margin:0">
+              <label class="fl">Headquarters City</label>
+              <input id="np-city" class="fi" type="text" placeholder="Charlotte"
+                oninput="this.value=this.value.toUpperCase()"
+                onkeydown="if(event.key==='Enter')npFindFacilities()">
+            </div>
+            <div class="fg" style="margin:0">
+              <label class="fl">State</label>
+              <input id="np-state" class="fi" type="text" placeholder="NC" maxlength="2"
+                oninput="this.value=this.value.toUpperCase()"
+                onkeydown="if(event.key==='Enter')npFindFacilities()">
+            </div>
           </div>
         </div>
         <div class="fg" style="margin-bottom:16px">
@@ -4244,13 +4252,21 @@ function npUpdateType() {
   if (s2desc) s2desc.textContent = cfg.step2Desc;
 }
 
+function _npHq() {
+  const c = (document.getElementById('np-city')?.value || '').trim();
+  const s = (document.getElementById('np-state')?.value || '').trim();
+  return [c, s].filter(Boolean).join(', ');
+}
+
 function npReset() {
-  const nameEl = document.getElementById('np-name');
-  const hqEl   = document.getElementById('np-hq');
-  const urlEl  = document.getElementById('np-url');
-  if (nameEl) nameEl.value = '';
-  if (hqEl)   hqEl.value   = '';
-  if (urlEl)  urlEl.value  = '';
+  const nameEl  = document.getElementById('np-name');
+  const cityEl  = document.getElementById('np-city');
+  const stateEl = document.getElementById('np-state');
+  const urlEl   = document.getElementById('np-url');
+  if (nameEl)  nameEl.value  = '';
+  if (cityEl)  cityEl.value  = '';
+  if (stateEl) stateEl.value = '';
+  if (urlEl)   urlEl.value   = '';
   _npRoster = [];
   document.getElementById('np-step2').classList.add('hidden');
   document.getElementById('np-step1').classList.remove('hidden');
@@ -4267,7 +4283,7 @@ function npReset() {
 
 async function npFindFacilities() {
   const name = document.getElementById('np-name').value.trim();
-  const hq   = document.getElementById('np-hq').value.trim();
+  const hq   = _npHq();
   const facilityType = document.getElementById('np-type').value || 'hospital';
   const cfg   = _npTypeCfg();
   const errEl = document.getElementById('np-step1-err');
@@ -4363,7 +4379,7 @@ function npShowRoster(facilities, networkName, confidenceNote, cfg) {
 
 async function npRunAnalysis() {
   const name  = document.getElementById('np-name').value.trim();
-  const hq    = document.getElementById('np-hq').value.trim();
+  const hq    = _npHq();
   const url   = document.getElementById('np-url').value.trim();
   const errEl = document.getElementById('np-step2-err');
   errEl.classList.add('hidden');
@@ -6442,7 +6458,7 @@ function ncaOpen() {
   // from the current form, so you don't retype what you just ran.
   const v = id => (document.getElementById(id)?.value || '').trim();
   const src = window._lastNetworkCA || {};
-  const npName = (src.name || v('np-name')), npHq = (src.hq || v('np-hq')), npUrl = (src.url || v('np-url'));
+  const npName = (src.name || v('np-name')), npHq = (src.hq || _npHq()), npUrl = (src.url || v('np-url'));
   const nameEl = document.getElementById('nca-name'), hqEl = document.getElementById('nca-hq');
   if (npName && nameEl && !nameEl.value.trim()) nameEl.value = npName;
   if (npHq && hqEl && !hqEl.value.trim()) hqEl.value = npHq;
@@ -7114,6 +7130,15 @@ function _dlMenu(uid, files, acts) {
   </div>`;
 }
 
+// Admin file-replace from a Downloads-menu action: pop a file picker, then upload.
+function evPickUpload(id, kind) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = kind === 'csv' ? '.csv' : '.zip';
+  inp.onchange = () => evUploadFile(id, kind, inp);
+  inp.click();
+}
+
 function _dlCell(run, caRuns) {
   const isNet = run.report_type === 'network' || run.entity_type === 'hospital_network';
   const tok = encodeURIComponent(_token);
@@ -7176,28 +7201,20 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
       const type  = ev.entity_type === 'practice' ? 'Practice' : ev.entity_type === 'fqhc' ? 'Community Health' : 'Hospital';
       const statusBadge = ev.status === 'complete'
         ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
-        : `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
-             <span class="badge bg-muted" style="font-size:10px">Running</span>
-             <button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 9px" onclick="evResume('${ev.id}')" title="Re-run any entities that never finished">↻ Resume</button>
-           </div>`;
+        : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
+      const evActs = [];
+      if (ev.status !== 'complete') evActs.push(['↻ Resume', `evResume('${ev.id}')`]);
+      if (_role === 'admin') {
+        evActs.push(['✎ Edit details', `evStartEditMeta('${ev.id}')`]);
+        evActs.push(['↑ Replace CSV', `evPickUpload('${ev.id}','csv')`]);
+        evActs.push(['↑ Replace ZIP', `evPickUpload('${ev.id}','zip')`]);
+        evActs.push(['🗑 Delete', `evDeleteById('${ev.id}','${(ev.event_name||'').replace(/'/g,"\\'")}')`]);
+      }
       const dlEv = _dlMenu(ev.id, [
         ...(ev.has_csv ? [['Enriched CSV', `/api/event/${ev.id}/csv?token=${encodeURIComponent(_token)}`]] : []),
         ...(ev.has_zip ? [['Report Bundle (ZIP)', `/api/event/${ev.id}/zip?token=${encodeURIComponent(_token)}`]] : []),
-      ]);
-      const adminBtns = _role === 'admin' ? `
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="evStartEditMeta('${ev.id}')" style="font-size:11px;padding:3px 8px">Edit</button>
-          <label class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;margin:0" title="Replace CSV">
-            <input type="file" accept=".csv" style="display:none" onchange="evUploadFile('${ev.id}','csv',this)">
-            ↑ CSV
-          </label>
-          <label class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;margin:0" title="Replace ZIP">
-            <input type="file" accept=".zip" style="display:none" onchange="evUploadFile('${ev.id}','zip',this)">
-            ↑ ZIP
-          </label>
-          <button class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="evDeleteById('${ev.id}','${(ev.event_name||'').replace(/'/g,"\\'")}')">Delete</button>
-        </div>` : '';
-      const EVCOLS = _role === 'admin' ? 8 : 7;
+      ], evActs);
+      const EVCOLS = 7;
       const editRow = (_role === 'admin' && _evEditingId === ev.id) ? `
         <tr><td colspan="${EVCOLS}" style="background:#f0f7f7;padding:16px 20px;border-top:1px solid var(--pale)" onclick="event.stopPropagation()">
           <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
@@ -7223,7 +7240,6 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
         <td style="font-size:13px;color:var(--muted)">${count}</td>
         <td>${statusBadge}</td>
         <td>${dlEv}</td>
-        ${_role === 'admin' ? `<td>${adminBtns}</td>` : ''}
       </tr>${editRow}`;
     }).join('');
     const _evCount = events.length;
@@ -7261,7 +7277,6 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
               <thead><tr>
                 <th>Date</th><th>Event Name</th><th>Event Date</th><th>Type</th>
                 <th>Entities</th><th>Status</th><th>Downloads</th>
-                ${_role === 'admin' ? '<th></th>' : ''}
               </tr></thead>
               <tbody>${evRows}</tbody>
             </table>
@@ -7278,20 +7293,18 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
       const result = b.status === 'running'
         ? `${b.done_count || 0} / ${b.total} scored`
         : `${b.scored} scored${b.failed ? ` · ${b.failed} failed` : ''}`;
-      const resumeBtn = `<button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 9px" onclick="nbResume('${b.id}')" title="Re-run from the saved upload — already-scored systems return from cache">↻ Resume</button>`;
       const statusBadge = b.status === 'done'
         ? `<span class="badge bg-teal" style="font-size:10px">Complete</span>`
         : b.status === 'failed'
-          ? `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
-               <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>${resumeBtn}</div>`
-          : `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
-               <span class="badge bg-muted" style="font-size:10px">Running</span>${resumeBtn}</div>`;
+          ? `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>`
+          : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
+      const nbActs = [];
+      if (b.status !== 'done') nbActs.push(['↻ Resume', `nbResume('${b.id}')`]);
+      if (_role === 'admin') nbActs.push(['🗑 Delete', `nbDelete('${b.id}')`]);
       const dlNb = _dlMenu(b.id, b.status === 'done'
-        ? [['Scores CSV', `/api/network/bulk/${b.id}/csv?token=${encodeURIComponent(_token)}`]] : []);
-      const delCell = _role === 'admin'
-        ? `<td><button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="nbDelete('${b.id}')">Delete</button></td>` : '';
+        ? [['Scores CSV', `/api/network/bulk/${b.id}/csv?token=${encodeURIComponent(_token)}`]] : [], nbActs);
       return `<tr><td>${date}</td><td>${b.label || ''}</td><td>${b.total}</td>
-        <td>${result}</td><td>${statusBadge}</td><td>${dlNb}</td>${delCell}</tr>`;
+        <td>${result}</td><td>${statusBadge}</td><td>${dlNb}</td></tr>`;
     }).join('');
     const nbCount = bulkRuns.length;
     nbHtml = `
@@ -7311,7 +7324,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
-              <thead><tr><th>Date</th><th>List</th><th>Systems</th><th>Result</th><th>Status</th><th>Downloads</th>${_role === 'admin' ? '<th></th>' : ''}</tr></thead>
+              <thead><tr><th>Date</th><th>List</th><th>Systems</th><th>Result</th><th>Status</th><th>Downloads</th></tr></thead>
               <tbody>${nbRows}</tbody>
             </table>
           </div>
