@@ -2146,7 +2146,9 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
                 emit({"type": "phase", "name": "service_line",
                       "text": "Service-line listing audit — this can take several minutes; safe to leave open"})
                 sys_norm = _norm_entity_name(_net_name)
-                cached = get_recent_service_line_analysis(sys_norm, days=21)
+                # Admin "Refresh — ignore cache" busts the service-line cache too;
+                # the fresh result below re-saves and refreshes it.
+                cached = None if override else get_recent_service_line_analysis(sys_norm, days=21)
                 if cached:
                     emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
                     _d = _json.loads(cached)
