@@ -417,3 +417,26 @@ class ServiceLineListings(BaseModel):
 class ServiceLineListingSet(BaseModel):
     system_name: str
     lines: list[ServiceLineListings] = Field(default_factory=list)
+
+
+class DimensionScore(BaseModel):
+    """One rubric dimension of a service-line scorecard (Phase C)."""
+    key: str                                 # findability | completeness | reputation | content
+    score: Optional[int] = None              # 0-100, or None if not_assessed
+    status: str = "verified"                 # verified | partial | not_assessed
+    signals: list[str] = Field(default_factory=list)
+
+
+class ServiceLineScorecard(BaseModel):
+    canonical_key: str
+    canonical_label: str
+    management_status: str = "partial"       # managed | partial | unmanaged | invisible
+    overall_score: Optional[int] = None
+    dimensions: list[DimensionScore] = Field(default_factory=list)
+    listings_scored: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+
+class ServiceLineScorecardSet(BaseModel):
+    system_name: str
+    scorecards: list[ServiceLineScorecard] = Field(default_factory=list)

@@ -339,6 +339,32 @@ def fetch_provider(
     return read, footprint
 
 
+def place_details(place_id: str, *, api_key: str | None = None,
+                  timeout: float = 20.0) -> dict:
+    """Places v1 GET place details for the fields Phase C scoring needs (GBP
+    completeness + reviews for recency). Never raises; returns {} on error/no-key."""
+    key = _api_key(api_key)
+    if not key or not place_id:
+        return {}
+    try:
+        resp = httpx.get(
+            f"https://places.googleapis.com/v1/places/{place_id}",
+            headers={
+                "X-Goog-Api-Key": key,
+                "X-Goog-FieldMask": (
+                    "id,displayName,primaryType,types,nationalPhoneNumber,"
+                    "websiteUri,regularOpeningHours,editorialSummary,photos,"
+                    "rating,userRatingCount,reviews"
+                ),
+            },
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except (httpx.HTTPError, ValueError):
+        return {}
+
+
 def text_search(query: str, *, max_results: int = 10, api_key: str | None = None,
                 timeout: float = 20.0) -> list[dict]:
     """Places Text Search → the full normalized candidate list (vs fetch_provider,

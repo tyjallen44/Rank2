@@ -424,10 +424,11 @@ of the three; components that can't be checked are excluded and the rest renorma
 (editorialSummary) · ≥3 photos · appointment/booking link. Score = % of fields present.
 
 **Reputation (C1)** — blend across sampled locations: rating (40%) · review volume,
-log-scaled (30%) · recency of the newest reviews (20%) · **review-response rate (10%)**.
-NOTE: the Places API does not expose owner responses, so response-rate is `not_assessed`
-in v1 (renormalize) unless we add an optional Maps place-page scrape (Playwright) — see
-open decisions. Rating/volume/recency are fully verified from the API.
+log-scaled (30%), renormalized to 100. AS BUILT: recency and response-rate are NOT
+scored. Response-rate isn't exposed by the API; and recency proved unreliable — the
+Places API returns the "most relevant" reviews, not the newest, so a recency number
+is misleading (a busy system showed "~1085d"). Both are shown as caveated
+informational signals only. Rating + volume are fully verified.
 
 **Content quality (C1)** — crawl `landing_url` (reuse `content_analyzer` crawler +
 schema extraction): schema.org Medical* present (30) · online-scheduling/booking CTA
@@ -463,6 +464,20 @@ Phase A→B→C on Atrium + one smaller system. Verify: (a) completeness/reputat
 scores are sane and backed by real signals (spot-check a flagship's GBP + landing page);
 (b) an under-managed line scores lower than a flagship institute; (c) any invisible line
 is flagged; (d) management-status labels match a human eyeball on 3–4 lines.
+
+### Acceptance results (2026-09-07, Atrium slice: oncology/cardiology/imaging/pain)
+Phase A→B→C end-to-end, ~102s for 4 lines:
+- **Discriminating & sensible:** overall oncology 83, cardiology 83, imaging 77,
+  pain 69 — reputation correctly separates pain (2.6★ → 30-ish) from cardiology
+  (4.7★ → high). Findability 100 on all (dedicated page + GBP + **AI probe surfaced
+  the system** for "best {line} in Charlotte"). Completeness 83 (5/6; Atrium GBPs
+  lack an editorialSummary). Content 70 (real finding: Atrium service pages have no
+  schema.org medical markup; booking CTA + provider links present).
+- **Fix from testing:** dropped recency from the reputation score (unreliable, see
+  above) — cardiology went 78→97, which matches its genuinely excellent reputation.
+- management_status is presence/completeness-based (managed = complete listings +
+  dedicated page), so a well-managed-but-underperforming line reads as
+  `managed` with a low overall (pain: managed, 69) — the intended dual signal.
 
 ### Open decisions for Phase C
 - Overall weights (default 30/25/25/20) — adjust?
