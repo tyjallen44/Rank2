@@ -25,13 +25,15 @@ _STATUS = {"verified": ("#2e9e5b", "Verified"),
 _PLATFORM = {"structured_data": "Structured data (schema.org)", "website": "Website",
              "llms_txt": "llms.txt", "wikidata": "Wikidata", "wikipedia": "Wikipedia",
              "reputation": "Reputation & Listings", "directory": "Provider Directories",
-             "service_line": "Service Lines"}
+             "service_line": "Service Lines", "safety": "Safety & Quality"}
 _REMEDIATION = {"schema_markup": "Add schema.org markup", "website_fix": "Website fix",
                 "wikidata_edit": "Wikidata edit (we can draft, you publish)",
                 "talk_page_request": "Wikipedia talk-page request",
                 "directory_update": "Directory update", "monitor_respond": "Monitor & respond",
                 "reputation_program": "Reputation / review-generation program (RLDatix Reputation Management)",
-                "listing_management": "Google Business Profile / listings management (RLDatix Reputation Management)"}
+                "listing_management": "Google Business Profile / listings management (RLDatix Reputation Management)",
+                "leapfrog_submission": "Participate in the Leapfrog Hospital Survey",
+                "quality_improvement": "Quality improvement (CMS Care Compare data)"}
 
 # Remediation types whose drafted output is literal content the client PUBLISHES
 # (website/knowledge-graph). Everything else is an operational plan to implement,

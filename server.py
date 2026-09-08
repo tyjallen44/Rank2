@@ -1836,9 +1836,14 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
                 "aggregate_rating": agg_rating,
                 "aggregate_count": agg_count,
             }
-        emit({"type": "phase", "name": "content", "text": "Checking website, Wikidata, Wikipedia, and reputation"})
+        saf = None
+        if entity_type == "hospital" and prov is not None:
+            saf = {"entity_kind": "hospital", "name": entity_name,
+                   "leapfrog_grade": getattr(prov, "leapfrog_grade", None),
+                   "cms_star_rating": getattr(prov, "cms_star_rating", None)}
+        emit({"type": "phase", "name": "content", "text": "Checking website, Wikidata, Wikipedia, reputation, and safety"})
         findings = analyze_content(entity_name, urls, city, state,
-                                   entity_kind=entity_type, reputation=rep, on_event=emit)
+                                   entity_kind=entity_type, reputation=rep, safety=saf, on_event=emit)
         findings.run_id = result.run_id
         save_content_findings(
             result.run_id, _norm_entity_name(entity_name),
@@ -2188,10 +2193,16 @@ def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str
         #    per-facility reputation.
         if not urls and result.source_url:
             urls = [result.source_url]
+        saf = None
+        if (result.facility_type or "hospital") == "hospital":
+            saf = {"entity_kind": "hospital", "locations": [
+                {"name": f.name, "leapfrog_grade": f.leapfrog_grade,
+                 "cms_star_rating": f.cms_star_rating,
+                 "address": ", ".join([p for p in [f.city, f.state] if p])} for f in facs]}
         emit({"type": "phase", "name": "content",
-              "text": "Checking system website, Wikidata, Wikipedia, and per-facility reputation"})
+              "text": "Checking system website, Wikidata, Wikipedia, per-facility reputation, and safety"})
         findings = analyze_content(network_name, urls, city, state,
-                                   entity_kind="hospital", reputation=rep, on_event=emit)
+                                   entity_kind="hospital", reputation=rep, safety=saf, on_event=emit)
         findings.run_id = result.run_id
         save_content_findings(result.run_id, _norm_entity_name(network_name),
                               findings.source_snapshot,

@@ -130,7 +130,8 @@ def _content_keys_section(findings) -> str:
               "not_assessed": ("#9aa8ac", "Not assessed")}
     plat_label = {"structured_data": "Structured data", "website": "Website",
                   "llms_txt": "llms.txt", "wikidata": "Wikidata", "wikipedia": "Wikipedia",
-                  "reputation": "Reputation", "directory": "Provider Directories"}
+                  "reputation": "Reputation", "directory": "Provider Directories",
+                  "safety": "Safety & Quality"}
 
     if not items:
         body = ('<p style="font-size:10.5pt;color:#3a5a60;margin:0">'

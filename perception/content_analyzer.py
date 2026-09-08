@@ -601,11 +601,86 @@ def _check_reputation(rep: dict) -> list:
     return findings
 
 
+# ── Safety / quality (hospital-only) ──────────────────────────────────────────
+
+def _check_safety(safety: dict) -> list:
+    """Hospital safety-grade findings from the base diagnostic's verified quality
+    data. A MISSING Leapfrog grade means patients and AI assistants see no
+    independent safety signal — the remediation is to participate in the Leapfrog
+    Hospital Survey. A low grade (D/F) or low CMS star is a visible negative
+    signal. Hospitals only (Leapfrog does not grade practices)."""
+    findings: list = []
+    if not safety or safety.get("entity_kind") != "hospital":
+        return findings
+
+    def _g(x):
+        return (x.get("leapfrog_grade") or "").strip().upper()
+
+    locs = safety.get("locations") or []
+    if locs:
+        no_grade = [l for l in locs if not _g(l)]
+        low_grade = [l for l in locs if _g(l) in ("D", "F")]
+        if no_grade:
+            names = [l.get("name") for l in no_grade if l.get("name")]
+            findings.append(dict(
+                platform="safety", category="opportunity",
+                severity="high" if len(no_grade) >= 2 else "medium", status="verified",
+                teaser_summary=f"{len(no_grade)} hospital(s) have no Leapfrog Hospital Safety Grade — a safety signal patients and AI assistants can't see.",
+                current_state=(f"{len(no_grade)} of {len(locs)} facilities are not rated by The Leapfrog Group: "
+                               + ", ".join(names[:10]) + ("…" if len(names) > 10 else "") + "."),
+                expected_state="Every hospital participates in the Leapfrog Hospital Survey and publishes a current safety grade.",
+                remediation_type="leapfrog_submission", evidence=names[:12]))
+        if low_grade:
+            names = [f"{l.get('name')} ({_g(l)})" for l in low_grade if l.get("name")]
+            findings.append(dict(
+                platform="safety", category="risk", severity="high", status="verified",
+                teaser_summary=f"{len(low_grade)} hospital(s) carry a low Leapfrog safety grade (D/F) — a visible negative signal.",
+                current_state="Graded D or F by The Leapfrog Group: " + ", ".join(names[:10]) + ("…" if len(names) > 10 else "") + ".",
+                expected_state="An improving Leapfrog Hospital Safety Grade (C or better), with verified survey participation.",
+                remediation_type="leapfrog_submission", evidence=names[:12]))
+        low_star = [l for l in locs if isinstance(l.get("cms_star_rating"), int) and l.get("cms_star_rating") <= 2]
+        if low_star:
+            names = [f"{l.get('name')} ({l.get('cms_star_rating')}★)" for l in low_star if l.get("name")]
+            findings.append(dict(
+                platform="safety", category="opportunity",
+                severity="high" if len(low_star) >= 2 else "medium", status="verified",
+                teaser_summary=f"{len(low_star)} hospital(s) have a low CMS Overall Star Rating (≤2★) — a quality signal patients and AI assistants weight.",
+                current_state="Low CMS Overall Hospital Quality Star Rating: " + ", ".join(names[:10]) + ("…" if len(names) > 10 else "") + ".",
+                expected_state="Improved CMS measures (3★+); ensure each hospital's CMS Care Compare data is complete and current.",
+                remediation_type="quality_improvement", evidence=names[:12]))
+    else:
+        g = _g(safety)
+        name = safety.get("name") or "This hospital"
+        if not g:
+            findings.append(dict(
+                platform="safety", category="opportunity", severity="medium", status="verified",
+                teaser_summary="No Leapfrog Hospital Safety Grade — patients and AI assistants see no independent safety signal.",
+                current_state=f"{name} is not currently rated by The Leapfrog Group.",
+                expected_state="Participation in the Leapfrog Hospital Survey, with a published safety grade.",
+                remediation_type="leapfrog_submission", evidence=[]))
+        elif g in ("D", "F"):
+            findings.append(dict(
+                platform="safety", category="risk", severity="high", status="verified",
+                teaser_summary=f"Low Leapfrog Hospital Safety Grade ({g}) — a visible negative safety signal for patients and AI.",
+                current_state=f"{name} holds a Leapfrog grade of {g}.",
+                expected_state="An improving Leapfrog grade (C or better), with verified survey participation.",
+                remediation_type="leapfrog_submission", evidence=[]))
+        star = safety.get("cms_star_rating")
+        if star is not None and star <= 2:
+            findings.append(dict(
+                platform="safety", category="opportunity", severity="medium", status="verified",
+                teaser_summary=f"Low CMS Overall Star Rating ({star}★) — a quality signal patients and AI assistants weight.",
+                current_state=f"{name} has a CMS Overall Hospital Quality Star Rating of {star}.",
+                expected_state="Improved CMS measures (3★+); ensure CMS Care Compare data is complete and current.",
+                remediation_type="quality_improvement", evidence=[]))
+    return findings
+
+
 # ── Orchestrator ──────────────────────────────────────────────────────────────
 
 def analyze_content(entity_name: str, website_urls: list, city: str = "", state: str = "",
                     entity_kind: str = "hospital", reputation: dict = None,
-                    on_event=None) -> ContentFindings:
+                    safety: dict = None, on_event=None) -> ContentFindings:
     """Run the verified content checks and return a ContentFindings object.
 
     Never raises: any component failure yields not_assessed findings and a
@@ -665,6 +740,11 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
     # network calls here, so it runs outside the HTTP client block.
     try:
         raw += _check_reputation(reputation)
+    except Exception:
+        partial = True
+    # Safety / quality (hospital Leapfrog + CMS) — same verified base data.
+    try:
+        raw += _check_safety(safety)
     except Exception:
         partial = True
 

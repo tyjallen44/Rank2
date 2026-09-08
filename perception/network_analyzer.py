@@ -369,9 +369,15 @@ def analyze_network(
                    "footprint": {"rating_range": rr,
                                  "consistency": "fragmented, multi-listing" if len(facs) > 1 else ""},
                    "aggregate_rating": None, "aggregate_count": None}
+            saf = None
+            if (result.facility_type or "hospital") == "hospital":
+                saf = {"entity_kind": "hospital", "locations": [
+                    {"name": f.name, "leapfrog_grade": f.leapfrog_grade,
+                     "cms_star_rating": f.cms_star_rating,
+                     "address": ", ".join([p for p in [f.city, f.state] if p])} for f in facs]}
             urls = [u for u in [source_url or result.source_url] if u]
             content_findings = analyze_content(network_name, urls, city, state,
-                                               entity_kind="hospital", reputation=rep, on_event=emit)
+                                               entity_kind="hospital", reputation=rep, safety=saf, on_event=emit)
             content_findings.run_id = result.run_id
             result.content_findings_json = content_findings.model_dump_json()
             save_content_findings(result.run_id, _norm_entity_name(network_name),
