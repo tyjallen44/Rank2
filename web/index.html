@@ -4394,6 +4394,7 @@ async function npRunAnalysis() {
     const { job_id } = await res.json();
 
     _lastPage = 'network';
+    window._lastNetworkCA = { name, hq, url };   // for the completion-screen "Detailed Content Analysis" button
     startProgress(job_id, `${name} — Hospital Network`, false);
 
   } catch (err) {
@@ -6150,10 +6151,14 @@ function showSingleDone(r) {
     ? `<button class="btn btn-ghost" onclick="window.location.href='/api/network/${r.run_id}/teaser-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Teaser</button>`
     : '';
 
+  const detailedCaBtn = isNetwork
+    ? `<button class="btn btn-secondary" onclick="launchDetailedCA()" title="Run the detailed content analysis + drafted remediation plan for this system (pre-filled).">🔎 Detailed Content Analysis</button>`
+    : '';
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
     ${teaserBtn}
     ${briefingBtn}
+    ${detailedCaBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
   document.getElementById('prog-done').classList.remove('hidden');
@@ -6412,12 +6417,21 @@ function caRenderResults(rec, caId, prefix) {
 
 // ── Content Analysis (Hospital Network) ─────────────────────────────────────
 let _ncaUrls = [];
+function launchDetailedCA() {
+  // From the completion screen: go to the Hospital Network page and open the
+  // pre-filled Detailed Content Analysis panel for the system just run.
+  navigate('network');
+  ncaOpen();
+}
+
 function ncaOpen() {
   ['np-mode-toggle', 'np-step1', 'np-bulk'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.add('hidden'); });
   document.getElementById('nca-panel').classList.remove('hidden');
-  // Pre-fill from the Hospital Network form so you don't retype what you just ran.
+  // Pre-fill from the last Hospital Network run (survives the page reset), else
+  // from the current form, so you don't retype what you just ran.
   const v = id => (document.getElementById(id)?.value || '').trim();
-  const npName = v('np-name'), npHq = v('np-hq'), npUrl = v('np-url');
+  const src = window._lastNetworkCA || {};
+  const npName = (src.name || v('np-name')), npHq = (src.hq || v('np-hq')), npUrl = (src.url || v('np-url'));
   const nameEl = document.getElementById('nca-name'), hqEl = document.getElementById('nca-hq');
   if (npName && nameEl && !nameEl.value.trim()) nameEl.value = npName;
   if (npHq && hqEl && !hqEl.value.trim()) hqEl.value = npHq;
