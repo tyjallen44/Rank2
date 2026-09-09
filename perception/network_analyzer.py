@@ -266,8 +266,13 @@ def analyze_network(
     else:
         emit({"type": "phase", "name": "scoring",
               "text": f"Scoring {network_name} on the four-pillar rubric"})
+        # headless=True: seed the canonical entity-score cache but DON'T persist a
+        # standalone analysis_run to History — the network run is the History entry.
+        # (Without this, every network report left a phantom 1-provider "Hospitals"
+        # row at the HQ city.)
         pulse, tier_scores, ai_says, weighting_profile = _entity_pulse_score(
-            network_name, hq_location, brand=brand, emit=emit, force=ignore_cache
+            network_name, hq_location, brand=brand, emit=emit, force=ignore_cache,
+            headless=True,
         )
         if pulse is not None:
             _code, _band = _sc.grade_from_score(pulse)
