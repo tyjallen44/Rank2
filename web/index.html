@@ -7159,21 +7159,29 @@ function _dlCell(run, caRuns) {
   const tok = encodeURIComponent(_token);
   const files = [];   // [label, url]  (url null => info line)
   const acts = [];    // [label, onclickJs]
-  if (run.has_pdf) files.push(['Report (PDF)', (isNet ? `/api/network/${run.run_id}/pdf` : `/api/reports/${run.run_id}/pdf`) + `?token=${tok}`]);
+  // Use ONE content-analysis run per base row (the most recent completed one;
+  // caRuns is newest-first) so re-runs don't multiply the download list.
+  const ca = (caRuns || []).find(c => c.status === 'done') || (caRuns || [])[0] || null;
+  // The content-analysis Report 1 IS the primary report plus the Content
+  // Improvement Keys section — it supersedes the base run's own PDF. Show one
+  // primary report, not both; fall back to the base PDF when there's no CA.
+  if (ca && ca.has_report1) {
+    files.push([isNet ? 'Hospital Network Report (PDF)' : 'Deep Diagnostic (PDF)',
+                `/api/content-analysis/${ca.id}/report1?token=${tok}`]);
+  } else if (run.has_pdf) {
+    files.push(['Report (PDF)', (isNet ? `/api/network/${run.run_id}/pdf` : `/api/reports/${run.run_id}/pdf`) + `?token=${tok}`]);
+  }
   if (isNet && run.has_teaser_pdf) files.push(['Teaser (PDF)', `/api/network/${run.run_id}/teaser-pdf?token=${tok}`]);
   if (run.has_briefing_pdf) files.push(['Briefing (PDF)', `/api/reports/${run.run_id}/briefing-pdf?token=${tok}`]);
-  (caRuns || []).forEach(c => {
-    if (c.has_report1) files.push(['Deep Diagnostic (PDF)', `/api/content-analysis/${c.id}/report1?token=${tok}`]);
-    if (c.has_report2) files.push(['Content Report (PDF)', `/api/content-analysis/${c.id}/report2?token=${tok}`]);
-  });
+  if (ca && ca.has_report2) files.push(['Content Report (PDF)', `/api/content-analysis/${ca.id}/report2?token=${tok}`]);
   if (run.entity_type === 'community_health') {
     if (run.mqcr != null) files.push([`MQCR: ${Math.round(run.mqcr * 100)}%`, null]);
     else acts.push(['Run MQCR Battery', `startBatteryFromHistory('${run.run_id}', this)`]);
   }
-  (caRuns || []).forEach(c => {
-    if (c.status === 'done' && !c.drafted) acts.push(['Generate Full Content Plan', `caDraftFromHistory('${c.id}', this)`]);
-    if (c.status === 'done') acts.push(['Rebuild content report', `caRerender('${c.id}', this)`]);
-  });
+  if (ca && ca.status === 'done') {
+    if (!ca.drafted) acts.push(['Generate Full Content Plan', `caDraftFromHistory('${ca.id}', this)`]);
+    acts.push(['Rebuild content report', `caRerender('${ca.id}', this)`]);
+  }
   return _dlMenu(run.run_id, files, acts);
 }
 
