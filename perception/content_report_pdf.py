@@ -363,37 +363,14 @@ def _contents_section(items, has_service_line: bool, page_map) -> str:
     </div>"""
 
 
-def _build_html(entity_name: str, location: str, findings, report_title: str,
-                service_line=None, page_map=None) -> str:
-    items = list(getattr(findings, "findings", []) or [])
-    items = [f.model_dump() if hasattr(f, "model_dump") else f for f in items]
-    snap = getattr(findings, "source_snapshot", {}) or {}
-    title = _display_name(report_title or entity_name)
-    location = _display_location(location)
-
-    by_sev = {"high": 0, "medium": 0, "low": 0}
-    for f in items:
-        by_sev[f.get("severity", "low")] = by_sev.get(f.get("severity", "low"), 0) + 1
-
-    if items:
-        summary = (f'<strong>{len(items)} item{"s" if len(items)!=1 else ""}</strong> — '
-                   f'{by_sev["high"]} high, {by_sev["medium"]} medium, {by_sev["low"]} low.')
-        blocks = "".join(_finding_block(f) for f in items)
-    else:
-        summary = "No content-visibility issues were detected, or sources could not be assessed."
-        blocks = '<div class="finding"><div class="fsum">Nothing to detail.</div></div>'
-
-    urls = ", ".join(snap.get("website_urls", []) or []) or "&mdash;"
-    pages = snap.get("pages_crawled", 0)
-    sl_section = ""
-    if service_line:
-        _summary, _cards = service_line
-        sl_section = _service_line_section(_summary, _cards)
-    toc = _contents_section(items, bool(sl_section), page_map)
-
-    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+def _content_css(include_reset: bool = True) -> str:
+    """The Content Report's CSS. `include_reset=False` omits the global *,body
+    rules so the block can be embedded inside another document (e.g. the Hospital
+    Network Full Detail report) without overriding that document's base styles."""
+    reset = (f"""
       * {{ box-sizing:border-box; margin:0; padding:0; }}
-      body {{ font-family:'Inter','Helvetica Neue',Arial,sans-serif; color:{_INK}; }}
+      body {{ font-family:'Inter','Helvetica Neue',Arial,sans-serif; color:{_INK}; }}""" if include_reset else "")
+    return reset + f"""
       .band {{ background:{_TEAL}; color:#fff; padding:26px 44px; }}
       .band .top {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }}
       .band .kick {{ font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#9FD8CF; margin-bottom:8px; }}
@@ -445,7 +422,41 @@ def _build_html(entity_name: str, location: str, findings, report_title: str,
       .rgtbl {{ width:100%; border-collapse:collapse; margin:4px 0 6px; }}
       .rgtbl th {{ background:#f0f6f7; font-size:7pt; font-weight:700; text-transform:uppercase;
                    letter-spacing:.04em; color:{_MUTE}; padding:5px 8px; text-align:center; }}
-    </style></head><body>
+    """
+
+
+def _content_body_html(entity_name: str, location: str, findings, report_title: str,
+                       service_line=None, page_map=None) -> str:
+    """The Content Report's inner body (band → meta → intro → contents index →
+    service-line → findings → method note). Reused both standalone and embedded in
+    the Hospital Network Full Detail report."""
+    items = list(getattr(findings, "findings", []) or [])
+    items = [f.model_dump() if hasattr(f, "model_dump") else f for f in items]
+    snap = getattr(findings, "source_snapshot", {}) or {}
+    title = _display_name(report_title or entity_name)
+    location = _display_location(location)
+
+    by_sev = {"high": 0, "medium": 0, "low": 0}
+    for f in items:
+        by_sev[f.get("severity", "low")] = by_sev.get(f.get("severity", "low"), 0) + 1
+
+    if items:
+        summary = (f'<strong>{len(items)} item{"s" if len(items)!=1 else ""}</strong> — '
+                   f'{by_sev["high"]} high, {by_sev["medium"]} medium, {by_sev["low"]} low.')
+        blocks = "".join(_finding_block(f) for f in items)
+    else:
+        summary = "No content-visibility issues were detected, or sources could not be assessed."
+        blocks = '<div class="finding"><div class="fsum">Nothing to detail.</div></div>'
+
+    urls = ", ".join(snap.get("website_urls", []) or []) or "&mdash;"
+    pages = snap.get("pages_crawled", 0)
+    sl_section = ""
+    if service_line:
+        _summary, _cards = service_line
+        sl_section = _service_line_section(_summary, _cards)
+    toc = _contents_section(items, bool(sl_section), page_map)
+
+    return f"""
       <div class="band">
         <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI VISIBILITY<br>REPORT</div></div>
         <h1>Content Analysis &mdash; Detailed Findings and Improvement Prescriptions</h1>
@@ -468,5 +479,11 @@ def _build_html(entity_name: str, location: str, findings, report_title: str,
         confirmation; <b>Not assessed</b> = the source couldn't be reached at analysis time.
         <b>Drafted content (ready to publish)</b> is copy you can put live (schema markup, llms.txt,
         Wikidata/Wikipedia edits); a <b>Recommended action plan</b> is an operational playbook for your
-        team (e.g. reputation programs, Google Business Profile fixes) — steps to implement, not copy to publish.</div>
-    </body></html>"""
+        team (e.g. reputation programs, Google Business Profile fixes) — steps to implement, not copy to publish.</div>"""
+
+
+def _build_html(entity_name: str, location: str, findings, report_title: str,
+                service_line=None, page_map=None) -> str:
+    return (f'<!doctype html><html><head><meta charset="utf-8"><style>{_content_css(True)}</style>'
+            f'</head><body>{_content_body_html(entity_name, location, findings, report_title, service_line, page_map)}'
+            f'</body></html>')

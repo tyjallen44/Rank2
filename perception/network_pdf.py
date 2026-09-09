@@ -43,16 +43,10 @@ def render_network_pdf(
     cfg["pale"]    = _NETWORK_PALE
 
     landscape = len(result.facilities) > 20
-    html = _build_network_html(result, cfg, teaser=teaser)
-    if not teaser:
-        from .pdf import _content_keys_section, _service_line_keys_section
-        inject = ""
-        if findings is not None:
-            inject += _content_keys_section(findings)
-        if service_line is not None:
-            inject += _service_line_keys_section(service_line[0], service_line[1])
-        if inject:
-            html = html.replace("</body>", inject + "</body>", 1) if "</body>" in html else html + inject
+    # Content Improvement Keys + service-line keys are rendered in-body (in the
+    # gated region) for both the full report and the teaser (blurred there).
+    html = _build_network_html(result, cfg, teaser=teaser,
+                               findings=findings, service_line=service_line)
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -120,11 +114,107 @@ def render_content_network(result: NetworkResult, pdf_path: str, findings,
         browser.close()
 
 
+def render_network_full_detail(result: NetworkResult, pdf_path: str, findings,
+                               service_line=None, brand: str = "original") -> None:
+    """Hospital Network **Full Detail** report: the base Hospital Network report
+    (WITHOUT the Content Improvement Keys box — the Contents index supersedes it)
+    combined with the entire detailed Content Report (Contents index + every
+    finding's remediation, incl. drafted content). Rendered as ONE document in two
+    passes so the Contents-index page numbers reflect the combined document."""
+    from playwright.sync_api import sync_playwright
+    from .network_prompts import get_facility_config
+    from .content_report_pdf import _content_css, _content_body_html, _page_map
+    from .pdf import _fmt_cached
+
+    cfg = dict(_BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"]))
+    cfg["primary"] = _NETWORK_PRIMARY
+    cfg["accent"]  = _NETWORK_ACCENT
+    cfg["pale"]    = _NETWORK_PALE
+    primary, accent, pale = cfg["primary"], cfg["accent"], cfg["pale"]
+    css_overrides = cfg.get("css_overrides", "")
+    logo_html = cfg.get("logo_html") or _default_logo_html()
+    ftype_cfg = get_facility_config(result.facility_type or "hospital")
+
+    cover       = _cover_block(result, primary, accent, pale, logo_html, ftype_cfg)
+    exec_sum    = _exec_summary_block(result)
+    score_bkdn  = _score_breakdown_block(result, primary, accent, pale)
+    facility_sc = _facility_scorecard_block(result, primary, pale, ftype_cfg, teaser=False)
+    appendix    = _methodology_appendix(primary, pale, ftype_cfg)
+    net_css     = _network_css(primary, pale, accent)
+
+    entity_name = result.network_canonical_name or result.network_name
+    location    = result.hq_location or ""
+    items = [f.model_dump() if hasattr(f, "model_dump") else f
+             for f in (getattr(findings, "findings", []) or [])]
+
+    def _doc(page_map):
+        content_body = _content_body_html(entity_name, location, findings,
+                                          report_title=entity_name,
+                                          service_line=service_line, page_map=page_map)
+        return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Hospital Network — Full Detail — {_e(entity_name)}</title>
+<style>
+{net_css}
+{css_overrides}
+{_content_css(include_reset=False)}
+/* The embedded Content Report keeps its own font; starts on a fresh page and
+   its teal band matches the network cover for one cohesive document. */
+.fulldetail-content {{ font-family:'Inter','Helvetica Neue',Arial,sans-serif; page-break-before:always; }}
+.fulldetail-content .band {{ background:{primary}; }}
+</style></head><body>
+{cover}
+<div class="report-body">
+{exec_sum}
+{score_bkdn}
+{facility_sc}
+{appendix}
+</div>
+<div class="fulldetail-content">
+{content_body}
+</div>
+</body></html>"""
+
+    _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
+    _footer = (
+        '<div style="width:100%;font-family:Arial,Helvetica,sans-serif;'
+        'font-size:8px;color:#8a9aaa;display:flex;justify-content:space-between;'
+        'align-items:center;padding:0 48px 10px;box-sizing:border-box">'
+        '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+        f'<span>{_cached_lbl}</span>'
+        '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
+        '</div>'
+    )
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+
+        def _emit(page_map):
+            page.set_content(_doc(page_map), wait_until="networkidle")
+            page.pdf(path=str(pdf_path), format="A4", landscape=False,
+                     margin={"top": "0", "bottom": "0.65in", "left": "0", "right": "0"},
+                     print_background=True, display_header_footer=True,
+                     header_template="<span></span>", footer_template=_footer)
+
+        _emit(None)  # measurement pass
+        pm = _page_map(pdf_path, items, bool(service_line)) if items else {}
+        if pm:
+            _emit(pm)  # final pass with real page numbers
+        browser.close()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # HTML builder
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False) -> str:
+def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False,
+                        findings=None, service_line=None) -> str:
+    """Base Hospital Network report. Strategic Recommendations are no longer
+    rendered. The gated region (facility scorecard + Content Improvement Keys +
+    service-line keys) sits between the System-Level AI Visibility section and the
+    methodology appendix, so a teaser can blur everything below System-Level AI
+    Visibility while leaving the appendix (how the gated content was produced)
+    readable."""
     from .network_prompts import get_facility_config
     primary = cfg.get("primary", _NETWORK_PRIMARY)
     accent  = cfg.get("accent",  _NETWORK_ACCENT)
@@ -139,9 +229,34 @@ def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False) 
     cover       = _cover_block(result, primary, accent, pale, logo_html, ftype_cfg)
     exec_sum    = _exec_summary_block(result)
     score_bkdn  = _score_breakdown_block(result, primary, accent, pale)
-    facility_sc = _facility_scorecard_block(result, primary, pale, ftype_cfg, teaser=teaser)
-    recs        = _recommendations_block(result, primary, accent, teaser=teaser)
+    facility_sc = _facility_scorecard_block(result, primary, pale, ftype_cfg, teaser=False)
     appendix    = _methodology_appendix(primary, pale, ftype_cfg)
+
+    # Content Improvement Keys + service-line keys are part of the base report,
+    # placed in the gated region (below).
+    from .pdf import _content_keys_section, _service_line_keys_section
+    keys = ""
+    if findings is not None:
+        keys += _content_keys_section(findings)
+    if service_line is not None:
+        keys += _service_line_keys_section(service_line[0], service_line[1])
+
+    gated = f"{facility_sc}{keys}"
+    if teaser:
+        detail_html = f"""
+<div class="net-teaser-gate">
+  <div class="blur-lock">&#128274;</div>
+  <div class="blur-cta-heading">The full Hospital Network report continues below</div>
+  <div class="blur-cta-sub">Request the complete report to see the full facility roster, content-visibility findings, and AI-visibility improvement priorities for this system.</div>
+  <div class="blur-cta-actions">
+    <span class="blur-phone">{_TEASER_PHONE}</span>
+    &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+    <a href="{_TEASER_DEMO_URL}" class="blur-demo-link">Book a Demo &rarr;</a>
+  </div>
+</div>
+<div class="net-teaser-blur-content">{gated}</div>"""
+    else:
+        detail_html = gated
 
     title = _e(result.network_canonical_name or result.network_name)
 
@@ -160,8 +275,7 @@ def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False) 
 <div class="report-body">
 {exec_sum}
 {score_bkdn}
-{facility_sc}
-{recs}
+{detail_html}
 {appendix}
 </div>
 </body>
@@ -566,6 +680,17 @@ tfoot {{ display: table-footer-group; }}
   filter: blur(2px);
   user-select: none;
   pointer-events: none;
+}}
+/* In-flow gate banner shown at the top of the blurred region (robust across
+   multi-page gated content, unlike an absolute full-height overlay). */
+.net-teaser-gate {{
+  text-align: center;
+  background: rgba(238,247,241,0.92);
+  border: 1.5px dashed {accent};
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin: 18px 0 14px;
+  page-break-inside: avoid;
 }}
 .net-teaser-blur-overlay {{
   position: absolute;

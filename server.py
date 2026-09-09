@@ -925,6 +925,8 @@ async def get_history(role: str = Depends(require_auth)):
             "generated_at": str(r["generated_at"]),
             "created_at": str(r["created_at"]) if r.get("created_at") else None,
             "has_pdf": has_pdf,
+            "has_teaser_pdf": bool(r.get("teaser_pdf_path")),
+            "has_full_detail_pdf": bool(r.get("full_detail_pdf_path")),
             "has_briefing_pdf": bool(
                 r.get("briefing_pdf_path") and Path(r["briefing_pdf_path"]).exists()
             ),
@@ -1076,6 +1078,7 @@ class NetworkAnalyzeRequest(BaseModel):
     ignore_cache: bool = False   # admin only: bypass same-day cache and regenerate
     teaser: bool = False
     service_line_audit: bool = False   # internal: add the service-line scorecard section
+    full_detail: bool = False    # also generate the Hospital Network Full Detail report
 
 
 @app.post("/api/network/analyze")
@@ -1087,7 +1090,7 @@ async def network_analyze(req: NetworkAnalyzeRequest, payload: dict = Depends(ge
     job_id = _new_job(role, brand)
     _pool.submit(_job_network_analyze, job_id, req.network_name, req.hq_location,
                  req.source_url, req.facilities, req.facility_type, brand, ignore_cache,
-                 req.teaser, req.service_line_audit)
+                 req.teaser, req.service_line_audit, req.full_detail)
     return {"job_id": job_id}
 
 
@@ -1097,7 +1100,8 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
                           brand: str = "original",
                           ignore_cache: bool = False,
                           teaser: bool = False,
-                          service_line_audit: bool = False) -> None:
+                          service_line_audit: bool = False,
+                          full_detail: bool = False) -> None:
     job = _jobs[job_id]
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
@@ -1117,6 +1121,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             teaser=teaser,
             content_summary=True,   # standard report includes the content summary + CTA
             service_line_audit=service_line_audit,   # internal opt-in: scorecard section
+            full_detail=full_detail,   # opt-in: Hospital Network Full Detail report
         )
         job["status"] = "done"
         job["result"] = {
@@ -1131,6 +1136,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             "states_covered": result.states_covered,
             "pdf_path": result.pdf_path,
             "teaser_pdf_path": result.teaser_pdf_path,
+            "full_detail_pdf_path": result.full_detail_pdf_path,
         }
     except Exception as exc:
         job["status"] = "error"
@@ -1206,6 +1212,27 @@ async def network_teaser_pdf(run_id: str, _: str = Depends(require_auth)):
     pdf_path = Path(row[0])
     if not pdf_path.exists():
         raise HTTPException(404, "Teaser PDF file missing from disk")
+    return FileResponse(
+        str(pdf_path),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{pdf_path.name}"'},
+    )
+
+
+@app.get("/api/network/{run_id}/full-detail-pdf")
+async def network_full_detail_pdf(run_id: str, _: str = Depends(require_auth)):
+    """Download the Hospital Network Full Detail PDF by run_id."""
+    from perception.db import get_connection
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT full_detail_pdf_path FROM network_runs WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+    if not row or not row[0]:
+        raise HTTPException(404, "Full Detail PDF not found for this run")
+    pdf_path = Path(row[0])
+    if not pdf_path.exists():
+        raise HTTPException(404, "Full Detail PDF file missing from disk")
     return FileResponse(
         str(pdf_path),
         media_type="application/pdf",
@@ -2113,194 +2140,6 @@ class ContentNetworkRequest(BaseModel):
     report_title: Optional[str] = None
     override_cache: bool = False             # admin only
     service_line_audit: bool = False         # opt-in: deep service-line listing audit
-
-
-@app.post("/api/content-analysis/network/run")
-async def content_analysis_network_run(req: ContentNetworkRequest,
-                                       payload: dict = Depends(get_current_user_payload)):
-    """Content Analysis for a whole hospital network: verified system-website
-    checks + Wikidata/Wikipedia + per-facility reputation across all hospitals."""
-    if not req.network_name.strip():
-        raise HTTPException(400, "network_name is required")
-    from perception.db import init_db, create_content_analysis_run
-    init_db()
-    ca_id = uuid.uuid4().hex[:12]
-    create_content_analysis_run(ca_id, req.network_name.strip(), req.hq_location.strip(),
-                                "network", req.urls,
-                                req.report_title or req.network_name.strip(),
-                                payload.get("role", ""))
-    req_d = req.dict()
-    req_d["override_cache"] = bool(req.override_cache) and payload.get("role") == "admin"
-    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
-    _pool.submit(_job_content_analysis_network, job_id, ca_id, req_d,
-                 payload.get("brand", "original"))
-    return {"job_id": job_id, "ca_id": ca_id}
-
-
-def _job_content_analysis_network(job_id: str, ca_id: str, req: dict, brand: str) -> None:
-    job = _jobs[job_id]
-    loop, queue = job["loop"], job["queue"]
-    emit = lambda e: _put(loop, queue, e)
-    try:
-        from perception.db import (init_db, get_recent_network_run, set_run_role,
-                                   save_content_findings, finalize_content_analysis_run,
-                                   _norm_entity_name)
-        from perception.models import NetworkResult
-        from perception.content_analyzer import analyze_content
-        init_db()
-        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-        network_name = (req.get("network_name") or "").strip()
-        hq = (req.get("hq_location") or "").strip()
-        override = bool(req.get("override_cache"))
-        urls = [u for u in (req.get("urls") or []) if (u or "").strip()]
-        city, state = "", ""
-        if "," in hq:
-            city, state = [p.strip() for p in hq.split(",", 1)]
-        else:
-            city = hq
-
-        # 1. Base network report — reuse-if-fresh, else discover + run.
-        cached = None if override else get_recent_network_run(network_name, days=30)
-        if cached and cached.get("result_json"):
-            emit({"type": "phase", "name": "network", "text": f"Using recent network analysis for {network_name}"})
-            result = NetworkResult.model_validate_json(cached["result_json"])
-        else:
-            from perception.network_analyzer import analyze_network, discover_hospitals_by_name
-            emit({"type": "phase", "name": "discover", "text": f"Discovering {network_name}'s hospitals"})
-            disc = discover_hospitals_by_name(network_name, hq)
-            result = analyze_network(
-                network_name=network_name, hq_location=hq,
-                source_url=(urls[0] if urls else ""),
-                facilities=disc.get("facilities", []), on_event=emit,
-                brand=brand, ignore_cache=override,
-            )
-        set_run_role(result.run_id, job["role"])
-
-        # 2. Per-facility reputation (already collected on every NetworkFacility).
-        facs = result.facilities or []
-        locs = [{"name": f.name, "google_rating": f.google_rating,
-                 "google_review_count": f.google_review_count,
-                 "address": ", ".join([p for p in [f.city, f.state] if p])}
-                for f in facs if f.google_rating is not None]
-        rated = [f.google_rating for f in facs if f.google_rating is not None]
-        rr = f"{min(rated):.1f}–{max(rated):.1f}★ across {len(rated)} facilities" if rated else ""
-        rep = {"locations": locs,
-               "footprint": {"rating_range": rr,
-                             "consistency": "fragmented, multi-listing" if len(facs) > 1 else ""},
-               "aggregate_rating": None, "aggregate_count": None}
-
-        # 3. Verified content analysis — system website + Wikidata/Wikipedia +
-        #    per-facility reputation.
-        if not urls and result.source_url:
-            urls = [result.source_url]
-        saf = None
-        if (result.facility_type or "hospital") == "hospital":
-            saf = {"entity_kind": "hospital", "locations": [
-                {"name": f.name, "leapfrog_grade": f.leapfrog_grade,
-                 "cms_star_rating": f.cms_star_rating,
-                 "address": ", ".join([p for p in [f.city, f.state] if p])} for f in facs]}
-        emit({"type": "phase", "name": "content",
-              "text": "Checking system website, Wikidata, Wikipedia, per-facility reputation, and safety"})
-        findings = analyze_content(network_name, urls, city, state,
-                                   entity_kind="hospital", reputation=rep, safety=saf, on_event=emit)
-        findings.run_id = result.run_id
-        save_content_findings(result.run_id, _norm_entity_name(network_name),
-                              findings.source_snapshot,
-                              [f.model_dump() for f in findings.findings], findings.status)
-        for f in findings.findings:
-            emit({"type": "text", "text": f"\n• [{f.severity}] {f.teaser_summary}"})
-
-        _net_name = result.network_canonical_name or network_name
-
-        # 3b. Service-line listing analysis (opt-in "deep audit"; can take minutes).
-        sl_payload = None                        # (summary, scorecards) for Report 2
-        if req.get("service_line_audit"):
-            try:
-                import json as _json
-                from perception.service_line_discovery import discover_service_lines
-                from perception.service_line_locations import resolve_service_line_listings
-                from perception.service_line_scoring import score_service_lines
-                from perception.service_line_report import build_summary, derive_findings
-                from perception.models import (ContentFinding, ServiceLineScorecardSet,
-                                               ServiceLineSummary)
-                from perception.db import (get_recent_service_line_analysis,
-                                           save_service_line_analysis)
-                emit({"type": "phase", "name": "service_line",
-                      "text": "Service-line listing audit — this can take several minutes; safe to leave open"})
-                sys_norm = _norm_entity_name(_net_name)
-                # Admin "Refresh — ignore cache" busts the service-line cache too;
-                # the fresh result below re-saves and refreshes it.
-                cached = None if override else get_recent_service_line_analysis(sys_norm, days=30)
-                if cached:
-                    emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
-                    _d = _json.loads(cached)
-                    cards = ServiceLineScorecardSet(**_d["cards"])
-                    summ = ServiceLineSummary(**_d["summary"])
-                else:
-                    sl = discover_service_lines(_net_name, urls, hq, on_event=emit)
-                    lst = resolve_service_line_listings(_net_name, hq, sl, on_event=emit)
-                    cards = score_service_lines(lst, hq, on_event=emit)
-                    summ = build_summary(cards,
-                        sampling_note=f"flagship + up to 6 locations/line; {len(cards.scorecards)} service lines scored")
-                    save_service_line_analysis(sys_norm, _net_name,
-                        _json.dumps({"cards": cards.model_dump(), "summary": summ.model_dump()}))
-                sl_payload = (summ, cards.scorecards)
-
-                # Merge derived findings into the CIK list (severity-sorted, renumbered).
-                derived = derive_findings(cards)
-                if derived:
-                    combined = [f.model_dump() for f in findings.findings] + derived
-                    _sev = {"high": 0, "medium": 1, "low": 2}
-                    combined.sort(key=lambda f: _sev.get(f.get("severity", "low"), 3))
-                    for i, f in enumerate(combined, 1):
-                        f["finding_id"] = f"CIK-{i:03d}"
-                        f.setdefault("evidence", [])
-                    findings.findings = [ContentFinding(**f) for f in combined]
-                    save_content_findings(result.run_id, _norm_entity_name(network_name),
-                                          findings.source_snapshot,
-                                          [f.model_dump() for f in findings.findings], findings.status)
-                emit({"type": "text", "text": f"\nService-line audit complete ({summ.total_lines} lines)."})
-            except Exception as _sle:
-                emit({"type": "text", "text": f"\n(service-line audit skipped: {type(_sle).__name__})"})
-
-        # 4. Report 1 = Network report + Content Keys; Report 2 = detailed report.
-        emit({"type": "phase", "name": "pdf", "text": "Building the reports"})
-        report1 = ""
-        try:
-            from perception.network_pdf import render_content_network
-            _r1 = REPORTS_DIR / f"content_{ca_id}_report1.pdf"
-            render_content_network(result, str(_r1), findings, brand=brand)
-            report1 = str(_r1)
-        except Exception as _pe:
-            emit({"type": "text", "text": f"\n(network report render failed: {type(_pe).__name__})"})
-            report1 = result.pdf_path or ""
-        report2 = ""
-        try:
-            from perception.content_report_pdf import render_content_report_pdf
-            _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
-            render_content_report_pdf(_net_name, hq, findings, str(_r2),
-                                      report_title=req.get("report_title") or _net_name,
-                                      service_line=sl_payload)
-            report2 = str(_r2)
-        except Exception as _pe2:
-            emit({"type": "text", "text": f"\n(content report render failed: {type(_pe2).__name__})"})
-
-        finalize_content_analysis_run(ca_id, result.run_id, findings.status,
-                                      len(findings.findings), report1, report2)
-        emit({"type": "phase", "name": "saving", "text": "Done"})
-        job["status"] = "done"
-        job["result"] = {"ca_id": ca_id, "content_analysis": True, "network": True,
-                         "run_id": result.run_id, "finding_count": len(findings.findings)}
-    except Exception as exc:
-        try:
-            from perception.db import fail_content_analysis_run
-            fail_content_analysis_run(ca_id)
-        except Exception:
-            pass
-        job["status"] = "error"
-        job["error"] = _job_error(exc)
-    finally:
-        _put(loop, queue, None)
 
 
 # ══ Public HubSpot webhook — Hospital Network report on request ═══════════════

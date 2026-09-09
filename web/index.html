@@ -1874,63 +1874,6 @@ input[type="url"]::placeholder, textarea::placeholder {
     <div id="page-network" class="page">
       <div class="page-title">Hospital Network</div>
       <div class="page-sub">AI Visibility report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
-      <div style="margin:-4px 0 12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" onclick="ncaOpen()" style="margin-left:auto" title="Run the detailed content analysis and drafted remediation plan for this system (the standard report already includes the summary + CTA).">🔎 Detailed Content Analysis</button>
-      </div>
-
-      <!-- ── Content Analysis (network, contained sandbox) ────────────────── -->
-      <div id="nca-panel" class="hidden">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <div style="font-size:15px;font-weight:700;color:var(--teal)">Detailed Content Analysis — Hospital Network</div>
-          <button class="btn btn-ghost btn-sm" onclick="ncaClose()">← Back to Hospital Network</button>
-        </div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
-          Verifies the network's content and reputation across <strong>all its hospitals</strong> — system-website
-          structured data, llms.txt, Wikidata/Wikipedia, and per-facility Google reputation — and produces a Network
-          report plus a detailed Content Improvement report.
-        </div>
-
-        <div id="nca-search" class="card" style="background:var(--bg);border-color:var(--border)">
-          <div class="fg" style="margin-bottom:14px">
-            <label class="fl">Network Name</label>
-            <input id="nca-name" class="fi" type="text" placeholder="e.g. Atrium Health">
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 120px;gap:14px;margin-bottom:14px">
-            <div class="fg" style="margin:0">
-              <label class="fl">Headquarters City</label>
-              <input id="nca-city" class="fi" type="text" placeholder="Charlotte">
-            </div>
-            <div class="fg" style="margin:0">
-              <label class="fl">State</label>
-              <input id="nca-state" class="fi" type="text" placeholder="NC" maxlength="2">
-            </div>
-          </div>
-          <div class="fg" style="margin-bottom:6px">
-            <label class="fl">System website URL(s)</label>
-            <div id="nca-url-list"></div>
-            <button class="btn btn-secondary btn-sm" onclick="ncaAddUrl()" style="margin-top:6px">+ Add URL</button>
-            <div style="font-size:12px;color:var(--muted);margin-top:6px">The main system site is checked for schema.org, llms.txt, and AI-crawler access. Leave blank to use the discovered roster source.</div>
-          </div>
-          <label class="aggregate-toggle mt10" style="display:none" id="nca-override-label" title="Admin only: re-run the base network report from scratch instead of reusing a recent cached result.">
-            <input type="checkbox" id="nca-override">
-            <span class="agg-label">Refresh — ignore cache on the base network report <span style="font-size:11px;color:#888">(Admin only)</span></span>
-          </label>
-          <label class="aggregate-toggle mt10" id="nca-autodraft-label" title="When the analysis finishes, automatically generate the full content plan (drafted, publish-ready remediation) so you land directly on the finished detailed report.">
-            <input type="checkbox" id="nca-autodraft" checked>
-            <span class="agg-label">Also generate the full content plan (drafts) automatically</span>
-          </label>
-          <div id="nca-search-err" class="err hidden mt8"></div>
-          <button class="btn btn-primary mt16" id="nca-run-btn" onclick="ncaRun()">Run Detailed Content Analysis →</button>
-        </div>
-
-        <div id="nca-progress" class="hidden mt16">
-          <div class="card">
-            <div style="font-weight:600;margin-bottom:8px" id="nca-progress-head">Analyzing…</div>
-            <div id="nca-progress-log" style="font-size:12px;color:var(--muted);max-height:260px;overflow:auto;font-family:monospace;line-height:1.6;white-space:pre-wrap;word-break:break-word"></div>
-          </div>
-        </div>
-        <div id="nca-results" class="hidden mt16"></div>
-      </div>
 
       <!-- Mode: single guided report vs bulk headless CSV scoring -->
       <div id="np-mode-toggle" style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
@@ -2006,14 +1949,18 @@ input[type="url"]::placeholder, textarea::placeholder {
           <input type="checkbox" id="np-ignore-cache">
           <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
         </label>
-        <label class="aggregate-toggle" style="margin-top:10px" title="Create a teaser version with blurred facility details for sending to prospects.">
+        <label class="aggregate-toggle" style="margin-top:10px" title="Create a teaser version of the Hospital Network report with everything below the System AI Visibility section blurred — for sending to prospects.">
           <input type="checkbox" id="np-teaser-toggle">
           <span class="agg-label">Also generate a teaser report</span>
         </label>
-        <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Produces a second PDF with facility details and strategic recommendations blurred — ideal for prospect outreach.</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">A second PDF that shows the cover, executive summary, and System AI Visibility, then blurs everything below — ideal for prospect outreach.</div>
         <label class="aggregate-toggle" style="margin-top:10px" title="Internal: enumerate the system's service lines and score each one's listings for patient attraction. Adds several minutes; appends a scorecard section to the report.">
           <input type="checkbox" id="np-service-line">
           <span class="agg-label">Include the service-line listing scorecard <span style="font-size:11px;color:#888">(internal · adds several minutes)</span></span>
+        </label>
+        <label class="aggregate-toggle" style="margin-top:10px" title="Also generate the Hospital Network Full Detail report — the network report combined with the full detailed content analysis (every finding plus its drafted remediation). Runs content drafting; adds several minutes.">
+          <input type="checkbox" id="np-full-detail">
+          <span class="agg-label">Also generate the Full Detail report <span style="font-size:11px;color:#888">(adds the full content analysis + drafts · several minutes)</span></span>
         </label>
         <div id="np-step1-err" class="err hidden mt8"></div>
         <button class="btn btn-primary" id="np-find-btn" onclick="npFindFacilities()">Find Hospitals via AI →</button>
@@ -4030,8 +3977,6 @@ function showApp() {
   if (shOverride) shOverride.style.display = isAdmin ? '' : 'none';
   const caOverride = document.getElementById('ca-override-label');
   if (caOverride) caOverride.style.display = isAdmin ? '' : 'none';
-  const ncaOverride = document.getElementById('nca-override-label');
-  if (ncaOverride) ncaOverride.style.display = isAdmin ? '' : 'none';
   const learnMng = document.getElementById('learn-manage-btn');
   if (learnMng) learnMng.style.display = isAdmin ? '' : 'none';
   fetch('/api/version').then(r => r.json()).then(d => {
@@ -4222,8 +4167,6 @@ function resetPage(p) {
 
   } else if (p === 'network') {
     npReset();
-    ncaReset();   // clear a finished Content Analysis so returning starts fresh
-    ncaClose();   // and show the base Hospital Network page, not the last report
   }
 }
 
@@ -4409,6 +4352,7 @@ async function npRunAnalysis() {
   const ignoreCache = document.getElementById('np-ignore-cache')?.checked || false;
   const teaser = document.getElementById('np-teaser-toggle')?.checked || false;
   const serviceLine = document.getElementById('np-service-line')?.checked || false;
+  const fullDetail = document.getElementById('np-full-detail')?.checked || false;
   const btn = document.getElementById('np-run-btn');
   btn.disabled = true;
   btn.textContent = 'Starting…';
@@ -4417,13 +4361,12 @@ async function npRunAnalysis() {
     const res = await fetch('/api/network/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
-      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache, teaser, service_line_audit: serviceLine }),
+      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache, teaser, service_line_audit: serviceLine, full_detail: fullDetail }),
     });
     if (!res.ok) throw new Error(await res.text());
     const { job_id } = await res.json();
 
     _lastPage = 'network';
-    window._lastNetworkCA = { name, hq, url };   // for the completion-screen "Detailed Content Analysis" button
     startProgress(job_id, `${name} — Hospital Network`, false);
 
   } catch (err) {
@@ -6180,14 +6123,14 @@ function showSingleDone(r) {
     ? `<button class="btn btn-ghost" onclick="window.location.href='/api/network/${r.run_id}/teaser-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Teaser</button>`
     : '';
 
-  const detailedCaBtn = isNetwork
-    ? `<button class="btn btn-secondary" onclick="launchDetailedCA()" title="Run the detailed content analysis + drafted remediation plan for this system (pre-filled).">🔎 Detailed Content Analysis</button>`
+  const fullDetailBtn = (isNetwork && r.full_detail_pdf_path)
+    ? `<button class="btn btn-secondary" onclick="window.location.href='/api/network/${r.run_id}/full-detail-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Full Detail</button>`
     : '';
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
     ${teaserBtn}
     ${briefingBtn}
-    ${detailedCaBtn}
+    ${fullDetailBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
   document.getElementById('prog-done').classList.remove('hidden');
@@ -6439,102 +6382,9 @@ function caRenderResults(rec, caId, prefix) {
       <div id="ca-draft-log" style="font-size:12px;color:var(--muted);margin-top:8px;font-family:monospace;line-height:1.6"></div>
     </div>` : ''}
   </div>
-  <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="${prefix==='nca'?'ncaReset()':'caReset()'}">Run Another</button></div>`;
+  <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="caReset()">Run Another</button></div>`;
   el.classList.remove('hidden');
   el.scrollIntoView({behavior:'smooth', block:'nearest'});
-}
-
-// ── Content Analysis (Hospital Network) ─────────────────────────────────────
-let _ncaUrls = [];
-function launchDetailedCA() {
-  // From the completion screen: go to the Hospital Network page and open the
-  // pre-filled Detailed Content Analysis panel for the system just run.
-  navigate('network');
-  ncaOpen();
-}
-
-function _ncaHq() {
-  const c = (document.getElementById('nca-city')?.value || '').trim();
-  const s = (document.getElementById('nca-state')?.value || '').trim();
-  return [c, s].filter(Boolean).join(', ');
-}
-function _splitHq(hq) {
-  const p = (hq || '').split(',');
-  return { city: (p[0] || '').trim(), state: (p[1] || '').trim() };
-}
-
-function ncaOpen() {
-  ['np-mode-toggle', 'np-step1', 'np-bulk'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.add('hidden'); });
-  document.getElementById('nca-panel').classList.remove('hidden');
-  // Pre-fill from the last Hospital Network run (survives the page reset), else
-  // from the current form, so you don't retype what you just ran.
-  const v = id => (document.getElementById(id)?.value || '').trim();
-  const src = window._lastNetworkCA || {};
-  const npName = (src.name || v('np-name')), npHq = (src.hq || _npHq()), npUrl = (src.url || v('np-url'));
-  const { city, state } = _splitHq(npHq);
-  const nameEl = document.getElementById('nca-name');
-  const cityEl = document.getElementById('nca-city'), stateEl = document.getElementById('nca-state');
-  if (npName && nameEl && !nameEl.value.trim()) nameEl.value = npName;
-  if (city && cityEl && !cityEl.value.trim()) cityEl.value = city;
-  if (state && stateEl && !stateEl.value.trim()) stateEl.value = state;
-  if (npUrl && (!_ncaUrls.some(u => (u || '').trim()))) _ncaUrls = [npUrl];
-  if (!_ncaUrls.length) _ncaUrls = [''];
-  ncaRenderUrls();
-}
-function ncaClose() {
-  document.getElementById('nca-panel').classList.add('hidden');
-  ['np-mode-toggle', 'np-step1'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.remove('hidden'); });
-}
-function ncaReset() {
-  ['nca-progress', 'nca-results'].forEach(id => document.getElementById(id).classList.add('hidden'));
-  const res = document.getElementById('nca-results'); if (res) res.innerHTML = '';
-  const log = document.getElementById('nca-progress-log'); if (log) log.textContent = '';
-  document.getElementById('nca-search').classList.remove('hidden');
-}
-function ncaRenderUrls() {
-  const el = document.getElementById('nca-url-list');
-  if (!_ncaUrls.length) _ncaUrls = [''];
-  el.innerHTML = _ncaUrls.map((u, i) => `<div style="display:flex;gap:8px;margin-bottom:8px">
-    <input class="fi" type="url" style="flex:1" placeholder="https://www.example.org" value="${_caEsc(u)}" oninput="_ncaUrls[${i}]=this.value">
-    <button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="ncaRemoveUrl(${i})">✕</button></div>`).join('');
-}
-function ncaAddUrl() { _ncaUrls.push(''); ncaRenderUrls(); }
-function ncaRemoveUrl(i) { _ncaUrls.splice(i, 1); ncaRenderUrls(); }
-
-async function ncaRun() {
-  const err = document.getElementById('nca-search-err'); err.classList.add('hidden');
-  const name = document.getElementById('nca-name').value.trim();
-  const hq = _ncaHq();
-  if (!name) { showErr(err, 'Enter a network name.'); return; }
-  const urls = _ncaUrls.map(u => (u || '').trim()).filter(Boolean);
-  const override = !!(document.getElementById('nca-override') || {}).checked;
-  const serviceLine = !!(document.getElementById('nca-service-line') || {}).checked;
-  const autodraft = !!(document.getElementById('nca-autodraft') || {}).checked;
-  const btn = document.getElementById('nca-run-btn'); btn.disabled = true; btn.textContent = 'Starting…';
-  const head = document.getElementById('nca-progress-head'), log = document.getElementById('nca-progress-log');
-  head.textContent = 'Analyzing…'; log.innerHTML = '';
-  document.getElementById('nca-search').classList.add('hidden');
-  document.getElementById('nca-results').classList.add('hidden');
-  document.getElementById('nca-progress').classList.remove('hidden');
-  let caId, jobId;
-  try {
-    const r = await api('/api/content-analysis/network/run', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ network_name:name, hq_location:hq, urls, override_cache:override, service_line_audit:serviceLine }) });
-    if (!r.ok) throw new Error(await errDetail(r, 'Run failed'));
-    const d = await r.json(); caId = d.ca_id; jobId = d.job_id;
-  } catch(e) { head.textContent='Error'; log.innerHTML=`<span style="color:#c0392b">${_caEsc(e.message)}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; return; }
-  const es = new EventSource(`/api/jobs/${jobId}/stream?token=${encodeURIComponent(_token)}`);
-  es.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === 'phase') head.textContent = msg.text || 'Analyzing…';
-    else if (msg.type === 'text') { log.appendChild(document.createTextNode(msg.text)); log.scrollTop = log.scrollHeight; }
-    else if (msg.type === 'done') { es.close(); btn.disabled=false; btn.textContent='Run Detailed Content Analysis →'; _completedPages.add('network');
-      if (autodraft) { caLoadResults(caId, 'nca').then(() => caDraft(caId, 'nca')); }
-      else { caLoadResults(caId, 'nca'); }
-    }
-    else if (msg.type === 'error') { es.close(); head.textContent='Failed'; log.innerHTML += `<br><span style="color:#c0392b">${_caEsc(msg.error||'error')}</span>`; btn.disabled=false; btn.textContent='Run Content Analysis →'; }
-  };
-  es.onerror = () => es.close();
 }
 
 function npDownloadTemplate() {
@@ -7159,19 +7009,25 @@ function _dlCell(run, caRuns) {
   const tok = encodeURIComponent(_token);
   const files = [];   // [label, url]  (url null => info line)
   const acts = [];    // [label, onclickJs]
-  // Use ONE content-analysis run per base row (the most recent completed one;
-  // caRuns is newest-first) so re-runs don't multiply the download list.
-  const ca = (caRuns || []).find(c => c.status === 'done') || (caRuns || [])[0] || null;
-  // The content-analysis Report 1 IS the primary report plus the Content
-  // Improvement Keys section — it supersedes the base run's own PDF. Show one
-  // primary report, not both; fall back to the base PDF when there's no CA.
-  if (ca && ca.has_report1) {
-    files.push([isNet ? 'Hospital Network Report (PDF)' : 'Deep Diagnostic (PDF)',
-                `/api/content-analysis/${ca.id}/report1?token=${tok}`]);
-  } else if (run.has_pdf) {
-    files.push(['Report (PDF)', (isNet ? `/api/network/${run.run_id}/pdf` : `/api/reports/${run.run_id}/pdf`) + `?token=${tok}`]);
+
+  // Hospital Network: the content analysis is merged into the report itself, so
+  // there's one base report plus optional Teaser and Full Detail variants.
+  if (isNet) {
+    if (run.has_pdf) files.push(['Report (PDF)', `/api/network/${run.run_id}/pdf?token=${tok}`]);
+    if (run.has_teaser_pdf) files.push(['Teaser (PDF)', `/api/network/${run.run_id}/teaser-pdf?token=${tok}`]);
+    if (run.has_full_detail_pdf) files.push(['Full Detail (PDF)', `/api/network/${run.run_id}/full-detail-pdf?token=${tok}`]);
+    return _dlMenu(run.run_id, files, acts);
   }
-  if (isNet && run.has_teaser_pdf) files.push(['Teaser (PDF)', `/api/network/${run.run_id}/teaser-pdf?token=${tok}`]);
+
+  // Deep Diagnostic / practice / community-health: the two-step content analysis
+  // still applies. Use ONE content-analysis run per base row (most recent done).
+  const ca = (caRuns || []).find(c => c.status === 'done') || (caRuns || [])[0] || null;
+  // Report 1 (base report + Content Improvement Keys) supersedes the base PDF.
+  if (ca && ca.has_report1) {
+    files.push(['Deep Diagnostic (PDF)', `/api/content-analysis/${ca.id}/report1?token=${tok}`]);
+  } else if (run.has_pdf) {
+    files.push(['Report (PDF)', `/api/reports/${run.run_id}/pdf?token=${tok}`]);
+  }
   if (run.has_briefing_pdf) files.push(['Briefing (PDF)', `/api/reports/${run.run_id}/briefing-pdf?token=${tok}`]);
   if (ca && ca.has_report2) files.push(['Content Report (PDF)', `/api/content-analysis/${ca.id}/report2?token=${tok}`]);
   if (run.entity_type === 'community_health') {

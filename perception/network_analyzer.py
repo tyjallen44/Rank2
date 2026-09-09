@@ -166,6 +166,7 @@ def analyze_network(
     teaser: bool = False,
     content_summary: bool = False,
     service_line_audit: bool = False,
+    full_detail: bool = False,
 ) -> NetworkResult:
     """Run a Network AI Visibility analysis for a multi-state healthcare network.
 
@@ -195,9 +196,15 @@ def analyze_network(
         if cached:
             emit({"type": "phase", "name": "analyzing",
                   "text": f"Using recent cached result for {network_name}"})
-            emit({"type": "phase", "name": "pdf", "text": "Serving cached PDF"})
-            emit({"type": "phase", "name": "saving", "text": "Done"})
-            return NetworkResult.model_validate_json(cached["result_json"])
+            cached_result = NetworkResult.model_validate_json(cached["result_json"])
+            # Reuse the cached analysis, but still generate any newly-requested
+            # outputs (teaser / full-detail) that the cached run didn't produce —
+            # all content/drafts/service-line stay in sync via the shared finalize.
+            return _finalize_network(
+                cached_result, network_name=network_name, hq_location=hq_location,
+                source_url=source_url, brand=brand, teaser=teaser, full_detail=full_detail,
+                content_summary=content_summary, service_line_audit=service_line_audit,
+                ignore_cache=ignore_cache, emit=emit)
 
     run_id = str(uuid.uuid4())
 
@@ -347,117 +354,208 @@ def analyze_network(
         facilities=facility_objects,
     )
 
-    # ── Lightweight content summary (opt-in) ─────────────────────────────────
-    # Website (schema/llms.txt) + Wikidata + Wikipedia + grouped reputation — no
-    # service-line audit, no drafting. Fail-soft: never blocks the report.
-    content_findings = None
-    if content_summary:
+    # ── Content findings, service-line, drafting, and all report renders ─────
+    return _finalize_network(
+        result, network_name=network_name, hq_location=hq_location,
+        source_url=source_url, brand=brand, teaser=teaser, full_detail=full_detail,
+        content_summary=content_summary, service_line_audit=service_line_audit,
+        ignore_cache=ignore_cache, emit=emit)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Output generation (shared by fresh + cached paths) — content findings,
+# service-line, drafting, and the base / teaser / full-detail report renders.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _compute_content_findings(result, network_name, hq_location, source_url, emit):
+    """Lightweight content summary: website (schema/llms.txt) + Wikidata +
+    Wikipedia + grouped reputation + safety. No drafting. Fail-soft."""
+    from .content_analyzer import analyze_content
+    from .db import save_content_findings, _norm_entity_name
+    city, state = ("", "")
+    if "," in (hq_location or ""):
+        city, state = [p.strip() for p in hq_location.split(",", 1)]
+    else:
+        city = hq_location or ""
+    facs = result.facilities or []
+    locs = [{"name": f.name, "google_rating": f.google_rating,
+             "google_review_count": f.google_review_count,
+             "address": ", ".join([p for p in [f.city, f.state] if p])}
+            for f in facs if f.google_rating is not None]
+    rated = [f.google_rating for f in facs if f.google_rating is not None]
+    rr = (f"{min(rated):.1f}–{max(rated):.1f}★ across {len(rated)} facilities" if rated else "")
+    rep = {"locations": locs,
+           "footprint": {"rating_range": rr,
+                         "consistency": "fragmented, multi-listing" if len(facs) > 1 else ""},
+           "aggregate_rating": None, "aggregate_count": None}
+    saf = None
+    if (result.facility_type or "hospital") == "hospital":
+        saf = {"entity_kind": "hospital", "locations": [
+            {"name": f.name, "leapfrog_grade": f.leapfrog_grade,
+             "cms_star_rating": f.cms_star_rating,
+             "address": ", ".join([p for p in [f.city, f.state] if p])} for f in facs]}
+    urls = [u for u in [source_url or result.source_url] if u]
+    cf = analyze_content(network_name, urls, city, state,
+                         entity_kind="hospital", reputation=rep, safety=saf, on_event=emit)
+    cf.run_id = result.run_id
+    result.content_findings_json = cf.model_dump_json()
+    save_content_findings(result.run_id, _norm_entity_name(network_name),
+                          cf.source_snapshot, [f.model_dump() for f in cf.findings], cf.status)
+    return cf
+
+
+def _load_content_findings(result):
+    """Reconstruct ContentFindings already computed for this run (from the result
+    JSON, else the content_findings table). Returns None if none exist yet."""
+    from .models import ContentFindings
+    if getattr(result, "content_findings_json", None):
         try:
-            emit({"type": "phase", "name": "content",
-                  "text": "Checking system website, Wikidata, Wikipedia, and reputation"})
-            from .content_analyzer import analyze_content
-            from .db import save_content_findings, _norm_entity_name
-            city, state = ("", "")
-            if "," in (hq_location or ""):
-                city, state = [p.strip() for p in hq_location.split(",", 1)]
-            else:
-                city = hq_location or ""
-            facs = result.facilities or []
-            locs = [{"name": f.name, "google_rating": f.google_rating,
-                     "google_review_count": f.google_review_count,
-                     "address": ", ".join([p for p in [f.city, f.state] if p])}
-                    for f in facs if f.google_rating is not None]
-            rated = [f.google_rating for f in facs if f.google_rating is not None]
-            rr = (f"{min(rated):.1f}–{max(rated):.1f}★ across {len(rated)} facilities"
-                  if rated else "")
-            rep = {"locations": locs,
-                   "footprint": {"rating_range": rr,
-                                 "consistency": "fragmented, multi-listing" if len(facs) > 1 else ""},
-                   "aggregate_rating": None, "aggregate_count": None}
-            saf = None
-            if (result.facility_type or "hospital") == "hospital":
-                saf = {"entity_kind": "hospital", "locations": [
-                    {"name": f.name, "leapfrog_grade": f.leapfrog_grade,
-                     "cms_star_rating": f.cms_star_rating,
-                     "address": ", ".join([p for p in [f.city, f.state] if p])} for f in facs]}
-            urls = [u for u in [source_url or result.source_url] if u]
-            content_findings = analyze_content(network_name, urls, city, state,
-                                               entity_kind="hospital", reputation=rep, safety=saf, on_event=emit)
-            content_findings.run_id = result.run_id
-            result.content_findings_json = content_findings.model_dump_json()
-            save_content_findings(result.run_id, _norm_entity_name(network_name),
-                                  content_findings.source_snapshot,
-                                  [f.model_dump() for f in content_findings.findings],
-                                  content_findings.status)
+            return ContentFindings.model_validate_json(result.content_findings_json)
+        except Exception:
+            pass
+    try:
+        from .db import get_content_findings
+        cf = get_content_findings(result.run_id)
+        if cf:
+            return ContentFindings(**{k: cf[k] for k in
+                                      ("run_id", "source_snapshot", "findings", "status") if k in cf})
+    except Exception:
+        pass
+    return None
+
+
+def _ensure_drafts(result, content_findings, network_name, emit):
+    """Draft the full remediation content for any undrafted findings (the
+    Full Detail report's action plans), then persist so drafts stay cached."""
+    from .content_drafting import draft_findings
+    from .db import save_content_findings, _norm_entity_name
+    from .models import ContentFinding
+    fdicts = [f.model_dump() if hasattr(f, "model_dump") else dict(f)
+              for f in content_findings.findings]
+    needs = [f for f in fdicts if not f.get("draft_content")
+             and f.get("remediation_type") and f.get("status") != "not_assessed"]
+    if not needs:
+        return content_findings
+    emit({"type": "phase", "name": "drafting",
+          "text": "Drafting full remediation content (this can take a few minutes)"})
+    snap = content_findings.source_snapshot or {}
+    facts = {"website_urls": snap.get("website_urls", []),
+             "wikidata_qid": snap.get("wikidata_qid"),
+             "wikipedia_article": snap.get("wikipedia_article")}
+    try:
+        drafts = draft_findings(network_name, result.hq_location or "", "hospital", facts, fdicts)
+    except Exception as _de:
+        emit({"type": "text", "text": f"\n(drafting skipped: {type(_de).__name__})"})
+        return content_findings
+    if drafts:
+        for f in fdicts:
+            if f.get("finding_id") in drafts:
+                f["draft_content"] = drafts[f["finding_id"]]
+        content_findings.findings = [ContentFinding(**f) for f in fdicts]
+        result.content_findings_json = content_findings.model_dump_json()
+        save_content_findings(result.run_id, _norm_entity_name(network_name),
+                              snap, fdicts, content_findings.status)
+    return content_findings
+
+
+def _build_service_line_payload(result, network_name, hq_location, source_url, ignore_cache, emit):
+    """Service-line listing audit (opt-in). Reuses the 30-day cache. Fail-soft."""
+    try:
+        import json as _sljson
+        from .service_line_discovery import discover_service_lines
+        from .service_line_locations import resolve_service_line_listings
+        from .service_line_scoring import score_service_lines
+        from .service_line_report import build_summary
+        from .models import ServiceLineScorecardSet, ServiceLineSummary
+        from .db import (get_recent_service_line_analysis, save_service_line_analysis,
+                         _norm_entity_name)
+        _slname = result.network_canonical_name or network_name
+        _slnorm = _norm_entity_name(_slname)
+        _slurls = [u for u in [source_url or result.source_url] if u]
+        _cached = None if ignore_cache else get_recent_service_line_analysis(_slnorm, days=30)
+        if _cached:
+            emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
+            _d = _sljson.loads(_cached)
+            cards = ServiceLineScorecardSet(**_d["cards"])
+            summ = ServiceLineSummary(**_d["summary"])
+        else:
+            emit({"type": "phase", "name": "service_line",
+                  "text": "Service-line listing audit — this can take several minutes"})
+            _sl = discover_service_lines(_slname, _slurls, hq_location, on_event=emit)
+            _lst = resolve_service_line_listings(_slname, hq_location, _sl, on_event=emit)
+            cards = score_service_lines(_lst, hq_location, on_event=emit)
+            summ = build_summary(cards,
+                sampling_note=f"flagship + up to 6 locations/line; {len(cards.scorecards)} service lines scored")
+            save_service_line_analysis(_slnorm, _slname,
+                _sljson.dumps({"cards": cards.model_dump(), "summary": summ.model_dump()}))
+        return (summ, cards.scorecards)
+    except Exception as _se:
+        emit({"type": "text", "text": f"\n(service-line audit skipped: {type(_se).__name__})"})
+        return None
+
+
+def _finalize_network(result, *, network_name, hq_location, source_url, brand,
+                      teaser, full_detail, content_summary, service_line_audit,
+                      ignore_cache, emit):
+    """Ensure content findings, service-line data, drafts (for full detail), and
+    render the base / teaser / full-detail PDFs. Shared by the fresh and cached
+    paths so all content and caching stay in sync."""
+    from .network_pdf import (render_network_pdf, render_network_full_detail)
+    from .strings import titlecase_filename
+
+    # 1. Content findings — reuse if already computed, else build (needed for the
+    #    Content Improvement Keys and for the Full Detail report).
+    content_findings = _load_content_findings(result)
+    if content_findings is None and (content_summary or full_detail):
+        try:
+            content_findings = _compute_content_findings(result, network_name, hq_location, source_url, emit)
         except Exception as _ce:
             emit({"type": "text", "text": f"\n(content summary skipped: {type(_ce).__name__})"})
             content_findings = None
 
-    # ── Service-line listing audit (opt-in; internal only) ───────────────────
-    # Deep, multi-minute pass — enumerate service lines, score their listings.
-    # Reuses the 21-day cache. Fail-soft: never blocks the report.
+    # 2. Service-line listing audit (opt-in).
     sl_payload = None
     if service_line_audit:
-        try:
-            import json as _sljson
-            from .service_line_discovery import discover_service_lines
-            from .service_line_locations import resolve_service_line_listings
-            from .service_line_scoring import score_service_lines
-            from .service_line_report import build_summary
-            from .models import ServiceLineScorecardSet, ServiceLineSummary
-            from .db import (get_recent_service_line_analysis, save_service_line_analysis,
-                             _norm_entity_name)
-            _slname = result.network_canonical_name or network_name
-            _slnorm = _norm_entity_name(_slname)
-            _slurls = [u for u in [source_url or result.source_url] if u]
-            _cached = None if ignore_cache else get_recent_service_line_analysis(_slnorm, days=30)
-            if _cached:
-                emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
-                _d = _sljson.loads(_cached)
-                cards = ServiceLineScorecardSet(**_d["cards"])
-                summ = ServiceLineSummary(**_d["summary"])
-            else:
-                emit({"type": "phase", "name": "service_line",
-                      "text": "Service-line listing audit — this can take several minutes"})
-                _sl = discover_service_lines(_slname, _slurls, hq_location, on_event=emit)
-                _lst = resolve_service_line_listings(_slname, hq_location, _sl, on_event=emit)
-                cards = score_service_lines(_lst, hq_location, on_event=emit)
-                summ = build_summary(cards,
-                    sampling_note=f"flagship + up to 6 locations/line; {len(cards.scorecards)} service lines scored")
-                save_service_line_analysis(_slnorm, _slname,
-                    _sljson.dumps({"cards": cards.model_dump(), "summary": summ.model_dump()}))
-            sl_payload = (summ, cards.scorecards)
-        except Exception as _se:
-            emit({"type": "text", "text": f"\n(service-line audit skipped: {type(_se).__name__})"})
-            sl_payload = None
+        sl_payload = _build_service_line_payload(result, network_name, hq_location,
+                                                 source_url, ignore_cache, emit)
 
-    # ── Phase: pdf ───────────────────────────────────────────────────────────
-    emit({"type": "phase", "name": "pdf",
-          "text": "Rendering Hospital Network PDF"})
+    # 3. Draft full remediation content — only for the Full Detail report.
+    if full_detail and content_findings and content_findings.findings:
+        content_findings = _ensure_drafts(result, content_findings, network_name, emit)
+
+    # 4. Renders.
+    emit({"type": "phase", "name": "pdf", "text": "Rendering Hospital Network report"})
     try:
-        from .network_pdf import render_network_pdf
         output_dir = Path("reports")
         output_dir.mkdir(parents=True, exist_ok=True)
-        from .strings import titlecase_filename
         slug = _slug(network_name)
         _ts = datetime.utcnow().strftime("%y%m%d-%H%M")
+
         pdf_filename = titlecase_filename(f"{slug}-hospital-network-{_ts}") + ".pdf"
         pdf_path = output_dir / pdf_filename
         render_network_pdf(result, str(pdf_path), brand=brand,
                            findings=content_findings, service_line=sl_payload)
         result.pdf_path = str(pdf_path)
+
         if teaser:
             teaser_filename = titlecase_filename(f"{slug}-hospital-network-teaser-{_ts}") + ".pdf"
             teaser_path = output_dir / teaser_filename
-            render_network_pdf(result, str(teaser_path), brand=brand, teaser=True)
+            render_network_pdf(result, str(teaser_path), brand=brand, teaser=True,
+                               findings=content_findings, service_line=sl_payload)
             result.teaser_pdf_path = str(teaser_path)
+
+        if full_detail and content_findings:
+            fd_filename = titlecase_filename(f"{slug}-hospital-network-full-detail-{_ts}") + ".pdf"
+            fd_path = output_dir / fd_filename
+            render_network_full_detail(result, str(fd_path), content_findings,
+                                       service_line=sl_payload, brand=brand)
+            result.full_detail_pdf_path = str(fd_path)
     except Exception as exc:
         emit({"type": "text", "text": f"\n⚠ PDF render failed: {exc}\n"})
 
-    # ── Phase: saving ────────────────────────────────────────────────────────
+    # 5. Persist.
     emit({"type": "phase", "name": "saving", "text": "Saving to database"})
     _save_network_run(result)
-
     return result
 
 
@@ -754,14 +852,15 @@ def _save_network_run(result: NetworkResult) -> None:
             """INSERT INTO network_runs
                (run_id, network_name, hq_location, source_url, facility_type, total_hospitals,
                 ai_visibility_score, grade, generated_at, result_json, pdf_path, teaser_pdf_path,
-                user_role, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                full_detail_pdf_path, user_role, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (run_id) DO UPDATE SET
-                   ai_visibility_score = excluded.ai_visibility_score,
-                   grade               = excluded.grade,
-                   result_json         = excluded.result_json,
-                   pdf_path            = excluded.pdf_path,
-                   teaser_pdf_path     = excluded.teaser_pdf_path""",
+                   ai_visibility_score  = excluded.ai_visibility_score,
+                   grade                = excluded.grade,
+                   result_json          = excluded.result_json,
+                   pdf_path             = excluded.pdf_path,
+                   teaser_pdf_path      = excluded.teaser_pdf_path,
+                   full_detail_pdf_path = excluded.full_detail_pdf_path""",
             [
                 result.run_id,
                 result.network_name,
@@ -775,6 +874,7 @@ def _save_network_run(result: NetworkResult) -> None:
                 result.model_dump_json(),
                 result.pdf_path,
                 result.teaser_pdf_path,
+                result.full_detail_pdf_path,
                 "admin",
                 datetime.utcnow(),
             ],

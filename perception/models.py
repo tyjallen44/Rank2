@@ -364,6 +364,7 @@ class NetworkResult(BaseModel):
     # Meta
     pdf_path: Optional[str] = None
     teaser_pdf_path: Optional[str] = None
+    full_detail_pdf_path: Optional[str] = None  # Hospital Network Full Detail report (base + full content report)
     entity_type: str = "hospital_network"
     content_findings_json: Optional[str] = None  # lightweight content summary (opt-in), travels with the result
 

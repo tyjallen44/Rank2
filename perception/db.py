@@ -923,6 +923,7 @@ def init_network_db(con=None) -> None:
         ("result_json",         "VARCHAR"),
         ("pdf_path",            "VARCHAR"),
         ("teaser_pdf_path",     "VARCHAR"),
+        ("full_detail_pdf_path", "VARCHAR"),
         ("user_role",           "VARCHAR DEFAULT 'admin'"),
         ("created_at",          "TIMESTAMP"),
     ]:
@@ -1602,7 +1603,8 @@ def query_history(role: str) -> list[dict[str, Any]]:
         """).fetchall()
         network_rows = con.execute("""
             SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
-                   generated_at, pdf_path, total_hospitals, created_at
+                   generated_at, pdf_path, total_hospitals, created_at,
+                   teaser_pdf_path, full_detail_pdf_path
             FROM network_runs
             ORDER BY generated_at DESC, run_id DESC
         """).fetchall()
@@ -1631,7 +1633,8 @@ def query_history(role: str) -> list[dict[str, Any]]:
         """, [role]).fetchall()
         network_rows = con.execute("""
             SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
-                   generated_at, pdf_path, total_hospitals, created_at
+                   generated_at, pdf_path, total_hospitals, created_at,
+                   teaser_pdf_path, full_detail_pdf_path
             FROM network_runs
             WHERE COALESCE(user_role, 'admin') = ?
             ORDER BY generated_at DESC, run_id DESC
@@ -1642,13 +1645,16 @@ def query_history(role: str) -> list[dict[str, Any]]:
     results = [dict(zip(analysis_cols, row)) for row in analysis_rows]
 
     for row in network_rows:
-        run_id, network_name, facility_type, generated_at, pdf_path, total, created_at = row
+        (run_id, network_name, facility_type, generated_at, pdf_path, total,
+         created_at, teaser_pdf_path, full_detail_pdf_path) = row
         results.append({
             "run_id":            run_id,
             "location":          network_name,
             "specialty":         facility_type,
             "generated_at":      generated_at,
             "pdf_path":          pdf_path,
+            "teaser_pdf_path":   teaser_pdf_path,
+            "full_detail_pdf_path": full_detail_pdf_path,
             "md_path":           None,
             "briefing_pdf_path": None,
             "event_id":          None,
