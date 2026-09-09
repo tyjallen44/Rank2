@@ -646,7 +646,7 @@ def _check_safety(safety: dict) -> list:
                 severity="high" if len(low_star) >= 2 else "medium", status="verified",
                 teaser_summary=f"{len(low_star)} hospital(s) have a low CMS Overall Star Rating (≤2★) — a quality signal patients and AI assistants weight.",
                 current_state="Low CMS Overall Hospital Quality Star Rating: " + ", ".join(names[:10]) + ("…" if len(names) > 10 else "") + ".",
-                expected_state="Improved CMS measures (3★+); ensure each hospital's CMS Care Compare data is complete and current.",
+                expected_state="Improved CMS measures (3★+), with systematic CAHPS/patient-experience survey capture and complete, timely CMS submission across the system.",
                 remediation_type="quality_improvement", evidence=names[:12]))
     else:
         g = _g(safety)
@@ -671,7 +671,7 @@ def _check_safety(safety: dict) -> list:
                 platform="safety", category="opportunity", severity="medium", status="verified",
                 teaser_summary=f"Low CMS Overall Star Rating ({star}★) — a quality signal patients and AI assistants weight.",
                 current_state=f"{name} has a CMS Overall Hospital Quality Star Rating of {star}.",
-                expected_state="Improved CMS measures (3★+); ensure CMS Care Compare data is complete and current.",
+                expected_state="Improved CMS measures (3★+), with systematic CAHPS/patient-experience survey capture and complete, timely CMS submission.",
                 remediation_type="quality_improvement", evidence=[]))
     return findings
 

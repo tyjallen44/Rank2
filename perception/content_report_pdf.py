@@ -34,7 +34,7 @@ _REMEDIATION = {"schema_markup": "Add schema.org markup", "website_fix": "Websit
                 "reputation_program": "Reputation / review-generation program (RLDatix Reputation Management)",
                 "listing_management": "Google Business Profile / listings management (RLDatix Reputation Management)",
                 "leapfrog_submission": "Participate in the Leapfrog Hospital Survey",
-                "quality_improvement": "Quality improvement (CMS Care Compare data)"}
+                "quality_improvement": "Patient-experience surveys & CMS quality (RLDatix Patient Experience & Growth)"}
 
 # Remediation types whose drafted output is literal content the client PUBLISHES
 # (website/knowledge-graph). Everything else is an operational plan to implement,
