@@ -459,7 +459,11 @@ def _ensure_drafts(result, content_findings, network_name, emit):
 
 
 def _build_service_line_payload(result, network_name, hq_location, source_url, ignore_cache, emit):
-    """Service-line listing audit (opt-in). Reuses the 30-day cache. Fail-soft."""
+    """Service-line listing audit (opt-in). Reuses the 30-day cache. Fail-soft.
+
+    A 0-line result is NEVER cached, and a cached 0-line result is treated as a
+    miss — so a transient discovery failure (e.g. a site that blocks the crawler,
+    as usahealthsystem.com did) doesn't poison every future run for 30 days."""
     try:
         import json as _sljson
         from .service_line_discovery import discover_service_lines
@@ -472,13 +476,17 @@ def _build_service_line_payload(result, network_name, hq_location, source_url, i
         _slname = result.network_canonical_name or network_name
         _slnorm = _norm_entity_name(_slname)
         _slurls = [u for u in [source_url or result.source_url] if u]
+
+        cards = summ = None
         _cached = None if ignore_cache else get_recent_service_line_analysis(_slnorm, days=30)
         if _cached:
-            emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
             _d = _sljson.loads(_cached)
-            cards = ServiceLineScorecardSet(**_d["cards"])
-            summ = ServiceLineSummary(**_d["summary"])
-        else:
+            _c = ServiceLineScorecardSet(**_d["cards"])
+            if _c.scorecards:                      # only trust a NON-empty cache
+                emit({"type": "text", "text": "\nUsing a recent service-line analysis for this system."})
+                cards, summ = _c, ServiceLineSummary(**_d["summary"])
+
+        if cards is None:                          # cache miss, or cached-empty → (re)discover
             emit({"type": "phase", "name": "service_line",
                   "text": "Service-line listing audit — this can take several minutes"})
             _sl = discover_service_lines(_slname, _slurls, hq_location, on_event=emit)
@@ -486,8 +494,13 @@ def _build_service_line_payload(result, network_name, hq_location, source_url, i
             cards = score_service_lines(_lst, hq_location, on_event=emit)
             summ = build_summary(cards,
                 sampling_note=f"flagship + up to 6 locations/line; {len(cards.scorecards)} service lines scored")
-            save_service_line_analysis(_slnorm, _slname,
-                _sljson.dumps({"cards": cards.model_dump(), "summary": summ.model_dump()}))
+            if cards.scorecards:                   # never cache an empty/failed result
+                save_service_line_analysis(_slnorm, _slname,
+                    _sljson.dumps({"cards": cards.model_dump(), "summary": summ.model_dump()}))
+            else:
+                emit({"type": "text", "text": "\nNo service lines were found on the system website — it may "
+                      "be blocking automated access. The service-line section is omitted (nothing was cached, "
+                      "so a re-run will try again)."})
         return (summ, cards.scorecards)
     except Exception as _se:
         emit({"type": "text", "text": f"\n(service-line audit skipped: {type(_se).__name__})"})
