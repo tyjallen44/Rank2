@@ -233,28 +233,27 @@ def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False,
     appendix    = _methodology_appendix(primary, pale, ftype_cfg)
 
     # Content Improvement Keys + service-line keys are part of the base report,
-    # placed in the gated region (below).
-    from .pdf import _content_keys_section, _service_line_keys_section
+    # placed in the gated region (below). In the teaser the keys' call-to-action
+    # is lifted out and rendered UNBLURRED so the reader can still act on it.
+    from .pdf import _content_keys_section, _service_line_keys_section, _content_keys_cta
     keys = ""
     if findings is not None:
-        keys += _content_keys_section(findings)
+        keys += _content_keys_section(findings, include_cta=not teaser)
     if service_line is not None:
         keys += _service_line_keys_section(service_line[0], service_line[1])
 
     gated = f"{facility_sc}{keys}"
     if teaser:
+        cta_unblurred = (f'<div style="padding:0 40px;margin-top:16px">{_content_keys_cta()}</div>'
+                         if findings is not None else "")
         detail_html = f"""
 <div class="net-teaser-gate">
   <div class="blur-lock">&#128274;</div>
   <div class="blur-cta-heading">The full Hospital Network report continues below</div>
   <div class="blur-cta-sub">Request the complete report to see the full facility roster, content-visibility findings, and AI-visibility improvement priorities for this system.</div>
-  <div class="blur-cta-actions">
-    <span class="blur-phone">{_TEASER_PHONE}</span>
-    &nbsp;&nbsp;&middot;&nbsp;&nbsp;
-    <a href="{_TEASER_DEMO_URL}" class="blur-demo-link">Book a Demo &rarr;</a>
-  </div>
 </div>
-<div class="net-teaser-blur-content">{gated}</div>"""
+<div class="net-teaser-blur-content">{gated}</div>
+{cta_unblurred}"""
     else:
         detail_html = gated
 

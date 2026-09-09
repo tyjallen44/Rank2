@@ -114,12 +114,33 @@ def _logo_data_uri() -> str:
     return ""
 
 
-def _content_keys_section(findings) -> str:
+def _content_keys_cta() -> str:
+    """The Content Improvement Keys call-to-action block. Split out so the network
+    teaser can render it UNBLURRED even when the rest of the keys section is
+    behind the teaser blur."""
+    return (
+        '<div style="margin-top:16px;background:#EEF7F1;border-left:4px solid #177B6E;'
+        'border-radius:6px;padding:12px 16px">'
+        '<div style="font-size:10pt;font-weight:700;color:#0F4146;margin-bottom:3px">'
+        'Request your Content Improvement Plan</div>'
+        '<div style="font-size:9pt;color:#3a5a60;line-height:1.5">A detailed, prioritized '
+        'remediation roadmap for every item above — publication-ready content where it applies '
+        '(schema, llms.txt, Wikidata), plus operational action plans for the rest '
+        '(reputation, listings).</div>'
+        '<a href="https://www.rldatix.com/en-nam/book-a-demo/" '
+        'style="display:inline-block;margin-top:8px;background:#177B6E;color:#fff;font-size:9pt;'
+        'font-weight:700;text-decoration:none;padding:7px 16px;border-radius:5px">Book a demo &rarr;</a></div>'
+    )
+
+
+def _content_keys_section(findings, include_cta: bool = True) -> str:
     """Content Improvement Keys — the teaser section appended to Report 1.
 
     Self-contained inline styles (no dependency on the report's CSS) so it can be
     injected into the deep-dive HTML without touching the shared builder.
-    `findings` is a ContentFindings object (may be empty / not_assessed)."""
+    `findings` is a ContentFindings object (may be empty / not_assessed).
+    `include_cta=False` omits the CTA (the network teaser renders it unblurred
+    outside the keys section)."""
     items = list(getattr(findings, "findings", []) or [])
     status = getattr(findings, "status", "not_assessed")
     snap = getattr(findings, "source_snapshot", {}) or {}
@@ -192,19 +213,7 @@ def _content_keys_section(findings) -> str:
                 f'{pages} page(s) crawled plus live Wikidata and Wikipedia checks '
                 f'on {_date.today():%m/%d/%Y}.</div>') if pages else ""
 
-    cta = (
-        '<div style="margin-top:16px;background:#EEF7F1;border-left:4px solid #177B6E;'
-        'border-radius:6px;padding:12px 16px">'
-        '<div style="font-size:10pt;font-weight:700;color:#0F4146;margin-bottom:3px">'
-        'Request your Content Improvement Plan</div>'
-        '<div style="font-size:9pt;color:#3a5a60;line-height:1.5">A detailed, prioritized '
-        'remediation roadmap for every item above — publication-ready content where it applies '
-        '(schema, llms.txt, Wikidata), plus operational action plans for the rest '
-        '(reputation, listings).</div>'
-        '<a href="https://www.rldatix.com/en-nam/book-a-demo/" '
-        'style="display:inline-block;margin-top:8px;background:#177B6E;color:#fff;font-size:9pt;'
-        'font-weight:700;text-decoration:none;padding:7px 16px;border-radius:5px">Book a demo &rarr;</a></div>'
-    )
+    cta = _content_keys_cta() if include_cta else ""
 
     return (
         '<div style="page-break-before:always;padding:0 40px">'
