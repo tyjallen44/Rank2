@@ -1517,12 +1517,13 @@ def list_content_analysis_runs(limit: int = 100) -> list:
     con = get_connection()
     rows = con.execute(
         "SELECT id, entity_name, location, entity_type, findings_status, finding_count, "
-        "report1_path, report2_path, drafted, status, created_at "
+        "report1_path, report2_path, drafted, status, created_at, base_run_id "
         "FROM content_analysis_runs ORDER BY created_at DESC LIMIT ?", [limit]
     ).fetchall()
     con.close()
     cols = ["id", "entity_name", "location", "entity_type", "findings_status",
-            "finding_count", "report1_path", "report2_path", "drafted", "status", "created_at"]
+            "finding_count", "report1_path", "report2_path", "drafted", "status",
+            "created_at", "base_run_id"]
     out = []
     for r in rows:
         d = dict(zip(cols, r))
@@ -1658,7 +1659,10 @@ def query_history(role: str) -> list[dict[str, Any]]:
             "created_at":        created_at,
         })
 
-    results.sort(key=lambda r: (str(r.get("generated_at") or ""), r["run_id"]), reverse=True)
+    # Newest first by full timestamp (created_at) so same-day runs order by time;
+    # fall back to the generated_at date for any legacy row without a created_at.
+    results.sort(key=lambda r: (str(r.get("created_at") or r.get("generated_at") or ""),
+                                str(r.get("generated_at") or ""), r["run_id"]), reverse=True)
     return results
 
 

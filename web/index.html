@@ -7415,7 +7415,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
 
   runs.sort((a, b) => {
     let va, vb;
-    if (_historySortField === 'date')      { va = a.generated_at; vb = b.generated_at; }
+    if (_historySortField === 'date')      { va = a.created_at || a.generated_at; vb = b.created_at || b.generated_at; }
     else if (_historySortField === 'location') { va = a.location.toLowerCase(); vb = b.location.toLowerCase(); }
     else if (_historySortField === 'type') { va = (a.specialty || '').toLowerCase(); vb = (b.specialty || '').toLowerCase(); }
     else if (_historySortField === 'providers') { va = a.provider_count; vb = b.provider_count; }
