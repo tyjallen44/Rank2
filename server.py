@@ -427,12 +427,26 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
         entity_name, result.location, result.top_recommendation,
         result.ai_visibility_verdict or result.top_recommendation, findings.findings)
 
-    # Render the combined report, replacing the base PDF.
+    # Render the combined report, replacing the base PDF. Force teaser_report off so
+    # the full render never uses the legacy blurred-card teaser layout — content_teaser
+    # controls the (separate) teaser instead.
+    result.teaser_report = False
     emit({"type": "phase", "name": "pdf", "text": "Building the combined practice report"})
     from pathlib import Path as _Path
     combined = REPORTS_DIR / f"{_Path(result.pdf_path).stem if result.pdf_path else result.run_id}.pdf"
     render_practice_combined(result, findings, str(combined), brand=brand)
     result.pdf_path = str(combined)
+
+    # Teaser (opt-in): same combined report with the content analysis + prescription
+    # blurred behind a gate; the score, ratings, and Assessment stay visible.
+    if job.get("teaser_report"):
+        teaser_path = REPORTS_DIR / f"{combined.stem}_teaser.pdf"
+        try:
+            render_practice_combined(result, findings, str(teaser_path), brand=brand, teaser=True)
+            result.teaser_pdf_path = str(teaser_path)
+        except Exception:
+            pass
+
     with get_connection() as con:
         con.execute("UPDATE analysis_runs SET pdf_path = ? WHERE run_id = ?",
                     [str(combined), result.run_id])
@@ -461,7 +475,7 @@ def _job_run_practice(
             specialty=specialty,
             aggregate=aggregate,
             practice_profile=job.get("practice_profile"),
-            teaser_report=job.get("teaser_report", False),
+            teaser_report=False,   # combined flow handles the teaser itself (below)
             output_dir=REPORTS_DIR,
             on_event=emit,
             brand=job.get("brand", "original"),
@@ -478,11 +492,11 @@ def _job_run_practice(
             org_name=job.get("org_name"),
         )
 
-        _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"])
 
         # Practice combined report: content analysis + prescription + findings-citing
-        # Diagnostic Assessment, merged into the report (replaces the Roadmap).
+        # Diagnostic Assessment, merged into the report (replaces the Roadmap). A
+        # teaser (blurred content) is produced too when the toggle is set.
         # Fail-soft — a content/render failure leaves the base four-pillar report.
         if not job.get("skip_pdf"):
             try:

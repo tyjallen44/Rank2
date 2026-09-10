@@ -357,7 +357,7 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
 
 
 def render_practice_combined(result: AnalysisResult, findings, pdf_path,
-                             brand: str = "original") -> None:
+                             brand: str = "original", teaser: bool = False) -> None:
     """Render the practice **combined** report: the four-pillar practice diagnostic
     with its Assessment (which cites the findings), the Improvement Roadmap replaced
     by the embedded Content Report (contents index + every finding + drafted
@@ -382,17 +382,21 @@ def render_practice_combined(result: AnalysisResult, findings, pdf_path,
         page = browser.new_page()
 
         def _emit(page_map):
-            page.set_content(_build_html(result, cfg, content_findings=findings, page_map=page_map),
+            page.set_content(_build_html(result, cfg, content_findings=findings,
+                                         page_map=page_map, content_teaser=teaser),
                              wait_until="networkidle")
             page.pdf(path=str(pdf_path), format="Letter",
                      margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
                      print_background=True, display_header_footer=True,
                      header_template="<span></span>", footer_template=_footer)
 
-        _emit(None)  # measurement pass
-        pm = _page_map(pdf_path, items, False) if items else {}
-        if pm:
-            _emit(pm)  # final pass with real page numbers
+        # The teaser blurs the content, so its Contents-index page numbers are moot —
+        # a single pass is enough. The full report gets the two-pass numbering.
+        _emit(None)
+        if not teaser:
+            pm = _page_map(pdf_path, items, False) if items else {}
+            if pm:
+                _emit(pm)
         browser.close()
 
 
@@ -1212,7 +1216,7 @@ def _practice_appendix_html() -> str:
 
 
 def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
-                content_findings=None, page_map=None) -> str:
+                content_findings=None, page_map=None, content_teaser: bool = False) -> str:
     """Build the individual/market report HTML. When `content_findings` (a
     ContentFindings) is given (practice combined report), the AI Visibility
     Improvement Roadmap is replaced by the embedded Content Report body — the
@@ -1423,9 +1427,24 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
             result.location, content_findings,
             report_title=result.report_title or result.entity_name or "",
             service_line=None, page_map=page_map)
-        _advice_or_content_block = (
-            '<div class="pxcontent" style="font-family:\'Inter\',\'Helvetica Neue\',Arial,sans-serif">'
-            + _pxc + '</div>')
+        if content_teaser:
+            _gate = (
+                '<div style="text-align:center;background:rgba(238,247,241,0.92);'
+                'border:1.5px dashed #177B6E;border-radius:6px;padding:16px 20px;margin:18px 0 14px">'
+                '<div style="font-size:18pt;margin-bottom:5px">&#128274;</div>'
+                '<div style="font-size:11pt;font-weight:700;color:#0F4146;margin-bottom:5px">'
+                'The full content analysis &amp; prescription continue below</div>'
+                '<div style="font-size:8.5pt;color:#3a5a60;max-width:420px;margin:0 auto 4px">'
+                'Request the complete report to see every verified content finding and its '
+                'publication-ready fix for this practice.</div></div>')
+            _advice_or_content_block = (
+                '<div class="pxcontent" style="font-family:\'Inter\',\'Helvetica Neue\',Arial,sans-serif">'
+                + _gate + '<div style="filter:blur(3px);user-select:none;pointer-events:none">'
+                + _pxc + '</div></div>')
+        else:
+            _advice_or_content_block = (
+                '<div class="pxcontent" style="font-family:\'Inter\',\'Helvetica Neue\',Arial,sans-serif">'
+                + _pxc + '</div>')
     else:
         _advice_or_content_block = (
             f'<div class="advice"><div class="section-title">{advice_title}</div>{_advice_html()}</div>')
