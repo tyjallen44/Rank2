@@ -6110,8 +6110,8 @@ function showSingleDone(r) {
       ? `<div style="font-size:12px;color:#c07a30;margin-top:4px">Briefing skipped: ${r.briefing_skipped_reason}</div>`
       : '';
 
-  const teaserBtn = (isNetwork && r.teaser_pdf_path)
-    ? `<button class="btn btn-ghost" onclick="window.location.href='/api/network/${r.run_id}/teaser-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Teaser</button>`
+  const teaserBtn = r.teaser_pdf_path
+    ? `<button class="btn btn-ghost" onclick="window.location.href='/api/${isNetwork ? 'network' : 'reports'}/${r.run_id}/teaser-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Teaser</button>`
     : '';
 
   const fullDetailBtn = (isNetwork && r.full_detail_pdf_path)
@@ -7019,6 +7019,7 @@ function _dlCell(run, caRuns) {
   } else if (run.has_pdf) {
     files.push(['Report (PDF)', `/api/reports/${run.run_id}/pdf?token=${tok}`]);
   }
+  if (run.has_teaser_pdf) files.push(['Teaser (PDF)', `/api/reports/${run.run_id}/teaser-pdf?token=${tok}`]);
   if (run.has_briefing_pdf) files.push(['Briefing (PDF)', `/api/reports/${run.run_id}/briefing-pdf?token=${tok}`]);
   if (ca && ca.has_report2) files.push(['Content Report (PDF)', `/api/content-analysis/${ca.id}/report2?token=${tok}`]);
   if (run.entity_type === 'community_health') {

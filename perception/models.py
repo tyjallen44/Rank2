@@ -298,6 +298,7 @@ class AnalysisResult(BaseModel):
     rankings: list[RankedProvider] = Field(default_factory=list)
     report_markdown: str = ""              # full narrative report text
     pdf_path: Optional[str] = None
+    teaser_pdf_path: Optional[str] = None           # practice combined report's teaser (blurred content)
     md_path: Optional[str] = None
     briefing_variant: Optional[str] = None          # "sales" | "cs" | None
     briefing_pdf_path: Optional[str] = None         # path to companion briefing PDF

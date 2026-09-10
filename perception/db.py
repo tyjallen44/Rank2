@@ -190,6 +190,7 @@ def init_db() -> None:
     ).fetchall()}
     for col, definition in [
         ("pdf_path", "VARCHAR"),
+        ("teaser_pdf_path", "VARCHAR"),
         ("md_path", "VARCHAR"),
         ("user_role", "VARCHAR"),
         ("aggregate", "BOOLEAN DEFAULT FALSE"),
@@ -1576,7 +1577,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
     con = get_connection()
 
     analysis_cols = ["run_id", "location", "specialty", "generated_at",
-                     "pdf_path", "md_path", "briefing_pdf_path", "event_id",
+                     "pdf_path", "teaser_pdf_path", "md_path", "briefing_pdf_path", "event_id",
                      "entity_type", "mqcr", "provider_count", "created_at"]
 
     if role == "admin":
@@ -1587,6 +1588,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.specialty,
                 a.generated_at,
                 a.pdf_path,
+                a.teaser_pdf_path,
                 a.md_path,
                 a.briefing_pdf_path,
                 a.event_id,
@@ -1597,7 +1599,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
-                     a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
+                     a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
                      a.entity_type, a.mqcr, a.created_at
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
@@ -1616,6 +1618,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.specialty,
                 a.generated_at,
                 a.pdf_path,
+                a.teaser_pdf_path,
                 a.md_path,
                 a.briefing_pdf_path,
                 a.event_id,
@@ -1627,7 +1630,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             WHERE a.user_role = ?
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
-                     a.pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
+                     a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
                      a.entity_type, a.mqcr, a.created_at
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()

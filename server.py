@@ -448,8 +448,8 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
             pass
 
     with get_connection() as con:
-        con.execute("UPDATE analysis_runs SET pdf_path = ? WHERE run_id = ?",
-                    [str(combined), result.run_id])
+        con.execute("UPDATE analysis_runs SET pdf_path = ?, teaser_pdf_path = ? WHERE run_id = ?",
+                    [str(combined), result.teaser_pdf_path, result.run_id])
 
 
 def _job_run_practice(
@@ -512,6 +512,7 @@ def _job_run_practice(
             "specialty": result.specialty,
             "provider_count": len(result.rankings),
             "pdf_path": result.pdf_path,
+            "teaser_pdf_path": result.teaser_pdf_path,
             "briefing_pdf_path": result.briefing_pdf_path,
             "briefing_skipped_reason": result.briefing_skipped_reason,
         }
@@ -1056,6 +1057,19 @@ async def download_pdf(run_id: str, role: str = Depends(require_auth)):
     pdf = Path(run["pdf_path"])
     if not pdf.exists():
         raise HTTPException(404, "PDF file not found on disk")
+    return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
+
+
+@app.get("/api/reports/{run_id}/teaser-pdf")
+async def download_report_teaser_pdf(run_id: str, role: str = Depends(require_auth)):
+    """Download the practice combined report's teaser (blurred content) by run_id."""
+    from perception.db import query_history
+    run = next((r for r in query_history(role) if r["run_id"] == run_id), None)
+    if not run or not run.get("teaser_pdf_path"):
+        raise HTTPException(404, "Teaser report not found")
+    pdf = Path(run["teaser_pdf_path"])
+    if not pdf.exists():
+        raise HTTPException(404, "Teaser PDF file not found on disk")
     return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
 
 
