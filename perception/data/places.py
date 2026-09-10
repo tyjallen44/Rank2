@@ -87,6 +87,7 @@ class GoogleRead:
     place_id: Optional[str] = None    # canonical Places ID for collision detection
     types: list = field(default_factory=list)  # Google Places primary/secondary types
     formatted_address: Optional[str] = None    # for city canonicalization check
+    website: Optional[str] = None     # websiteUri from Places — authoritative site for content analysis
 
     def as_line(self) -> str:
         """One-line human/LLM-readable summary for the evidence block."""
@@ -272,7 +273,7 @@ def fetch_provider(
                     "places.id,places.displayName,places.rating,"
                     "places.userRatingCount,places.businessStatus,"
                     "places.googleMapsUri,places.types,"
-                    "places.formattedAddress"
+                    "places.formattedAddress,places.websiteUri"
                 ),
             },
             json={"textQuery": query, "pageSize": max_results},
@@ -316,7 +317,8 @@ def fetch_provider(
         read = GoogleRead(query=query, verified=False, matched_name=found_name,
                           name_match=match, reason=reason,
                           place_id=top_place_id, types=top_types,
-                          formatted_address=top_address)
+                          formatted_address=top_address,
+                          website=top.get("websiteUri") or None)
     else:
         read = GoogleRead(
             query=query, verified=True, rating=float(rating),
@@ -327,6 +329,7 @@ def fetch_provider(
             place_id=top_place_id,
             types=top_types,
             formatted_address=top_address,
+            website=top.get("websiteUri") or None,
         )
 
     ratings = [p["rating"] for p in places if p.get("rating") is not None]

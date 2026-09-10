@@ -391,6 +391,21 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
 
     prov = result.rankings[0] if result.rankings else None
     urls = [u for u in (job.get("content_urls") or []) if (u or "").strip()]
+    if not urls:
+        # Prefer the AUTHORITATIVE website from the resolved Google Places listing
+        # over the LLM-guessed prov.website_url (which invents plausible-but-wrong
+        # domains for practices with non-obvious sites, e.g. doclv.com).
+        try:
+            from perception.data.places import fetch_provider
+            from urllib.parse import urlsplit, urlunsplit
+            _read, _ = fetch_provider(entity_name, city, state)
+            if _read and _read.website:
+                # Drop tracking query/fragment (Places often appends UTM params) so
+                # content checks hit the clean base site.
+                _s = urlsplit(_read.website)
+                urls = [urlunsplit((_s.scheme, _s.netloc, _s.path, "", "")).rstrip("/")]
+        except Exception:
+            pass
     if not urls and prov is not None and prov.website_url:
         urls = [prov.website_url]
 
