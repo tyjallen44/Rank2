@@ -198,6 +198,7 @@ def init_db() -> None:
         ("teaser_report", "BOOLEAN DEFAULT FALSE"),
         ("individual_report", "BOOLEAN DEFAULT FALSE"),
         ("entity_name", "VARCHAR"),
+        ("ran_by", "VARCHAR"),            # email/name of the user who ran the report
         # AI Visibility Score additions
         ("weighting_profile", "VARCHAR"),
         ("market_overview", "VARCHAR"),
@@ -926,6 +927,7 @@ def init_network_db(con=None) -> None:
         ("teaser_pdf_path",     "VARCHAR"),
         ("full_detail_pdf_path", "VARCHAR"),
         ("user_role",           "VARCHAR DEFAULT 'admin'"),
+        ("ran_by",              "VARCHAR"),
         ("created_at",          "TIMESTAMP"),
     ]:
         if _col not in _nr_cols:
@@ -1565,10 +1567,15 @@ def delete_event_run(event_id: str) -> None:
     con.close()
 
 
-def set_run_role(run_id: str, role: str) -> None:
-    """Tag an analysis run with the role of the user who created it."""
+def set_run_role(run_id: str, role: str, ran_by: Optional[str] = None) -> None:
+    """Tag an analysis run with the role — and, when known, the email/name — of the
+    user who created it."""
     con = get_connection()
-    con.execute("UPDATE analysis_runs SET user_role = ? WHERE run_id = ?", [role, run_id])
+    if ran_by:
+        con.execute("UPDATE analysis_runs SET user_role = ?, ran_by = ? WHERE run_id = ?",
+                    [role, ran_by, run_id])
+    else:
+        con.execute("UPDATE analysis_runs SET user_role = ? WHERE run_id = ?", [role, run_id])
     con.close()
 
 
@@ -1578,7 +1585,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
 
     analysis_cols = ["run_id", "location", "specialty", "generated_at",
                      "pdf_path", "teaser_pdf_path", "md_path", "briefing_pdf_path", "event_id",
-                     "entity_type", "mqcr", "provider_count", "created_at"]
+                     "entity_type", "mqcr", "entity_name", "ran_by", "provider_count", "created_at"]
 
     if role == "admin":
         analysis_rows = con.execute("""
@@ -1594,19 +1601,21 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.event_id,
                 a.entity_type,
                 a.mqcr,
+                a.entity_name,
+                a.ran_by,
                 COUNT(p.rank) AS provider_count,
                 a.created_at
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
-                     a.entity_type, a.mqcr, a.created_at
+                     a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
         network_rows = con.execute("""
             SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
                    generated_at, pdf_path, total_hospitals, created_at,
-                   teaser_pdf_path, full_detail_pdf_path
+                   teaser_pdf_path, full_detail_pdf_path, ran_by
             FROM network_runs
             ORDER BY generated_at DESC, run_id DESC
         """).fetchall()
@@ -1624,6 +1633,8 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.event_id,
                 a.entity_type,
                 a.mqcr,
+                a.entity_name,
+                a.ran_by,
                 COUNT(p.rank) AS provider_count,
                 a.created_at
             FROM analysis_runs a
@@ -1631,13 +1642,13 @@ def query_history(role: str) -> list[dict[str, Any]]:
             WHERE a.user_role = ?
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
-                     a.entity_type, a.mqcr, a.created_at
+                     a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()
         network_rows = con.execute("""
             SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
                    generated_at, pdf_path, total_hospitals, created_at,
-                   teaser_pdf_path, full_detail_pdf_path
+                   teaser_pdf_path, full_detail_pdf_path, ran_by
             FROM network_runs
             WHERE COALESCE(user_role, 'admin') = ?
             ORDER BY generated_at DESC, run_id DESC
@@ -1649,7 +1660,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
 
     for row in network_rows:
         (run_id, network_name, facility_type, generated_at, pdf_path, total,
-         created_at, teaser_pdf_path, full_detail_pdf_path) = row
+         created_at, teaser_pdf_path, full_detail_pdf_path, ran_by) = row
         results.append({
             "run_id":            run_id,
             "location":          network_name,
@@ -1663,6 +1674,8 @@ def query_history(role: str) -> list[dict[str, Any]]:
             "event_id":          None,
             "entity_type":       "hospital_network",
             "mqcr":              None,
+            "entity_name":       network_name,
+            "ran_by":            ran_by,
             "provider_count":    total or 0,
             "report_type":       "network",
             "created_at":        created_at,

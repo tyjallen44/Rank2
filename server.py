@@ -332,7 +332,7 @@ def _job_run_single(
             parent_system=job.get("parent_system"),
         )
         _backfill_teaser_pdf(result, job)
-        set_run_role(result.run_id, job["role"])
+        set_run_role(result.run_id, job["role"], job.get("email"))
         job["status"] = "done"
         job["result"] = {
             "run_id": result.run_id,
@@ -492,7 +492,7 @@ def _job_run_practice(
             org_name=job.get("org_name"),
         )
 
-        set_run_role(result.run_id, job["role"])
+        set_run_role(result.run_id, job["role"], job.get("email"))
 
         # Practice combined report: content analysis + prescription + findings-citing
         # Diagnostic Assessment, merged into the report (replaces the Roadmap). A
@@ -556,7 +556,7 @@ def _job_run_fqhc(
             report_title=job.get("report_title"),
         )
         _backfill_teaser_pdf(result, job)
-        set_run_role(result.run_id, job["role"])
+        set_run_role(result.run_id, job["role"], job.get("email"))
         job["status"] = "done"
         job["result"] = {
             "run_id": result.run_id,
@@ -678,7 +678,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
                 output_dir=REPORTS_DIR, on_event=emit,
                 brand=job.get("brand", "original"),
             )
-            set_run_role(result.run_id, job["role"])
+            set_run_role(result.run_id, job["role"], job.get("email"))
             results.append({
                 "run_id": result.run_id,
                 "location": result.location,
@@ -696,11 +696,12 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
         _put(loop, queue, None)
 
 
-def _new_job(role: str, brand: str = "original") -> str:
+def _new_job(role: str, brand: str = "original", email: Optional[str] = None) -> str:
     job_id = str(uuid.uuid4())
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
-    _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role, "brand": brand}
+    _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role,
+                     "brand": brand, "email": email}
     return job_id
 
 
@@ -810,7 +811,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     specialty = _normalize_input(req.specialty)
     entity_name = _normalize_input(req.entity_name)
 
-    job_id = _new_job(role, brand)
+    job_id = _new_job(role, brand, payload.get("email"))
     _jobs[job_id]["zip_code"] = req.zip_code if req.zip_code else None
     _jobs[job_id]["patient_perspective"] = req.patient_perspective
     _jobs[job_id]["teaser_report"] = req.teaser_report
@@ -850,7 +851,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
 async def start_batch(req: BatchRequest, payload: dict = Depends(get_current_user_payload)):
     role  = payload["role"]
     brand = payload.get("brand", "original")
-    job_id = _new_job(role, brand)
+    job_id = _new_job(role, brand, payload.get("email"))
     _pool.submit(_job_run_batch, job_id, [g.dict() for g in req.groups])
     return {"job_id": job_id}
 
@@ -915,7 +916,7 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
 async def start_comparison(req: CompareRequest, payload: dict = Depends(get_current_user_payload)):
     brand = payload.get("brand", "original")
     role  = payload.get("role", "user")
-    job_id = _new_job(role, brand)
+    job_id = _new_job(role, brand, payload.get("email"))
     req_dict = req.dict()
     # Gate override_today_lock to admin users only
     req_dict["override_today_lock"] = req.override_today_lock and (role == "admin")
@@ -1214,7 +1215,7 @@ async def network_analyze(req: NetworkAnalyzeRequest, payload: dict = Depends(ge
     role  = payload["role"]
     brand = payload.get("brand", req.brand)
     ignore_cache = req.ignore_cache and (role == "admin")
-    job_id = _new_job(role, brand)
+    job_id = _new_job(role, brand, payload.get("email"))
     _pool.submit(_job_network_analyze, job_id, req.network_name, req.hq_location,
                  req.source_url, req.facilities, req.facility_type, brand, ignore_cache,
                  req.teaser, req.service_line_audit, req.full_detail)
@@ -1250,6 +1251,11 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             service_line_audit=service_line_audit,   # internal opt-in: scorecard section
             full_detail=full_detail,   # opt-in: Hospital Network Full Detail report
         )
+        if job.get("email"):
+            from perception.db import get_connection as _gc
+            with _gc() as _con:
+                _con.execute("UPDATE network_runs SET ran_by = ? WHERE run_id = ?",
+                             [job.get("email"), result.run_id])
         job["status"] = "done"
         job["result"] = {
             "run_id": result.run_id,
@@ -1543,7 +1549,7 @@ async def network_bulk_run(file: UploadFile = File(...),
     input_path.write_bytes(raw)
     create_network_bulk_run(bulk_id, (file.filename or "list.csv"),
                             len(rows), payload.get("role", ""), str(input_path))
-    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
     _pool.submit(_run_network_bulk_job, job_id, bulk_id, str(input_path),
                  payload.get("brand", "original"))
     return {"job_id": job_id, "bulk_id": bulk_id, "total": len(rows)}
@@ -1563,7 +1569,7 @@ async def network_bulk_resume(bulk_id: str,
     if not input_path or not Path(input_path).exists():
         raise HTTPException(400, "The original upload is no longer available to resume.")
     reset_network_bulk_run(bulk_id)
-    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
     _pool.submit(_run_network_bulk_job, job_id, bulk_id, input_path,
                  payload.get("brand", "original"))
     return {"job_id": job_id, "bulk_id": bulk_id, "total": rec.get("total", 0)}
@@ -1724,7 +1730,7 @@ async def student_health_run(req: StudentRunRequest,
     override = bool(req.override_cache) and payload.get("role") == "admin"
     create_student_health_run(run_id, label, req.mode or "", len(schools),
                               payload.get("role", ""), title)
-    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
     _pool.submit(_run_student_health_job, job_id, run_id, label, req.mode or "", schools, override)
     return {"job_id": job_id, "run_id": run_id, "total": len(schools)}
 
@@ -1910,7 +1916,7 @@ async def content_analysis_run(req: ContentAnalysisRequest,
     req_d = req.dict()
     # Gate the cache override to admins (like every other report type).
     req_d["override_cache"] = bool(req.override_cache) and payload.get("role") == "admin"
-    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
     _pool.submit(_job_content_analysis, job_id, ca_id, req_d,
                  payload.get("brand", "original"))
     return {"job_id": job_id, "ca_id": ca_id}
@@ -1957,7 +1963,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
                 brand=brand, report_title=req.get("report_title"),
                 force_rerun=override, override_today_lock=override,
             )
-        set_run_role(result.run_id, job["role"])
+        set_run_role(result.run_id, job["role"], job.get("email"))
 
         # 2. Website URLs: user-confirmed, else the resolved provider's site.
         urls = [u for u in (req.get("urls") or []) if (u or "").strip()]
@@ -2169,7 +2175,7 @@ async def content_analysis_draft(ca_id: str, payload: dict = Depends(get_current
         raise HTTPException(400, "Run isn't complete yet.")
     if not get_content_findings(rec["base_run_id"]):
         raise HTTPException(400, "No findings to draft.")
-    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
     _pool.submit(_job_content_draft, job_id, ca_id)
     return {"job_id": job_id, "ca_id": ca_id}
 
@@ -3749,7 +3755,7 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
     )
     create_event_entities(entities_db)
 
-    job_id = _new_job(role, brand)
+    job_id = _new_job(role, brand, payload.get("email"))
     _event_job_map[event_id] = job_id
     _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser, req.override_cache, req.auto_practice_composite)
     return {"event_id": event_id, "job_id": job_id}
@@ -3769,7 +3775,7 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
     pending = [e for e in ents if (e.get("status") or "") != "done"]
     if not pending:
         raise HTTPException(400, "All entities already completed — nothing to resume.")
-    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"))
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
     _event_job_map[event_id] = job_id
     # Repeat the original run's settings so resumed entities are analyzed the same way.
     _pool.submit(_run_event_job, job_id, event_id, pending,
