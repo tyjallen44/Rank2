@@ -1949,18 +1949,10 @@ input[type="url"]::placeholder, textarea::placeholder {
           <input type="checkbox" id="np-ignore-cache">
           <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
         </label>
-        <label class="aggregate-toggle" style="margin-top:10px" title="Create a teaser version of the Hospital Network report with everything below the System AI Visibility section blurred — for sending to prospects.">
-          <input type="checkbox" id="np-teaser-toggle">
-          <span class="agg-label">Also generate a teaser report</span>
-        </label>
-        <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">A second PDF that shows the cover, executive summary, and System AI Visibility, then blurs everything below — ideal for prospect outreach.</div>
-        <label class="aggregate-toggle" style="margin-top:10px" title="Internal: enumerate the system's service lines and score each one's listings for patient attraction. Adds several minutes; appends a scorecard section to the report.">
+        <div style="font-size:12px;color:var(--muted);margin-top:12px;padding-left:2px;line-height:1.5">Every run automatically produces all three reports: the <strong>Hospital Network report</strong>, a <strong>Teaser</strong> version, and the <strong>Full Detail</strong> report (the full content analysis with drafted remediation for every finding).</div>
+        <label class="aggregate-toggle" style="margin-top:12px" title="Also analyze the system's individual departments / service lines and score each one's listings for patient attraction. Adds several minutes and appends a scorecard section to the reports.">
           <input type="checkbox" id="np-service-line">
-          <span class="agg-label">Include the service-line listing scorecard <span style="font-size:11px;color:#888">(internal · adds several minutes)</span></span>
-        </label>
-        <label class="aggregate-toggle" style="margin-top:10px" title="Also generate the Hospital Network Full Detail report — the network report combined with the full detailed content analysis (every finding plus its drafted remediation). Runs content drafting; adds several minutes.">
-          <input type="checkbox" id="np-full-detail">
-          <span class="agg-label">Also generate the Full Detail report <span style="font-size:11px;color:#888">(adds the full content analysis + drafts · several minutes)</span></span>
+          <span class="agg-label">Also analyze individual departments (service-line listing scorecard) <span style="font-size:11px;color:#888">(adds several minutes)</span></span>
         </label>
         <div id="np-step1-err" class="err hidden mt8"></div>
         <button class="btn btn-primary" id="np-find-btn" onclick="npFindFacilities()">Find Hospitals via AI →</button>
@@ -4350,9 +4342,8 @@ async function npRunAnalysis() {
   }
 
   const ignoreCache = document.getElementById('np-ignore-cache')?.checked || false;
-  const teaser = document.getElementById('np-teaser-toggle')?.checked || false;
   const serviceLine = document.getElementById('np-service-line')?.checked || false;
-  const fullDetail = document.getElementById('np-full-detail')?.checked || false;
+  // All three reports (standard + teaser + full detail) are always generated.
   const btn = document.getElementById('np-run-btn');
   btn.disabled = true;
   btn.textContent = 'Starting…';
@@ -4361,7 +4352,7 @@ async function npRunAnalysis() {
     const res = await fetch('/api/network/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
-      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache, teaser, service_line_audit: serviceLine, full_detail: fullDetail }),
+      body: JSON.stringify({ network_name: name, hq_location: hq, source_url: url, facilities: checked, facility_type: facilityType, ignore_cache: ignoreCache, teaser: true, service_line_audit: serviceLine, full_detail: true }),
     });
     if (!res.ok) throw new Error(await res.text());
     const { job_id } = await res.json();
