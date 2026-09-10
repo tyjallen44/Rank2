@@ -350,6 +350,94 @@ def _job_run_single(
         _put(loop, queue, None)  # sentinel → closes SSE stream
 
 
+def _build_practice_reputation(result) -> Optional[dict]:
+    """Reputation input for the practice content analysis, from the base diagnostic's
+    verified Google data across ALL of the practice's locations (no new crawling)."""
+    prov = result.rankings[0] if result.rankings else None
+    if prov is None:
+        return None
+    fp = prov.google_footprint
+    agg = fp.system_aggregate if fp else None
+    fd = fp.front_door if fp else None
+    agg_rating = (agg.rating if (agg and agg.rating is not None) else None)
+    agg_count = (agg.total_reviews if (agg and agg.rating is not None) else None)
+    if agg_rating is None and fd and getattr(fd, "verified", False) and fd.rating is not None:
+        agg_rating, agg_count = fd.rating, fd.count
+    return {
+        "locations": [
+            {"name": l.name, "google_rating": l.google_rating,
+             "google_review_count": l.google_review_count, "address": l.address}
+            for l in (prov.consolidated_locations or [])
+        ],
+        "footprint": {"rating_range": (fp.rating_range if fp else ""),
+                      "consistency": (fp.consistency if fp else "")},
+        "aggregate_rating": agg_rating,
+        "aggregate_count": agg_count,
+    }
+
+
+def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
+                                brand: str, job: dict, emit) -> None:
+    """Run the practice content analysis + drafting, synthesize a findings-citing
+    Diagnostic Assessment, and render the combined practice report (four-pillar +
+    Assessment + embedded Content Report/prescription), replacing the base PDF.
+    Fail-soft: on any error the base report is left intact."""
+    from perception.db import (save_content_findings, _norm_entity_name, get_connection)
+    from perception.content_analyzer import analyze_content
+    from perception.content_drafting import draft_findings
+    from perception.practice_assessment import synthesize_assessment
+    from perception.pdf import render_practice_combined
+    from perception.models import ContentFinding
+
+    prov = result.rankings[0] if result.rankings else None
+    urls = [u for u in (job.get("content_urls") or []) if (u or "").strip()]
+    if not urls and prov is not None and prov.website_url:
+        urls = [prov.website_url]
+
+    rep = _build_practice_reputation(result)
+    emit({"type": "phase", "name": "content",
+          "text": "Analyzing content: website, Wikidata, Wikipedia, and listings/reputation"})
+    findings = analyze_content(entity_name, urls, city, state,
+                               entity_kind="practice", reputation=rep, on_event=emit)
+    findings.run_id = result.run_id
+
+    # Draft the full prescription (always — the practice report includes it).
+    snap = findings.source_snapshot or {}
+    fdicts = [f.model_dump() for f in findings.findings]
+    needs = [f for f in fdicts if not f.get("draft_content") and f.get("remediation_type")
+             and f.get("status") != "not_assessed"]
+    if needs:
+        emit({"type": "phase", "name": "drafting", "text": "Drafting the content prescription"})
+        facts = {"website_urls": snap.get("website_urls", []), "specialty": result.specialty,
+                 "wikidata_qid": snap.get("wikidata_qid"), "wikipedia_article": snap.get("wikipedia_article")}
+        try:
+            drafts = draft_findings(entity_name, result.location, "practice", facts, fdicts)
+        except Exception:
+            drafts = {}
+        for f in fdicts:
+            if f.get("finding_id") in drafts:
+                f["draft_content"] = drafts[f["finding_id"]]
+        findings.findings = [ContentFinding(**f) for f in fdicts]
+    save_content_findings(result.run_id, _norm_entity_name(entity_name),
+                          snap, [f.model_dump() for f in findings.findings], findings.status)
+
+    # Assessment synthesis (cites the findings) → replaces top_recommendation.
+    emit({"type": "phase", "name": "assessment", "text": "Writing the diagnostic assessment"})
+    result.top_recommendation = synthesize_assessment(
+        entity_name, result.location, result.top_recommendation,
+        result.ai_visibility_verdict or result.top_recommendation, findings.findings)
+
+    # Render the combined report, replacing the base PDF.
+    emit({"type": "phase", "name": "pdf", "text": "Building the combined practice report"})
+    from pathlib import Path as _Path
+    combined = REPORTS_DIR / f"{_Path(result.pdf_path).stem if result.pdf_path else result.run_id}.pdf"
+    render_practice_combined(result, findings, str(combined), brand=brand)
+    result.pdf_path = str(combined)
+    with get_connection() as con:
+        con.execute("UPDATE analysis_runs SET pdf_path = ? WHERE run_id = ?",
+                    [str(combined), result.run_id])
+
+
 def _job_run_practice(
     job_id: str, entity_name: str, city: str, state: str,
     specialty: Optional[str] = None, aggregate: bool = False,
@@ -392,6 +480,17 @@ def _job_run_practice(
 
         _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"])
+
+        # Practice combined report: content analysis + prescription + findings-citing
+        # Diagnostic Assessment, merged into the report (replaces the Roadmap).
+        # Fail-soft — a content/render failure leaves the base four-pillar report.
+        if not job.get("skip_pdf"):
+            try:
+                _finalize_practice_combined(result, entity_name, city, state,
+                                            job.get("brand", "original"), job, emit)
+            except Exception as _ce:
+                emit({"type": "text", "text": f"\n(content analysis skipped: {type(_ce).__name__})"})
+
         job["status"] = "done"
         job["result"] = {
             "run_id": result.run_id,
