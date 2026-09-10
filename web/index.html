@@ -7310,7 +7310,6 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
       <table class="tbl">
         <thead><tr>
           ${th('Date', 'date')}
-          ${th('Location', 'location')}
           ${th('Name', 'name')}
           ${th('Type', 'type')}
           ${th('Analyzed', 'providers', 'right')}
@@ -7340,15 +7339,14 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
             const _ranBy = run.ran_by ? String(run.ran_by).split('@')[0] : '—';
             return `<tr>
               <td style="color:var(--muted);font-size:13px;white-space:nowrap;line-height:1.4">${_fmtRunDate(run)}</td>
-              <td style="font-weight:500">${run.location}</td>
-              <td style="font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_entName}">${_entName}</td>
+              <td style="font-weight:500;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_entName}">${_entName}</td>
               <td>${typeBadge}</td>
               <td style="text-align:right">${analyzedCount}</td>
               <td style="font-size:12px;color:var(--muted);white-space:nowrap" title="${run.ran_by || ''}">${_ranBy}</td>
               <td>${_dlCell(run, _caByBase[run.run_id] || [])}</td>
             </tr>`;
           }).join('')
-          : `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
+          : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
         </tbody>
       </table>
     </div>`;
