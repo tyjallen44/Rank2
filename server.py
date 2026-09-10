@@ -744,6 +744,7 @@ class AnalyzeRequest(BaseModel):
     confirmed_siblings: Optional[List[dict]] = None  # pre-confirmed location list from initiation flow; None = run discovery inside analyzer
     individual_report: bool = False
     skip_pdf: bool = False
+    content_urls: List[str] = []            # user-supplied website URL(s) for the content analysis
     entity_type: Optional[str] = None       # "practice" routes to practice_analyzer
     practice_profile: Optional[str] = None  # override auto-classified profile
     practice_composite: bool = False        # append practice reputation table
@@ -835,6 +836,9 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["report_title"] = _normalize_input(req.report_title) if req.report_title else None
     _jobs[job_id]["org_name"] = _normalize_input(req.org_name) if req.org_name else None
     _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list
+    _jobs[job_id]["content_urls"] = [
+        (u.strip() if u.strip().lower().startswith(("http://", "https://")) else "https://" + u.strip())
+        for u in (req.content_urls or []) if (u or "").strip()]
 
     if req.entity_type == "community_health" and entity_name:
         _jobs[job_id]["fqhc_intake"] = req.fqhc_intake

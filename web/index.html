@@ -1730,6 +1730,10 @@ input[type="url"]::placeholder, textarea::placeholder {
               &#9650; Scope disclosure: Pulse Briefing requires full data collection (all locations, all physician listings, battery metrics). Run time will be longer.
             </div>
           </div>
+          <div class="fg" style="margin-top:12px;margin-bottom:0">
+            <label class="fl">Website URL <span style="font-size:11px;color:#888">(optional — used for the content analysis; overrides the auto-detected site if it's wrong)</span></label>
+            <input id="ir-content-url" class="fi" type="url" placeholder="e.g. https://doclv.com">
+          </div>
           <label class="aggregate-toggle" style="margin-top:10px" title="Create a teaser version with blurred details for sending to prospects.">
             <input type="checkbox" id="ir-teaser-toggle">
             <span class="agg-label">Create Teaser Report</span>
@@ -5618,6 +5622,8 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     patient_perspective: false,
     teaser_report,
     skip_pdf,
+    content_urls: (document.getElementById('ir-content-url')?.value || '').trim()
+      ? [(document.getElementById('ir-content-url').value || '').trim()] : [],
     entity_type: _irType === 'specialty' ? 'practice'
                : _irType === 'community_health' ? 'community_health'
                : null,
