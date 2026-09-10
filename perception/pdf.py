@@ -356,6 +356,46 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
         browser.close()
 
 
+def render_practice_combined(result: AnalysisResult, findings, pdf_path,
+                             brand: str = "original") -> None:
+    """Render the practice **combined** report: the four-pillar practice diagnostic
+    with its Assessment (which cites the findings), the Improvement Roadmap replaced
+    by the embedded Content Report (contents index + every finding + drafted
+    prescription). Two passes so the Contents-index page numbers reflect the final
+    document (Chromium doesn't expose page numbers at build time)."""
+    from playwright.sync_api import sync_playwright
+    from .content_report_pdf import _page_map
+
+    cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
+    items = [f.model_dump() if hasattr(f, "model_dump") else f
+             for f in (getattr(findings, "findings", []) or [])]
+    _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
+    _footer = (
+        '<div style="width:100%;font-family:Arial,sans-serif;font-size:9px;color:#7a9095;'
+        'display:flex;justify-content:space-between;align-items:center;padding:0 48px 8px;box-sizing:border-box">'
+        f'<span>{_cached_lbl}</span>'
+        '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
+        '</div>'
+    )
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+
+        def _emit(page_map):
+            page.set_content(_build_html(result, cfg, content_findings=findings, page_map=page_map),
+                             wait_until="networkidle")
+            page.pdf(path=str(pdf_path), format="Letter",
+                     margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
+                     print_background=True, display_header_footer=True,
+                     header_template="<span></span>", footer_template=_footer)
+
+        _emit(None)  # measurement pass
+        pm = _page_map(pdf_path, items, False) if items else {}
+        if pm:
+            _emit(pm)  # final pass with real page numbers
+        browser.close()
+
+
 def _e(text: str | None) -> str:
     return _html_lib.escape(str(text or ""))
 
@@ -1171,7 +1211,14 @@ def _practice_appendix_html() -> str:
          "Identity &amp; Machine-Readability", "Access &amp; Fit"])
 
 
-def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
+def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
+                content_findings=None, page_map=None) -> str:
+    """Build the individual/market report HTML. When `content_findings` (a
+    ContentFindings) is given (practice combined report), the AI Visibility
+    Improvement Roadmap is replaced by the embedded Content Report body — the
+    contents index, every finding, and its drafted prescription — and the
+    Assessment above it is expected to already cite those findings
+    (result.top_recommendation is set by the caller)."""
     brand_cfg = brand_cfg or _BRAND_CONFIGS["original"]
     location        = _e(result.location)
     specialty_label = _e(result.specialty or "Hospital Market")
@@ -1320,7 +1367,11 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 
     # Section title overrides for individual reports
     overview_title       = "Organization Overview" if result.individual_report else "Market Overview"
-    recommendation_title = SECTION_ASSESSMENT      if result.individual_report else "Top Recommendation"
+    # With the embedded Content Report, the Roadmap is replaced by the prescription,
+    # so the section is just the Assessment (drop "& Roadmap" from the title).
+    recommendation_title = (
+        "Diagnostic Assessment" if content_findings is not None
+        else (SECTION_ASSESSMENT if result.individual_report else "Top Recommendation"))
     # Individual reports: assessment+roadmap are one section; advice_title is empty to avoid
     # a duplicate SECTION_ASSESSMENT header after recommendation_title already rendered it.
     advice_title         = (
@@ -1361,6 +1412,23 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
         appendix_html = ""
     else:
         appendix_html = _practice_appendix_html() if result.entity_type == "practice" else _appendix_html()
+
+    # The Roadmap block, OR — when content findings are supplied (practice combined
+    # report) — the embedded Content Report body (contents index + findings +
+    # drafted prescription), which replaces the Roadmap.
+    if content_findings is not None:
+        from .content_report_pdf import _content_body_html
+        _pxc = _content_body_html(
+            result.entity_name or result.report_title or result.location,
+            result.location, content_findings,
+            report_title=result.report_title or result.entity_name or "",
+            service_line=None, page_map=page_map)
+        _advice_or_content_block = (
+            '<div class="pxcontent" style="font-family:\'Inter\',\'Helvetica Neue\',Arial,sans-serif">'
+            + _pxc + '</div>')
+    else:
+        _advice_or_content_block = (
+            f'<div class="advice"><div class="section-title">{advice_title}</div>{_advice_html()}</div>')
 
     _html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -2103,10 +2171,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
     <p>{_e(_strip_md(result.top_recommendation))}</p>
   </div>
 
-  <div class="advice">
-    <div class="section-title">{advice_title}</div>
-    {_advice_html()}
-  </div>
+  {_advice_or_content_block}
 
   <div class="disclaimer">
     <strong>Data Limitations &amp; Disclaimer</strong><br>
@@ -2120,6 +2185,10 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None) -> str:
 </div>
 </body>
 </html>"""
+    # Embedded Content Report styles (practice combined report only).
+    if content_findings is not None:
+        from .content_report_pdf import _content_css
+        _html = _html.replace("</style>", _content_css(include_reset=False) + "\n  </style>", 1)
     # Apply brand color overrides via string replacement
     _primary = brand_cfg["primary"]
     _pale    = brand_cfg["pale"]
