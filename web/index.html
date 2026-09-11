@@ -1638,32 +1638,6 @@ input[type="url"]::placeholder, textarea::placeholder {
         </div>
       </div>
 
-      <!-- Step 2c: Organization Location Discovery (specialty practice only) -->
-      <div id="ir-step2c" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:12px">Organization Coverage</div>
-
-        <div id="ir-siblings-loading" style="padding:16px 0 20px;text-align:center">
-          <span class="spinner" style="display:block;margin:0 auto 12px"></span>
-          <div style="font-size:14px;font-weight:600;color:var(--teal);margin-bottom:6px">Discovering locations for <span id="ir-siblings-org-name"></span>…</div>
-          <div style="font-size:12px;color:var(--muted)">Claude is mapping all locations in this organization. This takes 10–20 seconds.</div>
-        </div>
-
-        <div id="ir-siblings-content" class="hidden">
-          <div id="ir-siblings-count" style="font-size:14px;font-weight:600;color:var(--teal);margin-bottom:14px"></div>
-          <div id="ir-siblings-list"></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:8px">Uncheck any false-positive entries that should not be included in the report.</div>
-        </div>
-
-        <div id="ir-siblings-err" class="err hidden mt16"></div>
-
-        <div class="mt20 row-actions">
-          <button class="btn btn-primary" id="ir-siblings-confirm-btn" onclick="irConfirmOrg()" style="display:none">
-            Confirm Organization →
-          </button>
-          <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
-        </div>
-      </div>
-
       <!-- Step 3: Options + Run -->
       <div id="ir-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Selected Organization</div>
@@ -1681,6 +1655,23 @@ input[type="url"]::placeholder, textarea::placeholder {
             <option value="practice_hybrid">Hybrid — multi-specialty groups: blend of procedural and relationship</option>
           </select>
           <div id="ir-profile-desc" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+        </div>
+
+        <!-- Locations (folded in from the former Organization Coverage gate). Populated by
+             discovery for specialty practices; hidden for hospital/FQHC. -->
+        <div id="ir-locations-section" class="hidden" style="margin-bottom:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:8px">Locations Analyzed</div>
+          <div id="ir-siblings-loading" style="padding:8px 0 12px;text-align:center">
+            <span class="spinner" style="display:block;margin:0 auto 10px"></span>
+            <div style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:4px">Discovering locations for <span id="ir-siblings-org-name"></span>…</div>
+            <div style="font-size:11px;color:var(--muted)">Mapping all locations in this organization. 10–20 seconds.</div>
+          </div>
+          <div id="ir-siblings-content" class="hidden">
+            <div id="ir-siblings-count" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
+            <div id="ir-siblings-list"></div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px">Uncheck any false-positive entries that should not be included.</div>
+          </div>
+          <div id="ir-siblings-err" class="err hidden mt8"></div>
         </div>
 
         <div style="margin-bottom:20px">
@@ -1705,7 +1696,7 @@ input[type="url"]::placeholder, textarea::placeholder {
             <span class="agg-label">Practice Composite</span>
           </label>
           <label class="aggregate-toggle" id="ir-physician-composite-wrap" style="margin-top:6px;margin-left:20px" title="Include physician-level reputation sub-rows under each practice in the composite table.">
-            <input type="checkbox" id="ir-physician-composite" disabled>
+            <input type="checkbox" id="ir-physician-composite" onchange="onPhysicianCompositeChange()" disabled>
             <span class="agg-label">Include Physicians in Composite</span>
           </label>
           <label class="aggregate-toggle" id="ir-briefing-wrap" style="margin-top:10px" title="Generate a one-page Pulse Briefing companion with talking points for a sales or CS meeting. Requires full data collection scope.">
@@ -1739,41 +1730,36 @@ input[type="url"]::placeholder, textarea::placeholder {
           </label>
         </div>
 
+        <!-- Practice composite list (folded in from the former post-Run gate). Populated
+             inline when Practice Composite is toggled on; the checked rows go into the run. -->
+        <div id="ir-composite-section" class="hidden" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Practice Composite — Reputation Table</div>
+          <div id="ir-pd-loading" class="hidden" style="padding:8px 0 12px;text-align:center">
+            <span class="spinner" style="display:block;margin:0 auto 8px"></span>
+            <div style="font-size:12px;color:var(--muted)">Discovering practices for the reputation table…</div>
+          </div>
+          <div id="ir-pd-count" style="font-size:12px;color:var(--teal);font-weight:600;margin-bottom:12px"></div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px">
+            <thead>
+              <tr style="background:#f0f6f7;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">
+                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Include</th>
+                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
+                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Type</th>
+                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">City, ST</th>
+              </tr>
+            </thead>
+            <tbody id="ir-pd-tbody"></tbody>
+          </table>
+          <div style="font-size:11px;color:var(--muted)">Uncheck any practice to exclude it from the reputation table.</div>
+          <div id="ir-pd-err" class="err hidden mt8"></div>
+        </div>
+
         <div id="ir-run-err" class="err hidden mt16"></div>
         <div class="mt20 row-actions">
           <button class="btn btn-primary" id="ir-run-btn" onclick="runIndividual()">
             Run Diagnostic →
           </button>
           <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
-        </div>
-      </div>
-
-      <!-- ── Practice Discovery confirmation step ──────────────────────── -->
-      <div id="ir-step-practice-discovery" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Practice Composite — Confirm Practice List</div>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
-          Review the discovered practices below. Uncheck any that should be excluded from the reputation table, then confirm to run.
-        </p>
-        <div id="ir-pd-count" style="font-size:12px;color:var(--teal);font-weight:600;margin-bottom:12px"></div>
-
-        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
-          <thead>
-            <tr style="background:#f0f6f7;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">
-              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Include</th>
-              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
-              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Type</th>
-              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">City, ST</th>
-            </tr>
-          </thead>
-          <tbody id="ir-pd-tbody"></tbody>
-        </table>
-
-        <div id="ir-pd-err" class="err hidden mt8"></div>
-        <div class="mt16 row-actions">
-          <button class="btn btn-primary" id="ir-pd-confirm-btn" onclick="confirmPracticeRoster()">
-            Confirm &amp; Run →
-          </button>
-          <button class="btn btn-ghost btn-sm" onclick="irBackFromPracticeDiscovery()">← Back</button>
         </div>
       </div>
 
@@ -4101,7 +4087,7 @@ function resetPage(p) {
     document.getElementById('ir-zip').value = '';
     const irSpecEl = document.getElementById('ir-specialty');
     if (irSpecEl) irSpecEl.value = '';
-    ['ir-step2','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake','ir-profile-inline'].forEach(id => {
+    ['ir-step2','ir-step3','ir-step-fqhc-intake','ir-profile-inline','ir-locations-section','ir-composite-section'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.add('hidden');
     });
@@ -5104,11 +5090,12 @@ async function irStartDiscovery() {
   document.getElementById('ir-siblings-loading').classList.remove('hidden');
   document.getElementById('ir-siblings-content').classList.add('hidden');
   document.getElementById('ir-siblings-err').classList.add('hidden');
-  document.getElementById('ir-siblings-confirm-btn').style.display = 'none';
 
-  const step2c = document.getElementById('ir-step2c');
-  step2c.classList.remove('hidden');
-  step2c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // Locations now render inline in the options panel (Stage 2) — no separate gate.
+  document.getElementById('ir-locations-section').classList.remove('hidden');
+  const step3 = document.getElementById('ir-step3');
+  step3.classList.remove('hidden');
+  step3.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   try {
     const r = await api('/api/practice/siblings', {
@@ -5137,7 +5124,20 @@ async function irStartDiscovery() {
 function renderIrSiblings(siblings) {
   document.getElementById('ir-siblings-loading').classList.add('hidden');
   document.getElementById('ir-siblings-content').classList.remove('hidden');
-  document.getElementById('ir-siblings-confirm-btn').style.display = '';
+
+  // Update the Selected Organization display + default the report title to the
+  // AI-identified parent org (moved here from the former irConfirmOrg gate).
+  _irReportTitle = _irOrgName || document.getElementById('ir-name').value.trim();
+  const totalLoc = 1 + siblings.length;
+  const badge = totalLoc > 1
+    ? ` <span style="font-size:11px;font-weight:700;background:var(--teal);color:#fff;padding:2px 8px;border-radius:10px;margin-left:8px">${totalLoc} locations</span>` : '';
+  document.getElementById('ir-selected-display').innerHTML = `
+    <div style="font-weight:700;font-size:16px;color:var(--teal)">${_irOrgName}${badge}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">Search anchor: ${_irSelected.name}</div>`;
+  const _ti = document.getElementById('ir-custom-title');
+  const _tp = document.getElementById('ir-title-preview');
+  if (_ti) _ti.value = _irReportTitle;
+  if (_tp) _tp.textContent = _irReportTitle;
 
   const total = 1 + siblings.length;
   const countEl = document.getElementById('ir-siblings-count');
@@ -5178,33 +5178,9 @@ function renderIrSiblings(siblings) {
   listEl.innerHTML = html;
 }
 
-function irConfirmOrg() {
-  _irConfirmedSiblings = _irDiscoveredSiblings.filter((_, i) => {
-    const cb = document.getElementById(`ir-sib-${i}`);
-    return cb ? cb.checked : true;
-  });
-
-  // Default report title to the AI-identified parent org name
-  _irReportTitle = _irOrgName || document.getElementById('ir-name').value.trim();
-
-  const totalCount = 1 + _irConfirmedSiblings.length;
-  const countBadge = totalCount > 1
-    ? ` <span style="font-size:11px;font-weight:700;background:var(--teal);color:#fff;padding:2px 8px;border-radius:10px;margin-left:8px">${totalCount} locations</span>`
-    : '';
-
-  document.getElementById('ir-selected-display').innerHTML = `
-    <div style="font-weight:700;font-size:16px;color:var(--teal)">${_irOrgName}${countBadge}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px">Search anchor: ${_irSelected.name}</div>`;
-
-  const titleInput  = document.getElementById('ir-custom-title');
-  const titlePreview = document.getElementById('ir-title-preview');
-  if (titleInput)  titleInput.value = _irReportTitle;
-  if (titlePreview) titlePreview.textContent = _irReportTitle;
-
-  document.getElementById('ir-step2c').classList.add('hidden');
-  document.getElementById('ir-step3').classList.remove('hidden');
-  document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
+// (irConfirmOrg removed — the coverage gate is gone; the locations list is inline
+//  in the options panel, and confirmed siblings are computed at run time from the
+//  ir-sib-* checkboxes in _submitIndividual.)
 
 async function showFqhcIntake() {
   document.getElementById('ir-profile-inline')?.classList.add('hidden');
@@ -5327,7 +5303,7 @@ function irResetSearch() {
   _pendingServiceLine = null;
   _fqhcIntake = {};
   _fqhcSiteRoster = [];
-  ['ir-step2','ir-step-sl','ir-step2c','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake','ir-profile-inline'].forEach(id => {
+  ['ir-step2','ir-step-sl','ir-step3','ir-step-fqhc-intake','ir-profile-inline','ir-locations-section','ir-composite-section'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
   });
@@ -5580,9 +5556,25 @@ async function runIndividual() {
   const errEl = document.getElementById('ir-run-err');
   errEl.classList.add('hidden');
 
-  // If Practice Composite is checked, go to practice discovery step first
+  // Practice Composite is confirmed inline (Stage 2). Collect the checked practices
+  // (+ physicians) from the inline table and submit directly — no separate screen.
   if (document.getElementById('ir-practice-composite')?.checked) {
-    openPracticeDiscovery();
+    const practiceCbs = document.querySelectorAll('#ir-pd-tbody input[data-idx]');
+    const included = _practiceRoster.filter((ent, i) =>
+      ent.is_anchor || (practiceCbs[i] && practiceCbs[i].checked));
+    if (!included.length) {
+      return showErr(errEl, 'Select at least one practice for the composite, or turn Practice Composite off.');
+    }
+    const confirmedPhysicians = {};
+    const orgName = _irSelected?.name;
+    document.querySelectorAll('#ir-pd-tbody input[data-ph]').forEach(cb => {
+      if (!cb.checked || !orgName) return;
+      const pi = parseInt(cb.dataset.ph);
+      const roster = _physicianRoster[orgName] || [];
+      if (!roster[pi]) return;
+      (confirmedPhysicians[orgName] = confirmedPhysicians[orgName] || []).push(roster[pi]);
+    });
+    await _submitIndividual(true, included, confirmedPhysicians);
     return;
   }
 
@@ -5592,6 +5584,15 @@ async function runIndividual() {
 async function _submitIndividual(practiceComposite = false, practiceRoster = [], physicianRoster = {}) {
   const errEl = document.getElementById('ir-run-err');
   errEl.classList.add('hidden');
+
+  // Confirmed siblings from the inline Locations list (Stage 2 — computed at run,
+  // no separate coverage gate). Specialty only.
+  if (_irType === 'specialty') {
+    _irConfirmedSiblings = (_irDiscoveredSiblings || []).filter((_, i) => {
+      const cb = document.getElementById(`ir-sib-${i}`);
+      return cb ? cb.checked : true;
+    });
+  }
 
   const specialty = _irType === 'specialty'
     ? (document.getElementById('ir-specialty').value.trim() || null) : null;
@@ -5671,6 +5672,21 @@ function onPracticeCompositeChange() {
   const phCb    = document.getElementById('ir-physician-composite');
   phCb.disabled = !checked;
   if (!checked) phCb.checked = false;
+  // Stage 2: composite practices are confirmed inline, not on a post-Run screen.
+  const section = document.getElementById('ir-composite-section');
+  if (checked) {
+    runCompositeDiscovery();
+  } else if (section) {
+    section.classList.add('hidden');
+    _practiceRoster = [];
+    _physicianRoster = {};
+  }
+}
+
+// Re-run composite discovery when the physician sub-option changes (it needs the
+// per-org physician roster, discovered as part of the same pass).
+function onPhysicianCompositeChange() {
+  if (document.getElementById('ir-practice-composite')?.checked) runCompositeDiscovery();
 }
 
 function onBriefingToggle() {
@@ -5683,6 +5699,7 @@ function onBriefingToggle() {
     // Briefing requires composite data — lock both on so user can see they're forced
     if (pcCb) { pcCb.checked = true; pcCb.disabled = true; }
     if (phCb) { phCb.checked = true; phCb.disabled = true; }
+    runCompositeDiscovery();   // populate the inline composite list (Stage 2)
   } else {
     // Briefing off — clear and unlock; let onPracticeCompositeChange re-apply disabled state
     if (pcCb) { pcCb.checked = false; pcCb.disabled = false; }
@@ -5691,68 +5708,48 @@ function onBriefingToggle() {
   }
 }
 
-function irBackFromPracticeDiscovery() {
-  document.getElementById('ir-step-practice-discovery').classList.add('hidden');
-  document.getElementById('ir-step3').classList.remove('hidden');
-  document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
 
-async function openPracticeDiscovery() {
-  const btn    = document.getElementById('ir-run-btn');
-  const errEl  = document.getElementById('ir-run-err');
-  btn.disabled = true;
+// Stage 2: composite practices are discovered and confirmed INLINE in the options
+// panel (ir-composite-section) — no separate post-Run screen. Triggered when the
+// Practice Composite (or physician) toggle is turned on.
+async function runCompositeDiscovery() {
+  const errEl = document.getElementById('ir-pd-err');
   errEl.classList.add('hidden');
-
-  // Same Claude-based discovery for both hospital and specialty practice types
-  btn.innerHTML = '<span class="spinner"></span> Discovering practices…';
+  const section = document.getElementById('ir-composite-section');
+  if (section) section.classList.remove('hidden');
+  document.getElementById('ir-pd-loading').classList.remove('hidden');
+  document.getElementById('ir-pd-tbody').innerHTML = '';
+  document.getElementById('ir-pd-count').textContent = '';
   _physicianRoster = {};
   try {
     const r = await api('/api/practice/discover', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        entity_name: _irSelected.name,
-        city:        _irResolvedCity,
-        state:       _irResolvedState,
-      }),
+      body: JSON.stringify({ entity_name: _irSelected.name, city: _irResolvedCity, state: _irResolvedState }),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Practice discovery failed'));
     const data = await r.json();
     _practiceRoster = (data.practices || []);
 
-    // If physician composite is checked, discover physicians at the org level (single call)
     if (document.getElementById('ir-physician-composite')?.checked) {
-      btn.innerHTML = '<span class="spinner"></span> Discovering physicians…';
       const pr = await api('/api/physician/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entity_name: _irSelected.name,
-          city:        _irResolvedCity,
-          state:       _irResolvedState,
-        }),
+        body: JSON.stringify({ entity_name: _irSelected.name, city: _irResolvedCity, state: _irResolvedState }),
       });
-      if (pr.ok) {
-        const pd = await pr.json();
-        _physicianRoster = pd.physicians || {};
-      }
+      if (pr.ok) { const pd = await pr.json(); _physicianRoster = pd.physicians || {}; }
     }
 
     _renderPracticeRoster();
     const practiceCount = _practiceRoster.length;
     const physicianCount = Object.values(_physicianRoster).reduce((s, v) => s + v.length, 0);
-    const scopeText = physicianCount
+    document.getElementById('ir-pd-count').textContent = physicianCount
       ? `${practiceCount} practice${practiceCount !== 1 ? 's' : ''} · ${physicianCount} physician${physicianCount !== 1 ? 's' : ''} discovered`
       : `${practiceCount} practice${practiceCount !== 1 ? 's' : ''} discovered`;
-    document.getElementById('ir-pd-count').textContent = scopeText;
-    document.getElementById('ir-step3').classList.add('hidden');
-    document.getElementById('ir-step-practice-discovery').classList.remove('hidden');
-    document.getElementById('ir-step-practice-discovery').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
     showErr(errEl, e.message);
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = 'Run Diagnostic →';
+    document.getElementById('ir-pd-loading').classList.add('hidden');
   }
 }
 
@@ -5803,34 +5800,8 @@ function _renderPracticeRoster() {
   });
 }
 
-async function confirmPracticeRoster() {
-  const errEl = document.getElementById('ir-pd-err');
-  errEl.classList.add('hidden');
-
-  // Collect practice checkboxes (only the first checkbox in each practice row)
-  const rows = Array.from(document.querySelectorAll('#ir-pd-tbody tr'));
-  const practiceCbs = document.querySelectorAll('#ir-pd-tbody input[data-idx]');
-  const included = _practiceRoster.filter((ent, i) =>
-    ent.is_anchor || (practiceCbs[i] && practiceCbs[i].checked)
-  );
-  if (included.length === 0) return showErr(errEl, 'Select at least one practice to include.');
-
-  // Collect confirmed physicians (all keyed by org name — discovery is org-level)
-  const confirmedPhysicians = {};
-  const phCbs = document.querySelectorAll('#ir-pd-tbody input[data-ph]');
-  const orgName = _irSelected?.name;
-  phCbs.forEach(cb => {
-    if (!cb.checked || !orgName) return;
-    const pi     = parseInt(cb.dataset.ph);
-    const roster = _physicianRoster[orgName] || [];
-    if (!roster[pi]) return;
-    if (!confirmedPhysicians[orgName]) confirmedPhysicians[orgName] = [];
-    confirmedPhysicians[orgName].push(roster[pi]);
-  });
-
-  document.getElementById('ir-step-practice-discovery').classList.add('hidden');
-  await _submitIndividual(true, included, confirmedPhysicians);
-}
+// (confirmPracticeRoster removed — the post-Run composite gate is gone; runIndividual
+//  now collects the inline composite roster + physicians and submits directly.)
 
 // ── Manual run ────────────────────────────────────────────────────────────
 async function runManual() {
