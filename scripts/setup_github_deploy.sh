@@ -37,9 +37,17 @@ gcloud services enable iamcredentials.googleapis.com sts.googleapis.com \
   --project="$PROJECT_ID" --quiet
 
 echo "==> Service account..."
-gcloud iam service-accounts create "$SA_NAME" \
-  --display-name="GitHub Actions deploy" --project="$PROJECT_ID" --quiet 2>/dev/null \
-  || echo "    (already exists)"
+if gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/dev/null 2>&1; then
+  echo "    (already exists)"
+else
+  gcloud iam service-accounts create "$SA_NAME" \
+    --display-name="GitHub Actions deploy" --project="$PROJECT_ID" --quiet
+  # IAM is eventually consistent — wait until the new SA is visible before binding roles.
+  for i in $(seq 1 30); do
+    gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/dev/null 2>&1 && break
+    sleep 2
+  done
+fi
 
 echo "==> Project roles for the deploy SA..."
 for ROLE in \
@@ -50,10 +58,15 @@ for ROLE in \
   roles/storage.admin \
   roles/serviceusage.serviceUsageConsumer
 do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:${SA_EMAIL}" --role="$ROLE" \
-    --condition=None --quiet >/dev/null
-  echo "    $ROLE"
+  for i in $(seq 1 5); do
+    if gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+         --member="serviceAccount:${SA_EMAIL}" --role="$ROLE" \
+         --condition=None --quiet >/dev/null 2>&1; then
+      echo "    $ROLE"; break
+    fi
+    [[ $i -eq 5 ]] && { echo "ERROR: could not bind $ROLE"; exit 1; }
+    sleep 5
+  done
 done
 
 echo "==> Workload Identity pool..."
