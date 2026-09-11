@@ -305,3 +305,55 @@ combined panel for FQHC, that's a follow-up (tracked as a future change).
 - [ ] T1 FQHC 2-screen flow
 - [ ] R1 intake validation intact
 - [ ] R2 no console errors
+
+---
+
+## CI-DEPLOY-WIF — GitHub Actions deploys to Cloud Run on push to main (keyless auth)
+
+**Shipped:** 2026-09-11 · **Area:** Deployment / infra · **Type:** infra (no UI change)
+
+### What changed
+- `.github/workflows/deploy.yml` rewritten. It had been **failing on every push** since June (no
+  `GCP_SA_KEY` secret) and carried a stale DuckDB-era config (min 0 / max 2 instances, half the
+  secrets missing). It now authenticates via **Workload Identity Federation** (no stored key) and
+  runs **`bash deploy.sh`**, so the Cloud Run flags live in exactly one place.
+- `deploy.sh`: honors `PROJECT_ID` env, tags images `app:<short-sha>` (rollback-friendly), passes
+  `--project`/`--quiet` so it runs non-interactively. Docker is no longer a prerequisite.
+- New one-time script `scripts/setup_github_deploy.sh` creates the `github-deploy` SA, roles, WIF
+  pool/provider (locked to `tyjallen44/Rank2`), and the impersonation binding. Idempotent.
+- Post-deploy **smoke check**: polls `/api/version` up to 3 min until `commit` equals the pushed
+  short SHA; fails the run otherwise.
+
+### Files changed
+`.github/workflows/deploy.yml`, `deploy.sh`, `scripts/setup_github_deploy.sh`
+
+### Test Cases
+**T1 — Push to main deploys**
+- Given the one-time setup script has been run once, push any commit to `main`.
+- Then the "Deploy to Cloud Run" run goes green and its summary shows `Deployed <sha> → <url>`.
+- And `GET https://rank2-883710187036.us-central1.run.app/api/version` returns `"commit": "<sha>"`.
+
+**T2 — Manual deploy**
+- `gh workflow run 'Deploy to Cloud Run' && gh run watch` → same result as T1.
+
+**T3 — Local deploy still works**
+- `bash deploy.sh` from a laptop with gcloud login → deploys the same way (no Docker needed).
+
+### Regression Checks
+- **R1** Live service config unchanged after CI deploy: 2Gi / 1 CPU / min 1 / max 10 /
+  session-affinity / no-cpu-throttling / all 6 secrets mounted / `/data` GCS volume.
+- **R2** Login (password + Google SSO) and report generation work on the new revision.
+- **R3** Two rapid pushes queue (concurrency group) rather than racing; no cancelled deploy.
+
+### Acceptance Checklist
+- [ ] T1 push → green run → live commit matches
+- [ ] T2 manual dispatch works
+- [ ] T3 local deploy.sh works
+- [ ] R1 service config unchanged
+- [ ] R2 login + report generation OK
+- [ ] R3 queued deploys
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING only for R2 (sanity on the deployed revision). The rest is verifiable from
+the GitHub Actions tab and `/api/version`. The first run after this commit is **expected to fail**
+until `scripts/setup_github_deploy.sh` has been executed once by a project owner.

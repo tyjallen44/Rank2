@@ -1,67 +1,73 @@
 name: Deploy to Cloud Run
 
+# Every push to main builds + deploys via deploy.sh (single source of truth for
+# Cloud Run flags). Auth is keyless: GitHub's OIDC token is exchanged for a
+# short-lived GCP token through Workload Identity Federation — no service
+# account key is stored in GitHub. One-time GCP setup:
+#   bash scripts/setup_github_deploy.sh
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+# Queue deploys instead of racing; never cancel an in-flight deploy.
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
 env:
   PROJECT_ID: rank2-499218
+  PROJECT_NUMBER: "883710187036"
   REGION: us-central1
   SERVICE: rank2
-  REPO: rank2
-  IMAGE: us-central1-docker.pkg.dev/rank2-499218/rank2/app
 
 jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Write build version
-        run: git rev-parse --short HEAD > VERSION
-
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github/providers/github
+          service_account: github-deploy@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - name: Build & deploy (deploy.sh)
+        run: bash deploy.sh
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
 
-      - name: Build and push image
+      - name: Smoke check — deployed commit matches
         run: |
-          docker build -t ${{ env.IMAGE }}:${{ github.sha }} -t ${{ env.IMAGE }}:latest .
-          docker push ${{ env.IMAGE }}:${{ github.sha }}
-          docker push ${{ env.IMAGE }}:latest
-
-      - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy ${{ env.SERVICE }} \
-            --image=${{ env.IMAGE }}:${{ github.sha }} \
-            --region=${{ env.REGION }} \
-            --platform=managed \
-            --allow-unauthenticated \
-            --memory=2Gi \
-            --cpu=1 \
-            --timeout=3600 \
-            --min-instances=0 \
-            --max-instances=2 \
-            --set-env-vars="REPORTS_DIR=/data/reports,DB_PATH=/data/rank2.duckdb" \
-            --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest" \
-            --add-volume="name=rank2-data,type=cloud-storage,bucket=rank2-499218-rank2-data" \
-            --add-volume-mount="volume=rank2-data,mount-path=/data" \
-            --project=${{ env.PROJECT_ID }}
-
-      - name: Show service URL
-        run: |
-          gcloud run services describe ${{ env.SERVICE }} \
-            --region=${{ env.REGION }} \
-            --format="value(status.url)" \
-            --project=${{ env.PROJECT_ID }}
+          URL=$(gcloud run services describe "$SERVICE" --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)')
+          EXPECTED=$(git rev-parse --short HEAD)
+          echo "Service: $URL  expecting commit $EXPECTED"
+          GOT=""
+          for i in $(seq 1 18); do
+            GOT=$(curl -sf --max-time 20 "$URL/api/version" \
+                  | python3 -c 'import sys,json; print(json.load(sys.stdin)["commit"])' 2>/dev/null || true)
+            if [ "$GOT" = "$EXPECTED" ]; then
+              echo "OK — live commit is $GOT"
+              echo "### Deployed \`$GOT\` → $URL" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "attempt $i: live commit '${GOT:-<no response>}' — waiting..."
+            sleep 10
+          done
+          echo "::error::Deployed commit '$GOT' does not match expected '$EXPECTED' after 3 minutes"
+          exit 1

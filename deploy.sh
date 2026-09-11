@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 # Deploy Rank2 to Google Cloud Run
-# Prerequisites:
+# Prerequisites (local use):
 #   1. gcloud CLI installed  →  brew install --cask google-cloud-sdk
 #   2. Logged in             →  gcloud auth login
-#   3. Docker running        →  open Docker Desktop
+#   (Docker is NOT required — the image is built by Cloud Build.)
 #
 # First-time run:  bash deploy.sh setup
 # Redeploy only:   bash deploy.sh
-set -e
+#
+# This same script is the single source of truth for CI: the GitHub Actions
+# workflow (.github/workflows/deploy.yml) runs `bash deploy.sh` on every push
+# to main after authenticating via Workload Identity Federation. Do not
+# duplicate the Cloud Run flags anywhere else — edit them here.
+#
+# Env overrides:
+#   PROJECT_ID   GCP project (defaults to the active gcloud config project)
+set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
 REGION="us-central1"
@@ -19,25 +27,27 @@ RESEND_FROM_DOMAIN="careclimb.com"
 APP_URL="https://careclimb.com"
 # ─────────────────────────────────────────────────────────────────────────────
 
-PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
+PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null || true)}"
 if [[ -z "$PROJECT_ID" ]]; then
-  echo "ERROR: No GCP project set. Run: gcloud config set project YOUR_PROJECT_ID"
+  echo "ERROR: No GCP project set. Run: gcloud config set project YOUR_PROJECT_ID (or export PROJECT_ID)"
   exit 1
 fi
 
 BUCKET="${PROJECT_ID}-rank2-data"
 REPO="rank2"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/app"
+GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
+IMAGE_TAG="${IMAGE}:${GIT_SHA}"
 
 echo ""
 echo "  Project : $PROJECT_ID"
 echo "  Region  : $REGION"
-echo "  Image   : $IMAGE"
+echo "  Image   : $IMAGE_TAG"
 echo "  Bucket  : gs://$BUCKET"
 echo ""
 
 # ── One-time setup ────────────────────────────────────────────────────────────
-if [[ "$1" == "setup" ]]; then
+if [[ "${1:-}" == "setup" ]]; then
   echo "==> Enabling APIs..."
   gcloud services enable \
     run.googleapis.com \
@@ -81,17 +91,19 @@ if [[ "$1" == "setup" ]]; then
 fi
 
 # ── Build & push ──────────────────────────────────────────────────────────────
-echo "==> Writing build version..."
-git rev-parse --short HEAD > VERSION 2>/dev/null || echo "dev" > VERSION
+echo "==> Writing build version ($GIT_SHA)..."
+echo "$GIT_SHA" > VERSION
 
 echo "==> Building and pushing image via Cloud Build..."
-gcloud builds submit --tag "$IMAGE" --project "$PROJECT_ID" .
+gcloud builds submit --tag "$IMAGE_TAG" --project "$PROJECT_ID" --quiet .
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
 echo "==> Deploying to Cloud Run..."
 gcloud run deploy "$SERVICE" \
-  --image="$IMAGE" \
+  --image="$IMAGE_TAG" \
   --region="$REGION" \
+  --project="$PROJECT_ID" \
+  --quiet \
   --platform=managed \
   --allow-unauthenticated \
   --memory=2Gi \
@@ -112,4 +124,4 @@ gcloud run deploy "$SERVICE" \
 
 echo ""
 echo "Deploy complete!"
-gcloud run services describe "$SERVICE" --region="$REGION" --format="value(status.url)"
+gcloud run services describe "$SERVICE" --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)"
