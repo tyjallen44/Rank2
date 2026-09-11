@@ -228,6 +228,13 @@ html, body {
   font-size: 26px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--teal); margin-bottom: 4px;
 }
+/* RLDatix wordmark above each page title (default brand only; partner brands hide it) */
+.page-title::before {
+  content: ''; display: block; width: 156px; height: 30px; margin-bottom: 16px;
+  background: url(/assets/logo-dark.svg) no-repeat left center / contain;
+}
+[data-brand="extension1"] .page-title::before,
+[data-brand="extension2"] .page-title::before { display: none; }
 .page-sub { font-size: 14px; color: var(--muted); margin-bottom: 26px; }
 
 /* ── Forms ───────────────────────────────────────────────────── */

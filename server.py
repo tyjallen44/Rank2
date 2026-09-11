@@ -4340,6 +4340,17 @@ async def download_events_display(_: str = Depends(require_auth)):
     return RedirectResponse(url=_EVENTS_DISPLAY_URL)
 
 
+_ASSETS_DIR = Path(__file__).parent / "web" / "assets"
+
+@app.get("/assets/{name}")
+async def static_asset(name: str):
+    """Serve brand assets (logos etc.) from web/assets — must precede the SPA catch-all."""
+    path = _ASSETS_DIR / Path(name).name          # basename only; no traversal
+    if not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(str(path), headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 async def frontend(full_path: str):
     html_path = Path(__file__).parent / "web" / "index.html"

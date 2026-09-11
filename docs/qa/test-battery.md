@@ -357,3 +357,51 @@ combined panel for FQHC, that's a follow-up (tracked as a future change).
 NEEDS BROWSER TESTING only for R2 (sanity on the deployed revision). The rest is verifiable from
 the GitHub Actions tab and `/api/version`. The first run after this commit is **expected to fail**
 until `scripts/setup_github_deploy.sh` has been executed once by a project owner.
+
+---
+
+## UI-RLDATIX-LOGO — RLDatix wordmark above every page title
+
+**Shipped:** 2026-09-11 · **Area:** App shell (all pages) · **Type:** UI
+
+### What changed
+- New asset `web/assets/logo-dark.svg` (RLDatix wordmark, dark teal, 156×30) served at
+  `/assets/logo-dark.svg` by a small route in `server.py` placed ahead of the SPA catch-all
+  (basename-only, 404 on unknown file, 1-day cache header).
+- CSS: `.page-title::before` renders the wordmark as a 156×30 block, left-aligned, 16px above
+  the title on every page (Market Pulse, Hospital Network, Deep Diagnostic, Competitors Rankings,
+  Compare Two, Event Prep, History, Trends, Feedback, Admin, Learn, Release Notes).
+- Partner brands (`extension1` Montecito, `extension2` Ashleigh Jane) hide it.
+
+### Files changed
+`server.py`, `web/index.html`, `web/assets/logo-dark.svg`
+
+### Test Cases
+**T1 — Logo above title (default brand)**
+- Log in as an RLDatix/admin user. On each Report Creation page the RLDatix wordmark sits
+  directly above the uppercase page title, left-aligned with it, with no layout shift below.
+
+**T2 — Asset served**
+- `GET /assets/logo-dark.svg` → 200, `image/svg+xml`. `GET /assets/missing.svg` → 404.
+
+**T3 — Partner brands unaffected**
+- Log in with a Montecito or Ashleigh Jane password: no RLDatix logo on any page.
+
+### Regression Checks
+- **R1** Page subtitles and forms are unchanged below the title (spacing only added above).
+- **R2** Tablet (≤860px) and phone widths: logo scales/holds 156px and doesn't overflow.
+- **R3** SPA routes (e.g. `/learn`, `/methodology`) still resolve to the app; `/assets/..` doesn't
+  expose server files (returns the app shell).
+
+### Acceptance Checklist
+- [ ] T1 logo on all pages (default brand)
+- [ ] T2 asset route 200 / 404
+- [ ] T3 partner brands show no logo
+- [ ] R1 layout below title unchanged
+- [ ] R2 responsive widths
+- [ ] R3 routing intact
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Verified locally via headless Chromium on Hospital Network and Deep
+Diagnostic (default brand) and Ashleigh Jane (hidden). The wordmark file is the "dark" variant
+intended for light backgrounds; report PDFs are not touched.
