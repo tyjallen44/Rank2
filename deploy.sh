@@ -95,11 +95,23 @@ echo "==> Writing build version ($GIT_SHA)..."
 echo "$GIT_SHA" > VERSION
 
 echo "==> Building and pushing image via Cloud Build..."
-# In CI the deploy SA can't stream build logs (needs project Viewer); gcloud
-# still waits for the build result. Locally, keep the live log stream.
-BUILD_LOG_FLAG=""
-[[ -n "${CI:-}" ]] && BUILD_LOG_FLAG="--suppress-logs"
-gcloud builds submit --tag "$IMAGE_TAG" --project "$PROJECT_ID" --quiet $BUILD_LOG_FLAG .
+if [[ -n "${CI:-}" ]]; then
+  # In CI the deploy SA can't stream build logs (that needs project Viewer), and
+  # gcloud refuses to wait synchronously without it. Submit async and poll.
+  BUILD_ID=$(gcloud builds submit --tag "$IMAGE_TAG" --project "$PROJECT_ID" \
+               --quiet --async --format='value(id)' .)
+  echo "    Build $BUILD_ID submitted — https://console.cloud.google.com/cloud-build/builds/${BUILD_ID}?project=${PROJECT_ID}"
+  while :; do
+    STATUS=$(gcloud builds describe "$BUILD_ID" --project "$PROJECT_ID" --format='value(status)')
+    case "$STATUS" in
+      SUCCESS) echo "    Build succeeded."; break ;;
+      QUEUED|PENDING|WORKING) sleep 15 ;;
+      *) echo "ERROR: Cloud Build finished with status $STATUS"; exit 1 ;;
+    esac
+  done
+else
+  gcloud builds submit --tag "$IMAGE_TAG" --project "$PROJECT_ID" --quiet .
+fi
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
 echo "==> Deploying to Cloud Run..."
