@@ -205,6 +205,53 @@ composite screen found many practices — they're now one panel, clearly labeled
 
 ---
 
+## CONTENT-LEAPFROG-VACUUM — Missing-Leapfrog prescription explains the "vacuum gets filled" exposure
+
+**Shipped:** 2026-09-11 · **Area:** Content analysis / drafting (`leapfrog_submission`) · **Type:** prescription content
+
+### What changed
+When a hospital has **no** Leapfrog grade submitted (missing / "grade not available"), the drafted
+prescription for that finding now opens with a short "why this matters" paragraph: the absence isn't
+neutral — AI models fill the vacuum with the next-most-visible safety signals (CMS star ratings,
+HCAHPS, infection data, news coverage, reviews), so real exposure depends on what that second-best
+signal says (strong CMS stars → less exposure; a lawsuit or bad infection report → more). This framing
+is added **only for the missing-grade case**, not for a low D/F grade.
+
+### Files changed
+- `perception/content_drafting.py` — `_SYSTEM` prompt, `leapfrog_submission` guidance.
+
+### Test Cases
+**T1 — Missing-grade prescription includes the vacuum framing**
+- Given a hospital / network with at least one hospital that has **no Leapfrog grade**, run a report
+  that drafts the prescription (Hospital Network **Full Detail**, or the detailed Content Report).
+- Then the drafted action plan for the "no Leapfrog Hospital Safety Grade" finding **opens with the
+  "vacuum gets filled" explanation** — mentions models substituting CMS stars / HCAHPS / infection
+  data / news / reviews, and that exposure depends on the second-best signal.
+- And it still includes the operational steps (register at leapfroggroup.org, survey sections,
+  deadlines `[VERIFY: current cycle dates]`, internal owner).
+
+**T2 — Low-grade (D/F) prescription does NOT include the vacuum framing**
+- Given a hospital with a **D or F** Leapfrog grade, draft its prescription.
+- Then the plan focuses on improving the grade and does **not** include the missing-grade "vacuum" paragraph.
+
+### Regression Checks
+- **R1** Non-safety drafted findings (schema, llms.txt, reputation, etc.) are unchanged.
+- **R2 [code]** `perception/content_drafting.py` compiles (`python -m py_compile`).
+
+### Acceptance Checklist
+- [ ] T1 missing-grade prescription has the vacuum explanation + operational steps
+- [ ] T2 low-grade prescription omits the vacuum explanation
+- [ ] R1 other prescriptions unchanged
+- [ ] R2 [code] module compiles
+
+### Notes for the testing agent
+- This affects **drafted** output only (Full Detail / detailed Content Report), not the lightweight
+  Content Improvement Keys summary. Drafting is an LLM step — wording will vary; assert on the
+  *presence of the concepts* (vacuum / substitution of CMS/HCAHPS/infection/news/reviews / second-best
+  signal), not exact text.
+
+---
+
 ## DD-CONSOLIDATION-STAGE3 — FQHC flow: confirmed already 2-screen (no fold required)
 
 **Shipped:** 2026-09-11 · **Area:** Deep Diagnostic (create-report flow) · **Type:** consolidation review (stage 3 of 3)
