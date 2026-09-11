@@ -205,6 +205,31 @@ composite screen found many practices — they're now one panel, clearly labeled
 
 ---
 
+## VERSION-1.08 — Version bump + release notes
+
+**Shipped:** 2026-09-11 · **Area:** Version / Release Notes · **Type:** metadata + content (no logic)
+
+### What changed
+`_APP_VERSION` → `1.08`; sidebar shows "Pulse Version 1.08"; Release Notes page gets a new **Version
+1.08** section (New Features + Improvements) above the retained 1.07 history block.
+
+### Test Cases
+- **T1** Sidebar footer reads **Pulse Version 1.08**; the build line below shows `v1.08 · <commit> · <time>`.
+- **T2** Release Notes page shows a **Version 1.08** card at the top with the New Features / Improvements
+  entries; the **Version 1.07** card still appears below it.
+
+### Regression Checks
+- **R1 [code]** `GET /api/version` returns `{"version":"1.08", ...}` (server `_APP_VERSION`).
+- **R2 [code]** `server.py` compiles; page JS `node --check` passes.
+
+### Acceptance Checklist
+- [ ] T1 sidebar 1.08
+- [ ] T2 release notes 1.08 card present, 1.07 retained
+- [ ] R1 /api/version = 1.08
+- [ ] R2 [code] compiles / JS valid
+
+---
+
 ## CONTENT-LEAPFROG-VACUUM — Missing-Leapfrog prescription explains the "vacuum gets filled" exposure
 
 **Shipped:** 2026-09-11 · **Area:** Content analysis / drafting (`leapfrog_submission`) · **Type:** prescription content

@@ -1035,7 +1035,7 @@ input[type="url"]::placeholder, textarea::placeholder {
       <button class="nav-btn" id="nav-release" onclick="navigate('release')" title="What's new in Pulse">
         <span class="ni">◈</span><span class="nb-lbl">Release Notes</span>
       </button>
-      <div class="sb-build" id="sb-version">Pulse Version 1.07</div>
+      <div class="sb-build" id="sb-version">Pulse Version 1.08</div>
       <div class="sb-build" id="sb-build"></div>
     </div>
   </nav>
@@ -2721,7 +2721,62 @@ input[type="url"]::placeholder, textarea::placeholder {
       <div class="card" style="max-width:820px">
 
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
-          <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.07</div>
+          <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.08</div>
+          <div style="font-size:13px;color:var(--muted)">Released September 11, 2026</div>
+        </div>
+
+        <div class="rn-section">
+          <div class="rn-heading new">New Features</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Hospital Network — Standard, Teaser &amp; Full Detail, Automatically</div>
+            <div class="rn-body">Every Hospital Network run now produces all three reports at once: the <strong>standard report</strong>, a prospect <strong>Teaser</strong> (everything below the System AI Visibility score is blurred, with the call-to-action left readable), and a <strong>Full Detail</strong> report that combines the network report with the complete content analysis and a drafted, publication-ready <strong>remediation prescription</strong> for every finding. The old two-step "Detailed Content Analysis" is gone — the only remaining choice is whether to add the service-line listing scorecard.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Practice Reports Now Include Content &amp; a Prescription</div>
+            <div class="rn-body">A Deep Diagnostic for a specialty practice now delivers one combined report: the four-pillar Pulse Score, a <strong>Diagnostic Assessment</strong> that cites the practice's verified content findings, and a full content-improvement <strong>prescription</strong> — publication-ready fixes that replace the former generic roadmap. An optional teaser blurs the prescription for prospect outreach.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Safety &amp; Quality in Content Reports</div>
+            <div class="rn-body">Content reports now flag hospitals that are missing a <strong>Leapfrog Hospital Safety Grade</strong> or carry a low <strong>CMS star rating</strong>, and prescribe how to fix it. When a Leapfrog grade is missing, the prescription explains how AI models "fill the vacuum" with other safety signals (CMS stars, HCAHPS, infection data, news, reviews) — and the CMS-quality fix pitches the <strong>RLDatix Patient Experience &amp; Growth</strong> survey suite.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Contents Index on the Content Report</div>
+            <div class="rn-body">The detailed Content Report now opens with a <strong>contents page</strong> that lists every finding from your summary and the exact page where its fix is addressed.</div>
+          </div>
+
+        </div>
+
+        <div class="rn-section">
+          <div class="rn-heading improved">Improvements</div>
+
+          <div class="rn-item">
+            <div class="rn-title">A Faster, Simpler Report Setup</div>
+            <div class="rn-body">The Deep Diagnostic create flow is streamlined from roughly six steps down to <strong>two</strong>: the best-matching organization is auto-selected, the practice profile is folded into the options panel, and the location and practice-composite confirmations now happen <strong>inline</strong> — no more separate screens or a surprise confirmation after you click Run.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Right Website, Every Time</div>
+            <div class="rn-body">Content analysis now uses the organization's <strong>authoritative Google Business Profile website</strong>, with a manual <strong>Website URL</strong> override field — fixing cases where a guessed, wrong site was analyzed.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">History, Cleaned Up</div>
+            <div class="rn-body">The History list now shows the <strong>organization name</strong> (not a filename), adds a <strong>Run By</strong> column, and sorts newest-first by time; the redundant Location column was removed. Content reports now appear in History, duplicate and blank rows were fixed, and each row's <strong>Downloads</strong> menu shows exactly the right set of files.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Navigation</div>
+            <div class="rn-body"><strong>Hospital Network</strong> is now the first item in the sidebar and the default landing page, with clearer icons for Hospital Network and Competitors Rankings.</div>
+          </div>
+
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;margin:30px 0 22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
+          <div style="background:var(--muted);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.07</div>
           <div style="font-size:13px;color:var(--muted)">Released September 2, 2026</div>
         </div>
 
