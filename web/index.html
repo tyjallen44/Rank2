@@ -1621,29 +1621,6 @@ input[type="url"]::placeholder, textarea::placeholder {
       </div>
 
       <!-- Step 2b: Practice Profile Confirmation (specialty practice only) -->
-      <div id="ir-step2b" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Practice Profile Classification</div>
-        <div style="font-size:13px;color:var(--text);margin-bottom:16px">
-          Based on the specialty, this practice has been auto-classified as
-          <strong id="ir-profile-proposed" style="color:var(--teal)"></strong>.
-          You can override the classification below if needed.
-        </div>
-        <div class="fg" style="margin-bottom:8px">
-          <label class="fl">Practice Profile</label>
-          <select id="ir-profile-select" class="fi" onchange="updateIrProfileDesc(this.value)">
-            <option value="practice_procedural">Procedural — elective/destination procedures (ortho, plastics, ophthalmology, fertility, bariatrics, cosmetic derm, oral surgery)</option>
-            <option value="practice_relationship">Relationship — primary care, pediatrics, OB/GYN, behavioral health, geriatrics, dental</option>
-            <option value="practice_referral_fed">Referral-Fed — reached via PCP referral (oncology, cardiology, nephrology, rheumatology, surgical subspecialties)</option>
-            <option value="practice_hybrid">Hybrid — multi-specialty groups: blend of procedural and relationship</option>
-          </select>
-        </div>
-        <div id="ir-profile-desc" style="font-size:11px;color:var(--muted);margin-bottom:16px"></div>
-        <div class="row-actions">
-          <button class="btn btn-primary" onclick="irConfirmProfile()">Confirm Profile → Discover Locations</button>
-          <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
-        </div>
-      </div>
-
       <!-- Step 2b-2: Service-line detection (department within a larger hospital system) -->
       <div id="ir-step-sl" class="card hidden mt16" style="background:var(--bg);border-color:var(--teal)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Service Line Detected</div>
@@ -1691,6 +1668,20 @@ input[type="url"]::placeholder, textarea::placeholder {
       <div id="ir-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Selected Organization</div>
         <div id="ir-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
+
+        <!-- Practice profile (specialty only) — folded in from the former standalone gate -->
+        <div id="ir-profile-inline" class="hidden" style="margin-bottom:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">
+            Practice Profile <span style="font-weight:400;text-transform:none;letter-spacing:0">— auto-classified as <strong id="ir-profile-proposed" style="color:var(--teal)"></strong>; override if needed</span>
+          </div>
+          <select id="ir-profile-select" class="fi" onchange="updateIrProfileDesc(this.value); _irPracticeProfile=this.value;">
+            <option value="practice_procedural">Procedural — elective/destination procedures (ortho, plastics, ophthalmology, fertility, bariatrics, cosmetic derm, oral surgery)</option>
+            <option value="practice_relationship">Relationship — primary care, pediatrics, OB/GYN, behavioral health, geriatrics, dental</option>
+            <option value="practice_referral_fed">Referral-Fed — reached via PCP referral (oncology, cardiology, nephrology, rheumatology, surgical subspecialties)</option>
+            <option value="practice_hybrid">Hybrid — multi-specialty groups: blend of procedural and relationship</option>
+          </select>
+          <div id="ir-profile-desc" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+        </div>
 
         <div style="margin-bottom:20px">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Report Title</div>
@@ -3502,7 +3493,7 @@ input[type="url"]::placeholder, textarea::placeholder {
     <div class="npa-step"><b class="n">2.</b> Enter the <strong>Location</strong> (city + state, e.g. <em>HOUSTON / TX</em>).</div>
     <div class="npa-step"><b class="n">3.</b> Set <strong>Analysis Type</strong> to <strong>Specialty Practice</strong>. <span style="color:var(--muted)">This is the key step — the plain "Hospital / Health System" type skips service-line detection.</span></div>
     <div class="npa-step"><b class="n">4.</b> Enter the <strong>Specialty</strong> that appears (e.g. <em>ORTHOPEDICS</em>), then click <strong>Search</strong>.</div>
-    <div class="npa-step"><b class="n">5.</b> Pick the candidate that identifies the department, then <strong>Confirm Profile → Discover Locations</strong>.</div>
+    <div class="npa-step"><b class="n">5.</b> The top match is auto-selected and locations are discovered automatically (pick a different candidate if needed). The practice profile is auto-classified — you can override it in the options panel before running.</div>
     <div class="npa-step"><b class="n">6.</b> A <strong>"Service Line Detected"</strong> card appears — e.g. <em>"the Orthopedics service line of Houston Methodist."</em> Click <strong>Analyze as service line →</strong> to score the department as one rolled-up entity. (Or "No, use as entered" to treat it as a standalone listing.)</div>
     <div class="npa-step"><b class="n">7.</b> The report runs on the practice rubric and downloads when done.</div>
 
@@ -4110,8 +4101,9 @@ function resetPage(p) {
     document.getElementById('ir-zip').value = '';
     const irSpecEl = document.getElementById('ir-specialty');
     if (irSpecEl) irSpecEl.value = '';
-    ['ir-step2','ir-step2b','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake'].forEach(id => {
-      document.getElementById(id).classList.add('hidden');
+    ['ir-step2','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake','ir-profile-inline'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
     });
     const irSearchErr = document.getElementById('ir-search-err');
     if (irSearchErr) irSearchErr.classList.add('hidden');
@@ -4939,6 +4931,11 @@ function showIrCandidates() {
     </div>`;
 
   container.innerHTML = html;
+
+  // Auto-select the top match so there's no forced address pick (Stage 1). The
+  // candidate list stays visible — clicking another card, or "Use This Name",
+  // re-selects and re-advances.
+  if (_irCandidates.length) selectIrCandidate(0);
 }
 
 function selectIrCandidate(idx) {
@@ -4991,7 +4988,8 @@ function selectIrCandidate(idx) {
     _irReportTitle = document.getElementById('ir-name').value.trim() || _irSelected.name;
     showFqhcIntake();
   } else {
-    document.getElementById('ir-step2b').classList.add('hidden');
+    // Hospital / health system: no practice profile — straight to the options panel.
+    document.getElementById('ir-profile-inline')?.classList.add('hidden');
     document.getElementById('ir-step3').classList.remove('hidden');
     document.getElementById('ir-step3').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
@@ -5008,6 +5006,10 @@ function updateIrProfileDesc(profile) {
   document.getElementById('ir-profile-desc').textContent = _IR_PROFILE_DESCS[profile] || '';
 }
 
+// Specialty path: auto-classify the practice profile, populate the (now inline)
+// profile dropdown in the options panel, then go straight to location discovery.
+// The former standalone "Practice Profile Classification" gate is gone — the user
+// can still override the profile in the options panel before Run.
 async function showIrProfileStep() {
   const specialty = document.getElementById('ir-specialty').value.trim();
   let proposed = 'practice_procedural';
@@ -5023,12 +5025,13 @@ async function showIrProfileStep() {
     proposedLabel = data.label || 'Procedural';
   } catch(e) { /* use defaults */ }
   _irPracticeProfile = proposed;
-  document.getElementById('ir-profile-proposed').textContent = proposedLabel;
-  document.getElementById('ir-profile-select').value = proposed;
+  const prop = document.getElementById('ir-profile-proposed');
+  if (prop) prop.textContent = proposedLabel;
+  const sel = document.getElementById('ir-profile-select');
+  if (sel) sel.value = proposed;
   updateIrProfileDesc(proposed);
-  document.getElementById('ir-step2b').classList.remove('hidden');
-  document.getElementById('ir-step3').classList.add('hidden');
-  document.getElementById('ir-step2b').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('ir-profile-inline')?.classList.remove('hidden');  // shown in the options panel (specialty only)
+  irDetectServiceLine();   // proceed straight to discovery — no separate profile gate
 }
 
 function onIrTitleInput(val) {
@@ -5037,11 +5040,9 @@ function onIrTitleInput(val) {
   if (preview) preview.textContent = _irReportTitle;
 }
 
-function irConfirmProfile() {
-  _irPracticeProfile = document.getElementById('ir-profile-select').value;
-  document.getElementById('ir-step2b').classList.add('hidden');
-  irDetectServiceLine();
-}
+// (irConfirmProfile removed — the profile gate is gone; the profile dropdown now
+//  lives inline in the options panel and the specialty path proceeds straight to
+//  discovery via showIrProfileStep → irDetectServiceLine.)
 
 // Detect whether the selected listing is a department/service line of a larger
 // hospital system (e.g. Duke Orthopaedics within Duke Health). If so, offer to
@@ -5206,7 +5207,7 @@ function irConfirmOrg() {
 }
 
 async function showFqhcIntake() {
-  document.getElementById('ir-step2b').classList.add('hidden');
+  document.getElementById('ir-profile-inline')?.classList.add('hidden');
   const el = document.getElementById('ir-step-fqhc-intake');
   el.classList.remove('hidden');
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -5326,8 +5327,9 @@ function irResetSearch() {
   _pendingServiceLine = null;
   _fqhcIntake = {};
   _fqhcSiteRoster = [];
-  ['ir-step2','ir-step2b','ir-step-sl','ir-step2c','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake'].forEach(id => {
-    document.getElementById(id).classList.add('hidden');
+  ['ir-step2','ir-step-sl','ir-step2c','ir-step3','ir-step-practice-discovery','ir-step-fqhc-intake','ir-profile-inline'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
   });
   document.getElementById('ir-search-err').classList.add('hidden');
   document.getElementById('ir-run-err').classList.add('hidden');
