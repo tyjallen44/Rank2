@@ -95,7 +95,11 @@ echo "==> Writing build version ($GIT_SHA)..."
 echo "$GIT_SHA" > VERSION
 
 echo "==> Building and pushing image via Cloud Build..."
-gcloud builds submit --tag "$IMAGE_TAG" --project "$PROJECT_ID" --quiet .
+# In CI the deploy SA can't stream build logs (needs project Viewer); gcloud
+# still waits for the build result. Locally, keep the live log stream.
+BUILD_LOG_FLAG=""
+[[ -n "${CI:-}" ]] && BUILD_LOG_FLAG="--suppress-logs"
+gcloud builds submit --tag "$IMAGE_TAG" --project "$PROJECT_ID" --quiet $BUILD_LOG_FLAG .
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
 echo "==> Deploying to Cloud Run..."
