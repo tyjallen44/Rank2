@@ -1,21 +1,47 @@
 #!/usr/bin/env bash
 # Deploy Rank2 to Google Cloud Run
-# Prerequisites (local use):
-#   1. gcloud CLI installed  →  brew install --cask google-cloud-sdk
-#   2. Logged in             →  gcloud auth login
-#   (Docker is NOT required — the image is built by Cloud Build.)
+# Usage:
+#   bash deploy.sh            Ship to production: dispatches the GitHub Actions
+#                             deploy of whatever is on origin/main and watches it.
+#                             (Pushing to main does NOT deploy — this does.)
+#   bash deploy.sh --local    Build + deploy directly from this machine via
+#                             Cloud Build (needs gcloud login; no Docker).
+#   bash deploy.sh setup      One-time GCP project setup (APIs, registry, bucket).
+#   bash scripts/deploy_status.sh   Show what's live vs. what's pending.
 #
-# First-time run:  bash deploy.sh setup
-# Redeploy only:   bash deploy.sh
-#
-# This same script is the single source of truth for CI: the GitHub Actions
-# workflow (.github/workflows/deploy.yml) runs `bash deploy.sh` on every push
-# to main after authenticating via Workload Identity Federation. Do not
-# duplicate the Cloud Run flags anywhere else — edit them here.
+# This script is the single source of truth for the Cloud Run flags: the
+# GitHub Actions workflow (.github/workflows/deploy.yml) runs `bash deploy.sh`
+# with CI=true after authenticating via Workload Identity Federation. Do not
+# duplicate the flags anywhere else — edit them here.
 #
 # Env overrides:
 #   PROJECT_ID   GCP project (defaults to the active gcloud config project)
 set -euo pipefail
+
+# ── Ship via GitHub Actions (default when run from a laptop) ─────────────────
+if [[ -z "${CI:-}" && "${1:-}" != "--local" && "${1:-}" != "setup" ]]; then
+  command -v gh >/dev/null || { echo "ERROR: gh CLI not installed (brew install gh; gh auth login)"; exit 1; }
+  git fetch -q origin main
+  if [[ -n "$(git status --porcelain)" ]]; then
+    echo "WARNING: you have uncommitted changes — they will NOT be deployed (only origin/main ships)."
+  fi
+  UNPUSHED=$(git log --oneline origin/main..main | wc -l | tr -d ' ')
+  if [[ "$UNPUSHED" != "0" ]]; then
+    echo "ERROR: $UNPUSHED local commit(s) on main are not pushed. Run: git push origin main"
+    exit 1
+  fi
+  SHIP_SHA=$(git rev-parse --short origin/main)
+  echo ""
+  echo "  Shipping origin/main @ $SHIP_SHA to production via GitHub Actions..."
+  echo ""
+  gh workflow run "Deploy to Cloud Run" --ref main
+  sleep 5
+  RUN_ID=$(gh run list --workflow=deploy.yml --event=workflow_dispatch --limit 1 --json databaseId -q '.[0].databaseId')
+  gh run watch "$RUN_ID" --exit-status
+  echo ""
+  bash "$(dirname "$0")/scripts/deploy_status.sh"
+  exit 0
+fi
 
 # ── Config ────────────────────────────────────────────────────────────────────
 REGION="us-central1"

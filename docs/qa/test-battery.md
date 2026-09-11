@@ -405,3 +405,43 @@ until `scripts/setup_github_deploy.sh` has been executed once by a project owner
 NEEDS BROWSER TESTING. Verified locally via headless Chromium on Hospital Network and Deep
 Diagnostic (default brand) and Ashleigh Jane (hidden). The wordmark file is the "dark" variant
 intended for light backgrounds; report PDFs are not touched.
+
+---
+
+## CI-MANUAL-DEPLOY — Production deploys are manual (push to main no longer deploys)
+
+**Shipped:** 2026-09-11 · **Area:** Deployment / infra · **Type:** infra (no UI change)
+
+### What changed
+- Workflow trigger is now `workflow_dispatch` only. Pushing to `main` does nothing in production.
+- `bash deploy.sh` (from a laptop, no args) now **ships**: it refuses if local main has unpushed
+  commits, warns on uncommitted changes, dispatches the GitHub Actions deploy of `origin/main`,
+  watches it, then prints the status. `bash deploy.sh --local` keeps the old direct Cloud Build path.
+  CI still runs the direct path (`CI=true`).
+- New `scripts/deploy_status.sh`: compares the live `/api/version` commit with `origin/main` and
+  lists the not-yet-deployed commits, plus unpushed/uncommitted warnings.
+
+### Files changed
+`.github/workflows/deploy.yml`, `deploy.sh`, `scripts/deploy_status.sh`
+
+### Test Cases
+**T1 — Push does not deploy**: push a commit to main → no new "Deploy to Cloud Run" run appears.
+**T2 — Status**: `bash scripts/deploy_status.sh` shows live commit, origin/main, and pending list.
+**T3 — Ship**: `bash deploy.sh` → dispatches run, watches to green, smoke check passes, status
+shows "up to date".
+**T4 — Guard**: with an unpushed local commit, `bash deploy.sh` exits 1 with a push hint.
+
+### Regression Checks
+- **R1** `bash deploy.sh --local` still deploys directly (needs gcloud login).
+- **R2** Manual run from the Actions tab ("Run workflow") still works.
+
+### Acceptance Checklist
+- [ ] T1 push is inert
+- [ ] T2 status output
+- [ ] T3 ship end-to-end
+- [ ] T4 unpushed guard
+- [ ] R1 --local path
+- [ ] R2 Actions-tab run
+
+### Notes for the testing agent
+No browser testing needed. T3 deploys to production — run it only when a deploy is wanted.

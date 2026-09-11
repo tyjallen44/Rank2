@@ -1,14 +1,15 @@
 name: Deploy to Cloud Run
 
-# Every push to main builds + deploys via deploy.sh (single source of truth for
-# Cloud Run flags). Auth is keyless: GitHub's OIDC token is exchanged for a
-# short-lived GCP token through Workload Identity Federation — no service
+# Production deploys are MANUAL. Pushing to main never deploys; run
+#   bash deploy.sh            (from a laptop — dispatches this workflow and watches it)
+#   bash scripts/deploy_status.sh   (what's live vs. what's pending)
+# The job builds + deploys whatever is on main via deploy.sh (single source of
+# truth for Cloud Run flags). Auth is keyless: GitHub's OIDC token is exchanged
+# for a short-lived GCP token through Workload Identity Federation — no service
 # account key is stored in GitHub. One-time GCP setup:
 #   bash scripts/setup_github_deploy.sh
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # Queue deploys instead of racing; never cancel an in-flight deploy.
