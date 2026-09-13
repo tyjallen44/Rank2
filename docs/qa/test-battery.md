@@ -445,3 +445,60 @@ shows "up to date".
 
 ### Notes for the testing agent
 No browser testing needed. T3 deploys to production — run it only when a deploy is wanted.
+
+---
+
+## EVENT-PRACTICE-COMBINED — Event Prep practice attendees get the combined practice report
+
+**Shipped:** 2026-09-13 · **Area:** Event Preparation · **Type:** feature
+
+### What changed
+- New per-event option **"Include content analysis & prescription (combined practice report)"**,
+  shown only when Entity Type = Specialty Practice, **checked by default**. Persisted as
+  `event_runs.practice_content` (auto-migrated) so **Resume** repeats it.
+- For each practice attendee, after the four-pillar analysis the event job calls the same
+  `_finalize_practice_combined` step Deep Diagnostic uses: content analysis (website from the CSV's
+  `url` column if present, else the Google listing's site) → drafted prescription → findings-citing
+  Assessment → combined PDF **replacing the base PDF in the event folder** (so the ZIP picks it up).
+  Then the usual `EventReport` rename applies.
+- With **teaser** also checked, the combined teaser (blurred content) is produced and renamed to
+  `<EventReport stem>_Teaser.pdf`; the legacy score-only teaser is skipped for those practices.
+- Fail-soft: any content/render error logs `⚠ Content analysis failed … base report kept` in the
+  event stream and the attendee still completes with the base report.
+- `_finalize_practice_combined` now writes next to the base PDF (event folder for events;
+  REPORTS_DIR for Deep Diagnostic — unchanged behavior there).
+
+### Files changed
+`server.py`, `perception/db.py`, `web/index.html`
+
+### Test Cases
+**T1 — Option visibility**: Event Prep → Hospital: no practice box. Specialty Practice: green box
+with the checkbox **checked**. FQHC: box hidden, FQHC composite box shown.
+**T2 — Practice event with content**: 2–3 practice rows (one with a `url`), run with the box
+checked. Each attendee's stream shows "Content analysis for <name>" then phase lines (content /
+drafting / assessment / pdf). The ZIP contains one `…EventReport.pdf` per practice that is the
+**combined** report (Diagnostic Assessment cites findings; embedded Content Report + prescription).
+**T3 — Unchecked**: same rows with the box unchecked → plain four-pillar EventReport PDFs, faster.
+**T4 — Teaser + content**: check both → ZIP has `…EventReport.pdf` and `…EventReport_Teaser.pdf`
+where the teaser blurs the content section but keeps score/Assessment.
+**T5 — Resume**: kill/skip an entity mid-run, Resume → the resumed attendee also gets the combined
+report (setting persisted).
+
+### Regression Checks
+- **R1** Hospital and FQHC events unchanged (no content step, no new files).
+- **R2** Deep Diagnostic practice report still writes to REPORTS_DIR and downloads from History.
+- **R3** Enriched CSV scores/grades unchanged; entity counts done/skipped correct.
+- **R4** A practice whose content analysis fails still counts as done with the base PDF.
+
+### Acceptance Checklist
+- [ ] T1 visibility / default
+- [ ] T2 combined PDFs in ZIP
+- [ ] T3 unchecked = base PDFs
+- [ ] T4 teaser variant
+- [ ] T5 resume persists
+- [ ] R1–R4
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Runtime: content analysis adds roughly 2–4 minutes per practice (5 run
+in parallel). Unit suite: 322 pass / 15 fail — the 15 failures are pre-existing (grade-token and
+rebrand assertions) and identical on the previous commit.

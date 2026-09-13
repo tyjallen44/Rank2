@@ -2391,6 +2391,18 @@ input[type="url"]::placeholder, textarea::placeholder {
             </div>
           </div>
 
+          <!-- Practice-specific options (shown only when Specialty Practice selected) -->
+          <div id="ev-practice-options" style="display:none;margin-bottom:16px;padding:14px 16px;background:var(--pale);border-radius:8px;border:1px solid var(--border)">
+            <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:14px">
+              <input type="checkbox" id="ev-practice-content" checked style="margin-top:2px">
+              <div>
+                Include content analysis &amp; prescription (combined practice report)
+                <span class="tooltip-anchor" style="margin-left:6px;cursor:help;color:var(--teal);font-size:12px;font-weight:600" title="Same report Deep Diagnostic produces for a practice: the four-pillar score plus a findings-citing Diagnostic Assessment and an embedded Content Report with drafted remediation. Uses each row's website URL if provided, otherwise the Google listing's website. Adds several minutes per attendee.">ⓘ</span>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">Each practice attendee gets the full Deep Diagnostic practice report (content findings + drafted fixes). Uncheck for a faster, score-only run.</div>
+              </div>
+            </label>
+          </div>
+
           <!-- FQHC-specific options (shown only when Community Health selected) -->
           <div id="ev-fqhc-options" style="display:none;margin-bottom:16px;padding:14px 16px;background:var(--pale);border-radius:8px;border:1px solid var(--border)">
             <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:14px">
@@ -8749,6 +8761,7 @@ async function submitAddEntity() {
 function evTypeChanged() {
   const type = document.querySelector('input[name="ev-type"]:checked')?.value;
   document.getElementById('ev-fqhc-options').style.display = type === 'fqhc' ? '' : 'none';
+  document.getElementById('ev-practice-options').style.display = type === 'practice' ? '' : 'none';
 }
 
 let _evRows        = [];       // raw resolved rows from /api/event/upload
@@ -8923,6 +8936,7 @@ async function evSubmitRun() {
   const includeteaser        = document.getElementById('ev-include-teaser')?.checked || false;
   const overrideCache        = document.getElementById('ev-override-cache')?.checked || false;
   const autoPracticeComposite = document.getElementById('ev-practice-composite')?.checked || false;
+  const practiceContent      = entityType === 'practice' && (document.getElementById('ev-practice-content')?.checked || false);
 
   const entities = [];
   _evRows.forEach((row, idx) => {
@@ -8971,6 +8985,7 @@ async function evSubmitRun() {
         include_teaser:  includeteaser,
         override_cache:  overrideCache,
         auto_practice_composite: autoPracticeComposite,
+        practice_content: practiceContent,
         entities,
       }),
     });

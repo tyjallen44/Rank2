@@ -448,14 +448,17 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
     result.teaser_report = False
     emit({"type": "phase", "name": "pdf", "text": "Building the combined practice report"})
     from pathlib import Path as _Path
-    combined = REPORTS_DIR / f"{_Path(result.pdf_path).stem if result.pdf_path else result.run_id}.pdf"
+    # Write next to the base PDF so callers that use their own output folder
+    # (Event Prep writes into the event's directory) keep everything together.
+    _out_dir = _Path(result.pdf_path).parent if result.pdf_path else REPORTS_DIR
+    combined = _out_dir / f"{_Path(result.pdf_path).stem if result.pdf_path else result.run_id}.pdf"
     render_practice_combined(result, findings, str(combined), brand=brand)
     result.pdf_path = str(combined)
 
     # Teaser (opt-in): same combined report with the content analysis + prescription
     # blurred behind a gate; the score, ratings, and Assessment stay visible.
     if job.get("teaser_report"):
-        teaser_path = REPORTS_DIR / f"{combined.stem}_teaser.pdf"
+        teaser_path = _out_dir / f"{combined.stem}_teaser.pdf"
         try:
             render_practice_combined(result, findings, str(teaser_path), brand=brand, teaser=True)
             result.teaser_pdf_path = str(teaser_path)
@@ -3677,6 +3680,7 @@ class EventRunRequest(BaseModel):
     include_teaser: bool = False
     override_cache: bool = False           # bypass same-day lock + 90-day score cache
     auto_practice_composite: bool = False  # FQHC only: discover all sites & build aggregate
+    practice_content: bool = False         # Practice only: content analysis + prescription (combined report)
     entities: List[dict]                   # confirmed list: {input_name,input_city,input_state,resolved_name,resolved_addr}
 
 
@@ -3771,12 +3775,14 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
         include_teaser=req.include_teaser,
         override_cache=req.override_cache,
         auto_practice_composite=req.auto_practice_composite,
+        practice_content=req.practice_content,
     )
     create_event_entities(entities_db)
 
     job_id = _new_job(role, brand, payload.get("email"))
     _event_job_map[event_id] = job_id
-    _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser, req.override_cache, req.auto_practice_composite)
+    _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser,
+                 req.override_cache, req.auto_practice_composite, req.practice_content)
     return {"event_id": event_id, "job_id": job_id}
 
 
@@ -3801,7 +3807,8 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
                  run.get("entity_type", "hospital"),
                  bool(run.get("include_teaser")),
                  bool(run.get("override_cache")),
-                 bool(run.get("auto_practice_composite")))
+                 bool(run.get("auto_practice_composite")),
+                 bool(run.get("practice_content")))
     return {"event_id": event_id, "job_id": job_id, "pending": len(pending)}
 
 
@@ -3810,6 +3817,7 @@ def _run_event_job(
     include_teaser: bool = False,
     override_cache: bool = False,
     auto_practice_composite: bool = False,
+    practice_content: bool = False,
 ) -> None:
     """Background: analyze all entities in the event, 5 at a time."""
     import re as _re
@@ -3926,6 +3934,28 @@ def _run_event_job(
 
                     set_run_role(result.run_id, role)
 
+                    # Practice combined report (opt-in per event): content analysis +
+                    # drafted prescription + findings-citing Assessment, replacing the
+                    # base four-pillar PDF in place (same path → zip picks it up).
+                    # Fail-soft: on error the base report stands.
+                    combined_ok = False
+                    if practice_content and entity_type == "practice":
+                        _ca_job = {
+                            "teaser_report": include_teaser,
+                            "content_urls": [entity.get("input_url")] if (entity.get("input_url") or "").strip() else [],
+                        }
+                        def _ca_emit(ev, _n=resolved_name):
+                            if ev.get("type") == "phase":
+                                emit({"type": "log", "text": f"  {_n}: {ev.get('text', ev.get('name', ''))}"})
+                        emit({"type": "log", "text": f"Content analysis for {resolved_name} (combined practice report)"})
+                        try:
+                            _finalize_practice_combined(result, resolved_name, city, state,
+                                                        brand, _ca_job, _ca_emit)
+                            combined_ok = True
+                        except Exception as _ce:
+                            emit({"type": "log", "text":
+                                  f"⚠ Content analysis failed for {resolved_name} ({type(_ce).__name__}); base report kept"})
+
                     # Tag the run with this event; make it visible to all users
                     with get_connection() as _con:
                         _con.execute(
@@ -3960,9 +3990,23 @@ def _run_event_job(
                         except Exception:
                             pass
 
+                    # Combined-report teaser (already rendered): rename to the event convention.
+                    if combined_ok and getattr(result, "teaser_pdf_path", None):
+                        try:
+                            _tp = Path(result.teaser_pdf_path)
+                            _tn = _tp.parent / f"{Path(new_pdf_path).stem}_Teaser.pdf"
+                            _tp.rename(_tn)
+                            result.teaser_pdf_path = str(_tn)
+                            with get_connection() as _con3:
+                                _con3.execute("UPDATE analysis_runs SET teaser_pdf_path=? WHERE run_id=?",
+                                              [str(_tn), result.run_id])
+                        except Exception:
+                            pass
+
                     # Teaser PDF: re-render the already-collected result with teaser_report=True.
                     # No API calls — just a second Playwright PDF render from the same data.
-                    if include_teaser:
+                    # (Skipped when the combined practice report already produced its own teaser.)
+                    if include_teaser and not (combined_ok and getattr(result, "teaser_pdf_path", None)):
                         try:
                             import copy as _copy
                             t_result = _copy.copy(result)
