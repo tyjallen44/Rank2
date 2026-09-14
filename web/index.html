@@ -1757,7 +1757,7 @@ input[type="url"]::placeholder, textarea::placeholder {
             </thead>
             <tbody id="ir-pd-tbody"></tbody>
           </table>
-          <div style="font-size:11px;color:var(--muted)">Uncheck any practice to exclude it from the reputation table.</div>
+          <div id="ir-pd-note" style="font-size:11px;color:var(--muted)">Uncheck any practice to exclude it from the reputation table.</div>
           <div id="ir-pd-err" class="err hidden mt8"></div>
         </div>
 
@@ -5800,15 +5800,30 @@ async function runCompositeDiscovery() {
   document.getElementById('ir-pd-tbody').innerHTML = '';
   document.getElementById('ir-pd-count').textContent = '';
   _physicianRoster = {};
+  const pdNote = document.getElementById('ir-pd-note');
   try {
-    const r = await api('/api/practice/discover', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entity_name: _irSelected.name, city: _irResolvedCity, state: _irResolvedState }),
-    });
-    if (!r.ok) throw new Error(await errDetail(r, 'Practice discovery failed'));
-    const data = await r.json();
-    _practiceRoster = (data.practices || []);
+    if (_irType === 'specialty') {
+      // Specialty / service-line runs: the reputation table is scoped server-side
+      // to the confirmed Locations list above (automatic pruning), so there is no
+      // separate system-wide practice discovery here. Only the anchor row is shown
+      // locally (physician sub-rows attach to it when that option is on).
+      _practiceRoster = [{
+        name: _irSelected.name, entity_type: 'practice', is_anchor: true,
+        city: _irResolvedCity, state: _irResolvedState,
+      }];
+      if (pdNote) pdNote.textContent =
+        'The reputation table automatically uses the locations checked in the Locations list above.';
+    } else {
+      const r = await api('/api/practice/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_name: _irSelected.name, city: _irResolvedCity, state: _irResolvedState }),
+      });
+      if (!r.ok) throw new Error(await errDetail(r, 'Practice discovery failed'));
+      const data = await r.json();
+      _practiceRoster = (data.practices || []);
+      if (pdNote) pdNote.textContent = 'Uncheck any practice to exclude it from the reputation table.';
+    }
 
     if (document.getElementById('ir-physician-composite')?.checked) {
       const pr = await api('/api/physician/discover', {
@@ -5820,11 +5835,22 @@ async function runCompositeDiscovery() {
     }
 
     _renderPracticeRoster();
-    const practiceCount = _practiceRoster.length;
     const physicianCount = Object.values(_physicianRoster).reduce((s, v) => s + v.length, 0);
+    let countText;
+    if (_irType === 'specialty') {
+      // Count follows the Locations list (anchor + currently checked siblings).
+      const checkedSibs = (_irDiscoveredSiblings || []).filter((_, i) => {
+        const cb = document.getElementById(`ir-sib-${i}`); return cb ? cb.checked : true;
+      }).length;
+      const locCount = 1 + checkedSibs;
+      countText = `${locCount} location${locCount !== 1 ? 's' : ''} from the Locations list`;
+    } else {
+      const practiceCount = _practiceRoster.length;
+      countText = `${practiceCount} practice${practiceCount !== 1 ? 's' : ''} discovered`;
+    }
     document.getElementById('ir-pd-count').textContent = physicianCount
-      ? `${practiceCount} practice${practiceCount !== 1 ? 's' : ''} · ${physicianCount} physician${physicianCount !== 1 ? 's' : ''} discovered`
-      : `${practiceCount} practice${practiceCount !== 1 ? 's' : ''} discovered`;
+      ? `${countText} · ${physicianCount} physician${physicianCount !== 1 ? 's' : ''} discovered`
+      : countText;
   } catch (e) {
     showErr(errEl, e.message);
   } finally {

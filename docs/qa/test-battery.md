@@ -550,3 +550,59 @@ finished runs and no actions for unfinished ones. Admin sees Resume (unfinished)
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Requires one admin and one non-admin account. No data migration.
+
+## COMPOSITE-AUTO-SCOPE — Practice Composite table auto-scoped to the confirmed Locations list
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic (Specialty Practice / service line), Compare Two, Event Prep · **Type:** correctness + UX
+
+### What changed
+- `analyze_practice` now records the sibling roster used for the aggregate analysis
+  (`_aggregate_siblings`: confirmed siblings from the UI, or the service-line / practice sibling
+  discovery result) and reuses it as the Practice Composite reputation roster. Previously the
+  composite table came from a separate **system-wide** `discover_practices` call, so a
+  "Houston Methodist Orthopedics" run could list imaging / primary-care sites in the table.
+- Deep Diagnostic UI (Specialty type only): checking **Practice Composite** no longer calls
+  `/api/practice/discover`. The composite panel shows the anchor row (+ physician sub-rows if
+  that option is on) and the note "The reputation table automatically uses the locations checked
+  in the Locations list above." The count line reads "N locations from the Locations list".
+- Hospital type is unchanged (still discovers affiliated practices and shows the checkbox list).
+- Stream shows `Reputation table scoped to the N confirmed location(s)` when auto-scoping applies.
+
+### Files changed
+`perception/practice_analyzer.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Service line + composite**: Deep Diagnostic → Specialty Practice, HOUSTON METHODIST
+ORTHOPEDICS / HOUSTON / TX, Specialty ORTHOPEDICS → Search → "Analyze as service line". In the
+Locations list uncheck one clinic. Check Practice Composite → no discovery spinner call for
+practices; note text + "N locations from the Locations list" shown. Run. The PDF's Practice
+Composite table has exactly the anchor + the checked clinics, and the unchecked clinic is absent.
+No non-ortho Houston Methodist facilities appear.
+**T2 — Independent practice + composite**: a standalone multi-location practice (not a service
+line). Composite table rows = anchor + the locations checked in the Locations list.
+**T3 — Physicians sub-option**: T1 with "Include Physicians in Composite" checked → physician
+sub-rows still render under the anchor row in the panel and in the PDF.
+**T4 — Hospital type**: Hospital / Health System with Practice Composite → the affiliated-practice
+checkbox list still populates via discovery and pruning there still controls the table.
+**T5 — Event Prep practice row with a service line** (e.g. `Houston Methodist Orthopedics,
+Houston,TX,,Orthopedics` with the combined practice option) → composite table, if produced, is
+limited to the discovered ortho clinics.
+
+### Regression Checks
+- **R1** Anchor row still pinned first with the header star rating; "Not established" rows unchanged.
+- **R2** Single-location specialty run (no siblings) with composite → table has the anchor only.
+- **R3** Compare Two with service-line sides unaffected in scores.
+- **R4** Unit suite: same 4 pre-existing failures as before this commit (practice_reputation URL
+  columns + rebrand token), 108 pass in the practice/service-line selection.
+
+### Acceptance Checklist
+- [ ] T1 auto-scoped table matches Locations list
+- [ ] T2 independent practice
+- [ ] T3 physicians
+- [ ] T4 hospital path unchanged
+- [ ] T5 Event Prep
+- [ ] R1–R4
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. T1 runtime roughly 5–8 minutes. Compare the PDF table against the
+Locations list you confirmed before running.

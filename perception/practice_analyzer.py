@@ -650,9 +650,15 @@ def analyze_practice(
     # When confirmed_siblings is provided by the initiation flow, use it directly
     # (skips the Claude discovery call). None means run discovery as usual.
     _location_roster: list[str] | None = None
+    # The same sibling dicts ({name, entity_type, city, state}) are reused as the
+    # Practice Composite roster below, so the reputation table is automatically
+    # scoped to the confirmed / service-line locations rather than a separate
+    # system-wide discovery pass.  None = no aggregate roster was established.
+    _aggregate_siblings: list[dict] | None = None
     if aggregate:
         if confirmed_siblings is not None:
             # Pre-confirmed by the user in the initiation screen
+            _aggregate_siblings = list(confirmed_siblings)
             if confirmed_siblings:
                 _location_roster = [entity_name] + [s["name"] for s in confirmed_siblings]
                 emit({"type": "phase", "name": "discovery",
@@ -671,6 +677,7 @@ def analyze_practice(
                 entity_name, parent_system, service_line, city, state,
                 on_event=emit, force_rerun=force_rerun,
             )
+            _aggregate_siblings = list(_siblings or [])
             if _siblings:
                 _location_roster = [entity_name] + [s["name"] for s in _siblings]
             if not org_name and _sl_brand:
@@ -681,6 +688,7 @@ def analyze_practice(
             _siblings, _discovered_org_name = _disc_siblings(
                 entity_name, city, state, on_event=emit, force_rerun=force_rerun
             )
+            _aggregate_siblings = list(_siblings or [])
             if _siblings:
                 _location_roster = [entity_name] + [s["name"] for s in _siblings]
             # Use discovered org name as fallback when not provided by frontend
@@ -873,8 +881,18 @@ def analyze_practice(
             "city": city,
             "state": state,
         }
-        sibling_roster = list(practice_roster or [])
-        if not sibling_roster:
+        if _aggregate_siblings is not None:
+            # Automatic scoping: reuse the confirmed / service-line location roster
+            # established for the aggregate analysis.  This keeps the reputation
+            # table to (e.g.) the orthopedic clinics only — never a system-wide
+            # practice list that would pull in unrelated imaging / primary care sites.
+            sibling_roster = list(_aggregate_siblings)
+            emit({"type": "text",
+                  "text": f"Reputation table scoped to the {1 + len(sibling_roster)} "
+                          f"confirmed location(s)"})
+        else:
+            sibling_roster = list(practice_roster or [])
+        if not sibling_roster and _aggregate_siblings is None:
             sibling_roster = discover_practice_siblings(
                 entity_name, city, state,
                 on_event=emit,
