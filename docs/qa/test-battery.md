@@ -676,3 +676,78 @@ time (composite hidden/forced for Specialty, shown/unchecked for Hospital).
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Front-end only; no server or schema changes in this commit. Pair with
 COMPOSITE-AUTO-SCOPE (previous commit) for the end-to-end service-line run.
+
+## DD-SERVICE-LINE-TYPE — "Hospital Service Line" is its own Deep Diagnostic analysis type
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic, History · **Type:** feature + UX
+
+### What changed
+- Analysis Type toggle is now **Hospital · Hospital Service Line · Specialty Practice · Community
+  Health (FQHC)**. The first label was "Hospital / Health System"; health-system analysis is the
+  Hospital Network report's job. (Other pages' toggles are unchanged.)
+- **Hospital Service Line** type: fields become **Health System** + Location + **Service Line**.
+  Search queries Google Places for "<system> <line>" to pick the flagship anchor listing (top match
+  auto-selected). The profile auto-classifies from the service line, then location discovery runs
+  **directly** with `service_line` + `parent_system` (`/api/practice/siblings`) — no LLM
+  detect-service-line call and no opt-out link. Selected Organization shows the "Service line" badge.
+- **Specialty Practice** no longer auto-accepts a detected service line. If detection fires, the
+  Selected Organization box shows an amber hint "This looks like the X service line of Y ·
+  **switch to Hospital Service Line**" which resets, flips the type, prefills both fields and
+  re-runs the search. Otherwise the practice is analyzed as entered.
+- Both practice types share the run path (entity_type `practice`, composite implicit, teaser
+  always). The service-line type also sends `service_line` + `parent_system` in the analyze body.
+- Persistence: `AnalysisResult.service_line` / `parent_system` → new nullable columns
+  `analysis_runs.service_line`, `analysis_runs.parent_system` (auto-migrated in `init_db`), written
+  by `_save_practice_extras`, returned by `query_history` (network rows return null).
+- **History badge**: service-line runs show `Service Line · ORTHOPEDICS` (gold, parent system in
+  the tooltip) instead of the bare specialty badge.
+- Help modal rewritten for the new type; page subtitle + help link text updated.
+
+### Files changed
+`web/index.html`, `server.py`, `perception/practice_analyzer.py`, `perception/models.py`,
+`perception/db.py`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Toggle + fields**: Deep Diagnostic → four types, first reads "Hospital". Pick Hospital Service
+Line → labels read Health System / Service Line, a note explains the type, placeholders change.
+Switch back to Hospital → labels revert and the Specialty field hides.
+**T2 — Service line run**: Health System HOUSTON METHODIST, HOUSTON / TX, Service Line ORTHOPEDICS →
+Search. Candidates come back for "Houston Methodist Orthopedics"; top auto-selected. Locations
+discovery starts immediately (no detection pause); the "Service line" badge names Orthopedics /
+Houston Methodist with **no** opt-out link. Locations list = ortho clinics only. Run → practice-rubric
+report titled "HOUSTON METHODIST ORTHOPEDICS" with the per-location table + teaser.
+**T3 — Validation**: Service Line type with an empty Service Line → "Please enter the service line";
+empty system → "Please enter the health system name".
+**T4 — Specialty hint**: Specialty Practice, HOUSTON METHODIST ORTHOPEDICS / HOUSTON / TX, Specialty
+ORTHOPEDICS → Search. Discovery runs for the listing as entered; the Selected Organization box shows
+the amber "This looks like the Orthopedics service line of Houston Methodist · switch to Hospital
+Service Line" hint. Click it → type flips, fields prefilled (HOUSTON METHODIST / ORTHOPEDICS), search
+re-runs on the service-line path (T2 state).
+**T5 — Standalone specialty unchanged**: an independent practice (no parent system) → no hint,
+analyzed as entered, composite scoped to its Locations list.
+**T6 — History**: after T2, History shows a gold "Service Line · ORTHOPEDICS" badge (hover shows
+Houston Methodist). The T4-as-entered run (if completed) shows the plain "ORTHOPEDICS" badge.
+**T7 — Migration**: on first start after deploy, `init_db` adds `service_line` / `parent_system`
+to `analysis_runs`; History loads for admin and non-admin without errors; older rows show as before.
+
+### Regression Checks
+- **R1** Hospital type: composite checkbox + affiliated-practice list unchanged; teaser produced.
+- **R2** FQHC flow unchanged.
+- **R3** Compare Two / Event Prep service-line paths unchanged (they pass service_line explicitly).
+- **R4** Network rows in History unaffected (service_line null).
+- **R5** Unit suite: same 4 pre-existing failures (practice_reputation URL columns + rebrand token).
+
+### Acceptance Checklist
+- [ ] T1 toggle/labels
+- [ ] T2 service-line run end-to-end
+- [ ] T3 validation
+- [ ] T4 specialty hint → switch
+- [ ] T5 standalone specialty
+- [ ] T6 History badge
+- [ ] T7 migration
+- [ ] R1–R5
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. The Postgres migration was NOT smoke-tested locally (only a shared
+DATABASE_URL is configured); it uses the existing add-column-if-missing loop in `init_db`. T7 is
+the first thing to check after deploy.

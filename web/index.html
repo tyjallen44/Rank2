@@ -1475,9 +1475,9 @@ input[type="url"]::placeholder, textarea::placeholder {
     <!-- ── Individual Report ────────────────────────────────────────────── -->
     <div id="page-individual" class="page">
       <div class="page-title">Deep Diagnostic</div>
-      <div class="page-sub">Run a focused diagnostic on a hospital, hospital network, specialty practice within a hospital, or a medical practice: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
+      <div class="page-sub">Run a focused diagnostic on a hospital, a service line within a hospital system, a specialty practice, or a community health center: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
       <div style="margin:-4px 0 12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-        <a href="#" onclick="showIrHelp();return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">ℹ How to analyze a specialty practice within a hospital →</a>
+        <a href="#" onclick="showIrHelp();return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">ℹ How to analyze a hospital service line →</a>
         <button class="btn btn-secondary btn-sm" onclick="caOpen()" style="margin-left:auto">🔎 Content Analysis</button>
       </div>
 
@@ -1556,7 +1556,7 @@ input[type="url"]::placeholder, textarea::placeholder {
       <!-- Step 1: Search form -->
       <div id="ir-step1" class="card">
         <div class="fg">
-          <label class="fl">Organization Name</label>
+          <label class="fl" id="ir-name-label">Organization Name</label>
           <input id="ir-name" class="fi" type="text" placeholder="e.g. Intermountain Medical Center"
             oninput="this.value=this.value.toUpperCase()"
             onkeydown="if(event.key==='Enter')runIrSearch()">
@@ -1597,13 +1597,15 @@ input[type="url"]::placeholder, textarea::placeholder {
         <div class="fg mt16" style="margin-bottom:0">
           <label class="fl">Analysis Type</label>
           <div class="tg-group">
-            <button class="tg-opt on" id="ir-tg-hospital"  onclick="setIrType('hospital')">Hospital / Health System</button>
-            <button class="tg-opt"    id="ir-tg-specialty" onclick="setIrType('specialty')">Specialty Practice</button>
+            <button class="tg-opt on" id="ir-tg-hospital"    onclick="setIrType('hospital')">Hospital</button>
+            <button class="tg-opt"    id="ir-tg-serviceline" onclick="setIrType('service_line')">Hospital Service Line</button>
+            <button class="tg-opt"    id="ir-tg-specialty"   onclick="setIrType('specialty')">Specialty Practice</button>
             <button class="tg-opt"    id="ir-tg-community" onclick="setIrType('community_health')">Community Health (FQHC)</button>
           </div>
         </div>
+        <div id="ir-service-line-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5">Scores one department of a hospital system — every one of its clinics rolled up and analyzed on the practice rubric, with a per-location reputation table. Enter the <strong>health system</strong> above and the <strong>service line</strong> below.</div>
         <div id="ir-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
-          <label class="fl">Specialty</label>
+          <label class="fl" id="ir-specialty-label">Specialty</label>
           <input id="ir-specialty" class="fi" type="text"
             placeholder="e.g. Orthopedics, Cardiology, Dermatology"
             oninput="this.value=this.value.toUpperCase()"
@@ -1620,7 +1622,7 @@ input[type="url"]::placeholder, textarea::placeholder {
 
       <!-- Step 2: Candidates -->
       <div id="ir-step2" class="hidden mt16">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Select the entry that identifies this organization. For specialty practices, all locations will be discovered next.</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Select the entry that identifies this organization. For specialty practices and service lines, all locations will be discovered next.</div>
         <div id="ir-candidates"></div>
         <div class="mt12">
           <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
@@ -3528,21 +3530,20 @@ input[type="url"]::placeholder, textarea::placeholder {
 <div id="ir-help-modal" onclick="if(event.target===this)irCloseHelp()">
   <div class="modal-card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-      <div class="modal-title" style="margin-bottom:4px">Analyze a Specialty Practice Within a Hospital</div>
+      <div class="modal-title" style="margin-bottom:4px">Analyze a Hospital Service Line</div>
       <button class="btn btn-ghost btn-sm" onclick="irCloseHelp()" style="flex-shrink:0">✕</button>
     </div>
     <div class="npa-p" style="margin-top:6px">Deep Diagnostic can score a single hospital <strong>department or service line</strong> — for example <em>Houston Methodist Orthopedics</em> — as its own entity, rolling up all of that department's clinics and scoring it on the practice rubric. Here's how:</div>
 
-    <div class="npa-step"><b class="n">1.</b> In the search form, enter the department in <strong>Organization Name</strong> — name the system + specialty for the cleanest match, e.g. <em>HOUSTON METHODIST ORTHOPEDICS</em>.</div>
-    <div class="npa-step"><b class="n">2.</b> Enter the <strong>Location</strong> (city + state, e.g. <em>HOUSTON / TX</em>).</div>
-    <div class="npa-step"><b class="n">3.</b> Set <strong>Analysis Type</strong> to <strong>Specialty Practice</strong>. <span style="color:var(--muted)">This is the key step — the plain "Hospital / Health System" type skips service-line detection.</span></div>
-    <div class="npa-step"><b class="n">4.</b> Enter the <strong>Specialty</strong> that appears (e.g. <em>ORTHOPEDICS</em>), then click <strong>Search</strong>.</div>
-    <div class="npa-step"><b class="n">5.</b> The top match is auto-selected and locations are discovered automatically (pick a different candidate if needed). The practice profile is auto-classified — you can override it in the options panel before running.</div>
-    <div class="npa-step"><b class="n">6.</b> If the listing resolves to a department of a larger system, it is analyzed as that service line automatically — a <strong>"Service line"</strong> badge appears in the Selected Organization box, e.g. <em>"Orthopedics service line of Houston Methodist."</em> Click <strong>treat as entered instead</strong> there if you want a standalone listing. The per-location reputation table and a teaser are included in every run.</div>
-    <div class="npa-step"><b class="n">7.</b> The report runs on the practice rubric and downloads when done.</div>
+    <div class="npa-step"><b class="n">1.</b> Set <strong>Analysis Type</strong> to <strong>Hospital Service Line</strong>.</div>
+    <div class="npa-step"><b class="n">2.</b> Enter the <strong>Health System</strong> (e.g. <em>HOUSTON METHODIST</em>) and the <strong>Location</strong> (city + state, e.g. <em>HOUSTON / TX</em>).</div>
+    <div class="npa-step"><b class="n">3.</b> Enter the <strong>Service Line</strong> (e.g. <em>ORTHOPEDICS</em>), then click <strong>Search</strong>.</div>
+    <div class="npa-step"><b class="n">4.</b> The top Google match is auto-selected as the flagship listing (pick a different candidate if needed). Every clinic of that service line is discovered automatically — uncheck any false positives in the Locations list.</div>
+    <div class="npa-step"><b class="n">5.</b> The practice profile is auto-classified from the service line; click <strong>change</strong> in the options panel to override it.</div>
+    <div class="npa-step"><b class="n">6.</b> Click <strong>Run Diagnostic</strong>. The report scores the department as one rolled-up entity on the practice rubric and always includes the per-location reputation table and a teaser.</div>
 
-    <div class="npa-h">If the "Service line" badge doesn't appear</div>
-    <div class="npa-p">The listing didn't resolve to a parent system. Search the department more explicitly — include the system name (e.g. <em>HOUSTON METHODIST ORTHOPEDICS</em>) — so the right candidate surfaces in the results.</div>
+    <div class="npa-h">Searched as a Specialty Practice by mistake?</div>
+    <div class="npa-p">If a Specialty Practice search resolves to a department of a larger system, the Selected Organization box shows a one-click <strong>switch to Hospital Service Line</strong> link that prefills both fields and re-runs the search.</div>
     <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="irCloseHelp()">Got it</button></div>
   </div>
 </div>
@@ -4885,10 +4886,29 @@ function setIrLocMode(m) {
 
 function setIrType(t) {
   _irType = t;
-  document.getElementById('ir-tg-hospital').classList.toggle('on',   t === 'hospital');
-  document.getElementById('ir-tg-specialty').classList.toggle('on',  t === 'specialty');
-  document.getElementById('ir-tg-community').classList.toggle('on',  t === 'community_health');
-  document.getElementById('ir-specialty-wrap').classList.toggle('hidden', t !== 'specialty');
+  const isPractice = (t === 'specialty' || t === 'service_line');
+  document.getElementById('ir-tg-hospital').classList.toggle('on',    t === 'hospital');
+  document.getElementById('ir-tg-serviceline').classList.toggle('on', t === 'service_line');
+  document.getElementById('ir-tg-specialty').classList.toggle('on',   t === 'specialty');
+  document.getElementById('ir-tg-community').classList.toggle('on',   t === 'community_health');
+  document.getElementById('ir-specialty-wrap').classList.toggle('hidden', !isPractice);
+  document.getElementById('ir-service-line-note').classList.toggle('hidden', t !== 'service_line');
+  // Field labels: the service-line type takes Health System + Service Line.
+  const nameLabel = document.getElementById('ir-name-label');
+  const nameInput = document.getElementById('ir-name');
+  const specLabel = document.getElementById('ir-specialty-label');
+  const specInput = document.getElementById('ir-specialty');
+  if (t === 'service_line') {
+    if (nameLabel) nameLabel.textContent = 'Health System';
+    if (nameInput) nameInput.placeholder = 'e.g. Houston Methodist';
+    if (specLabel) specLabel.textContent = 'Service Line';
+    if (specInput) specInput.placeholder = 'e.g. Orthopedics, Cardiology, Oncology';
+  } else {
+    if (nameLabel) nameLabel.textContent = 'Organization Name';
+    if (nameInput) nameInput.placeholder = 'e.g. Intermountain Medical Center';
+    if (specLabel) specLabel.textContent = 'Specialty';
+    if (specInput) specInput.placeholder = 'e.g. Orthopedics, Cardiology, Dermatology';
+  }
   // agg toggle is hospital-only; specialty and community_health do not use it
   document.getElementById('ir-composite-opts').style.display = t === 'hospital' ? '' : 'none';
   if (t !== 'hospital') {
@@ -4902,7 +4922,7 @@ function setIrType(t) {
   const phWrap = document.getElementById('ir-physician-composite-wrap');
   const phCb   = document.getElementById('ir-physician-composite');
   const autoNote = document.getElementById('ir-auto-composite-note');
-  if (t === 'specialty') {
+  if (isPractice) {
     if (pcWrap) pcWrap.style.display = 'none';
     if (pcCb) pcCb.checked = true;
     if (phWrap) phWrap.style.marginLeft = '0';
@@ -4923,8 +4943,14 @@ async function runIrSearch() {
   const errEl = document.getElementById('ir-search-err');
   errEl.classList.add('hidden');
 
-  const name = document.getElementById('ir-name').value.trim();
-  if (!name) return showErr(errEl, 'Please enter an organization name.');
+  let name = document.getElementById('ir-name').value.trim();
+  if (!name) return showErr(errEl, _irType === 'service_line' ? 'Please enter the health system name.' : 'Please enter an organization name.');
+  if (_irType === 'service_line') {
+    const line = document.getElementById('ir-specialty').value.trim();
+    if (!line) return showErr(errEl, 'Please enter the service line (e.g. ORTHOPEDICS).');
+    // Anchor listing search: the system + line usually resolves to the flagship clinic.
+    name = `${name} ${line}`;
+  }
 
   let reqBody;
   if (_irLocMode === 'city') {
@@ -5051,7 +5077,7 @@ function selectIrCandidate(idx) {
   if (titleInput) titleInput.value = _irReportTitle;
   if (titlePreview) titlePreview.textContent = _irReportTitle;
 
-  if (_irType === 'specialty') {
+  if (_irIsPractice()) {
     showIrProfileStep();
   } else if (_irType === 'community_health') {
     // For FQHC, the report title is the org name the user typed — not the Google-resolved site name
@@ -5121,8 +5147,19 @@ async function showIrProfileStep() {
   const chg = document.getElementById('ir-profile-change');
   if (chg) chg.style.display = '';
   updateIrProfileDesc(proposed);
-  document.getElementById('ir-profile-inline')?.classList.remove('hidden');  // shown in the options panel (specialty only)
-  irDetectServiceLine();   // proceed straight to discovery — no separate profile gate
+  document.getElementById('ir-profile-inline')?.classList.remove('hidden');  // shown in the options panel (practice types only)
+  if (_irType === 'service_line') {
+    // Explicit type: the user told us the system + line, so discovery is scoped
+    // directly (no LLM detection step, nothing to opt out of).
+    const system = document.getElementById('ir-name').value.trim();
+    const line   = document.getElementById('ir-specialty').value.trim();
+    _irServiceLine = { parent_system: system, service_line: line, service_line_brand: `${system} ${line}` };
+    _pendingServiceLine = null;
+    _irOrgName = _irServiceLine.service_line_brand;
+    irStartDiscovery();
+    return;
+  }
+  irDetectServiceLine();   // specialty: detection only produces a "switch type" hint
 }
 
 function onIrTitleInput(val) {
@@ -5159,33 +5196,29 @@ async function irDetectServiceLine() {
           service_line: d.service_line,
           service_line_brand: d.service_line_brand || `${d.parent_system} ${d.service_line}`,
         };
-        // Auto-accept: analyze as the service line straight away. The Selected
-        // Organization box shows a badge with a "treat as entered" opt-out.
-        _irServiceLine = _pendingServiceLine;
-        _irOrgName = _irServiceLine.service_line_brand;
-        irStartDiscovery();
-        return;
+        // Specialty Practice stays a standalone-practice analysis. Detection only
+        // surfaces a one-click hint to switch to the Hospital Service Line type.
       }
     }
   } catch(e) { /* fall through to normal discovery */ }
   irStartDiscovery();
 }
 
-let _pendingServiceLine = null;   // last detection result (kept so the user can re-apply it)
+let _pendingServiceLine = null;   // detection result on a Specialty Practice search (hint only)
 
-// Opt out of the auto-detected service line: re-discover as the listing entered.
-function irSkipServiceLine() {
-  _irServiceLine = null;
-  _irOrgName = null;
-  irStartDiscovery();
-}
+function _irIsPractice() { return _irType === 'specialty' || _irType === 'service_line'; }
 
-// Re-apply a detected service line after opting out.
-function irUseServiceLine() {
+// One-click switch from the Specialty Practice hint: prefill Health System +
+// Service Line, flip the type, and re-run the search on the explicit path.
+function irSwitchToServiceLine() {
   if (!_pendingServiceLine) return;
-  _irServiceLine = _pendingServiceLine;
-  _irOrgName = _irServiceLine.service_line_brand;
-  irStartDiscovery();
+  const sl = _pendingServiceLine;
+  irResetSearch();
+  setIrType('service_line');
+  document.getElementById('ir-name').value = (sl.parent_system || '').toUpperCase();
+  document.getElementById('ir-specialty').value = (sl.service_line || '').toUpperCase();
+  document.getElementById('ir-step1').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  runIrSearch();
 }
 
 async function irStartDiscovery() {
@@ -5241,11 +5274,10 @@ function renderIrSiblings(siblings) {
   if (_irServiceLine) {
     slLine = `<div style="font-size:12px;color:var(--text);margin-top:6px">
         <span style="font-size:11px;font-weight:700;background:#e6f3f4;color:var(--teal);padding:2px 8px;border-radius:10px">Service line</span>
-        ${_irServiceLine.service_line} service line of <strong>${_irServiceLine.parent_system}</strong>, analyzed as one rolled-up entity
-        · <a href="#" onclick="irSkipServiceLine();return false" style="color:var(--teal)">treat as entered instead</a></div>`;
+        ${_irServiceLine.service_line} service line of <strong>${_irServiceLine.parent_system}</strong>, analyzed as one rolled-up entity</div>`;
   } else if (_pendingServiceLine) {
-    slLine = `<div style="font-size:12px;color:var(--muted);margin-top:6px">Analyzed as entered
-        · <a href="#" onclick="irUseServiceLine();return false" style="color:var(--teal)">analyze as the ${_pendingServiceLine.service_line} service line of ${_pendingServiceLine.parent_system}</a></div>`;
+    slLine = `<div style="font-size:12px;color:#b45309;margin-top:6px">This looks like the ${_pendingServiceLine.service_line} service line of <strong>${_pendingServiceLine.parent_system}</strong>
+        · <a href="#" onclick="irSwitchToServiceLine();return false" style="color:var(--teal);font-weight:600">switch to Hospital Service Line</a></div>`;
   }
   document.getElementById('ir-selected-display').innerHTML = `
     <div style="font-weight:700;font-size:16px;color:var(--teal)">${_irOrgName}${badge}</div>
@@ -5674,7 +5706,7 @@ async function runIndividual() {
 
   // Practice Composite is confirmed inline (Stage 2). Collect the checked practices
   // (+ physicians) from the inline table and submit directly — no separate screen.
-  if (_irType === 'specialty') {
+  if (_irIsPractice()) {
     // Composite always on; the reputation roster is scoped server-side to the
     // confirmed Locations list, so only the anchor + any confirmed physicians go up.
     const anchor = { name: _irSelected.name, entity_type: 'practice', is_anchor: true,
@@ -5721,18 +5753,18 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
 
   // Confirmed siblings from the inline Locations list (Stage 2 — computed at run,
   // no separate coverage gate). Specialty only.
-  if (_irType === 'specialty') {
+  if (_irIsPractice()) {
     _irConfirmedSiblings = (_irDiscoveredSiblings || []).filter((_, i) => {
       const cb = document.getElementById(`ir-sib-${i}`);
       return cb ? cb.checked : true;
     });
   }
 
-  const specialty = _irType === 'specialty'
+  const specialty = _irIsPractice()
     ? (document.getElementById('ir-specialty').value.trim() || null) : null;
-  if (_irType === 'specialty' && !specialty) return showErr(errEl, 'Please enter a specialty.');
+  if (_irIsPractice() && !specialty) return showErr(errEl, _irType === 'service_line' ? 'Please enter a service line.' : 'Please enter a specialty.');
 
-  const aggregate = (_irType === 'specialty' || _irType === 'community_health')
+  const aggregate = (_irIsPractice() || _irType === 'community_health')
     ? true  // specialty always runs org-wide; community_health aggregates across sites
     : document.getElementById('ir-agg-toggle').checked;
   const skip_pdf           = document.getElementById('ir-skip-pdf-toggle').checked;
@@ -5754,17 +5786,19 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
       ? (document.getElementById('ir-name').value.trim() || _irSelected.name)
       : _irSelected.name,
     report_title: _irReportTitle || undefined,
-    confirmed_siblings: _irType === 'specialty' ? _irConfirmedSiblings : undefined,
-    org_name: _irType === 'specialty' ? _irOrgName : undefined,
+    confirmed_siblings: _irIsPractice() ? _irConfirmedSiblings : undefined,
+    org_name: _irIsPractice() ? _irOrgName : undefined,
+    service_line:  _irType === 'service_line' ? (_irServiceLine?.service_line  || specialty) : undefined,
+    parent_system: _irType === 'service_line' ? (_irServiceLine?.parent_system || document.getElementById('ir-name').value.trim()) : undefined,
     patient_perspective: false,
     teaser_report,
     skip_pdf,
     content_urls: (document.getElementById('ir-content-url')?.value || '').trim()
       ? [(document.getElementById('ir-content-url').value || '').trim()] : [],
-    entity_type: _irType === 'specialty' ? 'practice'
+    entity_type: _irIsPractice() ? 'practice'
                : _irType === 'community_health' ? 'community_health'
                : null,
-    practice_profile: _irType === 'specialty' ? (_irPracticeProfile || 'practice_procedural') : null,
+    practice_profile: _irIsPractice() ? (_irPracticeProfile || 'practice_procedural') : null,
     fqhc_intake:      _irType === 'community_health' ? _fqhcIntake : undefined,
     fqhc_site_roster: _irType === 'community_health' ? _fqhcSiteRoster : undefined,
     practice_composite:   _irType === 'community_health' ? false : practiceComposite,
@@ -5820,7 +5854,7 @@ function onPracticeCompositeChange() {
 // Re-run composite discovery when the physician sub-option changes (it needs the
 // per-org physician roster, discovered as part of the same pass).
 function onPhysicianCompositeChange() {
-  if (_irType === 'specialty') {
+  if (_irIsPractice()) {
     // Composite is implicit; the panel only exists to confirm physician sub-rows.
     if (document.getElementById('ir-physician-composite')?.checked) runCompositeDiscovery();
     else { document.getElementById('ir-composite-section')?.classList.add('hidden'); _physicianRoster = {}; }
@@ -5842,7 +5876,7 @@ function onBriefingToggle() {
     runCompositeDiscovery();   // populate the inline composite list (Stage 2)
   } else {
     // Briefing off — clear and unlock; let onPracticeCompositeChange re-apply disabled state
-    if (_irType === 'specialty') {
+    if (_irIsPractice()) {
       if (pcCb) { pcCb.checked = true; pcCb.disabled = false; }
       if (phCb) { phCb.checked = false; phCb.disabled = false; }
       onPhysicianCompositeChange();
@@ -5869,7 +5903,7 @@ async function runCompositeDiscovery() {
   _physicianRoster = {};
   const pdNote = document.getElementById('ir-pd-note');
   try {
-    if (_irType === 'specialty') {
+    if (_irIsPractice()) {
       // Specialty / service-line runs: the reputation table is scoped server-side
       // to the confirmed Locations list above (automatic pruning), so there is no
       // separate system-wide practice discovery here. Only the anchor row is shown
@@ -5904,7 +5938,7 @@ async function runCompositeDiscovery() {
     _renderPracticeRoster();
     const physicianCount = Object.values(_physicianRoster).reduce((s, v) => s + v.length, 0);
     let countText;
-    if (_irType === 'specialty') {
+    if (_irIsPractice()) {
       // Count follows the Locations list (anchor + currently checked siblings).
       const checkedSibs = (_irDiscoveredSiblings || []).filter((_, i) => {
         const cb = document.getElementById(`ir-sib-${i}`); return cb ? cb.checked : true;
@@ -7480,9 +7514,11 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
                 ? `<span class="badge bg-teal">FQHC</span>`
                 : isNetwork
                   ? `<span class="badge bg-teal">${NP_TYPE_BADGE[run.specialty] || 'Hospital Network'}</span>`
-                  : run.specialty
-                    ? `<span class="badge bg-gold">${run.specialty}</span>`
-                    : `<span class="badge bg-muted">Hospitals</span>`;
+                  : run.service_line
+                    ? `<span class="badge bg-gold" title="${run.parent_system || ''}">Service Line · ${run.service_line}</span>`
+                    : run.specialty
+                      ? `<span class="badge bg-gold">${run.specialty}</span>`
+                      : `<span class="badge bg-muted">Hospitals</span>`;
             const analyzedCount = run.entity_type === 'community_health' ? '1'
               : isNetwork ? `${run.provider_count} loc.`
               : run.provider_count;

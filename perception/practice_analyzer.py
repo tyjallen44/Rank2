@@ -522,9 +522,11 @@ def _save_practice_extras(
     # Update analysis_runs with practice-specific fields
     con.execute(
         """UPDATE analysis_runs
-           SET entity_type=?, rubric_version=?, practice_profile=?
+           SET entity_type=?, rubric_version=?, practice_profile=?,
+               service_line=?, parent_system=?
            WHERE run_id=?""",
-        [result.entity_type, result.rubric_version, result.practice_profile, result.run_id],
+        [result.entity_type, result.rubric_version, result.practice_profile,
+         result.service_line, result.parent_system, result.run_id],
     )
     # Update ranked_providers for rank=1 with derived metrics + ceiling
     if result.rankings:
@@ -843,6 +845,8 @@ def analyze_practice(
         entity_type="practice",
         rubric_version=_RUBRIC_VERSION,
         practice_profile=run_profile,
+        service_line=service_line or None,
+        parent_system=parent_system or None,
         market_overview=_clean(structured_data.get("market_overview", "")),
         ai_visibility_verdict=_clean(structured_data.get("ai_visibility_verdict", "")),
         coverage_note=f"Individual practice report: {entity_name}",

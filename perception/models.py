@@ -286,6 +286,8 @@ class AnalysisResult(BaseModel):
     entity_type: Optional[str] = None        # "hospital" | "practice" — None means hospital
     rubric_version: Optional[str] = None     # e.g. "practice-v1.0"
     practice_profile: Optional[str] = None  # e.g. "practice_procedural"
+    service_line: Optional[str] = None       # set when the practice run is a hospital service line (e.g. "Orthopedics")
+    parent_system: Optional[str] = None      # the health system that operates that service line
     practice_composite_rows: list[dict] = Field(default_factory=list)   # practice reputation data
     physician_composite_rows: list[dict] = Field(default_factory=list)  # physician reputation data (flat)
     market_overview: str = ""              # 2–3 paragraph landscape narrative

@@ -508,6 +508,8 @@ def _job_run_practice(
             report_title=job.get("report_title"),
             confirmed_siblings=job.get("confirmed_siblings"),
             org_name=job.get("org_name"),
+            service_line=job.get("service_line"),
+            parent_system=job.get("parent_system"),
         )
 
         set_run_role(result.run_id, job["role"], job.get("email"))

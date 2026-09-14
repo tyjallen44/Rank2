@@ -207,6 +207,8 @@ def init_db() -> None:
         ("entity_type", "VARCHAR DEFAULT 'hospital'"),
         ("rubric_version", "VARCHAR"),
         ("practice_profile", "VARCHAR"),
+        ("service_line", "VARCHAR"),      # hospital service-line runs (Deep Diagnostic type)
+        ("parent_system", "VARCHAR"),
         ("result_json", "VARCHAR"),
         ("briefing_pdf_path", "VARCHAR"),
         ("event_id", "VARCHAR"),
@@ -1586,7 +1588,8 @@ def query_history(role: str) -> list[dict[str, Any]]:
 
     analysis_cols = ["run_id", "location", "specialty", "generated_at",
                      "pdf_path", "teaser_pdf_path", "md_path", "briefing_pdf_path", "event_id",
-                     "entity_type", "mqcr", "entity_name", "ran_by", "provider_count", "created_at"]
+                     "entity_type", "mqcr", "entity_name", "ran_by", "provider_count", "created_at",
+                     "service_line", "parent_system"]
 
     if role == "admin":
         analysis_rows = con.execute("""
@@ -1605,12 +1608,15 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.entity_name,
                 a.ran_by,
                 COUNT(p.rank) AS provider_count,
-                a.created_at
+                a.created_at,
+                a.service_line,
+                a.parent_system
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
-                     a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at
+                     a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at,
+                     a.service_line, a.parent_system
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
         network_rows = con.execute("""
@@ -1637,13 +1643,16 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.entity_name,
                 a.ran_by,
                 COUNT(p.rank) AS provider_count,
-                a.created_at
+                a.created_at,
+                a.service_line,
+                a.parent_system
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             WHERE a.user_role = ?
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
-                     a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at
+                     a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at,
+                     a.service_line, a.parent_system
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()
         network_rows = con.execute("""
@@ -1680,6 +1689,8 @@ def query_history(role: str) -> list[dict[str, Any]]:
             "provider_count":    total or 0,
             "report_type":       "network",
             "created_at":        created_at,
+            "service_line":      None,
+            "parent_system":     None,
         })
 
     # Newest first by full timestamp (created_at) so same-day runs order by time;
