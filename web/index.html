@@ -3537,17 +3537,25 @@ input[type="url"]::placeholder, textarea::placeholder {
       <div class="modal-title" style="margin-bottom:4px">Analyze a Hospital Service Line</div>
       <button class="btn btn-ghost btn-sm" onclick="irCloseHelp()" style="flex-shrink:0">✕</button>
     </div>
-    <div class="npa-p" style="margin-top:6px">Deep Diagnostic can score a single hospital <strong>department or service line</strong> — for example <em>Houston Methodist Orthopedics</em> — as its own entity, rolling up all of that department's clinics and scoring it on the practice rubric. Here's how:</div>
+    <div class="npa-p" style="margin-top:6px">Deep Diagnostic can score one <strong>department of a hospital system</strong> — for example <em>Houston Methodist Orthopedics</em> — as a single entity. Every clinic of that service line is rolled up, scored on the practice rubric, and listed with its own Google reputation. The whole flow is: pick the type, fill three fields, glance at the locations, run.</div>
 
-    <div class="npa-step"><b class="n">1.</b> Set <strong>Analysis Type</strong> to <strong>Hospital Service Line</strong>.</div>
-    <div class="npa-step"><b class="n">2.</b> Enter the <strong>Health System</strong> only (e.g. <em>HOUSTON METHODIST</em>, not "Houston Methodist Orthopedics") and the <strong>Market</strong> — the city + state of the metro to analyze (e.g. <em>HOUSTON / TX</em>). Clinics within about 50 miles are discovered, so for a multi-state system pick the metro you care about.</div>
-    <div class="npa-step"><b class="n">3.</b> Enter the <strong>Service Line</strong> (e.g. <em>ORTHOPEDICS</em>), then click <strong>Search</strong>.</div>
-    <div class="npa-step"><b class="n">4.</b> The top Google match becomes the flagship listing (click <strong>change</strong> to pick another). The Locations list combines the other Google listings for the same brand with AI discovery — uncheck any that don't belong.</div>
-    <div class="npa-step"><b class="n">5.</b> The practice profile is auto-classified from the service line; click <strong>change</strong> in the options panel to override it.</div>
-    <div class="npa-step"><b class="n">6.</b> Click <strong>Run Diagnostic</strong>. The report scores the department as one rolled-up entity on the practice rubric and always includes the per-location reputation table and a teaser.</div>
+    <div class="npa-h">Set up the search</div>
+    <div class="npa-step"><b class="n">1.</b> At the top of the form, set <strong>Analysis Type</strong> to <strong>Hospital Service Line</strong>. Do this first — the fields below change to match.</div>
+    <div class="npa-step"><b class="n">2.</b> <strong>Health System</strong>: the system name only, e.g. <em>HOUSTON METHODIST</em>. If you type the department too ("Houston Methodist Orthopedics"), it is trimmed automatically.</div>
+    <div class="npa-step"><b class="n">3.</b> <strong>Service Line</strong>: the department, e.g. <em>ORTHOPEDICS</em>, <em>CARDIOLOGY</em>, <em>ONCOLOGY</em>.</div>
+    <div class="npa-step"><b class="n">4.</b> <strong>Market</strong>: the city and state of the metro to analyze, e.g. <em>HOUSTON / TX</em>. Clinics within about 50 miles are included, so for a multi-state system choose the metro you care about. Then click <strong>Search</strong>.</div>
 
-    <div class="npa-h">Searched as a Specialty Practice by mistake?</div>
-    <div class="npa-p">If a Specialty Practice search resolves to a department of a larger system, the Selected Organization box shows a one-click <strong>switch to Hospital Service Line</strong> link that prefills both fields and re-runs the search.</div>
+    <div class="npa-h">Confirm and run</div>
+    <div class="npa-step"><b class="n">5.</b> The best Google match becomes the <strong>flagship listing</strong>, shown on one line. Click <strong>change</strong> only if it picked the wrong clinic.</div>
+    <div class="npa-step"><b class="n">6.</b> The <strong>Locations</strong> list fills in over 10–20 seconds (Run stays disabled until it does). It combines the other Google listings for the same brand — each with its address and star rating — with AI discovery of remaining clinics. Uncheck anything that isn't part of this service line. Everything checked is rolled into the score and appears in the per-location reputation table.</div>
+    <div class="npa-step"><b class="n">7.</b> The <strong>Report Title</strong> is prefilled (e.g. <em>Houston Methodist Orthopedics</em>); edit it if you like. The practice profile is auto-classified from the service line — click <strong>change</strong> to override.</div>
+    <div class="npa-step"><b class="n">8.</b> Click <strong>Run Diagnostic</strong>. Every run produces the report and a teaser, plus the per-location reputation table. Physician sub-rows, a Pulse Briefing, or a website override are under <strong>Advanced options</strong> if you need them.</div>
+
+    <div class="npa-h">How the reviews pillar is scored</div>
+    <div class="npa-p">Reviews &amp; Reputation is computed from the checked locations — a review-count-weighted average of their Google ratings and their combined review volume — so it always agrees with the reputation table in the report. It is never taken from the parent hospital's main listing.</div>
+
+    <div class="npa-h">Started as a Specialty Practice by mistake?</div>
+    <div class="npa-p">If a Specialty Practice search resolves to a department of a larger system, an amber line under the title offers a one-click <strong>switch to Hospital Service Line</strong> that prefills both fields and re-runs the search.</div>
     <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="irCloseHelp()">Got it</button></div>
   </div>
 </div>

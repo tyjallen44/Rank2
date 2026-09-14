@@ -1027,3 +1027,36 @@ NEEDS BROWSER TESTING. Compare against the report that prompted this (Houston Me
 2026-09-14) — the new Pillar 2 should be materially lower and explainable from the table. Not
 smoke-tested against Postgres locally (shared DATABASE_URL only); migration is the standard
 add-column-if-missing pattern.
+
+## DD-HELP-REWRITE — Deep Diagnostic help pop-over rewritten for the service-line workflow
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic · **Type:** copy
+
+### What changed
+- The "How to analyze a hospital service line →" pop-over now describes the current flow: type
+  first; Health System (system only, auto-trim), Service Line, Market; flagship listing line with
+  "change"; Locations list (Google-seeded + AI, Run disabled until loaded); prefilled title and
+  profile "change"; Run produces report + teaser + per-location table; Advanced options.
+- Adds a short "How the reviews pillar is scored" paragraph (roster-weighted, never the parent
+  hospital's listing) and keeps the "started as a Specialty Practice" switch note.
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1**: Deep Diagnostic → click "ℹ How to analyze a hospital service line →" → modal opens with
+title "Analyze a Hospital Service Line", three sections (Set up the search / Confirm and run /
+reviews pillar) and steps 1–8; ✕ and "Got it" close it; clicking the backdrop closes it.
+**T2**: Follow the steps literally with HOUSTON METHODIST / ORTHOPEDICS / HOUSTON / TX — every UI
+element named in the text exists and behaves as described.
+
+### Regression Checks
+- **R1** Event Prep help modal unchanged.
+
+### Acceptance Checklist
+- [ ] T1 modal content/close
+- [ ] T2 steps match the UI
+- [ ] R1
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING (copy only).
