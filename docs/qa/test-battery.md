@@ -790,3 +790,41 @@ DD-SERVICE-LINE-TYPE T2.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Front-end only.
+
+## DD-TYPE-FIRST — Deep Diagnostic: Analysis Type moved to the top of the search form
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic · **Type:** UX
+
+### What changed
+- Step 1 field order is now: **Analysis Type** → Organization Name / Health System → Specialty /
+  Service Line (practice types only) → Location / Market (city + state, or ZIP) → Search.
+  Previously the type toggle sat third, after the user had already typed a name and location whose
+  labels/behavior then changed.
+- The service-line explainer note now sits directly under the toggle ("Enter the health system and
+  the service line below"). No ids, handlers, or validation changed.
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Order**: open Deep Diagnostic → Analysis Type is the first control; Organization Name next;
+Location last before Search. Specialty/Service Line field appears between name and location only
+for Specialty Practice / Hospital Service Line.
+**T2 — Type-first adaptation**: pick Hospital Service Line before typing → labels already read
+Health System / Service Line / Market with the note under the toggle; no City/ZIP toggle.
+**T3 — Enter key**: pressing Enter in any input still runs Search.
+**T4 — Search paths**: one Hospital run by ZIP and one Specialty run by city behave as before.
+
+### Regression Checks
+- **R1** Page reset (navigate away/back) still defaults to Hospital, city mode, empty fields.
+- **R2** Compare Two, Event Prep, Content Analysis forms untouched.
+
+### Acceptance Checklist
+- [ ] T1 order
+- [ ] T2 type-first adaptation
+- [ ] T3 Enter key
+- [ ] T4 search paths
+- [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Markup reorder only.

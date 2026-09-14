@@ -1553,11 +1553,31 @@ input[type="url"]::placeholder, textarea::placeholder {
         <div id="ca-results" class="hidden mt16"></div>
       </div>
 
-      <!-- Step 1: Search form -->
+      <!-- Step 1: Search form. Analysis Type comes first so the fields below adapt
+           (labels, service-line note, market vs location) before the user types. -->
       <div id="ir-step1" class="card">
+        <div class="fg" style="margin-bottom:16px">
+          <label class="fl">Analysis Type</label>
+          <div class="tg-group">
+            <button class="tg-opt on" id="ir-tg-hospital"    onclick="setIrType('hospital')">Hospital</button>
+            <button class="tg-opt"    id="ir-tg-serviceline" onclick="setIrType('service_line')">Hospital Service Line</button>
+            <button class="tg-opt"    id="ir-tg-specialty"   onclick="setIrType('specialty')">Specialty Practice</button>
+            <button class="tg-opt"    id="ir-tg-community" onclick="setIrType('community_health')">Community Health (FQHC)</button>
+          </div>
+          <div id="ir-service-line-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5">Scores one department of a hospital system — every one of its clinics rolled up and analyzed on the practice rubric, with a per-location reputation table. Enter the <strong>health system</strong> and the <strong>service line</strong> below.</div>
+        </div>
+
         <div class="fg">
           <label class="fl" id="ir-name-label">Organization Name</label>
           <input id="ir-name" class="fi" type="text" placeholder="e.g. Intermountain Medical Center"
+            oninput="this.value=this.value.toUpperCase()"
+            onkeydown="if(event.key==='Enter')runIrSearch()">
+        </div>
+
+        <div id="ir-specialty-wrap" class="fg hidden">
+          <label class="fl" id="ir-specialty-label">Specialty</label>
+          <input id="ir-specialty" class="fi" type="text"
+            placeholder="e.g. Orthopedics, Cardiology, Dermatology"
             oninput="this.value=this.value.toUpperCase()"
             onkeydown="if(event.key==='Enter')runIrSearch()">
         </div>
@@ -1594,24 +1614,6 @@ input[type="url"]::placeholder, textarea::placeholder {
               oninput="this.value=this.value.replace(/\D/g,'')"
               onkeydown="if(event.key==='Enter')runIrSearch()">
           </div>
-        </div>
-
-        <div class="fg mt16" style="margin-bottom:0">
-          <label class="fl">Analysis Type</label>
-          <div class="tg-group">
-            <button class="tg-opt on" id="ir-tg-hospital"    onclick="setIrType('hospital')">Hospital</button>
-            <button class="tg-opt"    id="ir-tg-serviceline" onclick="setIrType('service_line')">Hospital Service Line</button>
-            <button class="tg-opt"    id="ir-tg-specialty"   onclick="setIrType('specialty')">Specialty Practice</button>
-            <button class="tg-opt"    id="ir-tg-community" onclick="setIrType('community_health')">Community Health (FQHC)</button>
-          </div>
-        </div>
-        <div id="ir-service-line-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5">Scores one department of a hospital system — every one of its clinics rolled up and analyzed on the practice rubric, with a per-location reputation table. Enter the <strong>health system</strong> above and the <strong>service line</strong> below.</div>
-        <div id="ir-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
-          <label class="fl" id="ir-specialty-label">Specialty</label>
-          <input id="ir-specialty" class="fi" type="text"
-            placeholder="e.g. Orthopedics, Cardiology, Dermatology"
-            oninput="this.value=this.value.toUpperCase()"
-            onkeydown="if(event.key==='Enter')runIrSearch()">
         </div>
 
         <div id="ir-search-err" class="err hidden mt16"></div>
