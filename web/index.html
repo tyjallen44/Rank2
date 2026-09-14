@@ -460,6 +460,40 @@ input[type="url"]::placeholder, textarea::placeholder {
   .prog-layout { grid-template-columns: 1fr; }
 }
 
+/* ── Home page: icon rail (desktop only) ─────────────────────────
+   On Home the sidebar collapses to a 64px icon strip so the hero and featured
+   block get the width. Hovering the rail expands it as an OVERLAY (negative
+   margin keeps #main's width constant, so nothing reflows). Any navigation
+   away from Home removes .rail and restores the full sidebar. */
+@media (min-width: 861px) {
+  #app.rail #sidebar {
+    width: 64px; min-width: 64px; position: relative; z-index: 20;
+    transition: width .18s ease, min-width .18s ease, margin-right .18s ease, box-shadow .18s ease;
+  }
+  #app.rail #sidebar:hover {
+    width: 224px; min-width: 224px; margin-right: -160px;
+    box-shadow: 8px 0 28px rgba(0,0,0,.28);
+  }
+  #app.rail #sidebar:not(:hover) .sb-logo { padding: 18px 0; text-align: center; }
+  #app.rail #sidebar:not(:hover) .sb-logo .wordmark,
+  #app.rail #sidebar:not(:hover) .sb-logo .sub,
+  #app.rail #sidebar:not(:hover) .sb-logo .accent-line { display: none; }
+  #app.rail #sidebar:not(:hover) .sb-logo::after {
+    content: 'P'; font-family: 'Barlow Condensed', Impact, sans-serif;
+    font-size: 22px; font-weight: 700; color: var(--seafoam);
+  }
+  #app.rail #sidebar:not(:hover) .sb-nav { padding: 8px 6px; }
+  #app.rail #sidebar:not(:hover) .nav-btn { flex-direction: column; gap: 3px; padding: 10px 4px; justify-content: center; font-size: 10px; }
+  #app.rail #sidebar:not(:hover) .nav-btn .ni { width: auto; font-size: 18px; }
+  #app.rail #sidebar:not(:hover) .nav-btn .nb-lbl { display: none; }
+  #app.rail #sidebar:not(:hover) .nav-btn.active { padding-left: 1px; }
+  #app.rail #sidebar:not(:hover) .nav-section-label,
+  #app.rail #sidebar:not(:hover) .nav-divider,
+  #app.rail #sidebar:not(:hover) .sb-user-info { display: none; }
+  #app.rail #sidebar:not(:hover) .sb-footer { padding: 8px 6px 10px; }
+  #app.rail #sidebar:not(:hover) .sb-build { font-size: 9px; }
+}
+
 /* Mobile: top bar */
 @media (max-width: 540px) {
   #app { flex-direction: column; }
@@ -2732,7 +2766,7 @@ input[type="url"]::placeholder, textarea::placeholder {
 
           <div class="rn-item">
             <div class="rn-title">New Home Page</div>
-            <div class="rn-body">Signing in now lands on a <strong>Home</strong> page: the RLDatix mark, what Pulse does, a featured block for a welcome / walkthrough video, and one-click cards for every report type. The featured block is admin-editable (Learn &rarr; Manage Content &rarr; Home page); paste a YouTube, Vimeo or Loom link on its own line and it embeds as a player.</div>
+            <div class="rn-body">Signing in now lands on a <strong>Home</strong> page: the RLDatix mark, what Pulse does, a featured block for a welcome / walkthrough video, and one-click cards for every report type. On Home the left navigation shrinks to an icon rail &mdash; hover it to expand; it returns to full width on every other page. The featured block is admin-editable (Learn &rarr; Manage Content &rarr; Home page); paste a YouTube, Vimeo or Loom link on its own line and it embeds as a player.</div>
           </div>
 
           <div class="rn-heading new">Naming</div>
@@ -4065,6 +4099,8 @@ function navigate(p) {
   document.getElementById('page-' + p).classList.add('active');
   const nb = document.getElementById('nav-' + p);
   if (nb) nb.classList.add('active');
+  // Home shows the sidebar as an icon rail (hover to expand); every other page gets the full sidebar.
+  document.getElementById('app').classList.toggle('rail', p === 'home');
   document.getElementById('main').classList.toggle('patient-bg', p === 'patient');
   if (p === 'history') loadHistory();
   if (p === 'admin') loadAdminPage();

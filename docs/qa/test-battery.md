@@ -1259,3 +1259,48 @@ correct sizing.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Check the hero on a narrow window (≤760px) — headline scales down.
+
+## HOME-NAV-RAIL — Sidebar collapses to an icon rail on the Home page
+
+**Shipped:** 2026-09-14 · **Area:** App shell / Home · **Type:** UX
+
+### What changed
+- On the Home page (desktop, viewport > 860px) `#app` gets class `rail`: the sidebar becomes a 64px
+  icon strip (icons only, "P" monogram in place of the wordmark, no section labels / user block).
+- **Hover** expands it to the full 224px sidebar as an overlay (negative margin), with a shadow —
+  the page content does not reflow. Leaving the rail collapses it again.
+- Navigating to any other page removes `rail` → normal full sidebar everywhere else. Returning to
+  Home re-collapses it. Tablet/mobile breakpoints are unchanged.
+- Release note text for the Home page mentions the rail.
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Rail on Home**: sign in → Home shows the narrow icon rail; hero spans the freed width.
+**T2 — Hover expand**: move the pointer over the rail → it widens over the content with labels and
+section headers; content behind does not shift; move away → collapses.
+**T3 — Navigate**: click any rail icon or a Home card → destination page shows the full sidebar;
+click Home → rail again.
+**T4 — Active state**: "Home" icon is highlighted in the rail; on other pages the correct item is
+highlighted in the full sidebar.
+**T5 — Widths**: at ≤860px the existing tablet rail applies on every page (unchanged); at ≤540px
+the top bar applies (unchanged).
+**T6 — Partner brands**: extension1/extension2 → rail shows the "P" monogram only when collapsed,
+brand wordmark when expanded.
+
+### Regression Checks
+- **R1** Progress/overlay screens unaffected (rail only toggles with `navigate('home')`).
+- **R2** No horizontal scrollbar appears on Home when the rail is expanded.
+
+### Acceptance Checklist
+- [ ] T1 rail on Home
+- [ ] T2 hover overlay, no reflow
+- [ ] T3 navigate restores full sidebar
+- [ ] T4 active states
+- [ ] T5 breakpoints
+- [ ] T6 partner brands
+- [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. CSS/JS only.
