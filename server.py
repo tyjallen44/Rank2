@@ -1543,9 +1543,9 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, input_path: str, brand: str
 
 @app.post("/api/network/bulk/run")
 async def network_bulk_run(file: UploadFile = File(...),
-                           payload: dict = Depends(get_current_user_payload)):
-    """Headless bulk scoring of an uploaded list of hospital systems. The upload is
-    saved so the run can be resumed. Returns a job_id (SSE) + bulk_id (CSV)."""
+                           payload: dict = Depends(require_admin)):
+    """Admin only. Headless bulk scoring of an uploaded list of hospital systems. The
+    upload is saved so the run can be resumed. Returns a job_id (SSE) + bulk_id (CSV)."""
     import csv as _csv, io as _io
     raw = await file.read()
     try:
@@ -1579,8 +1579,8 @@ async def network_bulk_run(file: UploadFile = File(...),
 
 @app.post("/api/network/bulk/{bulk_id}/resume")
 async def network_bulk_resume(bulk_id: str,
-                              payload: dict = Depends(get_current_user_payload)):
-    """Re-run a bulk list from its saved upload. Already-scored systems return
+                              payload: dict = Depends(require_admin)):
+    """Admin only. Re-run a bulk list from its saved upload. Already-scored systems return
     instantly from the canonical cache, so only the remainder is re-computed."""
     from perception.db import init_db, get_network_bulk_run, reset_network_bulk_run
     init_db()

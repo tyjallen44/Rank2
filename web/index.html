@@ -1863,8 +1863,8 @@ input[type="url"]::placeholder, textarea::placeholder {
       <div class="page-title">Hospital Network</div>
       <div class="page-sub">AI Visibility report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
 
-      <!-- Mode: single guided report vs bulk headless CSV scoring -->
-      <div id="np-mode-toggle" style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
+      <!-- Mode: single guided report vs bulk headless CSV scoring (admin only; shown by showApp) -->
+      <div id="np-mode-toggle" style="display:none;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
         <button class="tg-opt on" id="np-mode-single" onclick="npSetMode('single')">Single Network</button>
         <button class="tg-opt"    id="np-mode-bulk"   onclick="npSetMode('bulk')">Bulk List (CSV)</button>
       </div>
@@ -2809,7 +2809,7 @@ input[type="url"]::placeholder, textarea::placeholder {
 
           <div class="rn-item">
             <div class="rn-title">National Entity Runs — Score a Whole List at Once</div>
-            <div class="rn-body">On the Hospital Network page, switch to <strong>Bulk List</strong> and upload a spreadsheet of hospital systems. Pulse scores every system in the background — no individual reports to open — and hands back your file enriched with each system's <strong>Pulse Score</strong>, <strong>national quartile</strong>, and all four pillar scores, so sales can spot exactly where a system is weak. Runs are saved under <em>National Entity Runs</em> on the History page.</div>
+            <div class="rn-body">On the Hospital Network page, admins can switch to <strong>Bulk List</strong> and upload a spreadsheet of hospital systems. Pulse scores every system in the background — no individual reports to open — and hands back your file enriched with each system's <strong>Pulse Score</strong>, <strong>national quartile</strong>, and all four pillar scores, so sales can spot exactly where a system is weak. Runs are saved under <em>National Entity Runs</em> on the History page.</div>
           </div>
 
           <div class="rn-item">
@@ -4018,6 +4018,11 @@ function showApp() {
   if (irLock)    irLock.style.display    = isAdmin ? '' : 'none';
   if (cmpLock)   cmpLock.style.display   = isAdmin ? '' : 'none';
   if (npLock)    npLock.style.display    = isAdmin ? '' : 'none';
+  // Hospital Network: Single vs Bulk List (CSV) mode toggle is admin only.
+  // Non-admins are pinned to Single Network so a stale bulk selection can't stick.
+  const npModeTg = document.getElementById('np-mode-toggle');
+  if (npModeTg) npModeTg.style.display = isAdmin ? 'inline-flex' : 'none';
+  if (!isAdmin) npSetMode('single');
   if (irSkipPdf) irSkipPdf.style.display = isAdmin ? '' : 'none';
   if (ppRefresh) ppRefresh.style.display = isAdmin ? '' : 'none';
   const shOverride = document.getElementById('sh-override-label');
@@ -7223,7 +7228,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           ? `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Failed</span>`
           : `<span class="badge bg-muted" style="font-size:10px">Running</span>`;
       const nbActs = [];
-      if (b.status !== 'done') nbActs.push(['↻ Resume', `nbResume('${b.id}')`]);
+      if (b.status !== 'done' && _role === 'admin') nbActs.push(['↻ Resume', `nbResume('${b.id}')`]);
       if (_role === 'admin') nbActs.push(['🗑 Delete', `nbDelete('${b.id}')`]);
       const dlNb = _dlMenu(b.id, b.status === 'done'
         ? [['Scores CSV', `/api/network/bulk/${b.id}/csv?token=${encodeURIComponent(_token)}`]] : [], nbActs);

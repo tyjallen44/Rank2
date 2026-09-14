@@ -502,3 +502,51 @@ report (setting persisted).
 NEEDS BROWSER TESTING. Runtime: content analysis adds roughly 2–4 minutes per practice (5 run
 in parallel). Unit suite: 322 pass / 15 fail — the 15 failures are pre-existing (grade-token and
 rebrand assertions) and identical on the previous commit.
+
+## NETWORK-BULK-ADMIN-ONLY — Hospital Network "Single / Bulk List (CSV)" toggle is admin only
+
+**Shipped:** 2026-09-14 · **Area:** Hospital Network / History · **Type:** UX + access control
+
+### What changed
+- The mode toggle at the top of the Hospital Network page (**Single Network** / **Bulk List (CSV)**)
+  is now hidden for non-admin users. It defaults to `display:none` and `showApp()` reveals it only
+  when `_role === 'admin'`. Non-admins are pinned to Single Network on login.
+- Server: `POST /api/network/bulk/run` and `POST /api/network/bulk/{id}/resume` now require the
+  admin role (`Depends(require_admin)` → 403 otherwise). Listing bulk runs and downloading the
+  enriched CSV are unchanged (any authenticated user).
+- History → National Entity Runs: the **↻ Resume** action is only rendered for admins (Delete
+  already was). Scores CSV download still shows for everyone.
+- Release note copy updated to say "admins can switch to Bulk List".
+
+### Files changed
+`server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Non-admin view**: log in as a non-admin user → Hospital Network page shows the title,
+subtitle, then the Step 1 form directly. No Single/Bulk toggle. The bulk upload card is not visible.
+**T2 — Admin view**: log in as admin → toggle appears above Step 1, defaults to Single Network;
+clicking Bulk List (CSV) swaps in the upload card exactly as before.
+**T3 — Server gate**: with a non-admin token, `curl -X POST /api/network/bulk/run` (any file) and
+`POST /api/network/bulk/<id>/resume` return **403 "Admin access required"**. Same calls with an
+admin token behave as before.
+**T4 — History actions**: non-admin History → National Entity Runs shows only "Scores CSV" for
+finished runs and no actions for unfinished ones. Admin sees Resume (unfinished) and Delete.
+**T5 — Role switch in one browser**: log in as admin, click Bulk List, log out, log in as non-admin
+→ page is back on Single Network with the Step 1 form visible (no stale bulk state).
+
+### Regression Checks
+- **R1** Single Network report run (all three variants) unchanged for both roles.
+- **R2** Admin bulk run end-to-end: upload → progress → enriched CSV download still works.
+- **R3** `GET /api/network/bulk/runs` and `GET /api/network/bulk/<id>/csv` still work for non-admins.
+- **R4** The "Override today's cache lock (Admin only)" checkbox visibility is unchanged.
+
+### Acceptance Checklist
+- [ ] T1 non-admin: no toggle, Step 1 visible
+- [ ] T2 admin: toggle works
+- [ ] T3 403 for non-admin bulk run/resume
+- [ ] T4 History actions by role
+- [ ] T5 no stale bulk state after role switch
+- [ ] R1–R4
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Requires one admin and one non-admin account. No data migration.
