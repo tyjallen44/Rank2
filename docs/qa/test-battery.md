@@ -1060,3 +1060,62 @@ element named in the text exists and behaves as described.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING (copy only).
+
+## DD-HOSPITAL-CONTENT-FOLDED — Hospital Deep Diagnostic includes content analysis; standalone Content Analysis panel removed
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic (Hospital type), History · **Type:** feature + UX
+
+### What changed
+- **Hospital-type Deep Diagnostic runs now include the content analysis.** After the base run,
+  `_finalize_hospital_combined` runs the verified content checks (website from the user's URL
+  override → Google listing website → LLM guess; Wikidata; Wikipedia; reputation from the base
+  run's Google data; Leapfrog/CMS safety), **drafts the prescription** for every draftable finding,
+  and renders **Report 1** (Deep Diagnostic + Content Improvement Keys, becomes the run's PDF) and
+  **Report 2** (detailed Content Report with the prescription). Recorded as a
+  `content_analysis_runs` row bound to the run so History's Downloads menu shows
+  "Deep Diagnostic (PDF)" + "Content Report (PDF)" exactly as before.
+- Applies only to `individual_report` hospital runs with an entity name and PDF output. Market
+  reports, FQHC, practice (already combined) and admin "Skip PDF" runs are unchanged. Fail-soft:
+  a content error logs `⚠ Content analysis failed … base report kept`.
+- **Removed from the Deep Diagnostic page**: the "🔎 Content Analysis" button, the contained
+  Content Analysis panel (search / candidates / URLs / progress / results) and its "What is Content
+  Analysis?" modal. The Run note now reads "Produces the report (with content analysis and a
+  drafted prescription) and a teaser…".
+- Kept: `/api/content-analysis/*` endpoints and the History re-render / draft actions for
+  existing content runs (their JS remains; the old panel functions are simply unreachable).
+
+### Files changed
+`server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Hospital run end-to-end**: Deep Diagnostic → Hospital → e.g. INTERMOUNTAIN MEDICAL CENTER /
+MURRAY / UT → Run. Stream shows the base phases, then "Analyzing content…", "Drafting the content
+prescription", "Building the report with Content Improvement Keys", finding bullets. Completion
+offers the report; History row's Downloads shows **Deep Diagnostic (PDF)** (has the Content
+Improvement Keys section at the end) and **Content Report (PDF)** (contents page + findings with
+drafted content), plus Teaser.
+**T2 — Website override**: same run with Advanced → Website URL set to the hospital's real site →
+the content report's website findings reference that URL.
+**T3 — Page**: no Content Analysis button/panel anywhere on Deep Diagnostic; no console errors on
+load or when switching types.
+**T4 — History legacy**: an older content-analysis run still shows its files and the re-render /
+draft actions still work.
+**T5 — Fail-soft**: with an unreachable website (bogus URL override), the run still completes with
+the base report and the ⚠ line in the stream.
+
+### Regression Checks
+- **R1** Practice / Service Line runs: unchanged (their own combined report).
+- **R2** FQHC and Market (Patient Pulse) runs: no content phase.
+- **R3** Admin "Skip PDF": no content phase.
+- **R4** Unit: suite at baseline (same 4 pre-existing failures); `import server` succeeds.
+
+### Acceptance Checklist
+- [ ] T1 end-to-end + History files
+- [ ] T2 URL override
+- [ ] T3 page clean
+- [ ] T4 legacy content runs
+- [ ] T5 fail-soft
+- [ ] R1–R4
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Hospital runs now take roughly 2–4 minutes longer.

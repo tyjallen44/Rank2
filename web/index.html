@@ -1478,79 +1478,6 @@ input[type="url"]::placeholder, textarea::placeholder {
       <div class="page-sub">Run a focused diagnostic on a hospital, a service line within a hospital system, a specialty practice, or a community health center: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
       <div style="margin:-4px 0 12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
         <a href="#" onclick="showIrHelp();return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">ℹ How to analyze a hospital service line →</a>
-        <button class="btn btn-secondary btn-sm" onclick="caOpen()" style="margin-left:auto">🔎 Content Analysis</button>
-      </div>
-
-      <!-- ── Content Analysis (contained sandbox) ─────────────────────────── -->
-      <div id="ca-panel" class="hidden">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <div style="font-size:15px;font-weight:700;color:var(--teal)">Content Analysis</div>
-          <button class="btn btn-ghost btn-sm" onclick="caClose()">← Back to Deep Diagnostic</button>
-        </div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:6px">
-          Verifies where AI assistants get their picture of a provider — website structured data, llms.txt,
-          Wikidata, Wikipedia — and produces a Deep Diagnostic plus a detailed Content Improvement report.
-        </div>
-        <div style="margin-bottom:14px"><a href="#" onclick="caShowAbout();return false" style="font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">ℹ What is Content Analysis? →</a></div>
-
-        <!-- Step 1: identify entity -->
-        <div id="ca-search" class="card" style="background:var(--bg);border-color:var(--border)">
-          <div class="fg" style="margin-bottom:14px">
-            <label class="fl">Organization Name</label>
-            <input id="ca-name" class="fi" type="text" placeholder="e.g. Duke Health" oninput="this.value=this.value.toUpperCase()">
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 120px;gap:14px;margin-bottom:14px">
-            <div class="fg" style="margin:0"><label class="fl">City</label>
-              <input id="ca-city" class="fi" type="text" placeholder="Durham" oninput="this.value=this.value.toUpperCase()"></div>
-            <div class="fg" style="margin:0"><label class="fl">State</label>
-              <input id="ca-state" class="fi" type="text" maxlength="2" placeholder="NC" oninput="this.value=this.value.toUpperCase()"></div>
-          </div>
-          <div class="fg" style="margin-bottom:14px">
-            <label class="fl">Type</label>
-            <div class="tg-group">
-              <button class="tg-opt on" id="ca-tg-hospital" onclick="caSetType('hospital')">Hospital / Health System</button>
-              <button class="tg-opt"    id="ca-tg-practice" onclick="caSetType('practice')">Specialty Practice</button>
-            </div>
-          </div>
-          <div id="ca-spec-wrap" class="fg hidden" style="margin-bottom:14px">
-            <label class="fl">Specialty (optional)</label>
-            <input id="ca-specialty" class="fi" type="text" placeholder="e.g. Orthopedics">
-          </div>
-          <label class="aggregate-toggle mt10" style="display:none" id="ca-override-label" title="Admin only: re-run the base Deep Diagnostic from scratch instead of reusing a recent cached result. The content checks always run fresh.">
-            <input type="checkbox" id="ca-override">
-            <span class="agg-label">Refresh — ignore cache on the base diagnostic <span style="font-size:11px;color:#888">(Admin only)</span></span>
-          </label>
-          <div id="ca-search-err" class="err hidden mt8"></div>
-          <button class="btn btn-primary" id="ca-find-btn" onclick="caFind()">Find Entity →</button>
-        </div>
-
-        <!-- Step 2: candidates -->
-        <div id="ca-candidates" class="hidden mt16"></div>
-
-        <!-- Step 3: URLs -->
-        <div id="ca-urls" class="hidden mt16">
-          <div class="card" style="background:var(--bg);border-color:var(--border)">
-            <div style="font-weight:600;margin-bottom:4px" id="ca-url-entity"></div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Confirm or add the website URL(s) to analyze. Leave blank to use the resolved provider site.</div>
-            <div id="ca-url-list"></div>
-            <button class="btn btn-secondary btn-sm" onclick="caAddUrl()" style="margin-top:8px">+ Add URL</button>
-            <div class="row-actions mt16">
-              <button class="btn btn-primary" id="ca-run-btn" onclick="caRun()">Run Content Analysis →</button>
-              <button class="btn btn-ghost btn-sm" onclick="caReset()">Start Over</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Progress -->
-        <div id="ca-progress" class="hidden mt16">
-          <div class="card">
-            <div style="font-weight:600;margin-bottom:8px" id="ca-progress-head">Analyzing…</div>
-            <div id="ca-progress-log" style="font-size:12px;color:var(--muted);max-height:240px;overflow:auto;font-family:monospace;line-height:1.6;white-space:pre-wrap;word-break:break-word"></div>
-          </div>
-        </div>
-
-        <!-- Results -->
-        <div id="ca-results" class="hidden mt16"></div>
       </div>
 
       <!-- Step 1: Search form. Analysis Type comes first so the fields below adapt
@@ -1756,7 +1683,7 @@ input[type="url"]::placeholder, textarea::placeholder {
           <button class="btn btn-primary" id="ir-run-btn" onclick="runIndividual()">
             Run Diagnostic →
           </button>
-          <span style="font-size:12px;color:var(--muted)">Produces the report and a teaser<span id="ir-auto-composite-note" class="hidden">, plus the per-location reputation table</span>.</span>
+          <span style="font-size:12px;color:var(--muted)">Produces the report (with content analysis and a drafted prescription) and a teaser<span id="ir-auto-composite-note" class="hidden">, plus the per-location reputation table</span>.</span>
         </div>
       </div>
 
@@ -3589,39 +3516,6 @@ Hospital for Special Surgery,New York,NY,,Orthopedics</div>
     <div class="npa-li">• The Specialty Practice setting applies to the whole upload — keep a service-line batch separate from a whole-hospitals batch.</div>
     <div class="npa-li">• A row that can't be resolved to a parent system is scored as a standalone practice instead — filling the specialty column reduces that.</div>
     <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="evCloseHelp()">Got it</button></div>
-  </div>
-</div>
-
-<!-- ── Content Analysis: about ────────────────────────────────────────────── -->
-<div id="ca-about-modal" onclick="if(event.target===this)caCloseAbout()">
-  <div class="modal-card">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-      <div class="modal-title" style="margin-bottom:4px">What is Content Analysis?</div>
-      <button class="btn btn-ghost btn-sm" onclick="caCloseAbout()" style="flex-shrink:0">✕</button>
-    </div>
-    <div class="npa-p" style="margin-top:6px">
-      AI assistants (ChatGPT, Gemini, Claude) build their picture of a provider from many sources
-      beyond its website — and if those sources are missing, outdated, or hard to read, the provider
-      shows up weakly no matter how good the care is. Content Analysis <strong>checks those sources
-      directly</strong> and shows you exactly where the gaps are.
-    </div>
-
-    <div class="npa-h">What it checks (from live checks, not estimates)</div>
-    <div class="npa-li"><strong>Website structured data</strong> — schema.org markup that lets AI parse your organization, providers, and locations.</div>
-    <div class="npa-li"><strong>llms.txt &amp; AI-crawler access</strong> — whether you guide AI assistants to your content, and whether your robots.txt is accidentally blocking them.</div>
-    <div class="npa-li"><strong>Wikidata</strong> — whether a structured knowledge entry exists and is complete.</div>
-    <div class="npa-li" style="margin-bottom:8px"><strong>Wikipedia</strong> — whether an article exists and whether its facts are current.</div>
-
-    <div class="npa-h">What you get</div>
-    <div class="npa-li"><strong>1. Deep Diagnostic</strong> — the standard AI Visibility report, with a <em>Content Improvement Keys</em> summary of the findings added.</div>
-    <div class="npa-li" style="margin-bottom:8px"><strong>2. Content Improvement report</strong> — every finding in detail, with the evidence and the recommended fix. Optionally, click <em>Generate Full Content Plan</em> to add publication-ready drafts (schema markup, Wikidata edits, a Wikipedia talk-page request, and more).</div>
-
-    <div class="npa-h">Good to know</div>
-    <div class="npa-li">Every finding is <strong>verified</strong> by a real check — nothing is guessed. Anything that can't be confirmed is marked accordingly.</div>
-    <div class="npa-li">Drafted content uses <strong>only known facts</strong>; anything unknown is left as a <code>[VERIFY]</code> placeholder for a person to complete — and no citations are ever invented.</div>
-    <div class="npa-li">This analysis <strong>does not change the Pulse Score</strong> — it's about the content behind your visibility.</div>
-
-    <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="caCloseAbout()">Got it</button></div>
   </div>
 </div>
 
@@ -6467,7 +6361,7 @@ function irCloseHelp() { document.getElementById('ir-help-modal').classList.remo
 function showEvHelp()  { document.getElementById('ev-help-modal').classList.add('open'); }
 function evCloseHelp() { document.getElementById('ev-help-modal').classList.remove('open'); }
 
-// ── Content Analysis (contained sandbox) ────────────────────────────────────
+// ── Content Analysis (retired standalone panel; caRerender/caDraftFromHistory still used by History) ──
 let _caType = 'hospital', _caCands = [], _caPicked = null, _caUrls = [];
 let _caName = '', _caCity = '', _caState = '', _caSpecialty = '';
 const _caEsc = s => (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));

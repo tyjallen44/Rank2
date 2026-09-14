@@ -333,6 +333,19 @@ def _job_run_single(
         )
         _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"], job.get("email"))
+
+        # Single-hospital Deep Diagnostic: fold the content analysis + prescription
+        # into the run (the standalone Content Analysis panel is retired). Market
+        # reports, FQHC and skip-pdf data pulls are unchanged. Fail-soft.
+        if (job.get("individual_report") and entity_type in (None, "hospital")
+                and job.get("entity_name") and not job.get("skip_pdf")):
+            try:
+                _finalize_hospital_combined(result, job["entity_name"], city, state,
+                                            job.get("brand", "original"), job, emit)
+            except Exception as _cexc:
+                emit({"type": "text",
+                      "text": f"\n⚠ Content analysis failed ({type(_cexc).__name__}: {_cexc}) — base report kept"})
+
         job["status"] = "done"
         job["result"] = {
             "run_id": result.run_id,
@@ -348,6 +361,111 @@ def _job_run_single(
         job["error"] = _job_error(exc)
     finally:
         _put(loop, queue, None)  # sentinel → closes SSE stream
+
+
+def _finalize_hospital_combined(result, entity_name: str, city: str, state: str,
+                                brand: str, job: dict, emit) -> None:
+    """Fold the content analysis into a single-hospital Deep Diagnostic run:
+    verified content checks → drafted prescription → Report 1 (Deep Diagnostic +
+    Content Improvement Keys, replaces the base PDF) + Report 2 (detailed content
+    report). Recorded as a content_analysis_runs row pointing at this run so the
+    History Downloads menu surfaces both files. Fail-soft: on any error the base
+    report is left intact."""
+    from perception.db import (save_content_findings, _norm_entity_name, get_connection,
+                               create_content_analysis_run, finalize_content_analysis_run,
+                               set_content_analysis_drafted)
+    from perception.content_analyzer import analyze_content
+    from perception.content_drafting import draft_findings
+    from perception.models import ContentFinding
+
+    prov = result.rankings[0] if result.rankings else None
+    urls = [u for u in (job.get("content_urls") or []) if (u or "").strip()]
+    if not urls:
+        try:
+            from perception.data.places import fetch_provider
+            from urllib.parse import urlsplit, urlunsplit
+            _read, _ = fetch_provider(entity_name, city, state)
+            if _read and _read.website:
+                _s = urlsplit(_read.website)
+                urls = [urlunsplit((_s.scheme, _s.netloc, _s.path, "", "")).rstrip("/")]
+        except Exception:
+            pass
+    if not urls and prov is not None and prov.website_url:
+        urls = [prov.website_url]
+
+    rep = _build_practice_reputation(result)   # generic: per-location Google data from the base run
+    saf = None
+    if prov is not None:
+        saf = {"entity_kind": "hospital", "name": entity_name,
+               "leapfrog_grade": getattr(prov, "leapfrog_grade", None),
+               "cms_star_rating": getattr(prov, "cms_star_rating", None)}
+    emit({"type": "phase", "name": "content",
+          "text": "Analyzing content: website, Wikidata, Wikipedia, reputation, and safety"})
+    findings = analyze_content(entity_name, urls, city, state,
+                               entity_kind="hospital", reputation=rep, safety=saf, on_event=emit)
+    findings.run_id = result.run_id
+
+    # Drafted prescription (always — same as the practice combined report / network Full Detail).
+    snap = findings.source_snapshot or {}
+    fdicts = [f.model_dump() for f in findings.findings]
+    needs = [f for f in fdicts if not f.get("draft_content") and f.get("remediation_type")
+             and f.get("status") != "not_assessed"]
+    if needs:
+        emit({"type": "phase", "name": "drafting", "text": "Drafting the content prescription"})
+        facts = {"website_urls": snap.get("website_urls", []),
+                 "wikidata_qid": snap.get("wikidata_qid"),
+                 "wikipedia_article": snap.get("wikipedia_article")}
+        try:
+            drafts = draft_findings(entity_name, result.location, "hospital", facts, fdicts)
+        except Exception:
+            drafts = {}
+        for f in fdicts:
+            if f.get("finding_id") in drafts:
+                f["draft_content"] = drafts[f["finding_id"]]
+        findings.findings = [ContentFinding(**f) for f in fdicts]
+    save_content_findings(result.run_id, _norm_entity_name(entity_name),
+                          snap, [f.model_dump() for f in findings.findings], findings.status)
+    for f in findings.findings:
+        emit({"type": "text", "text": f"\n• [{f.severity}] {f.teaser_summary}"})
+
+    # Persist as a content-analysis run bound to this base run (History reads it).
+    ca_id = uuid.uuid4().hex[:12]
+    loc = ", ".join([p for p in [city, state] if p])
+    create_content_analysis_run(ca_id, entity_name, loc, "hospital", urls,
+                                result.report_title or entity_name, job.get("role", ""))
+
+    emit({"type": "phase", "name": "pdf", "text": "Building the report with Content Improvement Keys"})
+    report1 = ""
+    try:
+        from perception.pdf import render_content_deep_dive
+        _r1 = REPORTS_DIR / f"content_{ca_id}_report1.pdf"
+        render_content_deep_dive(result, _r1, findings, brand=brand)
+        report1 = str(_r1)
+    except Exception as _pe:
+        emit({"type": "text", "text": f"\n(augmented report render failed: {type(_pe).__name__}) — using base report"})
+        report1 = result.pdf_path or ""
+    report2 = ""
+    try:
+        from perception.content_report_pdf import render_content_report_pdf
+        _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
+        render_content_report_pdf(entity_name, loc, findings, str(_r2),
+                                  report_title=result.report_title or entity_name)
+        report2 = str(_r2)
+    except Exception as _pe2:
+        emit({"type": "text", "text": f"\n(content report render failed: {type(_pe2).__name__})"})
+    finalize_content_analysis_run(ca_id, result.run_id, findings.status,
+                                  len(findings.findings), report1, report2)
+    if report2 and needs:
+        try:
+            set_content_analysis_drafted(ca_id, report2)
+        except Exception:
+            pass
+    # The augmented report becomes THE report for this run.
+    if report1 and report1 != (result.pdf_path or ""):
+        result.pdf_path = report1
+        with get_connection() as con:
+            con.execute("UPDATE analysis_runs SET pdf_path = ? WHERE run_id = ?",
+                        [report1, result.run_id])
 
 
 def _build_practice_reputation(result) -> Optional[dict]:
