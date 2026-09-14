@@ -606,3 +606,73 @@ limited to the discovered ortho clinics.
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. T1 runtime roughly 5–8 minutes. Compare the PDF table against the
 Locations list you confirmed before running.
+
+## DD-SPECIALTY-STREAMLINE — Deep Diagnostic specialty flow: fewer decisions before Run
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic · **Type:** UX streamlining (mirrors the Hospital Network "always generate" change)
+
+### What changed
+1. **Teaser always produced** (all Deep Diagnostic types). The "Create Teaser Report" checkbox is
+   gone; `_submitIndividual` sends `teaser_report: true`. A note under Options says both the report
+   and the Teaser are produced automatically.
+2. **Practice Composite always on for Specialty Practice.** The "Practice Composite" checkbox is
+   hidden and forced on for the Specialty type; "Include Physicians in Composite" is now a
+   top-level opt-in (enabled without a parent checkbox). The reputation roster is the confirmed
+   Locations list (see COMPOSITE-AUTO-SCOPE). Hospital type keeps the explicit checkbox and the
+   affiliated-practice list exactly as before.
+3. **Service line auto-accepted.** The "Service Line Detected" decision card is removed. When
+   detection resolves a parent system, discovery runs immediately as that service line and the
+   Selected Organization box shows a **"Service line"** badge with "treat as entered instead". After
+   opting out, the box offers an "analyze as the X service line of Y" link to re-apply it.
+4. **Practice Profile as a badge.** The options panel shows "auto-classified as <Label> · change".
+   The dropdown is hidden until "change" is clicked; changing it updates the badge label + description.
+- Help modal step 6 and the "If the badge doesn't appear" heading updated to match.
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Service line auto-accept**: Specialty Practice, HOUSTON METHODIST ORTHOPEDICS / HOUSTON / TX,
+Specialty ORTHOPEDICS → Search. No decision card. Locations discovery starts immediately; the
+Selected Organization box shows the teal "Service line" badge naming Orthopedics / Houston Methodist
+and the "treat as entered instead" link. Locations list is ortho clinics only.
+**T2 — Opt out / re-apply**: click "treat as entered instead" → discovery re-runs for the listing as
+entered; the box now says "Analyzed as entered · analyze as the Orthopedics service line of Houston
+Methodist". Click that link → back to service-line discovery with the badge.
+**T3 — Profile badge**: options panel shows "auto-classified as Procedural · change" with no
+dropdown. Click change → dropdown appears (link hides); pick Relationship → badge reads
+"Relationship" and the description line updates. Run → report uses the chosen profile.
+**T4 — Composite implicit**: no "Practice Composite" checkbox for Specialty; note says the
+per-location reputation table is included. Run without touching anything → PDF contains the
+Practice Composite table scoped to the checked locations, plus a teaser PDF.
+**T5 — Physicians opt-in**: check "Include Physicians in Composite" (enabled, top-level) → composite
+panel appears with anchor row + physician sub-rows; uncheck → panel hides. Run with it checked →
+physician sub-rows in the PDF.
+**T6 — Pulse Briefing interplay**: check Briefing → physicians forced on + panel shown; uncheck →
+physicians cleared but still enabled (specialty).
+**T7 — Hospital type unchanged**: Hospital / Health System → "Composite analysis related hospitals
+only", "Practice Composite" checkbox (physicians disabled until checked), no profile row, no badge.
+Teaser produced automatically.
+**T8 — Type switching**: pick Specialty then Hospital then Specialty → controls reset correctly each
+time (composite hidden/forced for Specialty, shown/unchecked for Hospital).
+
+### Regression Checks
+- **R1** Community Health (FQHC) flow unaffected (intake step, no composite, teaser produced).
+- **R2** Search Again / navigating away and back resets the badge, profile dropdown, and composite panel.
+- **R3** Compare Two and Event Prep untouched.
+- **R4** History shows the Teaser download for new Deep Diagnostic runs of every type.
+
+### Acceptance Checklist
+- [ ] T1 auto-accept + badge
+- [ ] T2 opt out / re-apply
+- [ ] T3 profile badge + change
+- [ ] T4 composite implicit + teaser
+- [ ] T5 physicians opt-in
+- [ ] T6 briefing interplay
+- [ ] T7 hospital unchanged
+- [ ] T8 type switching
+- [ ] R1–R4
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Front-end only; no server or schema changes in this commit. Pair with
+COMPOSITE-AUTO-SCOPE (previous commit) for the end-to-end service-line run.

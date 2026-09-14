@@ -1627,23 +1627,9 @@ input[type="url"]::placeholder, textarea::placeholder {
         </div>
       </div>
 
-      <!-- Step 2b: Practice Profile Confirmation (specialty practice only) -->
-      <!-- Step 2b-2: Service-line detection (department within a larger hospital system) -->
-      <div id="ir-step-sl" class="card hidden mt16" style="background:var(--bg);border-color:var(--teal)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Service Line Detected</div>
-        <div style="font-size:14px;color:var(--text);margin-bottom:6px">
-          This looks like the <strong id="ir-sl-line" style="color:var(--teal)"></strong> service line of
-          <strong id="ir-sl-parent" style="color:var(--teal)"></strong>.
-        </div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:16px">
-          Analyze <strong id="ir-sl-brand"></strong> as one aggregated entity — all of its
-          <span id="ir-sl-line2"></span> clinics rolled together — and compare it against nearby groups on the practice rubric?
-        </div>
-        <div class="row-actions">
-          <button class="btn btn-primary" onclick="irUseServiceLine()">Analyze as service line →</button>
-          <button class="btn btn-ghost btn-sm" onclick="irSkipServiceLine()">No, use as entered</button>
-        </div>
-      </div>
+      <!-- Service-line detection is automatic: when the listing resolves to a department of a
+           larger system it is analyzed as that service line and a badge appears in the Selected
+           Organization box (with a "treat as entered" opt-out). No separate decision card. -->
 
       <!-- Step 3: Options + Run -->
       <div id="ir-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
@@ -1653,9 +1639,10 @@ input[type="url"]::placeholder, textarea::placeholder {
         <!-- Practice profile (specialty only) — folded in from the former standalone gate -->
         <div id="ir-profile-inline" class="hidden" style="margin-bottom:20px">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">
-            Practice Profile <span style="font-weight:400;text-transform:none;letter-spacing:0">— auto-classified as <strong id="ir-profile-proposed" style="color:var(--teal)"></strong>; override if needed</span>
+            Practice Profile <span style="font-weight:400;text-transform:none;letter-spacing:0">— auto-classified as <strong id="ir-profile-proposed" style="color:var(--teal)"></strong>
+            · <a href="#" id="ir-profile-change" onclick="irShowProfileSelect();return false" style="color:var(--teal);font-weight:600">change</a></span>
           </div>
-          <select id="ir-profile-select" class="fi" onchange="updateIrProfileDesc(this.value); _irPracticeProfile=this.value;">
+          <select id="ir-profile-select" class="fi hidden" onchange="irProfileChanged(this.value)">
             <option value="practice_procedural">Procedural — elective/destination procedures (ortho, plastics, ophthalmology, fertility, bariatrics, cosmetic derm, oral surgery)</option>
             <option value="practice_relationship">Relationship — primary care, pediatrics, OB/GYN, behavioral health, geriatrics, dental</option>
             <option value="practice_referral_fed">Referral-Fed — reached via PCP referral (oncology, cardiology, nephrology, rheumatology, surgical subspecialties)</option>
@@ -1723,10 +1710,7 @@ input[type="url"]::placeholder, textarea::placeholder {
             <label class="fl">Website URL <span style="font-size:11px;color:#888">(optional — used for the content analysis; overrides the auto-detected site if it's wrong)</span></label>
             <input id="ir-content-url" class="fi" type="url" placeholder="e.g. https://doclv.com">
           </div>
-          <label class="aggregate-toggle" style="margin-top:10px" title="Create a teaser version with blurred details for sending to prospects.">
-            <input type="checkbox" id="ir-teaser-toggle">
-            <span class="agg-label">Create Teaser Report</span>
-          </label>
+          <div style="font-size:12px;color:var(--muted);margin-top:12px;padding-left:2px;line-height:1.5">Every run automatically produces the <strong>Deep Diagnostic report</strong> and a <strong>Teaser</strong> version (details blurred, for sending to prospects).<span id="ir-auto-composite-note" class="hidden"> Specialty runs also include the <strong>per-location reputation table</strong> for every location checked above.</span></div>
           <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-skip-pdf-label" title="Admin only: collect and store analysis data without generating a PDF.">
             <input type="checkbox" id="ir-skip-pdf-toggle">
             <span class="agg-label">Skip PDF — collect data only <span style="font-size:11px;color:#888">(Admin only)</span></span>
@@ -3554,10 +3538,10 @@ input[type="url"]::placeholder, textarea::placeholder {
     <div class="npa-step"><b class="n">3.</b> Set <strong>Analysis Type</strong> to <strong>Specialty Practice</strong>. <span style="color:var(--muted)">This is the key step — the plain "Hospital / Health System" type skips service-line detection.</span></div>
     <div class="npa-step"><b class="n">4.</b> Enter the <strong>Specialty</strong> that appears (e.g. <em>ORTHOPEDICS</em>), then click <strong>Search</strong>.</div>
     <div class="npa-step"><b class="n">5.</b> The top match is auto-selected and locations are discovered automatically (pick a different candidate if needed). The practice profile is auto-classified — you can override it in the options panel before running.</div>
-    <div class="npa-step"><b class="n">6.</b> A <strong>"Service Line Detected"</strong> card appears — e.g. <em>"the Orthopedics service line of Houston Methodist."</em> Click <strong>Analyze as service line →</strong> to score the department as one rolled-up entity. (Or "No, use as entered" to treat it as a standalone listing.)</div>
+    <div class="npa-step"><b class="n">6.</b> If the listing resolves to a department of a larger system, it is analyzed as that service line automatically — a <strong>"Service line"</strong> badge appears in the Selected Organization box, e.g. <em>"Orthopedics service line of Houston Methodist."</em> Click <strong>treat as entered instead</strong> there if you want a standalone listing. The per-location reputation table and a teaser are included in every run.</div>
     <div class="npa-step"><b class="n">7.</b> The report runs on the practice rubric and downloads when done.</div>
 
-    <div class="npa-h">If the "Service Line Detected" card doesn't appear</div>
+    <div class="npa-h">If the "Service line" badge doesn't appear</div>
     <div class="npa-p">The listing didn't resolve to a parent system. Search the department more explicitly — include the system name (e.g. <em>HOUSTON METHODIST ORTHOPEDICS</em>) — so the right candidate surfaces in the results.</div>
     <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="irCloseHelp()">Got it</button></div>
   </div>
@@ -4182,8 +4166,6 @@ function resetPage(p) {
     if (irAggEl) irAggEl.checked = true; // default is checked
     const irSkipEl = document.getElementById('ir-skip-pdf-toggle');
     if (irSkipEl) irSkipEl.checked = false;
-    const irTeaserEl = document.getElementById('ir-teaser-toggle');
-    if (irTeaserEl) irTeaserEl.checked = false;
     setIrLocMode('city');
     setIrType('hospital');
 
@@ -4912,6 +4894,29 @@ function setIrType(t) {
   if (t !== 'hospital') {
     document.getElementById('ir-agg-toggle').checked = false;
   }
+  // Specialty: the per-location reputation table is always included, so the
+  // Practice Composite checkbox is hidden (forced on) and "Include Physicians"
+  // becomes a top-level opt-in. Hospital keeps the explicit checkbox.
+  const pcWrap = document.getElementById('ir-practice-composite-wrap');
+  const pcCb   = document.getElementById('ir-practice-composite');
+  const phWrap = document.getElementById('ir-physician-composite-wrap');
+  const phCb   = document.getElementById('ir-physician-composite');
+  const autoNote = document.getElementById('ir-auto-composite-note');
+  if (t === 'specialty') {
+    if (pcWrap) pcWrap.style.display = 'none';
+    if (pcCb) pcCb.checked = true;
+    if (phWrap) phWrap.style.marginLeft = '0';
+    if (phCb) phCb.disabled = false;
+    if (autoNote) autoNote.classList.remove('hidden');
+  } else {
+    if (pcWrap) pcWrap.style.display = '';
+    if (pcCb) pcCb.checked = false;
+    if (phWrap) phWrap.style.marginLeft = '20px';
+    if (phCb) { phCb.checked = false; phCb.disabled = true; }
+    if (autoNote) autoNote.classList.add('hidden');
+    const sec = document.getElementById('ir-composite-section');
+    if (sec) sec.classList.add('hidden');
+  }
 }
 
 async function runIrSearch() {
@@ -5071,6 +5076,25 @@ function updateIrProfileDesc(profile) {
   document.getElementById('ir-profile-desc').textContent = _IR_PROFILE_DESCS[profile] || '';
 }
 
+const _IR_PROFILE_LABELS = {
+  practice_procedural: 'Procedural', practice_relationship: 'Relationship',
+  practice_referral_fed: 'Referral-Fed', practice_hybrid: 'Hybrid',
+};
+
+// The profile is shown as a badge; the dropdown only appears on "change".
+function irShowProfileSelect() {
+  document.getElementById('ir-profile-select')?.classList.remove('hidden');
+  const link = document.getElementById('ir-profile-change');
+  if (link) link.style.display = 'none';
+}
+
+function irProfileChanged(profile) {
+  _irPracticeProfile = profile;
+  updateIrProfileDesc(profile);
+  const prop = document.getElementById('ir-profile-proposed');
+  if (prop) prop.textContent = _IR_PROFILE_LABELS[profile] || profile;
+}
+
 // Specialty path: auto-classify the practice profile, populate the (now inline)
 // profile dropdown in the options panel, then go straight to location discovery.
 // The former standalone "Practice Profile Classification" gate is gone — the user
@@ -5093,7 +5117,9 @@ async function showIrProfileStep() {
   const prop = document.getElementById('ir-profile-proposed');
   if (prop) prop.textContent = proposedLabel;
   const sel = document.getElementById('ir-profile-select');
-  if (sel) sel.value = proposed;
+  if (sel) { sel.value = proposed; sel.classList.add('hidden'); }
+  const chg = document.getElementById('ir-profile-change');
+  if (chg) chg.style.display = '';
   updateIrProfileDesc(proposed);
   document.getElementById('ir-profile-inline')?.classList.remove('hidden');  // shown in the options panel (specialty only)
   irDetectServiceLine();   // proceed straight to discovery — no separate profile gate
@@ -5114,6 +5140,7 @@ function onIrTitleInput(val) {
 // analyze the whole service line as one aggregated entity.
 async function irDetectServiceLine() {
   _irServiceLine = null;
+  _pendingServiceLine = null;
   try {
     const r = await api('/api/practice/detect-service-line', {
       method: 'POST',
@@ -5132,13 +5159,11 @@ async function irDetectServiceLine() {
           service_line: d.service_line,
           service_line_brand: d.service_line_brand || `${d.parent_system} ${d.service_line}`,
         };
-        document.getElementById('ir-sl-line').textContent   = d.service_line;
-        document.getElementById('ir-sl-line2').textContent  = d.service_line.toLowerCase();
-        document.getElementById('ir-sl-parent').textContent = d.parent_system;
-        document.getElementById('ir-sl-brand').textContent  = _pendingServiceLine.service_line_brand;
-        const card = document.getElementById('ir-step-sl');
-        card.classList.remove('hidden');
-        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        // Auto-accept: analyze as the service line straight away. The Selected
+        // Organization box shows a badge with a "treat as entered" opt-out.
+        _irServiceLine = _pendingServiceLine;
+        _irOrgName = _irServiceLine.service_line_brand;
+        irStartDiscovery();
         return;
       }
     }
@@ -5146,18 +5171,20 @@ async function irDetectServiceLine() {
   irStartDiscovery();
 }
 
-let _pendingServiceLine = null;
+let _pendingServiceLine = null;   // last detection result (kept so the user can re-apply it)
 
-function irUseServiceLine() {
-  _irServiceLine = _pendingServiceLine;
-  _irOrgName = _irServiceLine.service_line_brand;
-  document.getElementById('ir-step-sl').classList.add('hidden');
+// Opt out of the auto-detected service line: re-discover as the listing entered.
+function irSkipServiceLine() {
+  _irServiceLine = null;
+  _irOrgName = null;
   irStartDiscovery();
 }
 
-function irSkipServiceLine() {
-  _irServiceLine = null;
-  document.getElementById('ir-step-sl').classList.add('hidden');
+// Re-apply a detected service line after opting out.
+function irUseServiceLine() {
+  if (!_pendingServiceLine) return;
+  _irServiceLine = _pendingServiceLine;
+  _irOrgName = _irServiceLine.service_line_brand;
   irStartDiscovery();
 }
 
@@ -5210,9 +5237,19 @@ function renderIrSiblings(siblings) {
   const totalLoc = 1 + siblings.length;
   const badge = totalLoc > 1
     ? ` <span style="font-size:11px;font-weight:700;background:var(--teal);color:#fff;padding:2px 8px;border-radius:10px;margin-left:8px">${totalLoc} locations</span>` : '';
+  let slLine = '';
+  if (_irServiceLine) {
+    slLine = `<div style="font-size:12px;color:var(--text);margin-top:6px">
+        <span style="font-size:11px;font-weight:700;background:#e6f3f4;color:var(--teal);padding:2px 8px;border-radius:10px">Service line</span>
+        ${_irServiceLine.service_line} service line of <strong>${_irServiceLine.parent_system}</strong>, analyzed as one rolled-up entity
+        · <a href="#" onclick="irSkipServiceLine();return false" style="color:var(--teal)">treat as entered instead</a></div>`;
+  } else if (_pendingServiceLine) {
+    slLine = `<div style="font-size:12px;color:var(--muted);margin-top:6px">Analyzed as entered
+        · <a href="#" onclick="irUseServiceLine();return false" style="color:var(--teal)">analyze as the ${_pendingServiceLine.service_line} service line of ${_pendingServiceLine.parent_system}</a></div>`;
+  }
   document.getElementById('ir-selected-display').innerHTML = `
     <div style="font-weight:700;font-size:16px;color:var(--teal)">${_irOrgName}${badge}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px">Search anchor: ${_irSelected.name}</div>`;
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">Search anchor: ${_irSelected.name}</div>${slLine}`;
   const _ti = document.getElementById('ir-custom-title');
   const _tp = document.getElementById('ir-title-preview');
   if (_ti) _ti.value = _irReportTitle;
@@ -5382,7 +5419,7 @@ function irResetSearch() {
   _pendingServiceLine = null;
   _fqhcIntake = {};
   _fqhcSiteRoster = [];
-  ['ir-step2','ir-step-sl','ir-step3','ir-step-fqhc-intake','ir-profile-inline','ir-locations-section','ir-composite-section'].forEach(id => {
+  ['ir-step2','ir-step3','ir-step-fqhc-intake','ir-profile-inline','ir-locations-section','ir-composite-section'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
   });
@@ -5637,6 +5674,24 @@ async function runIndividual() {
 
   // Practice Composite is confirmed inline (Stage 2). Collect the checked practices
   // (+ physicians) from the inline table and submit directly — no separate screen.
+  if (_irType === 'specialty') {
+    // Composite always on; the reputation roster is scoped server-side to the
+    // confirmed Locations list, so only the anchor + any confirmed physicians go up.
+    const anchor = { name: _irSelected.name, entity_type: 'practice', is_anchor: true,
+                     city: _irResolvedCity, state: _irResolvedState };
+    const confirmedPhysicians = {};
+    const orgName = _irSelected?.name;
+    document.querySelectorAll('#ir-pd-tbody input[data-ph]').forEach(cb => {
+      if (!cb.checked || !orgName) return;
+      const pi = parseInt(cb.dataset.ph);
+      const roster = _physicianRoster[orgName] || [];
+      if (!roster[pi]) return;
+      (confirmedPhysicians[orgName] = confirmedPhysicians[orgName] || []).push(roster[pi]);
+    });
+    await _submitIndividual(true, [anchor], confirmedPhysicians);
+    return;
+  }
+
   if (document.getElementById('ir-practice-composite')?.checked) {
     const practiceCbs = document.querySelectorAll('#ir-pd-tbody input[data-idx]');
     const included = _practiceRoster.filter((ent, i) =>
@@ -5681,7 +5736,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     ? true  // specialty always runs org-wide; community_health aggregates across sites
     : document.getElementById('ir-agg-toggle').checked;
   const skip_pdf           = document.getElementById('ir-skip-pdf-toggle').checked;
-  const teaser_report      = document.getElementById('ir-teaser-toggle').checked;
+  const teaser_report      = true;   // always produced (matches Hospital Network)
   const override_today_lock = document.getElementById('ir-force-rerun')?.checked || false;
   const physician_composite = practiceComposite && document.getElementById('ir-physician-composite')?.checked;
   const briefingChecked = document.getElementById('ir-briefing-toggle')?.checked;
@@ -5765,6 +5820,12 @@ function onPracticeCompositeChange() {
 // Re-run composite discovery when the physician sub-option changes (it needs the
 // per-org physician roster, discovered as part of the same pass).
 function onPhysicianCompositeChange() {
+  if (_irType === 'specialty') {
+    // Composite is implicit; the panel only exists to confirm physician sub-rows.
+    if (document.getElementById('ir-physician-composite')?.checked) runCompositeDiscovery();
+    else { document.getElementById('ir-composite-section')?.classList.add('hidden'); _physicianRoster = {}; }
+    return;
+  }
   if (document.getElementById('ir-practice-composite')?.checked) runCompositeDiscovery();
 }
 
@@ -5781,9 +5842,15 @@ function onBriefingToggle() {
     runCompositeDiscovery();   // populate the inline composite list (Stage 2)
   } else {
     // Briefing off — clear and unlock; let onPracticeCompositeChange re-apply disabled state
-    if (pcCb) { pcCb.checked = false; pcCb.disabled = false; }
-    if (phCb) { phCb.checked = false; }
-    onPracticeCompositeChange();
+    if (_irType === 'specialty') {
+      if (pcCb) { pcCb.checked = true; pcCb.disabled = false; }
+      if (phCb) { phCb.checked = false; phCb.disabled = false; }
+      onPhysicianCompositeChange();
+    } else {
+      if (pcCb) { pcCb.checked = false; pcCb.disabled = false; }
+      if (phCb) { phCb.checked = false; }
+      onPracticeCompositeChange();
+    }
   }
 }
 
