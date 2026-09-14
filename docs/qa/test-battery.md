@@ -953,3 +953,77 @@ again, then re-enables with the refreshed list.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Front-end only.
+
+## PRACTICE-PILLAR2-ROSTER — Reviews & Reputation pillar computed from the confirmed location roster
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic (Specialty / Service Line), Compare Two, Event Prep practice rows · **Type:** scoring correctness
+
+### What changed
+Root cause: Pillar 2 was rewritten after the LLM from ONE Google text search on the anchor name.
+The name matcher strips "hospital/medical/center", so "Houston Methodist Orthopedics" bound to
+*Houston Methodist Hospital* (thousands of reviews → band 92) while the per-location table showed
+the real clinics. The two had no shared data.
+
+1. **Roster Google pre-pass** (`_resolve_roster_google`, before the narrative): every confirmed
+   location (anchor + siblings) is pinned to one Google listing. Seeded entries with a `place_id`
+   are used verbatim; others are name-resolved under a **strict gate** (strong name match AND
+   healthcare category) with a collision rule (a place_id backs one entry; a sibling that resolves
+   to the anchor's listing is flagged `_anchor_dup` and excluded). Emits
+   `Google reviews: X.X★ across R of N location(s), T reviews total`.
+2. **Pillar 2 = reviews_band(roster weighted-avg rating, roster total reviews)** whenever the
+   roster aggregate exists; the single front-door listing is only the fallback. The evidence block
+   now carries a "Roster Google reviews … Use THIS for Reviews & Reputation" line for the narrative.
+3. **Front door pinned / strict**: when the search step supplied `anchor_listing`, the header
+   rating comes from that exact place_id (no re-search). Without a pin (Compare Two / Event Prep),
+   a name-searched listing must pass the strict gate or is treated as unverified.
+4. **Canonical score cache is roster-aware**: `entity_scores.roster_key` (new column,
+   auto-migrated) fingerprints the roster; a cached practice score is adopted only when the
+   fingerprint matches, and new seeds record it.
+5. Composite table reuses the same pinned dicts → the table's Google numbers equal the inputs to
+   the pillar by construction. `_anchor_dup` rows are dropped from the table.
+
+### Files changed
+`perception/practice_analyzer.py`, `perception/db.py`, `tests/test_roster_reputation.py`,
+`docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Service line end-to-end**: Hospital Service Line → HOUSTON METHODIST / HOUSTON / TX /
+ORTHOPEDICS → confirm the seeded clinics → Run. Stream shows the "Google reviews: … across R of N
+location(s)" line. In the PDF, Pillar 2 (Reviews & Reputation) is consistent with the table on the
+composite pages: e.g. clinics averaging ~4.3★ with a few hundred reviews total → band in the
+70s–80s, NOT 92. The header Google rating equals the flagship listing chosen in the search.
+**T2 — Pillar vs table math**: sum the Google review counts and compute the count-weighted average
+rating from the composite table rows (Google column) → apply the band (≥4.5→88, ≥4.0→75, ≥3.5→60;
++4 ≥400 reviews, +2 ≥100, −4 <100, −8 <25). Matches the printed Pillar 2.
+**T3 — No hospital capture**: a Specialty Practice run for "<System> Orthopedics" with NO
+seeded listings (block the seeding by choosing "Use This Name") → stream/PDF must not show the
+parent hospital as the matched listing; front door is either the clinic or "not verified".
+**T4 — Cache guard**: run T1 twice with different Locations selections (uncheck one clinic on the
+second run) → the second run's pillar reflects the smaller roster (not the first run's cached score).
+Running a third time with the same roster as the second adopts the cached score (same numbers).
+**T5 — Compare Two / Event Prep practice**: unchanged flows still complete; the reputation pillar
+for a service-line side/row is computed from the discovered clinics (strict gate) — check the
+stream line.
+**T6 — Migration**: first start adds `entity_scores.roster_key`; History and reports load.
+
+### Regression Checks
+- **R1** Hospital-type Deep Diagnostic unaffected (different analyzer).
+- **R2** Composite table rows: seeded clinics keep distinct Google data; anchor row rating equals
+  the header rating.
+- **R3** Unit: `tests/test_roster_reputation.py` (4 new) pass; suite otherwise at baseline (same 4
+  pre-existing failures).
+
+### Acceptance Checklist
+- [ ] T1 pillar consistent with table
+- [ ] T2 math check
+- [ ] T3 no hospital capture
+- [ ] T4 cache guard
+- [ ] T5 Compare/Event
+- [ ] T6 migration
+- [ ] R1–R3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Compare against the report that prompted this (Houston Methodist Orthopedics,
+2026-09-14) — the new Pillar 2 should be materially lower and explainable from the table. Not
+smoke-tested against Postgres locally (shared DATABASE_URL only); migration is the standard
+add-column-if-missing pattern.

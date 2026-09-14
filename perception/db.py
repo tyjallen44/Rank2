@@ -404,6 +404,10 @@ def init_db() -> None:
     ).fetchall()}
     if "weighting_profile" not in _es_cols:
         con.execute("ALTER TABLE entity_scores ADD COLUMN weighting_profile VARCHAR DEFAULT ''")
+    if "roster_key" not in _es_cols:
+        # Fingerprint of the confirmed location roster behind a practice score, so a
+        # cached score is only re-adopted by a run with the same roster.
+        con.execute("ALTER TABLE entity_scores ADD COLUMN roster_key VARCHAR DEFAULT ''")
     # ── Down-migrate System Composite (Tier 3) tables ────────────────────────
     for _tbl in ("composite_results", "network_battery_runs",
                  "network_entities", "network_registries"):
@@ -2160,7 +2164,7 @@ def get_entity_score(name: str, location: str, days: int = 30) -> dict | None:
     con = get_connection()
     row = con.execute(
         """SELECT display_name, pulse_score, tier_scores, overall_rating, band_label,
-                  ai_says, source, run_id, generated_at, weighting_profile
+                  ai_says, source, run_id, generated_at, weighting_profile, roster_key
            FROM entity_scores
            WHERE norm_name = ? AND location = ? AND generated_at >= ?
            ORDER BY generated_at DESC
@@ -2180,6 +2184,7 @@ def get_entity_score(name: str, location: str, days: int = 30) -> dict | None:
         "source": row[6], "run_id": str(row[7]) if row[7] else None,
         "generated_at": str(row[8]),
         "weighting_profile": (row[9] or "") if len(row) > 9 else "",
+        "roster_key": (row[10] or "") if len(row) > 10 else "",
     }
 
 
@@ -2187,7 +2192,8 @@ def upsert_entity_score(name: str, location: str, pulse_score: int | None,
                         tier_scores: dict | None, overall_rating: str | None = None,
                         band_label: str | None = None, ai_says: str = "",
                         source: str = "", run_id: str | None = None,
-                        overwrite: bool = False, weighting_profile: str = "") -> None:
+                        overwrite: bool = False, weighting_profile: str = "",
+                        roster_key: str = "") -> None:
     """Seed (or, with overwrite=True for an admin refresh, replace) today's
     canonical score. Without overwrite, an existing row for today is left intact
     (first writer within the window wins). weighting_profile records the rubric
@@ -2203,20 +2209,21 @@ def upsert_entity_score(name: str, location: str, pulse_score: int | None,
         "DO UPDATE SET display_name=EXCLUDED.display_name, pulse_score=EXCLUDED.pulse_score, "
         "tier_scores=EXCLUDED.tier_scores, overall_rating=EXCLUDED.overall_rating, "
         "band_label=EXCLUDED.band_label, ai_says=EXCLUDED.ai_says, "
-        "weighting_profile=EXCLUDED.weighting_profile, source=EXCLUDED.source, "
-        "run_id=EXCLUDED.run_id, created_at=EXCLUDED.created_at"
+        "weighting_profile=EXCLUDED.weighting_profile, roster_key=EXCLUDED.roster_key, "
+        "source=EXCLUDED.source, run_id=EXCLUDED.run_id, created_at=EXCLUDED.created_at"
         if overwrite else "DO NOTHING"
     )
     con = get_connection()
     con.execute(
         f"""INSERT INTO entity_scores
             (norm_name, location, generated_at, display_name, pulse_score, tier_scores,
-             overall_rating, band_label, ai_says, weighting_profile, source, run_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             overall_rating, band_label, ai_says, weighting_profile, roster_key,
+             source, run_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (norm_name, location, generated_at) {conflict}""",
         [nn, nl, today, name, pulse_score, json.dumps(tier_scores or {}),
          overall_rating, band_label, ai_says or "", weighting_profile or "",
-         source, run_id, datetime.utcnow()],
+         roster_key or "", source, run_id, datetime.utcnow()],
     )
     con.close()
 

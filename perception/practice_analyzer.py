@@ -462,6 +462,118 @@ def _build_practice_provider(r: dict, run_profile: str) -> RankedProvider:
     )
 
 
+def _strict_listing_ok(read) -> bool:
+    """A name-searched listing may set scores only when the name match is strong
+    and Google's category says healthcare. Prevents "<System> Orthopedics" from
+    binding to the parent hospital's main listing (stopword-stripped 2/3 match)."""
+    if read is None or not read.verified:
+        return False
+    if read.name_match != "strong":
+        return False
+    types = getattr(read, "types", None) or []
+    if types and not places._is_healthcare(types):
+        return False
+    return True
+
+
+def _roster_key(anchor_name: str, siblings: Optional[list]) -> str:
+    """Stable fingerprint of the location roster (anchor + sibling names)."""
+    import hashlib
+    names = sorted({(anchor_name or "").strip().lower()} |
+                   {str(s.get("name", "")).strip().lower() for s in (siblings or []) if s.get("name")})
+    return hashlib.sha1("|".join(names).encode("utf-8")).hexdigest()[:16]
+
+
+def _resolve_roster_google(
+    anchor: dict,
+    siblings: list[dict],
+    city: str,
+    state: str,
+    emit=None,
+) -> Optional[dict]:
+    """Pin every roster location to ONE Google listing and aggregate the reviews.
+
+    Entries that already carry a place_id (seeded from the search step) are used
+    verbatim. Others are resolved by name under the strict gate (strong match +
+    healthcare category) and a collision rule (a place_id may back only one
+    entry). The dicts are mutated in place so the composite table later reuses
+    exactly these numbers — the pillar and the table cannot disagree.
+
+    Returns {"avg_rating", "total_reviews", "rated_locations", "locations"} or
+    None when nothing could be rated.
+    """
+    from .practice_reputation import _weighted_average, _strip_tracking
+
+    def _emit(text: str) -> None:
+        if emit:
+            emit({"type": "text", "text": text})
+
+    assigned: dict[str, str] = {}   # place_id → entry name
+
+    def _pin_from_read(entry: dict, read) -> None:
+        entry["place_id"] = read.place_id
+        entry["rating"] = read.rating
+        entry["review_count"] = read.review_count
+        entry["maps_url"] = _strip_tracking(read.maps_url) if read.maps_url else None
+        if read.formatted_address and not entry.get("address"):
+            entry["address"] = read.formatted_address
+
+    # Anchor first — its listing is quarantined so no sibling can inherit it.
+    if not anchor.get("place_id"):
+        try:
+            read, _ = places.fetch_provider(anchor["name"], anchor.get("city") or city,
+                                            anchor.get("state") or state)
+        except Exception:
+            read = None
+        if _strict_listing_ok(read) and read.place_id:
+            _pin_from_read(anchor, read)
+        elif read is not None:
+            anchor["_unverified_reason"] = (
+                read.reason or f"listing '{read.matched_name}' is a {read.name_match} name match")
+    if anchor.get("place_id"):
+        assigned[anchor["place_id"]] = anchor["name"]
+
+    pairs: list[tuple[float, int]] = []
+    rated = 0
+    if anchor.get("place_id") and anchor.get("rating") is not None:
+        pairs.append((float(anchor["rating"]), int(anchor.get("review_count") or 0)))
+        rated += 1
+
+    for s in siblings or []:
+        if not s.get("place_id"):
+            try:
+                read, _ = places.fetch_provider(s.get("name", ""), s.get("city") or city,
+                                                s.get("state") or state)
+            except Exception:
+                read = None
+            if not (_strict_listing_ok(read) and read.place_id):
+                continue
+            if read.place_id in assigned:
+                # Same listing as the anchor / another sibling: an alias, not a location.
+                if assigned[read.place_id] == anchor["name"]:
+                    s["_anchor_dup"] = True
+                continue
+            _pin_from_read(s, read)
+        elif s["place_id"] in assigned:
+            if assigned[s["place_id"]] == anchor["name"]:
+                s["_anchor_dup"] = True
+            continue
+        assigned[s["place_id"]] = s.get("name", "")
+        if s.get("rating") is not None:
+            pairs.append((float(s["rating"]), int(s.get("review_count") or 0)))
+            rated += 1
+
+    avg, total = _weighted_average(pairs)
+    n_locations = 1 + len([s for s in (siblings or []) if not s.get("_anchor_dup")])
+    if avg is None:
+        _emit("Google reviews: no location could be verified for the roster")
+        return None
+    _emit(f"Google reviews: {avg:.1f}★ across {rated} of {n_locations} location(s), "
+          f"{total:,} reviews total")
+    return {"avg_rating": avg, "total_reviews": total,
+            "rated_locations": rated, "locations": n_locations}
+
+
 def _ground_and_score_practice(
     prov: RankedProvider,
     city: str,
@@ -469,10 +581,39 @@ def _ground_and_score_practice(
     entity_resolution_pct: Optional[float],
     linkage_integrity_pct: Optional[float],
     board_cert_unverifiable: bool,
+    roster_rep: Optional[dict] = None,
+    pinned_anchor: Optional[dict] = None,
 ) -> None:
     """Verify Google front door, update Reviews & Reputation tier (Pillar 2), and
-    compute deterministic practice composite score with ceiling."""
-    read, footprint = places.fetch_provider(prov.name, city, state)
+    compute deterministic practice composite score with ceiling.
+
+    roster_rep   — aggregate from _resolve_roster_google; when present it (not the
+                   front door) sets Pillar 2, so the pillar matches the per-location table.
+    pinned_anchor — the anchor's pinned Google listing; when present the front door
+                   is taken from it instead of a fresh name search.
+    """
+    read = footprint = None
+    if pinned_anchor and pinned_anchor.get("place_id") and pinned_anchor.get("rating") is not None:
+        read = places.GoogleRead(
+            query=prov.name, verified=True,
+            rating=float(pinned_anchor["rating"]),
+            review_count=int(pinned_anchor.get("review_count") or 0),
+            matched_name=pinned_anchor.get("original_name") or pinned_anchor.get("name") or prov.name,
+            name_match="strong", place_id=pinned_anchor.get("place_id"),
+            maps_url=pinned_anchor.get("maps_url"),
+            formatted_address=pinned_anchor.get("address"),
+        )
+    else:
+        read, footprint = places.fetch_provider(prov.name, city, state)
+        if read is not None and read.verified and not _strict_listing_ok(read):
+            # Strict gate for name-searched listings (no pinned place_id available).
+            read = places.GoogleRead(
+                query=read.query, verified=False, matched_name=read.matched_name,
+                name_match=read.name_match, place_id=read.place_id, types=read.types,
+                formatted_address=read.formatted_address,
+                reason=(f"listing '{read.matched_name}' rejected: "
+                        f"{read.name_match} name match / non-healthcare category"),
+            )
 
     if read is not None and read.verified:
         prov.google_footprint.front_door = GoogleFrontDoor(
@@ -482,12 +623,22 @@ def _ground_and_score_practice(
             verified=True,
             reason=None,
         )
-        # For practices, Google rating feeds Pillar 2 (credentials_recognition)
-        band = practice_scoring.reviews_band(read.rating, read.review_count)
+        # For practices, Google rating feeds Pillar 2 (credentials_recognition).
+        # Prefer the roster aggregate (all confirmed locations) over the single
+        # front-door listing so the pillar agrees with the per-location table.
+        if roster_rep and roster_rep.get("avg_rating") is not None:
+            band = practice_scoring.reviews_band(roster_rep["avg_rating"], roster_rep["total_reviews"])
+        else:
+            band = practice_scoring.reviews_band(read.rating, read.review_count)
         if band is not None:
             prov.tier_scores.credentials_recognition = band
     elif read is not None:
         prov.google_footprint.front_door = GoogleFrontDoor(verified=False, reason=read.reason)
+        if roster_rep and roster_rep.get("avg_rating") is not None:
+            # Front door unverified but the roster is: the pillar still comes from the roster.
+            band = practice_scoring.reviews_band(roster_rep["avg_rating"], roster_rep["total_reviews"])
+            if band is not None:
+                prov.tier_scores.credentials_recognition = band
 
     if footprint and footprint.listings_sampled > 1 and not prov.google_footprint.rating_range:
         prov.google_footprint.rating_range = footprint.as_line()
@@ -702,6 +853,34 @@ def analyze_practice(
     if org_name and not report_title:
         report_title = org_name
 
+    # ── Roster Google pre-pass ────────────────────────────────────────────────
+    # Pin every confirmed location (anchor + siblings) to one Google listing and
+    # aggregate their reviews BEFORE the narrative/scoring so Pillar 2, the
+    # evidence block and the composite table all use the same numbers.
+    _anchor_google: dict = {"name": entity_name, "city": city, "state": state, "is_anchor": True}
+    if anchor_listing:
+        for _k in ("place_id", "address", "rating", "review_count", "maps_url"):
+            if anchor_listing.get(_k) is not None:
+                _anchor_google[_k] = anchor_listing[_k]
+    _roster_rep: Optional[dict] = None
+    if _aggregate_siblings is not None or anchor_listing:
+        emit({"type": "phase", "name": "roster_google",
+              "text": f"Verifying Google listings for {1 + len(_aggregate_siblings or [])} location(s)"})
+        try:
+            _roster_rep = _resolve_roster_google(
+                _anchor_google, _aggregate_siblings or [], city, state, emit=emit)
+        except Exception as _exc:
+            console.print(f"[yellow]⚠[/yellow] Roster Google pass failed ({_exc}); using front door only.")
+            _roster_rep = None
+        if _roster_rep:
+            evidence_text += (
+                f"\nRoster Google reviews (all confirmed locations): "
+                f"{_roster_rep['avg_rating']:.1f}★ weighted across "
+                f"{_roster_rep['rated_locations']} of {_roster_rep['locations']} locations, "
+                f"{_roster_rep['total_reviews']} reviews total. Use THIS for Reviews & Reputation."
+            )
+    _roster_fp = _roster_key(entity_name, _aggregate_siblings) if _aggregate_siblings is not None else ""
+
     system_prompt, user_prompt = build_practice_prompt(
         entity_name=entity_name,
         city=city,
@@ -786,12 +965,14 @@ def analyze_practice(
 
     # ── Phase 3: Verify Google + score with ceiling ───────────────────────────
     emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})
-    for prov in rankings:
+    for _i, prov in enumerate(rankings):
         _ground_and_score_practice(
             prov, city, state,
             entity_resolution_pct=entity_resolution_pct,
             linkage_integrity_pct=linkage_integrity_pct,
             board_cert_unverifiable=board_cert_unverifiable,
+            roster_rep=_roster_rep if _i == 0 else None,
+            pinned_anchor=_anchor_google if (_i == 0 and _anchor_google.get("place_id")) else None,
         )
     console.print(f"[green]✓[/green] Scored practice ({run_profile} / {profile_label})")
 
@@ -807,8 +988,11 @@ def analyze_practice(
         _loc = f"{city}, {state}"
         _canon = None if override_today_lock else _get_es(_anchor.name, _loc, days=30)
         _cf = "practice" if (_canon or {}).get("weighting_profile", "").startswith("practice_") else "hospital"
-        # Only adopt a canonical computed under the practice rubric (same-rubric).
-        if _canon and _canon.get("pulse_score") is not None and _cf == "practice":
+        # Only adopt a canonical computed under the practice rubric (same-rubric)
+        # AND for the same confirmed roster — a cached score for a different set
+        # of locations must not overwrite this run's pillar values.
+        _same_roster = (_canon or {}).get("roster_key", "") == (_roster_fp or "")
+        if _canon and _canon.get("pulse_score") is not None and _cf == "practice" and _same_roster:
             _anchor.ai_visibility_score = _canon["pulse_score"]
             for _k, _v in (_canon.get("tier_scores") or {}).items():
                 if hasattr(_anchor.tier_scores, _k):
@@ -822,7 +1006,8 @@ def analyze_practice(
                     _anchor.tier_scores.as_dict(), overall_rating=_code,
                     band_label=_band, ai_says=getattr(_anchor, "ai_says", "") or "",
                     source="deep_diagnostic", run_id=run_id, overwrite=override_today_lock,
-                    weighting_profile=getattr(_anchor, "weighting_profile", None) or run_profile)
+                    weighting_profile=getattr(_anchor, "weighting_profile", None) or run_profile,
+                    roster_key=_roster_fp or "")
 
     disclaimer = _FULL_DISCLAIMER   # always hardcoded; LLM-generated disclaimer field ignored
 
@@ -886,11 +1071,11 @@ def analyze_practice(
             "city": city,
             "state": state,
         }
-        if anchor_listing:
-            # Pin the anchor to the exact listing chosen in the search step.
-            for _k in ("place_id", "address", "rating", "review_count", "maps_url"):
-                if anchor_listing.get(_k) is not None:
-                    anchor_entry[_k] = anchor_listing[_k]
+        # Pin the anchor to the listing resolved in the roster pre-pass (the search
+        # step's choice when provided, else the strict name lookup).
+        for _k in ("place_id", "address", "rating", "review_count", "maps_url"):
+            if _anchor_google.get(_k) is not None:
+                anchor_entry[_k] = _anchor_google[_k]
         if _aggregate_siblings is not None:
             # Automatic scoping: reuse the confirmed / service-line location roster
             # established for the aggregate analysis.  This keeps the reputation
@@ -979,6 +1164,8 @@ def analyze_practice(
         for s in sibling_roster:
             sn = s.get("name", "")
             sa = s.get("address", "")
+            if s.get("_anchor_dup"):
+                continue   # resolved to the anchor's own listing in the pre-pass
             if s.get("place_id"):
                 # A distinct Google place_id is definitive: same-name clinics at
                 # other streets are real locations, not anchor aliases.
