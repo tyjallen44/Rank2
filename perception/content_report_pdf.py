@@ -460,7 +460,7 @@ def _content_body_html(entity_name: str, location: str, findings, report_title: 
 
     return f"""
       <div class="band">
-        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI VISIBILITY<br>REPORT</div></div>
+        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI REPUTATION<br>REPORT</div></div>
         <h1>Content Analysis &mdash; Detailed Findings and Improvement Prescriptions</h1>
         <div class="sub">{_e(title)}{(" &middot; " + _e(location)) if location else ""}</div>
       </div>

@@ -141,7 +141,7 @@ def _build_html(result: dict) -> str:
       .note b {{ color:{_TEAL}; }}
     </style></head><body>
       <div class="band">
-        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">STUDENT HEALTH<br>AI VISIBILITY RANKING</div></div>
+        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">STUDENT HEALTH<br>AI REPUTATION RANKING</div></div>
         <div class="kick">Competitors Rankings &middot; Student Health</div>
         <h1>{_e(group)}</h1>
         <div class="sub">On-campus student health clinics, ranked by AI Reputation</div>

@@ -220,7 +220,7 @@ def analyze_network(
 
     # ── Phase: analyzing ─────────────────────────────────────────────────────
     emit({"type": "phase", "name": "analyzing",
-          "text": f"Analyzing AI visibility for {network_name}"})
+          "text": f"Analyzing AI reputation for {network_name}"})
 
     system_prompt, user_prompt = build_network_analysis_prompt(
         network_name=network_name,

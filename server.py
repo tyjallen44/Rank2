@@ -3397,7 +3397,7 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
   <header class="top">
     <a class="signin" href="/">Sign In &rarr;</a>
     <div class="wm">PULSE</div>
-    <div class="sub">AI VISIBILITY INTELLIGENCE</div>
+    <div class="sub">AI REPUTATION INTELLIGENCE</div>
   </header>
   <div class="wrap">
     <nav class="toc">{{TOC}}</nav>
