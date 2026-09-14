@@ -1,6 +1,6 @@
 """FQHC Community Health Edition PDF renderer.
 
-Produces a branded PDF for Community Health (FQHC) AI Visibility reports.
+Produces a branded PDF for Community Health (FQHC) AI Reputation reports.
 Uses the same Playwright render path as pdf.py and reuses its brand configs,
 color tokens, and HTML helpers.
 """
@@ -19,9 +19,10 @@ from .fqhc_scoring import (
 from .scoring import grade_from_score
 # Reuse brand configs and low-level helpers from pdf.py
 from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label
+from .strings import rebrand_result as _rebrand_for_display
 
 _BLUR_CTA_FQHC = (
-    "Access the complete Community Health Edition report — AI Visibility Verdict, "
+    "Access the complete Community Health Edition report — AI Reputation Verdict, "
     "all five pillars, Missed Queries Exhibit, and personalized Improvement Opportunities."
 )
 
@@ -32,6 +33,7 @@ def render_fqhc_pdf(
     brand: str = "original",
 ) -> None:
     """Render a Community Health Edition report to a branded PDF."""
+    _rebrand_for_display(result)   # display-time AI Reputation naming
     from playwright.sync_api import sync_playwright
 
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
@@ -407,7 +409,7 @@ def _cover_block(
       <div style="line-height:1">
         <span class="cover-score-num">{score_display}</span><span class="cover-score-out-of">/100</span>
       </div>
-      <div class="cover-score-lbl">AI Visibility Score</div>
+      <div class="cover-score-lbl">AI Reputation Score</div>
       <div class="cover-quartile-badge" style="border-left:3px solid {q_color}">
         <div class="cover-quartile-badge-lbl">National Quartile</div>
         <div class="cover-quartile-badge-val" style="color:{q_color}">{_e(_quartile_label(grade))} <span style="font-size:9pt;font-weight:500;color:rgba(255,255,255,0.7)">&middot;&nbsp;{_e(band)}</span></div>
@@ -420,7 +422,7 @@ def _cover_block(
   {kf_block}
   <div class="cover-meta">
     <span>Generated {generated} &nbsp;·&nbsp; Community Health Center</span>
-    <span>Pulse AI Visibility Report &nbsp;·&nbsp; Community Health Edition v1.0</span>
+    <span>Pulse AI Reputation Report &nbsp;·&nbsp; Community Health Edition v1.0</span>
   </div>
 </div>"""
 
@@ -456,7 +458,7 @@ def _pillar_scorecard(ps: FqhcPillarScores, primary: str, pale: str) -> str:
         )
 
     return f"""
-<h2>AI Visibility Scorecard</h2>
+<h2>AI Reputation Scorecard</h2>
 <div class="pillar-scorecard">{"".join(cards)}</div>"""
 
 
@@ -512,7 +514,7 @@ def _verdict_block(result: AnalysisResult) -> str:
         ) + verdict
 
     return f"""
-<h2>AI Visibility Verdict</h2>
+<h2>AI Reputation Verdict</h2>
 <div class="verdict-box"><p>{_e(verdict)}</p></div>"""
 
 
@@ -807,7 +809,7 @@ def _assessment_block(result: AnalysisResult, primary: str) -> str:
         return ""
 
     battery_ran = result.fqhc_mqcr is not None
-    html_parts = [f"<h2>AI Visibility Assessment &amp; Improvement Opportunities</h2>"]
+    html_parts = [f"<h2>AI Reputation Assessment &amp; Improvement Opportunities</h2>"]
 
     top_rec = result.top_recommendation
     if top_rec and not (battery_ran and _BATTERY_STALE_RE.search(top_rec)):

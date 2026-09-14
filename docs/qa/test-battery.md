@@ -1119,3 +1119,83 @@ the base report and the ⚠ line in the stream.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Hospital runs now take roughly 2–4 minutes longer.
+
+## REBRAND-AI-REPUTATION — "AI Visibility" → "AI Reputation" across reports, UI, emails and pages (v1.09)
+
+**Shipped:** 2026-09-14 · **Area:** all report PDFs, web app, Learn/Methodology pages, emails · **Type:** branding
+
+### What changed
+- **Names**: product tagline "AI Reputation Intelligence"; report name "AI Reputation Report";
+  score labels "AI Reputation Score" and "Pulse Score (AI Reputation)"; score descriptor
+  "AI Reputation". Central constants live in `perception/strings.py`.
+- **PDF renderers** (Deep Diagnostic/market, practice combined, comparison, content deep-dive,
+  Hospital Network standard/content/Full Detail, FQHC, Student Health, content report): all cover,
+  footer, scorecard and section headings updated. Each render entry point now calls
+  `rebrand_result(...)`, a **display-time** walker that rewrites any "AI Visibility" phrasing in the
+  model-written text (verdict, overview, assessment, roadmap items, ai_says, findings) — the
+  **LLM prompts are intentionally unchanged**. Ids, paths and URLs are skipped. Old runs re-rendered
+  from History are rebranded too.
+- **Web app**: sidebar/login tagline (all three brands), Hospital Network subtitle/tooltips, Trends
+  page title/labels/chart, Compare Two label, bulk-list help/CSV column text. **Release-notes history
+  left as-is**; new **Version 1.09** block added at the top ("Reports Are Now AI Reputation Reports").
+  `_APP_VERSION` → 1.09.
+- **Public Learn / Methodology pages**: HTML title, meta description, heading, lede, footer.
+- **Emails** (public network request): subject, ready-notice heading/body, confirmation text.
+- **Seed content** (`learn_seed.py`) updated. Live rows are admin-edited in Postgres, so a one-off
+  script is provided: `scripts/rebrand_learn_articles.py` (idempotent `replace()` on
+  title/body/category). **Must be run once against production after deploy.**
+- Briefing copy + config, config/env comments, and `tests/test_rebrand.py` expectations updated.
+- Not changed: code identifiers (`ai_visibility_score`, `ai_visibility_verdict`, DB columns, API
+  JSON), prompts, previously generated PDFs on disk.
+
+### Files changed
+`perception/strings.py`, `perception/pdf.py`, `perception/network_pdf.py`, `perception/fqhc_pdf.py`,
+`perception/student_health_pdf.py`, `perception/content_report_pdf.py`, `perception/briefing.py`,
+`perception/briefing_config.json`, `perception/email_utils.py`, `perception/learn_seed.py`,
+`perception/config.py`, `.env.example`, `server.py`, `web/index.html`, `tests/test_rebrand.py`,
+`scripts/rebrand_learn_articles.py`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — App chrome**: sidebar and login show "AI Reputation Intelligence"; Release Notes opens with
+Version 1.09 / September 14, 2026 and the naming entry; footer version reads 1.09; older release
+entries still say "AI Visibility" (intentional).
+**T2 — Deep Diagnostic PDF** (any hospital or practice): cover sub-line "AI Reputation Report", score
+badge descriptor "AI Reputation", methodology box "Pulse AI Reputation", roadmap heading "AI
+Reputation Improvement Roadmap". Search the PDF text for "Visibility" → no hits.
+**T3 — Hospital Network PDFs** (standard, Teaser, Full Detail): cover "Hospital Network / AI
+Reputation Report", "Network AI Reputation", "AI Reputation Score", "System-Level AI Reputation",
+footer line. No "Visibility" in the PDF text.
+**T4 — FQHC + Student Health PDFs**: scorecard/verdict/assessment headings and the ranked sub-line
+read "AI Reputation".
+**T5 — Model text**: in a fresh run's PDF, the Verdict/Assessment prose shows "AI Reputation" even
+though the model still writes "AI Visibility" (display-time rewrite). Re-render an OLD run from
+History → also rebranded.
+**T6 — Compare Two + Trends**: labels "Pulse Score (AI Reputation)"; Trends page title "AI Reputation
+Trends".
+**T7 — Public pages**: /learn and /methodology titles, headings and footer say AI Reputation.
+Then run `scripts/rebrand_learn_articles.py` once on production → article bodies updated; admin
+Learn editor shows the new wording.
+**T8 — Email**: trigger a public network request → confirmation and ready emails say "AI Reputation
+Report".
+
+### Regression Checks
+- **R1** Scores, pillars, grades unchanged (pure naming).
+- **R2** URLs/links in PDFs intact (walker skips path/url fields).
+- **R3** Full unit suite: identical failure set to before (15 pre-existing), 326 pass.
+- **R4** API JSON field names unchanged (`ai_visibility_score` etc.).
+
+### Acceptance Checklist
+- [ ] T1 chrome + release note
+- [ ] T2 Deep Diagnostic PDF
+- [ ] T3 Network PDFs
+- [ ] T4 FQHC / Student Health PDFs
+- [ ] T5 model text rewritten (new + old run)
+- [ ] T6 Compare / Trends
+- [ ] T7 public pages + live article script
+- [ ] T8 emails
+- [ ] R1–R4
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. After deploy, run once: `.venv/bin/python scripts/rebrand_learn_articles.py`
+(with production DATABASE_URL) — until then the live Learn/Methodology article bodies still say
+"AI Visibility" while the page chrome says "AI Reputation".

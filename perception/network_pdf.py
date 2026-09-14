@@ -1,4 +1,4 @@
-"""Network Pulse PDF renderer — multi-state hospital network AI Visibility reports.
+"""Network Pulse PDF renderer — multi-state hospital network AI Reputation reports.
 
 Executive-summary format for C-suite audiences.  Dark navy (#0B1F3A) primary
 with gold accent (#C9A84C) — distinct from the teal used in Community Health.
@@ -15,6 +15,7 @@ from .models import NetworkResult, NetworkFacility
 from .network_scoring import grade_band as _grade_band
 from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label, _score_bar_color
 from .scoring import grade_from_score as _grade_from_score
+from .strings import rebrand_result as _rebrand_for_display
 
 # Network Pulse brand — uses the standard RLDatix teal palette.
 _NETWORK_PRIMARY = "#0F4146"
@@ -34,6 +35,8 @@ def render_network_pdf(
     ContentFindings) is given and this isn't a teaser, the Content Improvement
     Keys summary + CTA are appended. When `service_line` = (summary, scorecards)
     is given, the Service-Line Listing Management section is appended too."""
+    _rebrand_for_display(result)   # display-time AI Reputation naming
+    _rebrand_for_display(findings)   # display-time AI Reputation naming
     from playwright.sync_api import sync_playwright
 
     # Always use navy/gold for network reports; ignore brand's primary/accent
@@ -80,6 +83,8 @@ def render_content_network(result: NetworkResult, pdf_path: str, findings,
     """Report 1 for the network Content Analysis sandbox: the standard Hospital
     Network report with the Content Improvement Keys section appended. Reuses the
     network HTML builder untouched and injects the section before </body>."""
+    _rebrand_for_display(result)   # display-time AI Reputation naming
+    _rebrand_for_display(findings)   # display-time AI Reputation naming
     from playwright.sync_api import sync_playwright
     from .pdf import _content_keys_section
     cfg = dict(_BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"]))
@@ -121,6 +126,8 @@ def render_network_full_detail(result: NetworkResult, pdf_path: str, findings,
     combined with the entire detailed Content Report (Contents index + every
     finding's remediation, incl. drafted content). Rendered as ONE document in two
     passes so the Contents-index page numbers reflect the combined document."""
+    _rebrand_for_display(result)   # display-time AI Reputation naming
+    _rebrand_for_display(findings)   # display-time AI Reputation naming
     from playwright.sync_api import sync_playwright
     from .network_prompts import get_facility_config
     from .content_report_pdf import _content_css, _content_body_html, _page_map
@@ -211,7 +218,7 @@ def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False,
                         findings=None, service_line=None) -> str:
     """Base Hospital Network report. Strategic Recommendations are no longer
     rendered. The gated region (facility scorecard + Content Improvement Keys +
-    service-line keys) sits between the System-Level AI Visibility section and the
+    service-line keys) sits between the System-Level AI Reputation section and the
     methodology appendix, so a teaser can blur everything below System-Level AI
     Visibility while leaving the appendix (how the gated content was produced)
     readable."""
@@ -250,7 +257,7 @@ def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False,
 <div class="net-teaser-gate">
   <div class="blur-lock">&#128274;</div>
   <div class="blur-cta-heading">The full Hospital Network report continues below</div>
-  <div class="blur-cta-sub">Request the complete report to see the full facility roster, content-visibility findings, and AI-visibility improvement priorities for this system.</div>
+  <div class="blur-cta-sub">Request the complete report to see the full facility roster, content-visibility findings, and AI-reputation improvement priorities for this system.</div>
 </div>
 <div class="net-teaser-blur-content">{gated}</div>
 {cta_unblurred}"""
@@ -751,10 +758,10 @@ def _cover_block(
 <div class="cover">
   <div class="cover-logo-header">
     {logo_html}
-    <div class="cover-report-type-label">Hospital Network<br>AI Visibility Report</div>
+    <div class="cover-report-type-label">Hospital Network<br>AI Reputation Report</div>
   </div>
 
-  <div class="cover-edition">Network AI Visibility</div>
+  <div class="cover-edition">Network AI Reputation</div>
   <div class="cover-network-name">{name}</div>
   <div class="cover-subtitle">{hq if hq else ftype_cfg.get('label', 'Multi-State Healthcare Network')}</div>
   <div class="cover-confidential">Confidential &nbsp;·&nbsp; Prepared exclusively for {name}</div>
@@ -763,7 +770,7 @@ def _cover_block(
     <div style="line-height:1">
       <span class="cover-score-num" style="color:{accent}">{score_str}</span><span class="cover-score-out-of">/100</span>
     </div>
-    <div class="cover-score-lbl">AI Visibility Score</div>
+    <div class="cover-score-lbl">AI Reputation Score</div>
     <div class="cover-quartile-badge" style="border-left:4px solid {q_color}">
       <div class="cover-quartile-badge-lbl">National Quartile</div>
       <div class="cover-quartile-badge-val" style="color:{q_color}">{_e(_quartile_label(quartile))} <span style="font-size:11pt;font-weight:500;color:rgba(255,255,255,0.7)">&middot;&nbsp;{_e(q_band)}</span></div>
@@ -790,7 +797,7 @@ def _cover_block(
   </div>
 
   <div class="cover-meta">
-    <span>Pulse | RLDatix &nbsp;·&nbsp; Network AI Visibility &nbsp;·&nbsp; {_e(name)}</span>
+    <span>Pulse | RLDatix &nbsp;·&nbsp; Network AI Reputation &nbsp;·&nbsp; {_e(name)}</span>
     <span>Generated {_e(generated)}</span>
   </div>
 </div>"""
@@ -844,7 +851,7 @@ def _score_breakdown_block(
 </div>"""
 
     return f"""
-<h2>System-Level AI Visibility</h2>
+<h2>System-Level AI Reputation</h2>
 <p style="font-size:9pt;color:#4a5a6a;margin-top:-4px">
   How AI assistants view {system_name} as a single system — the same four-pillar Pulse Score
   this system receives in the Hospital Market report.
@@ -1006,7 +1013,7 @@ def _recommendations_block(result: NetworkResult, primary: str, accent: str,
   <div class="net-teaser-blur-overlay" style="border-top:1.5px dashed {accent};border-radius:6px">
     <div class="blur-lock">&#128274;</div>
     <div class="blur-cta-heading">Strategic recommendations available upon request</div>
-    <div class="blur-cta-sub">Request the full report to receive tailored recommendations for improving AI visibility across your network.</div>
+    <div class="blur-cta-sub">Request the full report to receive tailored recommendations for improving AI reputation across your network.</div>
     <div class="blur-cta-actions">
       <span class="blur-phone">{_TEASER_PHONE}</span>
       &nbsp;&nbsp;&middot;&nbsp;&nbsp;

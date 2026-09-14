@@ -13,7 +13,7 @@ STARTER_ARTICLES: list[dict] = [
         "category": "Overview",
         "title": "What is Pulse?",
         "body": (
-            "Pulse is an **AI Visibility Intelligence** platform for healthcare. "
+            "Pulse is an **AI Reputation Intelligence** platform for healthcare. "
             "It measures how your organization shows up when patients and consumers "
             "ask AI assistants — like ChatGPT, Gemini, and Copilot — for help choosing "
             "where to get care.\n\n"
@@ -29,7 +29,7 @@ STARTER_ARTICLES: list[dict] = [
     },
     {
         "category": "Overview",
-        "title": "Why AI visibility matters",
+        "title": "Why AI reputation matters",
         "body": (
             "Patients no longer start with a search box. They ask an AI assistant: "
             "*\"Who's the best orthopedic surgeon near me?\"* or *\"Which hospital should "
@@ -60,7 +60,7 @@ STARTER_ARTICLES: list[dict] = [
         "category": "The Reports",
         "title": "Hospital Network",
         "body": (
-            "An AI Visibility report for a **multi-facility or multi-state hospital "
+            "An AI Reputation report for a **multi-facility or multi-state hospital "
             "network**.\n\n"
             "**What it shows**\n\n"
             "- A network-level Pulse Score and quartile\n"
@@ -76,7 +76,7 @@ STARTER_ARTICLES: list[dict] = [
         "body": (
             "Score an **entire list of hospital systems at once**, instead of one "
             "report at a time. Upload a spreadsheet of health systems and get the same "
-            "file back with an AI Visibility **Pulse Score**, a **national quartile**, "
+            "file back with an AI Reputation **Pulse Score**, a **national quartile**, "
             "and all four pillar scores filled in for every entity.\n\n"
             "**What it shows**\n\n"
             "For each system in your list:\n\n"
@@ -137,13 +137,13 @@ STARTER_ARTICLES: list[dict] = [
         "category": "The Reports",
         "title": "Event Preparation",
         "body": (
-            "Generates AI-visibility diagnostics for a **list of event attendees** in one "
+            "Generates AI-reputation diagnostics for a **list of event attendees** in one "
             "batch.\n\n"
             "**What it shows**\n\n"
             "- A diagnostic for each organization on your list\n"
             "- An exportable summary (including letter grades) for quick review\n\n"
             "**Best for:** conferences and events — walk in already knowing every "
-            "attendee's AI visibility."
+            "attendee's AI reputation."
         ),
     },
     # ── Who It's For ──────────────────────────────────────────────────────────

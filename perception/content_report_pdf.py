@@ -65,6 +65,7 @@ def _hidden_marker(token: str) -> str:
 # Deep Diagnostic (which uses the analyzed canonical name). Applied to the
 # entity/report title and the location — never to user content elsewhere.
 import re as _re
+from .strings import rebrand_result as _rebrand_for_display
 
 _SMALL_WORDS = {"a", "an", "and", "the", "of", "for", "to", "at", "in", "on",
                 "by", "or", "nor", "vs", "de", "la"}
@@ -166,6 +167,7 @@ def render_content_report_pdf(entity_name: str, location: str, findings, pdf_pat
     page each finding lands on; the second fills those page numbers into the cover
     Contents list. The finding layout is identical between passes (only the tiny
     page-number strings change), so the located pages stay valid."""
+    _rebrand_for_display(findings)   # display-time AI Reputation naming
     from playwright.sync_api import sync_playwright
     raw = list(getattr(findings, "findings", []) or [])
     items = [f.model_dump() if hasattr(f, "model_dump") else f for f in raw]

@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://localhost:5432/rank2"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    # Google Places API key — grounds the AI Visibility Score in real Google
+    # Google Places API key — grounds the AI Reputation Score in real Google
     # ratings/review counts. Without it, Google reads come back unverified.
     google_places_api_key: str = ""
     # Web search (Anthropic native tool) — refreshes recognitions, rankings, and

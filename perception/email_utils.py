@@ -130,16 +130,16 @@ def send_public_report_ready(email: str, name: Optional[str], organization: str,
     """Deliver a requested Hospital Network report as a secure download link."""
     display = name or "there"
     body = f"""
-    <h2 style="margin:0 0 12px;font-size:20px;">Your AI Visibility Report is ready</h2>
+    <h2 style="margin:0 0 12px;font-size:20px;">Your AI Reputation Report is ready</h2>
     <p>Hi {display},</p>
-    <p style="margin-bottom:8px">Your Hospital Network AI Visibility report for
+    <p style="margin-bottom:8px">Your Hospital Network AI Reputation report for
     <strong>{organization}</strong> has been generated. Use the secure link below to
     download it:</p>
     <p style="margin:20px 0">{_btn(download_url, "Download Your Report")}</p>
     <p style="font-size:12px;color:#5A6E72;margin-bottom:0">This link is unique to you and
     will expire in 14 days. If you have questions about your results, just reply to this email.</p>
     """
-    _send(email, "Your AI Visibility Report", _wrap(body))
+    _send(email, "Your AI Reputation Report", _wrap(body))
 
 
 def send_public_report_followup(email: str, name: Optional[str], organization: str) -> None:
@@ -149,7 +149,7 @@ def send_public_report_followup(email: str, name: Optional[str], organization: s
     body = f"""
     <h2 style="margin:0 0 12px;font-size:20px;">We're preparing your report</h2>
     <p>Hi {display},</p>
-    <p style="margin-bottom:8px">Thanks for requesting a Hospital Network AI Visibility
+    <p style="margin-bottom:8px">Thanks for requesting a Hospital Network AI Reputation
     report for <strong>{organization}</strong>. To make sure it reaches the right person,
     a specialist from our team will follow up with you shortly to confirm a few details
     and deliver your report.</p>

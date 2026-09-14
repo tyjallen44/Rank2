@@ -745,7 +745,7 @@ def _build_hook(
     from .scoring import grade_from_score
     score = p.ai_visibility_score or 0
     grade, _ = grade_from_score(score)
-    band = cfg["band_descriptors"].get(grade, "moderate AI visibility")
+    band = cfg["band_descriptors"].get(grade, "moderate AI reputation")
     anchor_row = next(
         (r for r in (result.practice_composite_rows or []) if r.get("is_anchor")), None
     )
@@ -953,7 +953,7 @@ def _build_ask(
     """Return (ask_text, prior_score_or_None, prior_date_or_None)."""
     sections = result.improvement_sections or []
     section_title = sections[0].title if sections else "Phase 1"
-    roadmap_item_1 = sections[0].items[0] if sections and sections[0].items else "optimize AI visibility signals"
+    roadmap_item_1 = sections[0].items[0] if sections and sections[0].items else "optimize AI reputation signals"
     roadmap_item_2 = sections[1].items[0] if len(sections) > 1 and sections[1].items else None
     ri2_clause = f" and {roadmap_item_2}" if roadmap_item_2 else ""
     top_gap = next((f for f in findings if f.candidate_type == "gap"), findings[0])
@@ -1016,7 +1016,7 @@ def _render_finding(cand: _Candidate, cfg: dict) -> BriefingFinding:
     else:
         # Fallback for any finding type without a template
         what = f"{cand.context.get('entity_name', '')} — {cand.source_ref} ({cand.candidate_type})."
-        why  = "This signal affects the AI Visibility Score."
+        why  = "This signal affects the AI Reputation Score."
         say  = "Our analysis identifies this as an area to address."
     return BriefingFinding(
         candidate_id=cand.id,
@@ -1056,7 +1056,7 @@ def extract(result: "AnalysisResult", variant: str) -> BriefingResult:
     from .scoring import grade_from_score
     score = p.ai_visibility_score or 0
     grade, _ = grade_from_score(score)
-    band = cfg["band_descriptors"].get(grade, "moderate AI visibility")
+    band = cfg["band_descriptors"].get(grade, "moderate AI reputation")
 
     candidates = _build_candidate_pool(result, p, cfg)
     findings_raw, strong_posture = _select_findings(candidates, variant, cfg)
@@ -1138,7 +1138,7 @@ def _extract_fqhc(result: "AnalysisResult", variant: str) -> BriefingResult:
     p = result.rankings[0] if result.rankings else None
     score = (p.ai_visibility_score if p else None) or 0
     grade, _ = grade_from_score(score)
-    band = cfg["band_descriptors"].get(grade, "moderate AI visibility")
+    band = cfg["band_descriptors"].get(grade, "moderate AI reputation")
 
     entity_name = result.entity_name or ""
     city = result.location.split(",")[0].strip() if result.location else ""

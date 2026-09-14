@@ -84,10 +84,10 @@
     "B+": "strong digital presence",
     "B":  "strong digital presence",
     "B-": "established presence with addressable gaps",
-    "C+": "moderate AI visibility",
-    "C":  "moderate AI visibility",
-    "C-": "below-average AI visibility",
-    "D":  "weak AI visibility",
+    "C+": "moderate AI reputation",
+    "C":  "moderate AI reputation",
+    "C-": "below-average AI reputation",
+    "D":  "weak AI reputation",
     "F":  "critical visibility deficit"
   },
 
@@ -186,8 +186,8 @@
     },
     "tier:_relative_strength": {
       "what": "{entity_name} scores {tier_score}/100 on {tier_label} — the relative high point across all measured pillars.",
-      "why":  "Even where overall signals are developing, this pillar offers the strongest foundation for AI visibility improvements.",
-      "say":  "This is where you're furthest along — and it's the anchor for how we talk about your AI visibility profile."
+      "why":  "Even where overall signals are developing, this pillar offers the strongest foundation for AI reputation improvements.",
+      "say":  "This is where you're furthest along — and it's the anchor for how we talk about your AI reputation profile."
     },
 
     "composite:anchor_reputation:strength": {

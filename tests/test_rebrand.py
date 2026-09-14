@@ -79,10 +79,10 @@ def test_aivs_block_contains_pulse_score():
     html = _aivs_block(p)
     assert "Pulse Score" in html or "PULSE SCORE" in html.upper(), \
         "Score badge must contain 'Pulse Score'"
-    assert "AI Visibility" in html or "AI VISIBILITY" in html.upper(), \
-        "Score badge must contain 'AI Visibility' descriptor"
+    assert "AI Reputation" in html or "AI REPUTATION" in html.upper(), \
+        "Score badge must contain 'AI Reputation' descriptor"
     assert 'class="aivs-sublabel"' in html, \
-        "Score badge must use aivs-sublabel div for AI Visibility descriptor"
+        "Score badge must use aivs-sublabel div for AI Reputation descriptor"
     assert 'class="aivs-label"' in html, \
         "Score badge must use aivs-label div for Pulse Score label"
 
@@ -99,7 +99,7 @@ def test_comparison_cover_eyebrow():
 
 def test_cover_report_sub():
     from perception.strings import COVER_REPORT_SUB
-    assert COVER_REPORT_SUB == "AI Visibility Report"
+    assert COVER_REPORT_SUB == "AI Reputation Report"
 
 
 def test_market_cover_eyebrow():

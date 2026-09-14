@@ -212,7 +212,7 @@ async def me(payload: dict = Depends(get_current_user_payload)):
     }
 
 
-_APP_VERSION = "1.08"
+_APP_VERSION = "1.09"
 _SERVER_START = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
@@ -3304,10 +3304,10 @@ def _learn_grouped(articles: list[dict]) -> list[tuple[str, list[dict]]]:
     return [(c, groups[c]) for c in order]
 
 
-def _render_learn_page(articles: list[dict], *, title: str = "Learn about Pulse — AI Visibility Intelligence",
+def _render_learn_page(articles: list[dict], *, title: str = "Learn about Pulse — AI Reputation Intelligence",
                        heading: str = "Learn about Pulse",
                        lede: str = "What Pulse is, what its reports reveal, who they help, and how to get started.",
-                       desc: str = "Learn what Pulse is, what its AI-visibility reports show, who they help, and how to get started.",
+                       desc: str = "Learn what Pulse is, what its AI-reputation reports show, who they help, and how to get started.",
                        empty_msg: str = "Content is coming soon. Check back shortly.") -> str:
     """Server-render a standalone, publicly-indexable content page (Learn / Methodology)."""
     from perception.learn import render_markdown
@@ -3405,7 +3405,7 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
       {{BODY}}
     </main>
   </div>
-  <footer>Pulse &middot; AI Visibility Intelligence &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
+  <footer>Pulse &middot; AI Reputation Intelligence &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
 </body>
 </html>"""
 
@@ -3433,10 +3433,10 @@ async def methodology_public_page():
         articles = []
     return HTMLResponse(_render_learn_page(
         articles,
-        title="Methodology — Pulse AI Visibility Intelligence",
-        heading="Pulse AI Visibility Methodology",
-        lede="How Pulse measures AI visibility — the pillars, scoring rubric, national quartiles, data sources, and prompt battery behind every report.",
-        desc="The full methodology behind Pulse AI Visibility reports: pillars, scoring, quartiles, data sources, and prompt battery.",
+        title="Methodology — Pulse AI Reputation Intelligence",
+        heading="Pulse AI Reputation Methodology",
+        lede="How Pulse measures AI reputation — the pillars, scoring rubric, national quartiles, data sources, and prompt battery behind every report.",
+        desc="The full methodology behind Pulse AI Reputation reports: pillars, scoring, quartiles, data sources, and prompt battery.",
         empty_msg="The full methodology is being published. Check back shortly.",
     ))
 
