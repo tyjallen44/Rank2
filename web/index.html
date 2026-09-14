@@ -804,6 +804,37 @@ input[type="url"]::placeholder, textarea::placeholder {
 .md-primer td.syn { font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   color:var(--ink); white-space:nowrap; padding-right:10px; }
 
+/* ── Home page ───────────────────────────────────────────────── */
+.home-hero{background:linear-gradient(135deg,#0b3c43 0%,var(--teal) 62%,#1aa3ab 100%);color:#fff;border-radius:16px;padding:44px 48px 40px;position:relative;overflow:hidden;margin-bottom:22px}
+.home-hero::after{content:'';position:absolute;right:-90px;top:-90px;width:340px;height:340px;border-radius:50%;background:rgba(255,255,255,.07);pointer-events:none}
+.home-hero::before{content:'';position:absolute;right:120px;bottom:-140px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.05);pointer-events:none}
+.home-rl-logo{height:30px;width:auto;display:block;margin-bottom:24px;filter:brightness(0) invert(1);opacity:.95}
+[data-brand="extension1"] .home-rl-logo,[data-brand="extension2"] .home-rl-logo{display:none}
+.home-kicker{font-family:'Barlow Condensed',Impact,sans-serif;font-size:15px;font-weight:700;letter-spacing:.24em;text-transform:uppercase;opacity:.85;margin-bottom:6px}
+.home-kicker span{opacity:.75}
+.home-h1{font-family:'Barlow Condensed',Impact,sans-serif;font-size:48px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;line-height:1.02;margin:0 0 14px;position:relative}
+.home-lede{font-size:16px;line-height:1.55;max-width:660px;opacity:.95;margin:0 0 26px;position:relative}
+.home-cta{display:flex;gap:12px;flex-wrap:wrap;position:relative}
+.home-cta .btn-light{background:#fff;color:var(--teal);border:1px solid #fff;font-weight:700}
+.home-cta .btn-outline{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.45)}
+.home-cta .btn-outline:hover{background:rgba(255,255,255,.2)}
+.home-feature{background:#fff;border:1px solid var(--border);border-radius:14px;padding:26px 28px 22px;margin-bottom:22px}
+.home-feature h2,.home-feature h3{font-family:'Barlow Condensed',Impact,sans-serif;font-size:24px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--teal);margin:0 0 10px}
+.home-feature .learn-body p{font-size:15px;line-height:1.6;color:var(--text)}
+.home-feature .learn-body p:last-child{margin-bottom:0}
+.home-placeholder{aspect-ratio:16/9;border:2px dashed var(--border);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:6px;background:var(--pale);font-size:14px}
+.home-placeholder .ph-icon{font-size:34px;color:var(--teal);opacity:.6}
+.video-embed{position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000;margin:14px 0}
+.video-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.home-section-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 10px}
+.home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.home-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px 18px 16px;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s;text-align:left;font-family:inherit}
+.home-card:hover{border-color:var(--teal);transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.06)}
+.home-card .hc-icon{font-size:20px;color:var(--teal);margin-bottom:8px}
+.home-card .hc-title{font-weight:700;font-size:15px;color:var(--text);margin-bottom:4px}
+.home-card .hc-desc{font-size:12.5px;color:var(--muted);line-height:1.45}
+@media (max-width:760px){.home-hero{padding:30px 24px}.home-h1{font-size:36px}}
+
 /* ── Learn reader ─────────────────────────────────────────────── */
 .learn-cat-h { font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--teal);
   border-bottom:1px solid var(--border);padding-bottom:8px;margin:34px 0 6px; }
@@ -988,6 +1019,9 @@ input[type="url"]::placeholder, textarea::placeholder {
       <div class="accent-line"></div>
     </div>
     <div class="sb-nav">
+      <button class="nav-btn" id="nav-home" onclick="navigate('home')" title="Home — what Pulse is and where to start">
+        <span class="ni">⌂</span><span class="nb-lbl">Home</span>
+      </button>
       <div class="nav-section-label">Report Creation</div>
       <button class="nav-btn active" id="nav-network" onclick="navigate('network')" title="AI Reputation report for a multi-state hospital network">
         <span class="ni">🖧</span><span class="nb-lbl">Hospital Network</span>
@@ -2627,6 +2661,37 @@ input[type="url"]::placeholder, textarea::placeholder {
       </div>
     </div>
 
+    <!-- ── Home (landing page after login) ──────────────────────────────── -->
+    <div id="page-home" class="page" style="max-width:1040px">
+      <div class="home-hero">
+        <img class="home-rl-logo" src="/assets/logo-dark.svg" alt="RLDatix">
+        <div class="home-kicker"><span class="wordmark">PULSE</span></div>
+        <h1 class="home-h1">AI Reputation Intelligence</h1>
+        <p class="home-lede">See how AI assistants describe, rank and recommend your hospitals and practices — scored on four pillars, benchmarked nationally, with the exact fixes that move the score.</p>
+        <div class="home-cta">
+          <button class="btn btn-light" onclick="navigate('network')">Run a Hospital Network report →</button>
+          <button class="btn btn-outline" onclick="navigate('individual')">Deep Diagnostic</button>
+          <button class="btn btn-outline" onclick="navigate('learn')">How it works</button>
+        </div>
+      </div>
+
+      <!-- Featured content: admin-editable (Learn → Manage Content → Home page). A pasted
+           YouTube / Vimeo / Loom link on its own line renders as an embedded player. -->
+      <div class="home-feature" id="home-feature">
+        <div class="home-placeholder"><div class="ph-icon">▶</div><div>Loading…</div></div>
+      </div>
+
+      <div class="home-section-h">Start a report</div>
+      <div class="home-grid">
+        <button class="home-card" onclick="navigate('network')"><div class="hc-icon">🖧</div><div class="hc-title">Hospital Network</div><div class="hc-desc">A whole system: every hospital scored, content analysis and a drafted prescription, plus Teaser and Full Detail versions.</div></button>
+        <button class="home-card" onclick="navigate('individual')"><div class="hc-icon">◎</div><div class="hc-title">Deep Diagnostic</div><div class="hc-desc">One hospital, a hospital service line, a specialty practice or an FQHC — with the per-location reputation table.</div></button>
+        <button class="home-card" onclick="navigate('patient')"><div class="hc-icon">☰</div><div class="hc-title">Competitors Rankings</div><div class="hc-desc">Rank every provider in a market or on a list, in prospect-facing or full formats.</div></button>
+        <button class="home-card" onclick="navigate('compare')"><div class="hc-icon">⇄</div><div class="hc-title">Compare Two</div><div class="hc-desc">Two organizations head-to-head in a single combined report.</div></button>
+        <button class="home-card" onclick="navigate('event')"><div class="hc-icon">◫</div><div class="hc-title">Event Preparation</div><div class="hc-desc">Upload an attendee list and get a report for every organization before the meeting.</div></button>
+        <button class="home-card" onclick="navigate('history')"><div class="hc-icon">◷</div><div class="hc-title">History</div><div class="hc-desc">Every report you and your team have run, with all downloads in one place.</div></button>
+      </div>
+    </div>
+
     <!-- ── Learn ─────────────────────────────────────────────────────────── -->
     <div id="page-learn" class="page">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
@@ -2641,6 +2706,7 @@ input[type="url"]::placeholder, textarea::placeholder {
         <select id="learn-page-select" onchange="setLearnPage(this.value)" style="padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;margin-right:12px">
           <option value="learn">Learn page (/learn)</option>
           <option value="methodology">Methodology page (/methodology)</option>
+          <option value="home">Home page (in-app landing)</option>
         </select>
         <button class="btn btn-primary" style="padding:8px 16px;font-size:13px" onclick="learnEdit(null)">+ Add Article</button>
         <button class="btn" style="padding:8px 16px;font-size:13px;margin-left:8px;border:1px solid var(--border);background:#fff" onclick="learnSeed()">Load starter articles</button>
@@ -2662,6 +2728,13 @@ input[type="url"]::placeholder, textarea::placeholder {
         </div>
 
         <div class="rn-section">
+          <div class="rn-heading new">New Features</div>
+
+          <div class="rn-item">
+            <div class="rn-title">New Home Page</div>
+            <div class="rn-body">Signing in now lands on a <strong>Home</strong> page: the RLDatix mark, what Pulse does, a featured block for a welcome / walkthrough video, and one-click cards for every report type. The featured block is admin-editable (Learn &rarr; Manage Content &rarr; Home page); paste a YouTube, Vimeo or Loom link on its own line and it embeds as a player.</div>
+          </div>
+
           <div class="rn-heading new">Naming</div>
 
           <div class="rn-item">
@@ -3713,7 +3786,7 @@ function applyBrand(brand) {
 
   if (_brand === 'extension2') {
     // Sidebar: reverse wordmark (linen on espresso)
-    document.querySelectorAll('#sidebar .wordmark').forEach(el => {
+    document.querySelectorAll('#sidebar .wordmark, #page-home .wordmark').forEach(el => {
       el.innerHTML = `<img src="${_AJ_WORDMARK_REVERSE_SRC}" alt="Ashleigh Jane"` +
         ` style="height:46px;width:auto;display:block;margin-left:auto">`;
     });
@@ -3951,7 +4024,7 @@ function showApp() {
     }
     el.textContent = label;
   }).catch(() => {});
-  navigate('network');
+  navigate('home');
 }
 
 function showSessionExpired() {
@@ -3998,6 +4071,26 @@ function navigate(p) {
   if (p === 'feedback') loadFeedback();
   if (p === 'track') loadTrackPage();
   if (p === 'learn') loadLearn();
+  if (p === 'home') loadHome();
+}
+
+// ── Home page: featured content from the admin-editable "home" content page ──
+async function loadHome() {
+  const host = document.getElementById('home-feature');
+  if (!host) return;
+  try {
+    const r = await fetch('/api/learn?page=home');
+    const arts = r.ok ? await r.json() : [];
+    if (!arts.length) {
+      const adminHint = (_role === 'admin')
+        ? '<div style="font-size:12px">Admins: Learn → Manage Content → Home page → paste a YouTube, Vimeo or Loom link.</div>' : '';
+      host.innerHTML = `<div class="home-placeholder"><div class="ph-icon">▶</div><div>A short welcome video is coming soon.</div>${adminHint}</div>`;
+      return;
+    }
+    host.innerHTML = arts.map(a => `<h2>${_learnEsc(a.title)}</h2><div class="learn-body">${a.html || ''}</div>`).join('<hr style="border:0;border-top:1px solid var(--border);margin:18px 0">');
+  } catch (e) {
+    host.innerHTML = `<div class="home-placeholder"><div class="ph-icon">▶</div><div>Could not load the welcome content.</div></div>`;
+  }
 }
 
 function resetPage(p) {
@@ -7870,7 +7963,7 @@ async function adminTestEmail() {
 
 // ── Learn ───────────────────────────────────────────────────────────────────
 let _learnManage = false;
-let _learnPage = 'learn';   // which content page admins are managing: 'learn' | 'methodology'
+let _learnPage = 'learn';   // which content page admins are managing: 'learn' | 'methodology' | 'home'
 function setLearnPage(p){ _learnPage = p; loadLearn(); }
 let _learnEditingId = null;
 let _learnCache = [];
@@ -7997,7 +8090,7 @@ async function learnMove(id,dir){
 }
 
 async function learnSeed(){
-  const _lbl = _learnPage === 'methodology' ? 'methodology' : 'starter';
+  const _lbl = _learnPage === 'methodology' ? 'methodology' : _learnPage === 'home' ? 'home page' : 'starter';
   if(!confirm(`Load the ${_lbl} content? Existing articles with the same title are left unchanged.`)) return;
   const r=await api('/api/admin/learn/seed?page=' + encodeURIComponent(_learnPage),{method:'POST'});
   if(r.ok){

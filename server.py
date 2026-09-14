@@ -3382,6 +3382,8 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
   article.learn-article h3 { font-size:20px; margin:8px 0 6px; }
   .learn-body :first-child { margin-top:0; }
   .learn-body img { max-width:100%; }
+  .video-embed { position:relative; width:100%; aspect-ratio:16/9; border-radius:12px; overflow:hidden; background:#000; margin:14px 0; }
+  .video-embed iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
   .learn-body pre { background:#0f1720; color:#e6edf3; padding:14px 16px; border-radius:8px; overflow:auto; }
   .learn-body code { background:#eef2f4; padding:2px 5px; border-radius:4px; font-size:.92em; }
   .learn-body pre code { background:none; padding:0; }
@@ -3441,13 +3443,19 @@ async def methodology_public_page():
     ))
 
 
+_CONTENT_PAGES = ("learn", "methodology", "home")
+
+
 @app.get("/api/learn")
-async def learn_public_api():
-    """Published Learn content (rendered HTML) — used by the in-app Learn view. Public."""
+async def learn_public_api(page: str = "learn"):
+    """Published content (rendered HTML) for a content page — used by the in-app
+    Learn view and the Home page. Public."""
     from perception.db import init_db, list_learn_articles
     from perception.learn import render_markdown
+    if page not in _CONTENT_PAGES:
+        raise HTTPException(400, "unknown content page")
     init_db()
-    arts = list_learn_articles(include_unpublished=False, page="learn")
+    arts = list_learn_articles(include_unpublished=False, page=page)
     return [{"id": a["id"], "category": a["category"], "title": a["title"],
              "html": render_markdown(a["body"])} for a in arts]
 
@@ -3520,9 +3528,10 @@ async def learn_admin_preview(req: LearnPreviewRequest, _: dict = Depends(requir
 async def learn_admin_seed(page: str = "learn", _: dict = Depends(require_admin)):
     """Insert the starter articles for a page. Idempotent — skips existing titles."""
     from perception.db import init_db, list_learn_articles, create_learn_article
-    from perception.learn_seed import STARTER_ARTICLES, METHODOLOGY_ARTICLES
+    from perception.learn_seed import STARTER_ARTICLES, METHODOLOGY_ARTICLES, HOME_ARTICLES
     init_db()
-    arts = METHODOLOGY_ARTICLES if page == "methodology" else STARTER_ARTICLES
+    arts = (METHODOLOGY_ARTICLES if page == "methodology"
+            else HOME_ARTICLES if page == "home" else STARTER_ARTICLES)
     existing = {a["title"].strip().lower()
                 for a in list_learn_articles(include_unpublished=True, page=page)}
     added = 0

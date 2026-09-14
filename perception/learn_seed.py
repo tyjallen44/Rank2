@@ -291,3 +291,21 @@ METHODOLOGY_ARTICLES: list[dict] = [
         ),
     },
 ]
+
+
+# ── Home page (in-app landing) ───────────────────────────────────────────────
+# One featured block. Paste a YouTube, Vimeo or Loom link on its own line to
+# embed the welcome video; everything else is ordinary Markdown.
+HOME_ARTICLES = [
+    {
+        "category": "Welcome",
+        "title": "Welcome to Pulse",
+        "body": (
+            "Pulse shows how AI assistants describe, rank and recommend healthcare "
+            "organizations — and what to change so they recommend yours.\n\n"
+            "_A short walkthrough video is coming soon. Admins: edit this block under "
+            "Learn → Manage Content → Home page and paste a YouTube, Vimeo or Loom link on "
+            "its own line to embed it here._"
+        ),
+    },
+]

@@ -24,6 +24,30 @@ _UL = re.compile(r"^\s*[-*+]\s+(.*)$")
 _OL = re.compile(r"^\s*\d+[.)]\s+(.*)$")
 _BQ = re.compile(r"^\s*&gt;\s?(.*)$")  # '>' is HTML-escaped before block parsing
 
+# A line that is ONLY a YouTube / Vimeo / Loom link becomes a responsive embed.
+_VIDEO_YT = re.compile(r"^(?:https?://)?(?:www\.|m\.)?(?:youtube(?:-nocookie)?\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/)|youtu\.be/)([A-Za-z0-9_-]{6,})")
+_VIDEO_VIMEO = re.compile(r"^(?:https?://)?(?:www\.|player\.)?vimeo\.com/(?:video/)?(\d+)(?:/([A-Za-z0-9]+))?")
+_VIDEO_LOOM = re.compile(r"^(?:https?://)?(?:www\.)?loom\.com/(?:share|embed)/([A-Za-z0-9]+)")
+
+
+def video_embed_html(url: str) -> str | None:
+    """Return an <iframe> embed for a supported video URL, else None."""
+    u = (url or "").strip()
+    src = None
+    if (m := _VIDEO_YT.match(u)):
+        src = f"https://www.youtube-nocookie.com/embed/{m.group(1)}?rel=0&modestbranding=1"
+    elif (m := _VIDEO_VIMEO.match(u)):
+        src = f"https://player.vimeo.com/video/{m.group(1)}?dnt=1"
+        if m.group(2):   # unlisted-video hash
+            src += f"&h={m.group(2)}"
+    elif (m := _VIDEO_LOOM.match(u)):
+        src = f"https://www.loom.com/embed/{m.group(1)}"
+    if not src:
+        return None
+    return ('<div class="video-embed"><iframe src="' + html.escape(src, quote=True) +
+            '" title="Video" loading="lazy" allow="accelerometer; autoplay; clipboard-write; '
+            'encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>')
+
 
 def _safe_href(url: str) -> str:
     u = url.strip()
@@ -86,6 +110,15 @@ def render_markdown(md: str) -> str:
             out.append("<hr>")
             i += 1
             continue
+
+        # Video embed: a line holding only a YouTube / Vimeo / Loom URL
+        if "youtu" in stripped or "vimeo" in stripped or "loom.com" in stripped:
+            _emb = video_embed_html(html.unescape(stripped))
+            if _emb:
+                flush_para()
+                out.append(_emb)
+                i += 1
+                continue
 
         mh = _HEADING.match(stripped)
         if mh:

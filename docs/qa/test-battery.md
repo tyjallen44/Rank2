@@ -1199,3 +1199,63 @@ Report".
 NEEDS BROWSER TESTING. After deploy, run once: `.venv/bin/python scripts/rebrand_learn_articles.py`
 (with production DATABASE_URL) — until then the live Learn/Methodology article bodies still say
 "AI Visibility" while the page chrome says "AI Reputation".
+
+## HOME-PAGE — New Home landing page with admin-editable featured (video) block
+
+**Shipped:** 2026-09-14 · **Area:** App shell, Learn content system · **Type:** feature
+
+### What changed
+- **Home page** (`#page-home`, nav "Home" at the top of the sidebar). Login now lands on Home
+  instead of Hospital Network. Hero: RLDatix mark (hidden for partner brands, like page titles),
+  brand wordmark, headline **AI Reputation Intelligence**, one-line lede, three CTAs (Hospital
+  Network / Deep Diagnostic / How it works). Below: **featured block** and six "Start a report"
+  cards (Hospital Network, Deep Diagnostic, Competitors Rankings, Compare Two, Event Prep, History).
+- **Featured block** is content from a new `home` content page in the existing Learn system.
+  `GET /api/learn?page=home` (public; pages limited to learn/methodology/home). Admins manage it
+  under Learn → Manage Content → **Home page (in-app landing)**; "Load starter articles" seeds a
+  "Welcome to Pulse" block (`HOME_ARTICLES`). Empty state shows a 16:9 placeholder "A short welcome
+  video is coming soon" (+ an admin hint).
+- **Video embeds in Markdown**: a line containing only a YouTube (`watch?v=`, `youtu.be`, `shorts`,
+  `live`), Vimeo (incl. unlisted `/id/hash`) or Loom (`share`/`embed`) link renders as a responsive
+  16:9 iframe (`youtube-nocookie`, `dnt=1` for Vimeo). Works on Home, in-app Learn and the public
+  /learn and /methodology pages (CSS added to both).
+- Release note "New Home Page" added under 1.09.
+
+### Files changed
+`web/index.html`, `server.py`, `perception/learn.py`, `perception/learn_seed.py`,
+`docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Landing**: sign in → Home page shows: RLDatix logo (white on teal hero), "PULSE" kicker,
+"AI Reputation Intelligence" headline, lede, three buttons; placeholder featured block; six cards.
+Sidebar "Home" is highlighted first in the list. Cards and CTAs navigate to the right pages.
+**T2 — Admin content**: as admin, Learn → Manage Content → select "Home page (in-app landing)" →
+"Load starter articles" → a "Welcome to Pulse" article appears. Edit it: put a YouTube link on its
+own line (e.g. `https://www.youtube.com/watch?v=dQw4w9WgXcQ`) → Save → Home shows the title and an
+embedded, playable 16:9 player with the surrounding text. Repeat with a Vimeo and a Loom link.
+**T3 — Non-video URL**: a line with `https://example.com/page` stays a plain paragraph/link.
+**T4 — Unpublish**: unpublish the home article → Home shows the placeholder again.
+**T5 — Partner brands**: log in under extension1 / extension2 → no RLDatix mark in the hero; the
+brand's own wordmark appears in the kicker (Ashleigh Jane: reverse image).
+**T6 — Public pages**: paste a video link into a /learn article → /learn renders the embed with
+correct sizing.
+**T7 — API**: `GET /api/learn?page=home` returns the published home content; `?page=bogus` → 400.
+
+### Regression Checks
+- **R1** All other pages/nav unchanged; `navigate('network')` deep links (e.g. bulk "New Bulk Run")
+  still work.
+- **R2** In-app Learn (page=learn) content unchanged; Methodology admin management unchanged.
+- **R3** Unit suite: 326 pass / same 15 pre-existing failures; learn/markdown tests pass.
+
+### Acceptance Checklist
+- [ ] T1 landing + navigation
+- [ ] T2 admin content + embeds (YouTube / Vimeo / Loom)
+- [ ] T3 plain URL
+- [ ] T4 unpublish
+- [ ] T5 partner brands
+- [ ] T6 public page embed
+- [ ] T7 API
+- [ ] R1–R3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Check the hero on a narrow window (≤760px) — headline scales down.
