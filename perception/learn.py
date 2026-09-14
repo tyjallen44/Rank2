@@ -34,18 +34,24 @@ def video_embed_html(url: str) -> str | None:
     """Return an <iframe> embed for a supported video URL, else None."""
     u = (url or "").strip()
     src = None
+    host = None
     if (m := _VIDEO_YT.match(u)):
-        src = f"https://www.youtube-nocookie.com/embed/{m.group(1)}?rel=0&modestbranding=1"
+        # enablejsapi lets the page reset the player when the video ends
+        src = f"https://www.youtube-nocookie.com/embed/{m.group(1)}?rel=0&modestbranding=1&enablejsapi=1"
+        host = "youtube"
     elif (m := _VIDEO_VIMEO.match(u)):
-        src = f"https://player.vimeo.com/video/{m.group(1)}?dnt=1"
+        # dnt: no tracking; title/byline/portrait off: no uploader chrome over the video
+        src = f"https://player.vimeo.com/video/{m.group(1)}?dnt=1&title=0&byline=0&portrait=0"
         if m.group(2):   # unlisted-video hash
             src += f"&h={m.group(2)}"
+        host = "vimeo"
     elif (m := _VIDEO_LOOM.match(u)):
         src = f"https://www.loom.com/embed/{m.group(1)}"
+        host = "loom"
     if not src:
         return None
     return ('<div class="video-embed"><iframe src="' + html.escape(src, quote=True) +
-            '" title="Video" loading="lazy" allow="accelerometer; autoplay; clipboard-write; '
+            f'" data-host="{host}" title="Video" loading="lazy" allow="accelerometer; autoplay; clipboard-write; '
             'encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>')
 
 

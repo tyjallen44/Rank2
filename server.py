@@ -3408,6 +3408,39 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
     </main>
   </div>
   <footer>Pulse &middot; AI Reputation Intelligence &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
+<!-- video embeds: return to poster when a video ends -->
+<script>
+function _bindVideoEmbeds(root){
+  (root||document).querySelectorAll('.video-embed iframe[data-host]').forEach(function(f){
+    if(f.dataset.bound) return; f.dataset.bound='1';
+    var host=f.dataset.host;
+    var arm=function(){
+      try{
+        if(host==='vimeo') f.contentWindow.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*');
+        else if(host==='youtube') f.contentWindow.postMessage(JSON.stringify({event:'listening',id:f.id||'yt',channel:'widget'}),'*');
+      }catch(e){}
+    };
+    f.addEventListener('load',arm); arm();
+  });
+}
+window.addEventListener('message',function(ev){
+  var d=ev.data; if(typeof d==='string'){ try{ d=JSON.parse(d);}catch(e){ return; } }
+  if(!d||typeof d!=='object') return;
+  document.querySelectorAll('.video-embed iframe[data-host]').forEach(function(f){
+    if(f.contentWindow!==ev.source) return;
+    var host=f.dataset.host, w=f.contentWindow;
+    try{
+      if(host==='vimeo'){
+        if(d.event==='ready') w.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*');
+        if(d.event==='ended'){ w.postMessage(JSON.stringify({method:'unload'}),'*'); }
+      } else if(host==='youtube' && d.event==='infoDelivery' && d.info && d.info.playerState===0){
+        w.postMessage(JSON.stringify({event:'command',func:'stopVideo',args:[]}),'*');
+      }
+    }catch(e){}
+  });
+});
+_bindVideoEmbeds(document);
+</script>
 </body>
 </html>"""
 

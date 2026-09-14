@@ -4110,6 +4110,39 @@ function navigate(p) {
   if (p === 'home') loadHome();
 }
 
+// ── Video embeds: when a video ends, return it to its poster/play state instead of
+//    the host's end screen (Vimeo "more videos", YouTube suggestions). Uses the hosts'
+//    postMessage player APIs — no SDKs loaded. Loom has no end-screen API (nothing to do).
+function _bindVideoEmbeds(root){
+  (root||document).querySelectorAll('.video-embed iframe[data-host]').forEach(function(f){
+    if(f.dataset.bound) return; f.dataset.bound='1';
+    var host=f.dataset.host;
+    var arm=function(){
+      try{
+        if(host==='vimeo') f.contentWindow.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*');
+        else if(host==='youtube') f.contentWindow.postMessage(JSON.stringify({event:'listening',id:f.id||'yt',channel:'widget'}),'*');
+      }catch(e){}
+    };
+    f.addEventListener('load',arm); arm();
+  });
+}
+window.addEventListener('message',function(ev){
+  var d=ev.data; if(typeof d==='string'){ try{ d=JSON.parse(d);}catch(e){ return; } }
+  if(!d||typeof d!=='object') return;
+  document.querySelectorAll('.video-embed iframe[data-host]').forEach(function(f){
+    if(f.contentWindow!==ev.source) return;
+    var host=f.dataset.host, w=f.contentWindow;
+    try{
+      if(host==='vimeo'){
+        if(d.event==='ready') w.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*');
+        if(d.event==='ended'){ w.postMessage(JSON.stringify({method:'unload'}),'*'); }
+      } else if(host==='youtube' && d.event==='infoDelivery' && d.info && d.info.playerState===0){
+        w.postMessage(JSON.stringify({event:'command',func:'stopVideo',args:[]}),'*');
+      }
+    }catch(e){}
+  });
+});
+
 // ── Home page: featured content from the admin-editable "home" content page ──
 async function loadHome() {
   const host = document.getElementById('home-feature');
@@ -4124,6 +4157,7 @@ async function loadHome() {
       return;
     }
     host.innerHTML = arts.map(a => `<h2>${_learnEsc(a.title)}</h2><div class="learn-body">${a.html || ''}</div>`).join('<hr style="border:0;border-top:1px solid var(--border);margin:18px 0">');
+    _bindVideoEmbeds(host);
   } catch (e) {
     host.innerHTML = `<div class="home-placeholder"><div class="ph-icon">▶</div><div>Could not load the welcome content.</div></div>`;
   }
@@ -8043,6 +8077,7 @@ function renderLearnReader(arts){
     });
   });
   host.innerHTML=html;
+  _bindVideoEmbeds(host);
 }
 
 function renderLearnManage(arts){
