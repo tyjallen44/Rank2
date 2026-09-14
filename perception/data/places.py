@@ -498,8 +498,8 @@ def search_entity_candidates(
                 "Content-Type": "application/json",
                 "X-Goog-Api-Key": key,
                 "X-Goog-FieldMask": (
-                    "places.displayName,places.formattedAddress,"
-                    "places.rating,places.userRatingCount"
+                    "places.id,places.displayName,places.formattedAddress,"
+                    "places.rating,places.userRatingCount,places.googleMapsUri"
                 ),
             },
             json={"textQuery": query, "pageSize": min(max_results, 20)},
@@ -521,6 +521,8 @@ def search_entity_candidates(
             "rating": p.get("rating"),
             "review_count": p.get("userRatingCount"),
             "resolved_state": _state_from_address(p.get("formattedAddress", "")),
+            "place_id": p.get("id"),
+            "maps_url": p.get("googleMapsUri"),
         }
         for p in raw
     ]

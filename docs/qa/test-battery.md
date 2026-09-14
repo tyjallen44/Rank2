@@ -828,3 +828,87 @@ Health System / Service Line / Market with the note under the toggle; no City/ZI
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Markup reorder only.
+
+## DD-CONFIRM-SIMPLE — Deep Diagnostic confirmation page simplified; Google-seeded locations; name dedupe
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic (all types; mainly Specialty / Service Line) · **Type:** UX + correctness
+
+### What changed
+**Correctness**
+- **Service-line name dedupe.** If the Health System field already contains the service line
+  ("HOUSTON METHODIST ORTHOPEDICS" + "ORTHOPEDICS"), the line is stripped (also for spelling
+  variants such as ORTHOPAEDICS) and the field is rewritten to the bare system. The brand /
+  report title is no longer doubled.
+- **Locations seeded from Google.** After discovery, same-brand Google candidates from the search
+  (token overlap ≥ 0.6 with the chosen listing, other streets) are added to the Locations list
+  with their address, rating, and **place_id**. Same-name listings are labelled "Name (street)".
+  Discovery results that describe the same listing are dropped in favour of the seeded row.
+- **Pinned Google profiles server-side.** `search_entity_candidates` now returns `place_id` and
+  `maps_url`. `collect_platform_data` uses an entry's `place_id`/rating/count verbatim ("pinned")
+  before any name-based lookup, so five same-name clinics keep five distinct profiles. The chosen
+  anchor listing is passed as `anchor_listing` (new `AnalyzeRequest` field) and pinned too; the
+  anchor-duplicate check trusts a distinct `place_id`.
+
+**Layout (confirmation card)**
+- Candidate cards collapse into one line once a listing is chosen: "Flagship listing: X · address
+  · 4.6★ (157) · change". "change" re-opens the list. ("Google listing" wording for other types.)
+- One card: **Report Title** (single editable input, prefilled) → context line (service-line badge
+  or the "switch to Hospital Service Line" hint) → **Practice profile: Procedural · change** (one
+  line; description is a tooltip; dropdown only on change) → **Locations (N)** list with
+  address + rating per row → **Advanced options** (collapsed `<details>`: composite/physicians,
+  Pulse Briefing, Website URL, admin toggles, composite table) → **Run Diagnostic** with a
+  one-line "Produces the report and a teaser, plus the per-location reputation table".
+- Removed: Selected Organization box, "Search anchor" line, Parent Organization block, title
+  preview, the duplicate Search Again next to Run, the standalone "every run produces" paragraph.
+
+### Files changed
+`web/index.html`, `server.py`, `perception/data/places.py`, `perception/practice_reputation.py`,
+`perception/practice_analyzer.py`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Dedupe**: Hospital Service Line, Health System "HOUSTON METHODIST ORTHOPEDICS", Service Line
+ORTHOPEDICS, HOUSTON/TX → Search. The system field rewrites to "HOUSTON METHODIST"; the title reads
+"HOUSTON METHODIST ORTHOPEDICS" (no doubled word); the context line says "ORTHOPEDICS service line
+of HOUSTON METHODIST".
+**T2 — Seeded locations**: same search returns ~5 "Houston Methodist Orthopedics & Sports Medicine"
+listings. Locations shows the flagship row plus the other four with street addresses and star
+ratings (labelled "(street)" where names repeat), plus any additional AI-discovered clinics. No
+"single-location" message.
+**T3 — Pinned profiles**: run T2. The PDF's per-location reputation table shows a distinct Google
+rating/review count for each seeded clinic (matching the search cards), not "Not established" for
+the same-name rows.
+**T4 — Candidate collapse**: after Search the cards fold to one summary line with "change";
+clicking change re-opens the cards; selecting another card re-collapses and updates the flagship
+row + title.
+**T5 — Card layout**: confirmation card shows only Title, context line, profile line, Locations,
+"Advanced options" (collapsed), Run. Expanding Advanced reveals physicians / briefing / URL (+ admin
+toggles for admin). Title edits still flow to the report.
+**T6 — Profile change**: "change" reveals the dropdown; choosing Relationship updates the badge and
+its tooltip.
+**T7 — Hospital type**: single-listing hospital → collapsed "Google listing" line; card shows Title
++ Advanced (with the composite checkbox inside) + Run; no Locations section.
+**T8 — Specialty hint**: Specialty Practice search that resolves to a department shows the amber
+"switch to Hospital Service Line" line under the title.
+
+### Regression Checks
+- **R1** Standalone specialty practice with several Google listings → seeded locations appear;
+  unchecking one removes it from the run.
+- **R2** Compare Two / Event Prep untouched (no anchor_listing; name-based resolution as before).
+- **R3** FQHC flow untouched.
+- **R4** Unit suite: same 4 pre-existing failures; 108 pass in the practice/places selection.
+
+### Acceptance Checklist
+- [ ] T1 dedupe
+- [ ] T2 seeded locations
+- [ ] T3 pinned profiles in PDF
+- [ ] T4 collapse/expand
+- [ ] T5 card layout
+- [ ] T6 profile change
+- [ ] T7 hospital type
+- [ ] T8 specialty hint
+- [ ] R1–R4
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. T3 is the key end-to-end check (5–8 min run). The Places field mask now
+requests `places.id` and `places.googleMapsUri`; if candidates come back without ratings, check
+the API key restrictions first.

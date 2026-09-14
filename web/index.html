@@ -1626,8 +1626,12 @@ input[type="url"]::placeholder, textarea::placeholder {
 
       <!-- Step 2: Candidates -->
       <div id="ir-step2" class="hidden mt16">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Select the entry that identifies this organization. For specialty practices and service lines, all locations will be discovered next.</div>
-        <div id="ir-candidates"></div>
+        <!-- Collapsed summary (shown once a listing is chosen); "change" re-opens the list -->
+        <div id="ir-cand-summary" class="hidden" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fff;border:1.5px solid var(--border);border-radius:8px;font-size:13px"></div>
+        <div id="ir-cand-picker">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Select the entry that identifies this organization. For specialty practices and service lines, all locations will be discovered next.</div>
+          <div id="ir-candidates"></div>
+        </div>
         <div class="mt12">
           <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
         </div>
@@ -1637,126 +1641,122 @@ input[type="url"]::placeholder, textarea::placeholder {
            larger system it is analyzed as that service line and a badge appears in the Selected
            Organization box (with a "treat as entered" opt-out). No separate decision card. -->
 
-      <!-- Step 3: Options + Run -->
+      <!-- Step 3: Confirm + Run. One card: title, context line, locations, Run. Everything
+           else lives under a collapsed "Advanced options" disclosure so a typical user only
+           glances at the locations and runs. -->
       <div id="ir-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Selected Organization</div>
-        <div id="ir-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
-
-        <!-- Practice profile (specialty only) — folded in from the former standalone gate -->
-        <div id="ir-profile-inline" class="hidden" style="margin-bottom:20px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">
-            Practice Profile <span style="font-weight:400;text-transform:none;letter-spacing:0">— auto-classified as <strong id="ir-profile-proposed" style="color:var(--teal)"></strong>
-            · <a href="#" id="ir-profile-change" onclick="irShowProfileSelect();return false" style="color:var(--teal);font-weight:600">change</a></span>
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Report Title</div>
+          <input type="text" id="ir-custom-title" placeholder="Report title…" oninput="onIrTitleInput(this.value)"
+            style="width:100%;box-sizing:border-box;font-size:15px;font-weight:700;color:var(--teal);padding:9px 12px;border:1.5px solid var(--border);border-radius:6px;outline:none;background:#fff">
+          <div id="ir-selected-display" style="font-size:12px;color:var(--text);margin-top:6px"></div>
+          <!-- Practice profile (practice types only): one line, dropdown only on "change" -->
+          <div id="ir-profile-inline" class="hidden" style="font-size:12px;color:var(--muted);margin-top:4px">
+            Practice profile: <strong id="ir-profile-proposed" style="color:var(--teal)"></strong>
+            · <a href="#" id="ir-profile-change" onclick="irShowProfileSelect();return false" style="color:var(--teal);font-weight:600">change</a>
+            <select id="ir-profile-select" class="fi hidden" style="margin-top:6px" onchange="irProfileChanged(this.value)">
+              <option value="practice_procedural">Procedural — elective/destination procedures (ortho, plastics, ophthalmology, fertility, bariatrics, cosmetic derm, oral surgery)</option>
+              <option value="practice_relationship">Relationship — primary care, pediatrics, OB/GYN, behavioral health, geriatrics, dental</option>
+              <option value="practice_referral_fed">Referral-Fed — reached via PCP referral (oncology, cardiology, nephrology, rheumatology, surgical subspecialties)</option>
+              <option value="practice_hybrid">Hybrid — multi-specialty groups: blend of procedural and relationship</option>
+            </select>
+            <div id="ir-profile-desc" class="hidden"></div>
           </div>
-          <select id="ir-profile-select" class="fi hidden" onchange="irProfileChanged(this.value)">
-            <option value="practice_procedural">Procedural — elective/destination procedures (ortho, plastics, ophthalmology, fertility, bariatrics, cosmetic derm, oral surgery)</option>
-            <option value="practice_relationship">Relationship — primary care, pediatrics, OB/GYN, behavioral health, geriatrics, dental</option>
-            <option value="practice_referral_fed">Referral-Fed — reached via PCP referral (oncology, cardiology, nephrology, rheumatology, surgical subspecialties)</option>
-            <option value="practice_hybrid">Hybrid — multi-specialty groups: blend of procedural and relationship</option>
-          </select>
-          <div id="ir-profile-desc" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
         </div>
 
-        <!-- Locations (folded in from the former Organization Coverage gate). Populated by
-             discovery for specialty practices; hidden for hospital/FQHC. -->
-        <div id="ir-locations-section" class="hidden" style="margin-bottom:20px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:8px">Locations Analyzed</div>
+        <!-- Locations: the one thing worth confirming. Populated by discovery (+ Google
+             candidates from the search) for practice types; hidden for hospital/FQHC. -->
+        <div id="ir-locations-section" class="hidden" style="margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:8px">Locations <span id="ir-locations-badge"></span></div>
           <div id="ir-siblings-loading" style="padding:8px 0 12px;text-align:center">
             <span class="spinner" style="display:block;margin:0 auto 10px"></span>
             <div style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:4px">Discovering locations for <span id="ir-siblings-org-name"></span>…</div>
-            <div style="font-size:11px;color:var(--muted)">Mapping all locations in this organization. 10–20 seconds.</div>
+            <div style="font-size:11px;color:var(--muted)">10–20 seconds.</div>
           </div>
           <div id="ir-siblings-content" class="hidden">
-            <div id="ir-siblings-count" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
+            <div id="ir-siblings-count" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
             <div id="ir-siblings-list"></div>
-            <div style="font-size:11px;color:var(--muted);margin-top:8px">Uncheck any false-positive entries that should not be included.</div>
           </div>
           <div id="ir-siblings-err" class="err hidden mt8"></div>
         </div>
 
-        <div style="margin-bottom:20px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Report Title</div>
-          <div id="ir-title-preview" style="font-size:14px;font-weight:700;color:var(--teal);padding:9px 14px;background:#fff;border:1.5px solid var(--border);border-radius:6px;margin-bottom:8px;min-height:1.4em"></div>
-          <input type="text" id="ir-custom-title" placeholder="Edit title…" oninput="onIrTitleInput(this.value)"
-            style="width:100%;box-sizing:border-box;font-size:13px;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);outline:none">
-        </div>
-
-        <div class="fg" style="margin-bottom:0">
-          <label class="fl">Options</label>
-          <!-- Hospital-only options -->
-          <div id="ir-composite-opts">
-            <label class="aggregate-toggle" title="Analyze related hospitals and aggregate their data into this report.">
-              <input type="checkbox" id="ir-agg-toggle" checked>
-              <span class="agg-label">Composite analysis related hospitals only</span>
+        <details id="ir-advanced" style="margin-bottom:6px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
+          <div style="margin-top:10px;padding-left:2px">
+            <!-- Hospital-only options -->
+            <div id="ir-composite-opts">
+              <label class="aggregate-toggle" title="Analyze related hospitals and aggregate their data into this report.">
+                <input type="checkbox" id="ir-agg-toggle" checked>
+                <span class="agg-label">Composite analysis related hospitals only</span>
+              </label>
+            </div>
+            <!-- Practice Composite: explicit for Hospital, implicit (hidden) for practice types -->
+            <label class="aggregate-toggle" id="ir-practice-composite-wrap" style="margin-top:10px" title="Append a practice reputation table showing public ratings for associated practices and clinics.">
+              <input type="checkbox" id="ir-practice-composite" onchange="onPracticeCompositeChange()">
+              <span class="agg-label">Practice Composite</span>
             </label>
-          </div>
-          <!-- Available for both Hospital and Specialty Practice types -->
-          <label class="aggregate-toggle" id="ir-practice-composite-wrap" style="margin-top:10px" title="Append a practice reputation table showing public ratings for associated practices and clinics.">
-            <input type="checkbox" id="ir-practice-composite" onchange="onPracticeCompositeChange()">
-            <span class="agg-label">Practice Composite</span>
-          </label>
-          <label class="aggregate-toggle" id="ir-physician-composite-wrap" style="margin-top:6px;margin-left:20px" title="Include physician-level reputation sub-rows under each practice in the composite table.">
-            <input type="checkbox" id="ir-physician-composite" onchange="onPhysicianCompositeChange()" disabled>
-            <span class="agg-label">Include Physicians in Composite</span>
-          </label>
-          <label class="aggregate-toggle" id="ir-briefing-wrap" style="margin-top:10px" title="Generate a one-page Pulse Briefing companion with talking points for a sales or CS meeting. Requires full data collection scope.">
-            <input type="checkbox" id="ir-briefing-toggle" onchange="onBriefingToggle()">
-            <span class="agg-label">Include Pulse Briefing (talking points)</span>
-          </label>
-          <div id="ir-briefing-variant-wrap" style="display:none;margin-top:6px;margin-left:20px">
-            <select id="ir-briefing-variant" style="font-size:12px;padding:3px 6px;border:1px solid #cde0e2;border-radius:4px;color:#1c1c1e">
-              <option value="sales">Sales Edition — prospect meeting</option>
-              <option value="cs">Customer Success Edition — existing customer</option>
-            </select>
-            <div style="margin-top:5px;font-size:11px;color:#c07a30;font-style:italic">
-              &#9650; Scope disclosure: Pulse Briefing requires full data collection (all locations, all physician listings, battery metrics). Run time will be longer.
+            <label class="aggregate-toggle" id="ir-physician-composite-wrap" style="margin-top:6px;margin-left:20px" title="Include physician-level reputation sub-rows under each practice in the composite table.">
+              <input type="checkbox" id="ir-physician-composite" onchange="onPhysicianCompositeChange()" disabled>
+              <span class="agg-label">Include Physicians in Composite</span>
+            </label>
+            <label class="aggregate-toggle" id="ir-briefing-wrap" style="margin-top:10px" title="Generate a one-page Pulse Briefing companion with talking points for a sales or CS meeting. Requires full data collection scope.">
+              <input type="checkbox" id="ir-briefing-toggle" onchange="onBriefingToggle()">
+              <span class="agg-label">Include Pulse Briefing (talking points)</span>
+            </label>
+            <div id="ir-briefing-variant-wrap" style="display:none;margin-top:6px;margin-left:20px">
+              <select id="ir-briefing-variant" style="font-size:12px;padding:3px 6px;border:1px solid #cde0e2;border-radius:4px;color:#1c1c1e">
+                <option value="sales">Sales Edition — prospect meeting</option>
+                <option value="cs">Customer Success Edition — existing customer</option>
+              </select>
+              <div style="margin-top:5px;font-size:11px;color:#c07a30;font-style:italic">
+                &#9650; Scope disclosure: Pulse Briefing requires full data collection (all locations, all physician listings, battery metrics). Run time will be longer.
+              </div>
+            </div>
+            <div class="fg" style="margin-top:12px;margin-bottom:0">
+              <label class="fl">Website URL <span style="font-size:11px;color:#888">(optional — overrides the auto-detected site for the content analysis)</span></label>
+              <input id="ir-content-url" class="fi" type="url" placeholder="e.g. https://doclv.com">
+            </div>
+            <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-skip-pdf-label" title="Admin only: collect and store analysis data without generating a PDF.">
+              <input type="checkbox" id="ir-skip-pdf-toggle">
+              <span class="agg-label">Skip PDF — collect data only <span style="font-size:11px;color:#888">(Admin only)</span></span>
+            </label>
+            <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
+              <input type="checkbox" id="ir-force-rerun">
+              <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
+            </label>
+
+            <!-- Practice composite list: Hospital = discovered affiliated practices (checkboxes);
+                 practice types = anchor row + physician sub-rows when that option is on. -->
+            <div id="ir-composite-section" class="hidden" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Practice Composite — Reputation Table</div>
+              <div id="ir-pd-loading" class="hidden" style="padding:8px 0 12px;text-align:center">
+                <span class="spinner" style="display:block;margin:0 auto 8px"></span>
+                <div style="font-size:12px;color:var(--muted)">Discovering practices for the reputation table…</div>
+              </div>
+              <div id="ir-pd-count" style="font-size:12px;color:var(--teal);font-weight:600;margin-bottom:12px"></div>
+              <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px">
+                <thead>
+                  <tr style="background:#f0f6f7;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">
+                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Include</th>
+                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
+                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Type</th>
+                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">City, ST</th>
+                  </tr>
+                </thead>
+                <tbody id="ir-pd-tbody"></tbody>
+              </table>
+              <div id="ir-pd-note" style="font-size:11px;color:var(--muted)">Uncheck any practice to exclude it from the reputation table.</div>
+              <div id="ir-pd-err" class="err hidden mt8"></div>
             </div>
           </div>
-          <div class="fg" style="margin-top:12px;margin-bottom:0">
-            <label class="fl">Website URL <span style="font-size:11px;color:#888">(optional — used for the content analysis; overrides the auto-detected site if it's wrong)</span></label>
-            <input id="ir-content-url" class="fi" type="url" placeholder="e.g. https://doclv.com">
-          </div>
-          <div style="font-size:12px;color:var(--muted);margin-top:12px;padding-left:2px;line-height:1.5">Every run automatically produces the <strong>Deep Diagnostic report</strong> and a <strong>Teaser</strong> version (details blurred, for sending to prospects).<span id="ir-auto-composite-note" class="hidden"> Specialty runs also include the <strong>per-location reputation table</strong> for every location checked above.</span></div>
-          <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-skip-pdf-label" title="Admin only: collect and store analysis data without generating a PDF.">
-            <input type="checkbox" id="ir-skip-pdf-toggle">
-            <span class="agg-label">Skip PDF — collect data only <span style="font-size:11px;color:#888">(Admin only)</span></span>
-          </label>
-          <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
-            <input type="checkbox" id="ir-force-rerun">
-            <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
-          </label>
-        </div>
-
-        <!-- Practice composite list (folded in from the former post-Run gate). Populated
-             inline when Practice Composite is toggled on; the checked rows go into the run. -->
-        <div id="ir-composite-section" class="hidden" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Practice Composite — Reputation Table</div>
-          <div id="ir-pd-loading" class="hidden" style="padding:8px 0 12px;text-align:center">
-            <span class="spinner" style="display:block;margin:0 auto 8px"></span>
-            <div style="font-size:12px;color:var(--muted)">Discovering practices for the reputation table…</div>
-          </div>
-          <div id="ir-pd-count" style="font-size:12px;color:var(--teal);font-weight:600;margin-bottom:12px"></div>
-          <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px">
-            <thead>
-              <tr style="background:#f0f6f7;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">
-                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Include</th>
-                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
-                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Type</th>
-                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">City, ST</th>
-              </tr>
-            </thead>
-            <tbody id="ir-pd-tbody"></tbody>
-          </table>
-          <div id="ir-pd-note" style="font-size:11px;color:var(--muted)">Uncheck any practice to exclude it from the reputation table.</div>
-          <div id="ir-pd-err" class="err hidden mt8"></div>
-        </div>
+        </details>
 
         <div id="ir-run-err" class="err hidden mt16"></div>
-        <div class="mt20 row-actions">
+        <div class="mt16 row-actions" style="align-items:center;gap:14px">
           <button class="btn btn-primary" id="ir-run-btn" onclick="runIndividual()">
             Run Diagnostic →
           </button>
-          <button class="btn btn-ghost btn-sm" onclick="irResetSearch()">← Search Again</button>
+          <span style="font-size:12px;color:var(--muted)">Produces the report and a teaser<span id="ir-auto-composite-note" class="hidden">, plus the per-location reputation table</span>.</span>
         </div>
       </div>
 
@@ -3540,9 +3540,9 @@ input[type="url"]::placeholder, textarea::placeholder {
     <div class="npa-p" style="margin-top:6px">Deep Diagnostic can score a single hospital <strong>department or service line</strong> — for example <em>Houston Methodist Orthopedics</em> — as its own entity, rolling up all of that department's clinics and scoring it on the practice rubric. Here's how:</div>
 
     <div class="npa-step"><b class="n">1.</b> Set <strong>Analysis Type</strong> to <strong>Hospital Service Line</strong>.</div>
-    <div class="npa-step"><b class="n">2.</b> Enter the <strong>Health System</strong> (e.g. <em>HOUSTON METHODIST</em>) and the <strong>Market</strong> — the city + state of the metro to analyze (e.g. <em>HOUSTON / TX</em>). Clinics within about 50 miles are discovered, so for a multi-state system pick the metro you care about.</div>
+    <div class="npa-step"><b class="n">2.</b> Enter the <strong>Health System</strong> only (e.g. <em>HOUSTON METHODIST</em>, not "Houston Methodist Orthopedics") and the <strong>Market</strong> — the city + state of the metro to analyze (e.g. <em>HOUSTON / TX</em>). Clinics within about 50 miles are discovered, so for a multi-state system pick the metro you care about.</div>
     <div class="npa-step"><b class="n">3.</b> Enter the <strong>Service Line</strong> (e.g. <em>ORTHOPEDICS</em>), then click <strong>Search</strong>.</div>
-    <div class="npa-step"><b class="n">4.</b> The top Google match is auto-selected as the flagship listing (pick a different candidate if needed). Every clinic of that service line is discovered automatically — uncheck any false positives in the Locations list.</div>
+    <div class="npa-step"><b class="n">4.</b> The top Google match becomes the flagship listing (click <strong>change</strong> to pick another). The Locations list combines the other Google listings for the same brand with AI discovery — uncheck any that don't belong.</div>
     <div class="npa-step"><b class="n">5.</b> The practice profile is auto-classified from the service line; click <strong>change</strong> in the options panel to override it.</div>
     <div class="npa-step"><b class="n">6.</b> Click <strong>Run Diagnostic</strong>. The report scores the department as one rolled-up entity on the practice rubric and always includes the per-location reputation table and a teaser.</div>
 
@@ -4967,8 +4967,12 @@ async function runIrSearch() {
   if (_irType === 'service_line') {
     const line = document.getElementById('ir-specialty').value.trim();
     if (!line) return showErr(errEl, 'Please enter the service line (e.g. ORTHOPEDICS).');
+    // Users often type "HOUSTON METHODIST ORTHOPEDICS" as the system. Strip the
+    // line from the system name so the brand isn't doubled, and reflect it back.
+    const parts = _irServiceLineParts();
+    document.getElementById('ir-name').value = parts.system;
     // Anchor listing search: the system + line usually resolves to the flagship clinic.
-    name = `${name} ${line}`;
+    name = parts.brand;
   }
 
   let reqBody;
@@ -5008,9 +5012,32 @@ async function runIrSearch() {
   }
 }
 
+// Once a listing is chosen the candidate cards fold into one summary line so the
+// page reads: form → "Flagship listing: X (change)" → confirmation card.
+function _irCollapseCandidates(idx) {
+  const sum = document.getElementById('ir-cand-summary');
+  const picker = document.getElementById('ir-cand-picker');
+  if (!sum || !picker) return;
+  const label = _irType === 'service_line' ? 'Flagship listing' : 'Google listing';
+  const rating = (_irSelected && _irSelected.rating != null)
+    ? ` · ${_irSelected.rating.toFixed(1)}★${_irSelected.review_count ? ` (${_irSelected.review_count.toLocaleString()})` : ''}` : '';
+  const body = idx === -1
+    ? `Proceeding with the name as entered: <strong>${_irSelected.name}</strong>`
+    : `${label}: <strong>${_irSelected.name}</strong>${_irSelected.address ? ` <span style="color:var(--muted)">· ${_irSelected.address}</span>` : ''}<span style="color:var(--muted)">${rating}</span>`;
+  sum.innerHTML = `<div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${body}</div>
+    <a href="#" onclick="irShowCandidatePicker();return false" style="color:var(--teal);font-weight:600;white-space:nowrap">change</a>`;
+  sum.classList.remove('hidden');
+  picker.classList.add('hidden');
+}
+function irShowCandidatePicker() {
+  document.getElementById('ir-cand-summary')?.classList.add('hidden');
+  document.getElementById('ir-cand-picker')?.classList.remove('hidden');
+}
+
 function showIrCandidates() {
   document.getElementById('ir-step2').classList.remove('hidden');
   document.getElementById('ir-step3').classList.add('hidden');
+  irShowCandidatePicker();
   _irSelected = null;
 
   const container = document.getElementById('ir-candidates');
@@ -5076,20 +5103,8 @@ function selectIrCandidate(idx) {
     : (_irCandidates[idx] || { name: enteredName, address: '', rating: null, review_count: null });
 
   _irReportTitle = _irSelected.name;
-
-  const ratingLine = _irSelected.rating != null
-    ? ` <span style="font-size:12px;color:var(--teal);font-weight:600">${_irSelected.rating.toFixed(1)}★</span>` +
-      (_irSelected.review_count ? ` <span style="font-size:12px;color:var(--muted)">${_irSelected.review_count.toLocaleString()} reviews</span>` : '')
-    : '';
-  const addrLine = _irSelected.address
-    ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_irSelected.address}</div>` : '';
-  const cityStateLine = (_irResolvedCity && _irResolvedState)
-    ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">${_irResolvedCity}, ${_irResolvedState}</div>` : '';
-
-  document.getElementById('ir-selected-display').innerHTML = `
-    <div style="font-weight:700;font-size:15px;color:var(--teal)">${_irSelected.name}${ratingLine}</div>
-    ${addrLine}
-    ${cityStateLine}`;
+  document.getElementById('ir-selected-display').innerHTML = '';
+  _irCollapseCandidates(idx);
 
   const titleInput = document.getElementById('ir-custom-title');
   const titlePreview = document.getElementById('ir-title-preview');
@@ -5118,7 +5133,11 @@ const _IR_PROFILE_DESCS = {
 };
 
 function updateIrProfileDesc(profile) {
-  document.getElementById('ir-profile-desc').textContent = _IR_PROFILE_DESCS[profile] || '';
+  const d = _IR_PROFILE_DESCS[profile] || '';
+  const descEl = document.getElementById('ir-profile-desc');
+  if (descEl) descEl.textContent = d;
+  const prop = document.getElementById('ir-profile-proposed');
+  if (prop) prop.title = d;   // one-line UI: the description is a tooltip
 }
 
 const _IR_PROFILE_LABELS = {
@@ -5170,9 +5189,8 @@ async function showIrProfileStep() {
   if (_irType === 'service_line') {
     // Explicit type: the user told us the system + line, so discovery is scoped
     // directly (no LLM detection step, nothing to opt out of).
-    const system = document.getElementById('ir-name').value.trim();
-    const line   = document.getElementById('ir-specialty').value.trim();
-    _irServiceLine = { parent_system: system, service_line: line, service_line_brand: `${system} ${line}` };
+    const parts = _irServiceLineParts();
+    _irServiceLine = { parent_system: parts.system, service_line: parts.line, service_line_brand: parts.brand };
     _pendingServiceLine = null;
     _irOrgName = _irServiceLine.service_line_brand;
     irStartDiscovery();
@@ -5227,6 +5245,79 @@ let _pendingServiceLine = null;   // detection result on a Specialty Practice se
 
 function _irIsPractice() { return _irType === 'specialty' || _irType === 'service_line'; }
 
+// Health System + Service Line as typed → {system, line, brand}, with the line
+// removed from the system name if the user already included it.
+function _irServiceLineParts() {
+  let system = document.getElementById('ir-name').value.trim();
+  const line = document.getElementById('ir-specialty').value.trim();
+  if (line) {
+    const re = new RegExp('\\s*\\b' + line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 's?\\b\\s*', 'i');
+    let stripped = system.replace(re, ' ').replace(/\s{2,}/g, ' ').trim();
+    if (stripped === system && line.length >= 6) {
+      // Spelling variants ("ORTHOPAEDICS" vs "ORTHOPEDICS"): drop tokens sharing a 6-char prefix.
+      const pref = line.slice(0, 6).toLowerCase();
+      stripped = system.split(/\s+/).filter(t => t.toLowerCase().slice(0, 6) !== pref).join(' ').trim();
+    }
+    if (stripped) system = stripped;
+  }
+  return { system, line, brand: `${system} ${line}`.trim() };
+}
+
+// Normalized token set for loose name matching (client-side seeding only).
+function _irTokens(str) {
+  return new Set(String(str || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9 ]+/g, ' ')
+    .split(/\s+/).filter(t => t && !['the','of','and','at','in'].includes(t)));
+}
+function _irOverlap(a, b) {   // |a∩b| / |a|
+  const A = _irTokens(a), B = _irTokens(b);
+  if (!A.size) return 0;
+  let n = 0; A.forEach(t => { if (B.has(t)) n++; });
+  return n / A.size;
+}
+function _irStreet(addr) { return String(addr || '').split(',')[0].trim(); }
+function _irCityFromAddr(addr) {
+  const parts = String(addr || '').split(',').map(x => x.trim());
+  return parts.length >= 3 ? parts[parts.length - 3] : '';
+}
+
+// Seed the Locations list from the Google candidates returned by the search:
+// same-brand listings at other streets are real locations of this practice /
+// service line. They carry place_id so the server pins each to its own profile.
+function _irSeedFromCandidates(discovered) {
+  if (!_irSelected || !_irCandidates?.length) return discovered;
+  const anchorName = _irSelected.name;
+  const anchorStreet = _irStreet(_irSelected.address).toLowerCase();
+  const seeded = [];
+  const nameCounts = {};
+  _irCandidates.forEach(c => { const k = String(c.name || '').toLowerCase(); nameCounts[k] = (nameCounts[k] || 0) + 1; });
+  _irCandidates.forEach(c => {
+    if (!c || !c.name) return;
+    if (_irSelected.place_id && c.place_id === _irSelected.place_id) return;
+    const street = _irStreet(c.address);
+    if (!c.place_id && street.toLowerCase() === anchorStreet) return;
+    if (_irOverlap(anchorName, c.name) < 0.6) return;   // different brand
+    const dupName = (nameCounts[String(c.name).toLowerCase()] > 1) || String(c.name).toLowerCase() === anchorName.toLowerCase();
+    seeded.push({
+      name: dupName && street ? `${c.name} (${street})` : c.name,
+      original_name: c.name,
+      entity_type: 'clinic',
+      city: _irCityFromAddr(c.address) || _irResolvedCity,
+      state: c.resolved_state || _irResolvedState,
+      address: c.address || '',
+      place_id: c.place_id || null,
+      rating: c.rating ?? null,
+      review_count: c.review_count ?? null,
+      maps_url: c.maps_url || null,
+      seeded: true,
+    });
+  });
+  // Discovery results that clearly describe a seeded listing are dropped (the
+  // seeded row has the exact Google profile); the rest are kept.
+  const kept = (discovered || []).filter(d =>
+    !seeded.some(sd => _irOverlap(d.name, sd.original_name) >= 0.8 && _irOverlap(sd.original_name, d.name) >= 0.8));
+  return seeded.concat(kept);
+}
+
 // One-click switch from the Specialty Practice hint: prefill Health System +
 // Service Line, flip the type, and re-run the search on the explicit path.
 function irSwitchToServiceLine() {
@@ -5269,7 +5360,7 @@ async function irStartDiscovery() {
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Location discovery failed'));
     const data = await r.json();
-    _irDiscoveredSiblings = data.siblings || [];
+    _irDiscoveredSiblings = _irSeedFromCandidates(data.siblings || []);
     // Prefer the AI-identified parent org / service-line brand; fall back to typed name
     _irOrgName = (data.parent_org_name || '').trim() || orgName;
     renderIrSiblings(_irDiscoveredSiblings);
@@ -5287,8 +5378,6 @@ function renderIrSiblings(siblings) {
   // AI-identified parent org (moved here from the former irConfirmOrg gate).
   _irReportTitle = _irOrgName || document.getElementById('ir-name').value.trim();
   const totalLoc = 1 + siblings.length;
-  const badge = totalLoc > 1
-    ? ` <span style="font-size:11px;font-weight:700;background:var(--teal);color:#fff;padding:2px 8px;border-radius:10px;margin-left:8px">${totalLoc} locations</span>` : '';
   let slLine = '';
   if (_irServiceLine) {
     slLine = `<div style="font-size:12px;color:var(--text);margin-top:6px">
@@ -5298,27 +5387,16 @@ function renderIrSiblings(siblings) {
     slLine = `<div style="font-size:12px;color:#b45309;margin-top:6px">This looks like the ${_pendingServiceLine.service_line} service line of <strong>${_pendingServiceLine.parent_system}</strong>
         · <a href="#" onclick="irSwitchToServiceLine();return false" style="color:var(--teal);font-weight:600">switch to Hospital Service Line</a></div>`;
   }
-  document.getElementById('ir-selected-display').innerHTML = `
-    <div style="font-weight:700;font-size:16px;color:var(--teal)">${_irOrgName}${badge}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px">Search anchor: ${_irSelected.name}</div>${slLine}`;
+  document.getElementById('ir-selected-display').innerHTML = slLine;
   const _ti = document.getElementById('ir-custom-title');
-  const _tp = document.getElementById('ir-title-preview');
   if (_ti) _ti.value = _irReportTitle;
-  if (_tp) _tp.textContent = _irReportTitle;
 
-  const total = 1 + siblings.length;
+  const badgeEl = document.getElementById('ir-locations-badge');
+  if (badgeEl) badgeEl.innerHTML = `<span style="font-weight:700;background:var(--teal);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px;letter-spacing:0">${totalLoc}</span>`;
   const countEl = document.getElementById('ir-siblings-count');
-  countEl.innerHTML = siblings.length > 0
-    ? `<div style="margin-bottom:10px">
-         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Parent Organization</span><br>
-         <span style="font-size:17px;font-weight:800;color:var(--teal)">${_irOrgName}</span>
-       </div>
-       <div style="font-size:13px;color:var(--text)">Found <strong>${total} locations</strong> across this organization. Uncheck any that are false positives.</div>`
-    : `<div style="margin-bottom:10px">
-         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Organization</span><br>
-         <span style="font-size:17px;font-weight:800;color:var(--teal)">${_irOrgName}</span>
-       </div>
-       <div style="font-size:13px;color:var(--muted)">No additional locations found — this will be analyzed as a single-location organization.</div>`;
+  countEl.textContent = siblings.length > 0
+    ? 'All checked locations are rolled into the report. Uncheck any that don\'t belong.'
+    : 'Only the flagship listing was found; the report covers this single location.';
 
   const listEl = document.getElementById('ir-siblings-list');
   let html = `
@@ -5326,18 +5404,22 @@ function renderIrSiblings(siblings) {
       <input type="checkbox" checked disabled style="accent-color:var(--teal);flex-shrink:0;width:15px;height:15px">
       <div style="flex:1;min-width:0">
         <span style="font-size:13px;font-weight:700;color:var(--teal)">${_irSelected.name}</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:6px">search anchor</span>
+        ${_irSelected.address ? `<span style="font-size:11px;color:var(--muted);margin-left:6px">${_irSelected.address}</span>` : ''}
+        ${_irSelected.rating != null ? `<span style="font-size:11px;color:var(--teal);font-weight:600;margin-left:8px">${_irSelected.rating.toFixed(1)}★${_irSelected.review_count ? ` (${_irSelected.review_count.toLocaleString()})` : ''}</span>` : ''}
+        <span style="font-size:11px;color:var(--muted);margin-left:6px">${_irType === 'service_line' ? 'flagship' : 'selected listing'}</span>
       </div>
     </div>`;
 
   siblings.forEach((s, i) => {
-    const loc = s.city && s.state ? `${s.city}, ${s.state}` : (s.city || '');
+    const loc = s.address ? s.address : (s.city && s.state ? `${s.city}, ${s.state}` : (s.city || ''));
+    const rating = s.rating != null
+      ? `<span style="font-size:11px;color:var(--teal);font-weight:600;margin-left:8px;white-space:nowrap">${Number(s.rating).toFixed(1)}★${s.review_count ? ` (${Number(s.review_count).toLocaleString()})` : ''}</span>` : '';
     html += `
       <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1.5px solid var(--border);border-radius:6px;margin-bottom:6px">
         <input type="checkbox" id="ir-sib-${i}" checked style="accent-color:var(--teal);flex-shrink:0;width:15px;height:15px">
-        <label for="ir-sib-${i}" style="flex:1;min-width:0;cursor:pointer;margin:0">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">${s.name}</span>
-          ${loc ? `<span style="font-size:11px;color:var(--muted);margin-left:6px">${loc}</span>` : ''}
+        <label for="ir-sib-${i}" style="flex:1;min-width:0;cursor:pointer;margin:0;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">${s.original_name || s.name}</span>
+          ${loc ? `<span style="font-size:11px;color:var(--muted)">${loc}</span>` : ''}${rating}
         </label>
       </div>`;
   });
@@ -5729,7 +5811,10 @@ async function runIndividual() {
     // Composite always on; the reputation roster is scoped server-side to the
     // confirmed Locations list, so only the anchor + any confirmed physicians go up.
     const anchor = { name: _irSelected.name, entity_type: 'practice', is_anchor: true,
-                     city: _irResolvedCity, state: _irResolvedState };
+                     city: _irResolvedCity, state: _irResolvedState,
+                     address: _irSelected.address || '', place_id: _irSelected.place_id || null,
+                     rating: _irSelected.rating ?? null, review_count: _irSelected.review_count ?? null,
+                     maps_url: _irSelected.maps_url || null };
     const confirmedPhysicians = {};
     const orgName = _irSelected?.name;
     document.querySelectorAll('#ir-pd-tbody input[data-ph]').forEach(cb => {
@@ -5807,6 +5892,11 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     report_title: _irReportTitle || undefined,
     confirmed_siblings: _irIsPractice() ? _irConfirmedSiblings : undefined,
     org_name: _irIsPractice() ? _irOrgName : undefined,
+    anchor_listing: (_irIsPractice() && _irSelected && _irSelected.place_id) ? {
+      place_id: _irSelected.place_id, address: _irSelected.address || '',
+      rating: _irSelected.rating ?? null, review_count: _irSelected.review_count ?? null,
+      maps_url: _irSelected.maps_url || null,
+    } : undefined,
     service_line:  _irType === 'service_line' ? (_irServiceLine?.service_line  || specialty) : undefined,
     parent_system: _irType === 'service_line' ? (_irServiceLine?.parent_system || document.getElementById('ir-name').value.trim()) : undefined,
     patient_perspective: false,

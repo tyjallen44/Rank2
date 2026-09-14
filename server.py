@@ -510,6 +510,7 @@ def _job_run_practice(
             org_name=job.get("org_name"),
             service_line=job.get("service_line"),
             parent_system=job.get("parent_system"),
+            anchor_listing=job.get("anchor_listing"),
         )
 
         set_run_role(result.run_id, job["role"], job.get("email"))
@@ -762,6 +763,7 @@ class AnalyzeRequest(BaseModel):
     report_title: Optional[str] = None          # display override for PDF title
     org_name: Optional[str] = None              # parent org brand name; drives prompt subject in org mode
     confirmed_siblings: Optional[List[dict]] = None  # pre-confirmed location list from initiation flow; None = run discovery inside analyzer
+    anchor_listing: Optional[dict] = None   # the Google candidate picked in the search step (place_id, address, rating, review_count, maps_url)
     individual_report: bool = False
     skip_pdf: bool = False
     content_urls: List[str] = []            # user-supplied website URL(s) for the content analysis
@@ -856,6 +858,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["report_title"] = _normalize_input(req.report_title) if req.report_title else None
     _jobs[job_id]["org_name"] = _normalize_input(req.org_name) if req.org_name else None
     _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list
+    _jobs[job_id]["anchor_listing"] = req.anchor_listing
     _jobs[job_id]["content_urls"] = [
         (u.strip() if u.strip().lower().startswith(("http://", "https://")) else "https://" + u.strip())
         for u in (req.content_urls or []) if (u or "").strip()]

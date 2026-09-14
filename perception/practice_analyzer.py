@@ -577,6 +577,7 @@ def analyze_practice(
     org_name: Optional[str] = None,
     service_line: Optional[str] = None,          # e.g. "Orthopedics" — scope aggregation to a hospital service line
     parent_system: Optional[str] = None,         # e.g. "Duke Health" — the system that operates the service line
+    anchor_listing: Optional[dict] = None,       # the Google candidate the user picked: {place_id, address, rating, review_count, maps_url}
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -885,6 +886,11 @@ def analyze_practice(
             "city": city,
             "state": state,
         }
+        if anchor_listing:
+            # Pin the anchor to the exact listing chosen in the search step.
+            for _k in ("place_id", "address", "rating", "review_count", "maps_url"):
+                if anchor_listing.get(_k) is not None:
+                    anchor_entry[_k] = anchor_listing[_k]
         if _aggregate_siblings is not None:
             # Automatic scoping: reuse the confirmed / service-line location roster
             # established for the aggregate analysis.  This keeps the reputation
@@ -969,10 +975,16 @@ def analyze_practice(
 
         deduped: list[dict] = []
         seen_names: set[str] = set()
+        _anchor_pid = anchor_entry.get("place_id")
         for s in sibling_roster:
             sn = s.get("name", "")
             sa = s.get("address", "")
-            if _is_anchor_duplicate(sn, sa):
+            if s.get("place_id"):
+                # A distinct Google place_id is definitive: same-name clinics at
+                # other streets are real locations, not anchor aliases.
+                if _anchor_pid and s["place_id"] == _anchor_pid:
+                    continue
+            elif _is_anchor_duplicate(sn, sa):
                 continue
             canonical = _canon_sibling(sn)
             k = canonical.lower()

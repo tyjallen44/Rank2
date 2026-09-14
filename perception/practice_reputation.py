@@ -146,12 +146,30 @@ def collect_platform_data(
     _assigned_place_ids: dict[str, tuple[str, str]] = {}  # place_id → (entity_name, match_strength)
     _log_run_id = run_id or ""
 
+    # ── Pinned listings ──────────────────────────────────────────────────────
+    # Entries seeded from the search step's Google candidates carry the exact
+    # place_id (plus rating/count/maps_url) the user saw.  Use them verbatim so
+    # several same-name clinics that differ only by street each keep their own
+    # profile instead of all resolving to the same top result.
+    for p in practices:
+        _pid = p.get("place_id")
+        if not _pid or _pid in _assigned_place_ids:
+            continue
+        _ename = p["name"]
+        _assigned_place_ids[_pid] = (_ename, "pinned")
+        google_data[_ename] = (
+            p.get("rating"), p.get("review_count"),
+            _strip_tracking(p.get("maps_url")), _pid,
+        )
+        log_gbp_binding(_log_run_id, _ename, _pid, p.get("rating"), p.get("review_count"),
+                        "pinned_place_id", "Google listing confirmed in the search step")
+
     # ── Pre-load durable GBP identity bindings ───────────────────────────────
     # For each non-anchor entity, check whether a confirmed place_id binding
     # exists from a prior run.  Seed _assigned_place_ids so the collision
     # backstop prevents any live fetch from overwriting a durable binding.
     for p in practices:
-        if p.get("is_anchor"):
+        if p.get("is_anchor") or p["name"] in google_data:
             continue
         _ename = p["name"]
         _pc    = p.get("city") or city
@@ -176,7 +194,7 @@ def collect_platform_data(
     # hiccup, etc.).  The pre-registration call is a best-effort: if it fails, the
     # main-loop fetch for the anchor will still register when it succeeds.
     _anchor_pre = next((p for p in practices if p.get("is_anchor")), None)
-    if _anchor_pre:
+    if _anchor_pre and _anchor_pre["name"] not in google_data:
         try:
             _ar, _ = places.fetch_provider(
                 _anchor_pre["name"],
