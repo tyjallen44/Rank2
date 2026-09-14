@@ -5331,10 +5331,25 @@ function irSwitchToServiceLine() {
   runIrSearch();
 }
 
+// Run Diagnostic is disabled while location discovery is in flight so the user
+// can't start a run before seeing (and pruning) the Locations list. It comes
+// back on success AND on error — a failed discovery still allows a
+// single-location run.
+function _irSetRunBusy(busy) {
+  const btn = document.getElementById('ir-run-btn');
+  if (!btn) return;
+  btn.disabled = !!busy;
+  btn.innerHTML = busy
+    ? '<span class="spinner"></span> Discovering locations…'
+    : 'Run Diagnostic →';
+  btn.title = busy ? 'Waiting for the Locations list to finish loading' : '';
+}
+
 async function irStartDiscovery() {
   const orgName = _irServiceLine
     ? _irServiceLine.service_line_brand
     : document.getElementById('ir-name').value.trim();
+  _irSetRunBusy(true);
   document.getElementById('ir-siblings-org-name').textContent = orgName;
   document.getElementById('ir-siblings-loading').classList.remove('hidden');
   document.getElementById('ir-siblings-content').classList.add('hidden');
@@ -5367,12 +5382,14 @@ async function irStartDiscovery() {
   } catch(e) {
     document.getElementById('ir-siblings-loading').classList.add('hidden');
     showErr(document.getElementById('ir-siblings-err'), e.message);
+    _irSetRunBusy(false);   // discovery failed: allow a single-location run
   }
 }
 
 function renderIrSiblings(siblings) {
   document.getElementById('ir-siblings-loading').classList.add('hidden');
   document.getElementById('ir-siblings-content').classList.remove('hidden');
+  _irSetRunBusy(false);   // list is in — the user can confirm/prune and run
 
   // Update the Selected Organization display + default the report title to the
   // AI-identified parent org (moved here from the former irConfirmOrg gate).

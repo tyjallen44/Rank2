@@ -912,3 +912,44 @@ its tooltip.
 NEEDS BROWSER TESTING. T3 is the key end-to-end check (5–8 min run). The Places field mask now
 requests `places.id` and `places.googleMapsUri`; if candidates come back without ratings, check
 the API key restrictions first.
+
+## DD-RUN-GATED-ON-DISCOVERY — Run Diagnostic disabled while locations are being discovered
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic (Specialty Practice / Hospital Service Line) · **Type:** UX guard
+
+### What changed
+- When location discovery starts (`irStartDiscovery`), the **Run Diagnostic** button is disabled
+  and relabelled "⟳ Discovering locations…" (tooltip: waiting for the Locations list).
+- It returns to "Run Diagnostic →" and re-enables when the list renders **or** when discovery
+  errors (a failed discovery still allows a single-location run).
+- Re-triggers (picking another candidate via "change", or the "switch to Hospital Service Line"
+  hint) disable it again for the new discovery.
+- Hospital and FQHC types have no discovery and are unaffected. The optional physician roster
+  lookup does not gate Run.
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Gated**: Service Line search → during the 10–20 s discovery the Run button is gray with
+"Discovering locations…"; clicking does nothing. When the Locations list appears the button reads
+"Run Diagnostic →" and is enabled.
+**T2 — Error path**: force discovery to fail (e.g. block `/api/practice/siblings` in devtools) → the
+error shows under Locations and the Run button is enabled; running works as single-location.
+**T3 — Re-trigger**: click "change" on the flagship line and pick another card → button gates
+again, then re-enables with the refreshed list.
+**T4 — Hospital / FQHC**: button never gates.
+
+### Regression Checks
+- **R1** Run still disables/relabels to "Starting…" on click and restores on error, as before.
+- **R2** Physicians checkbox lookup does not disable Run.
+
+### Acceptance Checklist
+- [ ] T1 gated during discovery
+- [ ] T2 error re-enables
+- [ ] T3 re-trigger
+- [ ] T4 other types unaffected
+- [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Front-end only.
