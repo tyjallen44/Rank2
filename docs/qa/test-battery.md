@@ -751,3 +751,42 @@ to `analysis_runs`; History loads for admin and non-admin without errors; older 
 NEEDS BROWSER TESTING. The Postgres migration was NOT smoke-tested locally (only a shared
 DATABASE_URL is configured); it uses the existing add-column-if-missing loop in `init_db`. T7 is
 the first thing to check after deploy.
+
+## DD-SERVICE-LINE-MARKET — Hospital Service Line type: no City/ZIP toggle, "Market" city + state only
+
+**Shipped:** 2026-09-14 · **Area:** Deep Diagnostic · **Type:** UX
+
+### What changed
+- When Analysis Type = **Hospital Service Line**, the By City / By ZIP Code toggle is hidden and
+  the form is pinned to city mode. The section label reads **Market** with the hint "The metro to
+  analyze. Clinics of this service line within about 50 miles are discovered." City + State inputs
+  are unchanged (they still feed the anchor search and scoped discovery).
+- Switching to any other type restores the toggle and the "Location" label.
+- Help modal step 2 explains that for a multi-state system the city picks the metro.
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Toggle hidden**: pick Hospital Service Line → no By City / By ZIP buttons; label "Market" +
+hint; City and State inputs visible; ZIP row hidden.
+**T2 — Pinned to city**: choose Hospital, switch to By ZIP Code, then pick Hospital Service Line →
+the form flips to City/State (ZIP row hidden). Search with city/state works as in
+DD-SERVICE-LINE-TYPE T2.
+**T3 — Restore**: from Hospital Service Line switch to Specialty Practice → toggle back, label
+"Location", hint gone, city mode still selected.
+**T4 — Page reload / navigate away and back**: defaults to Hospital with the toggle visible.
+
+### Regression Checks
+- **R1** Hospital / Specialty / FQHC types: By ZIP Code search unchanged.
+- **R2** Service-line validation messages unchanged (system + service line required).
+
+### Acceptance Checklist
+- [ ] T1 hidden toggle + Market label
+- [ ] T2 pinned to city after ZIP
+- [ ] T3 restore on type switch
+- [ ] T4 defaults
+- [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Front-end only.

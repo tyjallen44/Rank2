@@ -1563,11 +1563,13 @@ input[type="url"]::placeholder, textarea::placeholder {
         </div>
 
         <div class="fg" style="margin-bottom:16px">
-          <label class="fl">Location</label>
-          <div class="tg-group">
+          <label class="fl" id="ir-loc-label">Location</label>
+          <div class="tg-group" id="ir-loc-mode-toggle">
             <button class="tg-opt on" id="ir-tg-bycity" onclick="setIrLocMode('city')">By City</button>
             <button class="tg-opt"    id="ir-tg-byzip"  onclick="setIrLocMode('zip')">By ZIP Code</button>
           </div>
+          <!-- Service line: no city/ZIP toggle — the city names which metro of the system to analyze -->
+          <div id="ir-loc-market-hint" class="hidden" style="font-size:12px;color:var(--muted);line-height:1.5">The metro to analyze. Clinics of this service line within about 50 miles are discovered.</div>
         </div>
 
         <div id="ir-loc-city-row" style="display:grid;grid-template-columns:1fr 120px;gap:14px">
@@ -3536,7 +3538,7 @@ input[type="url"]::placeholder, textarea::placeholder {
     <div class="npa-p" style="margin-top:6px">Deep Diagnostic can score a single hospital <strong>department or service line</strong> — for example <em>Houston Methodist Orthopedics</em> — as its own entity, rolling up all of that department's clinics and scoring it on the practice rubric. Here's how:</div>
 
     <div class="npa-step"><b class="n">1.</b> Set <strong>Analysis Type</strong> to <strong>Hospital Service Line</strong>.</div>
-    <div class="npa-step"><b class="n">2.</b> Enter the <strong>Health System</strong> (e.g. <em>HOUSTON METHODIST</em>) and the <strong>Location</strong> (city + state, e.g. <em>HOUSTON / TX</em>).</div>
+    <div class="npa-step"><b class="n">2.</b> Enter the <strong>Health System</strong> (e.g. <em>HOUSTON METHODIST</em>) and the <strong>Market</strong> — the city + state of the metro to analyze (e.g. <em>HOUSTON / TX</em>). Clinics within about 50 miles are discovered, so for a multi-state system pick the metro you care about.</div>
     <div class="npa-step"><b class="n">3.</b> Enter the <strong>Service Line</strong> (e.g. <em>ORTHOPEDICS</em>), then click <strong>Search</strong>.</div>
     <div class="npa-step"><b class="n">4.</b> The top Google match is auto-selected as the flagship listing (pick a different candidate if needed). Every clinic of that service line is discovered automatically — uncheck any false positives in the Locations list.</div>
     <div class="npa-step"><b class="n">5.</b> The practice profile is auto-classified from the service line; click <strong>change</strong> in the options panel to override it.</div>
@@ -4898,6 +4900,21 @@ function setIrType(t) {
   const nameInput = document.getElementById('ir-name');
   const specLabel = document.getElementById('ir-specialty-label');
   const specInput = document.getElementById('ir-specialty');
+  // Location: the service-line type is pinned to City/State (a ZIP radius is a
+  // market-search concept and does not apply); the toggle returns for other types.
+  const locToggle = document.getElementById('ir-loc-mode-toggle');
+  const locLabel  = document.getElementById('ir-loc-label');
+  const locHint   = document.getElementById('ir-loc-market-hint');
+  if (t === 'service_line') {
+    setIrLocMode('city');
+    if (locToggle) locToggle.style.display = 'none';
+    if (locLabel)  locLabel.textContent = 'Market';
+    if (locHint)   locHint.classList.remove('hidden');
+  } else {
+    if (locToggle) locToggle.style.display = '';
+    if (locLabel)  locLabel.textContent = 'Location';
+    if (locHint)   locHint.classList.add('hidden');
+  }
   if (t === 'service_line') {
     if (nameLabel) nameLabel.textContent = 'Health System';
     if (nameInput) nameInput.placeholder = 'e.g. Houston Methodist';
