@@ -3810,6 +3810,36 @@ async def track_trend(entity_id: str, _: dict = Depends(get_current_user_payload
     return {"entity": entity, "data_points": data}
 
 
+@app.get("/api/track/entities/{entity_id}/report.pdf")
+async def track_report_pdf(entity_id: str, payload: dict = Depends(get_current_user_payload)):
+    """AI Reputation Trend Report for one tracked entity. Rendered on demand and cached
+    per latest snapshot (a new run invalidates the cache naturally via the filename)."""
+    from perception.db import init_db, get_tracked_entity, get_entity_trend
+    from perception.trend_pdf import render_trend_report_pdf
+    init_db()
+    entity = get_tracked_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "tracked entity not found")
+    points = get_entity_trend(entity["entity_name"])
+    if not points:
+        raise HTTPException(404, "No snapshots yet — run the entity at least once first.")
+    latest = points[-1].get("run_id") or "none"
+    out_dir = REPORTS_DIR / "trends"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe_id = "".join(ch for ch in entity_id if ch.isalnum() or ch in "-_")
+    pdf_path = out_dir / f"trend_{safe_id}_{latest}.pdf"
+    if not pdf_path.exists():
+        for k in ("last_run_at", "next_run_at", "created_at"):
+            if entity.get(k):
+                entity[k] = str(entity[k])
+        await asyncio.get_running_loop().run_in_executor(
+            None, lambda: render_trend_report_pdf(entity, points, str(pdf_path),
+                                                  brand=payload.get("brand", "original")))
+    slug = "".join(ch if ch.isalnum() else "-" for ch in str(entity.get("entity_name") or "entity")).strip("-")[:60]
+    return FileResponse(str(pdf_path), media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{slug}_AI_Reputation_Trend_Report.pdf"'})
+
+
 @app.post("/api/track/entities/{entity_id}/run")
 async def track_run_now(entity_id: str, payload: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, get_tracked_entity, mark_tracked_entity_ran

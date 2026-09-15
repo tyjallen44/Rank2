@@ -2653,6 +2653,7 @@ input[type="url"]::placeholder, textarea::placeholder {
           </div>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
             <span id="trend-run-status" style="font-size:12px;color:var(--muted)"></span>
+            <button class="btn btn-secondary btn-sm" id="trend-pdf-btn" onclick="downloadTrendReport()" title="Customer-ready PDF: summary, score and pillar trends, Google reputation, snapshots">⬇ Trend Report (PDF)</button>
             <button class="btn btn-primary btn-sm" id="trend-run-btn" onclick="triggerTrackRun()">Run Now</button>
           </div>
         </div>
@@ -9135,6 +9136,14 @@ async function loadEntityTrend(entityId) {
   } catch (e) {
     document.getElementById('trend-no-data').style.display = '';
   }
+}
+
+function downloadTrendReport() {
+  if (!_trackCurrentEntity) return;
+  const st = document.getElementById('trend-run-status');
+  if (st) st.textContent = 'Building the report… (a few seconds)';
+  window.location.href = `/api/track/entities/${encodeURIComponent(_trackCurrentEntity.id)}/report.pdf?token=${encodeURIComponent(_token)}`;
+  setTimeout(() => { if (st && st.textContent.startsWith('Building')) st.textContent = ''; }, 8000);
 }
 
 function showTrackList() {

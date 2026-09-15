@@ -1713,3 +1713,53 @@ NEEDS BROWSER TESTING.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## TRENDS-REPORT-PDF — AI Reputation Trend Report (downloadable PDF per tracked entity)
+
+**Shipped:** 2026-09-15 · **Area:** Trends · **Type:** feature (part 1 of 2; email delivery follows)
+
+### What changed
+- New `perception/trend_pdf.py`: builds a customer-ready **AI Reputation Trend Report** from the
+  tracked entity + its snapshot history. Sections: cover band (RLDatix mark, entity, market ·
+  specialty) · meta strip (snapshots, first/latest snapshot dates, scope, prepared date) ·
+  **Executive summary** (latest score + quartile, change since previous / since first, most
+  improved pillar, largest decline, and a 3–4 sentence **analyst paragraph written by the model
+  from the computed numbers only** — fail-soft, omitted on any error/refusal) · **Pulse Score over
+  time** (line chart with shaded quartile bands) · **Pillar trends** (four small charts +
+  first/latest/change table; practice-rubric labels when the latest run used a practice profile) ·
+  **Google reputation over time** (rating + review count) · **Snapshots** table (date, score, Δ,
+  pillars, Google, run settings with ⚠ drift flag) · **Notable changes** (3 largest moves + any
+  drift) · methodology/disclaimer box. Charts are inline SVG (no CDN); rendered via Playwright.
+- `GET /api/track/entities/{id}/report.pdf` (auth; token query supported): renders on demand into
+  `REPORTS_DIR/trends/trend_<id>_<latest_run_id>.pdf` and serves it; cached until a new snapshot
+  exists. 404 when the entity has no snapshots.
+- Trend detail header: **⬇ Trend Report (PDF)** button next to Run Now.
+
+### Files changed
+`perception/trend_pdf.py` (new), `server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Download**: Trends → View an entity with ≥2 snapshots → "Trend Report (PDF)" → a PDF named
+`<Entity>_AI_Reputation_Trend_Report.pdf` downloads within a few seconds; status text clears.
+**T2 — Content**: cover shows the entity/market; meta strip counts match the detail view; latest
+score/quartile and the deltas match the list row and snapshot table; score chart shows all
+snapshots with quartile bands; four pillar charts + table; Google chart; snapshot table rows =
+detail table rows (same values); notable changes lists the 3 largest moves; drift rows carry ⚠.
+**T3 — Analyst paragraph**: present, 3–4 sentences, references only numbers that appear in the
+summary/pillar table (no invented events). If the model call fails the report still renders
+without the paragraph.
+**T4 — Cache**: download twice → second is instant (same file); run the entity (Run Now) and
+download again → a new file with the new snapshot.
+**T5 — Edge**: entity with 1 snapshot → report renders (charts show "Not enough snapshots",
+deltas "—"); entity with 0 → 404 with a clear message.
+**T6 — Practice entity**: a tracked specialty practice → pillar labels are the practice rubric's.
+
+### Regression Checks
+- **R1** Other PDFs unchanged. **R2** Suite at baseline.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Rendered locally for "Usa Health University Hospital" (33 snapshots):
+layout verified from a screenshot; PDF 230 KB in ~1 s (+ a few seconds for the paragraph).
