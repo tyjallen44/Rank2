@@ -811,13 +811,19 @@ input[type="url"]::placeholder, textarea::placeholder {
 #learn-modal.open { display:flex; }
 
 /* ── Bulk "About this report" info modal ──────────────────────── */
-#np-about-modal, #ir-help-modal, #ev-help-modal, #ca-about-modal, #help-modal {
+#np-about-modal, #ir-help-modal, #ev-help-modal, #ca-about-modal, #help-modal, #chooser-modal {
   display:none;position:fixed;inset:0;
   background:rgba(15,65,70,0.55);z-index:1000;
   align-items:center;justify-content:center;
 }
-#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open, #ca-about-modal.open, #help-modal.open { display:flex; }
-#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card, #ca-about-modal .modal-card, #help-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
+#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open, #ca-about-modal.open, #help-modal.open, #chooser-modal.open { display:flex; }
+#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card, #ca-about-modal .modal-card, #help-modal .modal-card, #chooser-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
+#chooser-modal .home-chooser { border:0; padding:0; margin:0; }
+.nav-btn.nav-start { color:#fff; background:var(--teal); margin:6px 0 4px; border-radius:8px; }
+.nav-btn.nav-start:hover { background:#0F4146; color:#fff; }
+.nav-btn.nav-start .ni { color:#80F8E4; }
+.page-title .title-help { margin-left:12px; font-size:12px; font-weight:500; color:var(--teal); text-decoration:none; vertical-align:middle; letter-spacing:0; text-transform:none; white-space:nowrap; }
+.page-title .title-help:hover { text-decoration:underline; }
 .npa-step { font-size:13.5px;color:var(--text);line-height:1.55;margin:0 0 9px;padding-left:26px;position:relative; }
 .npa-step b.n { position:absolute;left:0;top:0;color:var(--teal);font-weight:700; }
 .npa-h { font-size:12px;font-weight:700;color:var(--teal);text-transform:uppercase;
@@ -1066,6 +1072,9 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         <span class="ni">⌂</span><span class="nb-lbl">Home</span>
       </button>
       <div class="nav-section-label">Report Creation</div>
+      <button class="nav-btn nav-start" id="nav-start" onclick="openChooser(null, event)" title="Not sure which report? Answer two questions and Pulse opens the right one.">
+        <span class="ni">✦</span><span class="nb-lbl">Start a report</span>
+      </button>
       <button class="nav-btn active" id="nav-network" onclick="navigate('network')" title="AI Reputation report for a multi-state hospital network">
         <span class="ni">🖧</span><span class="nb-lbl">Hospital Network</span>
       </button>
@@ -1280,7 +1289,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
     <!-- ── Patient Perspective ───────────────────────────────────────────── -->
     <div id="page-patient" class="page">
-      <div class="page-title">Competitors Rankings</div>
+      <div class="page-title">Competitors Rankings <a href="#" class="title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
       <div class="page-sub">See your market the way a patient's AI assistant sees it — providers ranked purely by Pulse Score, exactly as they surface when patients ask.</div>
 
       <div class="oc-grid">
@@ -1554,7 +1563,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
     <!-- ── Individual Report ────────────────────────────────────────────── -->
     <div id="page-individual" class="page">
-      <div class="page-title">Deep Diagnostic</div>
+      <div class="page-title">Deep Diagnostic <a href="#" class="title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
       <div class="page-sub">Run a focused diagnostic on a hospital, a service line within a hospital system, a specialty practice, or a community health center: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
       <div style="margin:-4px 0 12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
         <a href="#" onclick="showIrHelp();return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">ℹ How to analyze a hospital service line →</a>
@@ -1857,7 +1866,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
     <!-- ── Comparison Report ─────────────────────────────────────────────── -->
     <!-- ── Network Pulse ──────────────────────────────────────────────────── -->
     <div id="page-network" class="page">
-      <div class="page-title">Hospital Network</div>
+      <div class="page-title">Hospital Network <a href="#" class="title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
       <div class="page-sub">AI Reputation report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
 
       <!-- Mode: single guided report vs bulk headless CSV scoring (admin only; shown by showApp) -->
@@ -1960,7 +1969,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
     </div>
 
     <div id="page-compare" class="page">
-      <div class="page-title">Compare Two</div>
+      <div class="page-title">Compare Two <a href="#" class="title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
       <div class="page-sub">Compare two organizations head-to-head on Pulse Score, with the same depth as a full diagnostic for each.</div>
 
       <!-- Entity A -->
@@ -2400,7 +2409,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
     <!-- ── Events Pulse ─────────────────────────────────────────────────── -->
     <div id="page-events" class="page">
-      <div class="page-title">Event Preparation</div>
+      <div class="page-title">Event Preparation <a href="#" class="title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
       <div class="page-sub">Upload an event attendee list to generate a Deep Diagnostic for every hospital, practice, or community health center — and download an enriched CSV with scores.</div>
 
       <!-- Step 1: Setup -->
@@ -3705,6 +3714,18 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 </div>
 
 <!-- ── Shared "What is this?" help pop-over (content in _HELP_TOPICS) ──────── -->
+<div id="chooser-modal" onclick="if(event.target===this)closeChooser()">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
+      <div>
+        <div class="modal-title" style="margin-bottom:2px">Which report do I need?</div>
+        <div style="font-size:13px;color:var(--muted)">Answer two questions and Pulse opens the right report with the type preselected.</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="closeChooser()" style="flex-shrink:0">✕</button>
+    </div>
+    <div class="home-chooser"><div id="chooser-modal-body"></div></div>
+  </div>
+</div>
 <div id="help-modal" onclick="if(event.target===this)closeHelp()">
   <div class="modal-card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
@@ -6728,9 +6749,18 @@ function _chooserRec() {
   if (goal === 'track')   return { page: 'track', type: what, title: 'Trends', why: `Re-runs the ${label} Deep Diagnostic on a schedule and charts the score over time.` };
   return { page: 'individual', type: what, title: 'Deep Diagnostic', why: `The full four-pillar diagnosis of one ${label.toLowerCase()} with the fixes that move the score.` };
 }
+function openChooser(presetWhat, ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  _chooser.what = presetWhat || null; _chooser.goal = null;
+  renderChooser();
+  document.getElementById('chooser-modal').classList.add('open');
+}
+function closeChooser() { document.getElementById('chooser-modal').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChooser(); });
 function renderChooser() {
-  const host = document.getElementById('home-chooser-body');
-  if (!host) return;
+  ['home-chooser-body', 'chooser-modal-body'].forEach(id => { const h = document.getElementById(id); if (h) _renderChooserInto(h); });
+}
+function _renderChooserInto(host) {
   const pills = (k, opts) => `<div class="hc-pills">${opts.map(([v, l]) => `<button class="hc-pill ${_chooser[k] === v ? 'on' : ''}" onclick="chooserPick('${k}','${v}')">${l}</button>`).join('')}</div>`;
   const rec = _chooserRec();
   host.innerHTML = `
@@ -6740,6 +6770,7 @@ function renderChooser() {
 }
 function chooserGo() {
   const rec = _chooserRec(); if (!rec) return;
+  closeChooser();
   navigate(rec.page);
   try {
     if (rec.page === 'individual' && rec.type) setIrType(rec.type);
@@ -6996,6 +7027,7 @@ function showSingleDone(r) {
       ${canHand ? `<button class="btn btn-ghost btn-sm" onclick="handoffTrackRun('${r.run_id}')" title="Track this organization on a schedule and see the score move over time">📈 Track in Trends</button>` : ''}
       ${canHand ? `<button class="btn btn-ghost btn-sm" onclick="handoffCompareRun('${r.run_id}')" title="Put this organization on side A of a head-to-head report">⇄ Compare against…</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="emailReport('${r.run_id}', this)" title="Send the PDF to a customer or colleague">✉ Email report…</button>
+      <button class="btn btn-ghost btn-sm" onclick="openChooser(null, event)" title="Not sure which report comes next? Answer two questions.">✦ Start another report…</button>
       ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}
     </div>`;
   document.getElementById('done-actions').innerHTML = `

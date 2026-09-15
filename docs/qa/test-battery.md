@@ -2480,3 +2480,21 @@ Commit: Home featured video is floated right at ~36% of the card width (max 360p
 **T2 — Narrow window.** Below ~760px wide the video returns to full width above/below the text.
 
 **R1 — Learn pages.** Video embeds in Learn / Methodology articles stay full width.
+
+## CHOOSER-EVERYWHERE — "Which report do I need?" from the sidebar, every report page, and the completion screen
+
+Commit: one shared chooser modal; sidebar "✦ Start a report" entry at the top of Report Creation; "Not sure this is the right report?" link beside the title of Hospital Network, Deep Diagnostic, Competitors Rankings, Compare Two and Event Preparation; "✦ Start another report…" in the completion screen's Next row. NEEDS BROWSER TESTING.
+
+**T1 — Sidebar entry.** On any page click "✦ Start a report" (teal button under Report Creation).
+- [ ] A modal titled "Which report do I need?" opens with the two-question chooser; picking answers shows the recommendation; "Open <Report> →" closes the modal and opens that page with the type preselected (same matrix as the Home card).
+- [ ] Esc, ✕ and clicking outside close it. The sidebar highlight stays on the page you navigated to, not on Start a report.
+- [ ] On Home (icon rail) the entry shows as the ✦ icon only and expands on hover with the rest of the rail.
+
+**T2 — Page title links.** Each of the five report pages shows a small "Not sure this is the right report?" link after the title. Click it → same modal, starting blank.
+- [ ] Present on Hospital Network, Deep Diagnostic, Competitors Rankings, Compare Two, Event Preparation. Not on History, Trends, Admin, Learn, Feedback.
+
+**T3 — Completion screen.** Finish any run. The Next row includes "✦ Start another report…" → modal → recommendation → navigates.
+
+**T4 — Shared state.** Pick answers on the Home card, then open the modal from the sidebar: the modal starts blank (each open resets). Pick answers in the modal, close it, look at the Home card: it shows the modal's answers (one chooser, two views). Clear on the Home card resets both.
+
+**R1 — Help modal and other modals unchanged.** ⓘ links still open the help modal; Esc closes the chooser only (help modal keeps its own close behaviour).
