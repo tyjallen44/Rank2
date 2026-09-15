@@ -930,6 +930,10 @@ class CompareRequest(BaseModel):
     force_rerun_a: bool = False
     force_rerun_b: bool = False
     override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
+    confirmed_siblings_a: Optional[List[dict]] = None   # practice types: confirmed Locations list (None = discover inside)
+    confirmed_siblings_b: Optional[List[dict]] = None
+    anchor_listing_a: Optional[dict] = None             # flagship Google listing picked in the search step
+    anchor_listing_b: Optional[dict] = None
 
 
 @app.post("/api/analyze")
@@ -1040,6 +1044,10 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
             force_rerun_a=req_dict.get("force_rerun_a", False),
             force_rerun_b=req_dict.get("force_rerun_b", False),
             override_today_lock=req_dict.get("override_today_lock", False),
+            confirmed_siblings_a=req_dict.get("confirmed_siblings_a"),
+            confirmed_siblings_b=req_dict.get("confirmed_siblings_b"),
+            anchor_listing_a=req_dict.get("anchor_listing_a"),
+            anchor_listing_b=req_dict.get("anchor_listing_b"),
         )
         # Persist the comparison so History can list/download it and the link survives restarts.
         cid = uuid.uuid4().hex[:12]

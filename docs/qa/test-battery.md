@@ -2105,3 +2105,58 @@ PDF, which stays).
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Run the backfill on production once after deploy.
+
+## COMPARE-STREAMLINE — Compare Two rebuilt on the Deep Diagnostic pattern (type-first, flagship line, Locations per side, implicit composite)
+
+**Shipped:** 2026-09-15 · **Area:** Compare Two · **Type:** UX + scoring parity
+
+### What changed
+- Each side now starts with **Analysis Type** (Hospital · Hospital Service Line · Specialty
+  Practice); fields adapt (Health System / Service Line / Market for a service line; name dedupe
+  as on Deep Diagnostic). "Hospital / Health System" label retired.
+- **Candidates collapse** to one line after search ("Flagship listing: X · addr · 4.6★ (change)");
+  the top match is auto-selected; "change" reopens the cards; "use the name as entered" kept.
+- **Locations per side** (practice types): discovery via `/api/practice/siblings` (scoped to the
+  service line when applicable) **seeded from same-brand Google candidates** with address, rating
+  and place_id; inline prune with checkboxes; count badge. Hospital sides show no list.
+- **Practice Composite is implicit** for practice types (hidden, always on; note explains); the
+  explicit checkbox remains for Hospital sides only. Aggregate is implicit for practice types.
+- **Specialty Practice detection is a hint** ("switch to Hospital Service Line") instead of an
+  inline toggle; the service-line type sets the system/line explicitly.
+- **Run Compare Two is disabled** ("Discovering locations…") while either side's discovery is in
+  flight; re-enabled on success or error.
+- API: `confirmed_siblings_a/b` and `anchor_listing_a/b` added to the compare request and passed to
+  the practice analyzer → each practice side gets the **roster-based Reviews & Reputation pillar
+  and pinned per-location composite table**, exactly like Deep Diagnostic. Practice sides also now
+  receive `practice_composite` (previously only hospital sides did).
+- Shared helper `_seedFromCandidates(selected, candidates, city, state, discovered)` used by both
+  pages.
+
+### Files changed
+`web/index.html`, `server.py`, `perception/analyzer.py`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Two practices**: A: Specialty Practice, ORTHOSOUTH / MEMPHIS / TN / ORTHOPEDICS → flagship
+line + Locations list (seeded rows with addresses/ratings). B: Specialty Practice, CAMPBELL CLINIC
+… → same. Uncheck one location on B. Run → comparison PDF; each side's composite table lists
+exactly the checked locations; Reviews pillar consistent with each table.
+**T2 — Service line vs practice**: A: Hospital Service Line, HOUSTON METHODIST / HOUSTON / TX /
+ORTHOPEDICS (badge "Service line … of HOUSTON METHODIST"); B: a practice → runs.
+**T3 — Hospital vs hospital**: both Hospital → no Locations list; related-hospitals + Practice
+Composite checkboxes present (composite off by default); runs as before.
+**T4 — Hint**: Specialty Practice search that resolves to a department shows the amber hint;
+clicking it flips the side to Hospital Service Line, prefills, re-searches.
+**T5 — Gating**: during discovery the Run button reads "Discovering locations…" and is disabled;
+enabled once both sides finish; a failed discovery on one side still allows running.
+**T6 — Change listing**: "change" reopens cards; picking another re-collapses and re-discovers.
+**T7 — Start Over** resets both sides to Hospital with empty fields.
+
+### Regression Checks
+- **R1** Comparison persists to History (HISTORY-COMPARE-TWO) unchanged.
+- **R2** Suite at baseline.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] T7 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. T1 is the key parity check against a Deep Diagnostic of the same practice.

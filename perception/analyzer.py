@@ -1488,6 +1488,10 @@ def compare_locations(
     force_rerun_a: bool = False,
     force_rerun_b: bool = False,
     override_today_lock: bool = False,
+    confirmed_siblings_a: list[dict] | None = None,
+    confirmed_siblings_b: list[dict] | None = None,
+    anchor_listing_a: dict | None = None,
+    anchor_listing_b: dict | None = None,
 ) -> tuple[AnalysisResult, AnalysisResult, object]:
     """Run two individual-report analyses then synthesize a structured comparison.
 
@@ -1538,6 +1542,8 @@ def compare_locations(
                 practice_profile=practice_profile_a, skip_pdf=True,
                 output_dir=output_dir, on_event=on_event, brand=brand,
                 service_line=service_line_a, parent_system=parent_system_a,
+                practice_composite=practice_composite_a, practice_roster=practice_roster_a or [],
+                confirmed_siblings=confirmed_siblings_a, anchor_listing=anchor_listing_a,
             )
         else:
             result_a = analyze_location(
@@ -1564,6 +1570,8 @@ def compare_locations(
                 practice_profile=practice_profile_b, skip_pdf=True,
                 output_dir=output_dir, on_event=on_event, brand=brand,
                 service_line=service_line_b, parent_system=parent_system_b,
+                practice_composite=practice_composite_b, practice_roster=practice_roster_b or [],
+                confirmed_siblings=confirmed_siblings_b, anchor_listing=anchor_listing_b,
             )
         else:
             result_b = analyze_location(
