@@ -2060,3 +2060,48 @@ teaser, physicians, briefing and service-line scorecard labels.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## HISTORY-COMPARE-TWO — Compare Two reports are persisted and downloadable from History
+
+**Shipped:** 2026-09-15 · **Area:** Compare Two, History · **Type:** bug fix
+
+### What changed
+- Root cause: a head-to-head run analyzed each side with PDF generation skipped (or reused a
+  cached run, creating no row) and kept the combined PDF path only in the in-memory job. History
+  therefore showed 0–2 clinic rows with nothing downloadable, and the result-screen link died on a
+  server restart (an old release note acknowledged the 404).
+- New `comparison_runs` table; `_job_run_comparison` records every comparison (both entities,
+  markets, specialty, PDF path, teaser flag, role, ran_by). Side runs created only for the
+  comparison (no PDF of their own) are tagged `analysis_runs.comparison_id` and hidden from
+  History; cached full runs stay visible.
+- History shows one row per comparison: name "A vs B", badge **Compare Two · <specialty>**,
+  Analyzed = 2, Downloads → **Comparison (PDF)** (or "Comparison — Teaser (PDF)"). Search/window/
+  older-runs all include them. Admin Delete run works on them.
+- `GET /api/compare/{id}/pdf` accepts the persisted id (History) or a live job id (result screen).
+- `scripts/backfill_comparisons.py` recovers rows for comparison PDFs generated before this change
+  (dry run by default; `--apply` writes). Locally: 2 found.
+
+### Files changed
+`perception/db.py`, `server.py`, `web/index.html`, `scripts/backfill_comparisons.py`,
+`docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — New comparison**: run Compare Two (two practices) → result screen download works → History
+shows "A vs B" with the Compare Two badge and Comparison (PDF); the download is the same combined
+report. No empty clinic rows for the two sides (unless a side was a prior full run with its own
+PDF, which stays).
+**T2 — Restart**: restart the server → the History download still works.
+**T3 — Teaser**: run with "Create Teaser version" → label reads "Comparison — Teaser (PDF)".
+**T4 — Backfill (prod)**: after deploy, run `scripts/backfill_comparisons.py` (dry) then
+`--apply` → older comparison PDFs appear in History with their original dates and users.
+**T5 — Delete**: admin Delete run on a comparison row removes it and its PDF.
+
+### Regression Checks
+- **R1** Trends still counts comparison side runs as snapshots (they remain in analysis_runs).
+- **R2** Suite at baseline; round-trip create → history → delete verified locally.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Run the backfill on production once after deploy.

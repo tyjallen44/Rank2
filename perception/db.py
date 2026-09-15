@@ -212,6 +212,7 @@ def init_db() -> None:
         ("result_json", "VARCHAR"),
         ("briefing_pdf_path", "VARCHAR"),
         ("event_id", "VARCHAR"),
+        ("comparison_id", "VARCHAR"),    # side run created for a Compare Two report (no own PDF)
         ("created_at", "TIMESTAMP"),
     ]:
         if col not in existing_run_cols:
@@ -634,6 +635,27 @@ def init_db() -> None:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN service_line VARCHAR")
     if "parent_system" not in _te_cols:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN parent_system VARCHAR")
+
+    # Compare Two (head-to-head) reports — one row per comparison so History can list
+    # and download the combined PDF (previously only the in-memory job knew the path).
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS comparison_runs (
+            id            VARCHAR PRIMARY KEY,
+            run_id_a      VARCHAR,
+            run_id_b      VARCHAR,
+            entity_a      VARCHAR NOT NULL,
+            entity_b      VARCHAR NOT NULL,
+            location_a    VARCHAR,
+            location_b    VARCHAR,
+            specialty     VARCHAR,
+            pdf_path      VARCHAR,
+            teaser        BOOLEAN DEFAULT FALSE,
+            user_role     VARCHAR,
+            ran_by        VARCHAR,
+            generated_at  DATE NOT NULL,
+            created_at    TIMESTAMP NOT NULL
+        )
+    """)
 
     # Sent Trend Reports — every emailed report is kept as an artifact so the exact
     # file a customer received can be retrieved later. On-demand downloads are a cache.
@@ -1651,6 +1673,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.parent_system
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
+            WHERE NOT (a.comparison_id IS NOT NULL AND a.pdf_path IS NULL)
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
                      a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at,
@@ -1686,7 +1709,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.parent_system
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
-            WHERE a.user_role = ?
+            WHERE a.user_role = ? AND NOT (a.comparison_id IS NOT NULL AND a.pdf_path IS NULL)
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
                      a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at,
@@ -1702,9 +1725,42 @@ def query_history(role: str) -> list[dict[str, Any]]:
             ORDER BY generated_at DESC, run_id DESC
         """, [role]).fetchall()
 
+    cmp_sql = (f"SELECT {', '.join(_CMP_COLS)} FROM comparison_runs"
+               + ("" if role == "admin" else " WHERE COALESCE(user_role, 'admin') = ?")
+               + " ORDER BY created_at DESC")
+    try:
+        cmp_rows = con.execute(cmp_sql, [] if role == "admin" else [role]).fetchall()
+    except Exception:
+        cmp_rows = []
     con.close()
 
     results = [dict(zip(analysis_cols, row)) for row in analysis_rows]
+    for row in cmp_rows:
+        c = dict(zip(_CMP_COLS, row))
+        results.append({
+            "run_id":            c["id"],
+            "location":          f"{c.get('location_a') or ''} · {c.get('location_b') or ''}",
+            "specialty":         c.get("specialty"),
+            "generated_at":      c["generated_at"],
+            "pdf_path":          c.get("pdf_path"),
+            "teaser_pdf_path":   None,
+            "full_detail_pdf_path": None,
+            "md_path":           None,
+            "briefing_pdf_path": None,
+            "event_id":          None,
+            "entity_type":       "comparison",
+            "mqcr":              None,
+            "entity_name":       f"{c['entity_a']} vs {c['entity_b']}",
+            "ran_by":            c.get("ran_by"),
+            "provider_count":    2,
+            "report_type":       "comparison",
+            "created_at":        c.get("created_at"),
+            "service_line":      None,
+            "parent_system":     None,
+            "comparison":        {"entity_a": c["entity_a"], "entity_b": c["entity_b"],
+                                  "run_id_a": c.get("run_id_a"), "run_id_b": c.get("run_id_b"),
+                                  "teaser": bool(c.get("teaser"))},
+        })
 
     for row in network_rows:
         (run_id, network_name, facility_type, generated_at, pdf_path, total,
@@ -1946,6 +2002,49 @@ def create_tracked_entity(
     )
     con.close()
     return get_tracked_entity(eid)
+
+
+def create_comparison_run(cid: str, run_id_a: str, run_id_b: str, entity_a: str, entity_b: str,
+                          location_a: str, location_b: str, specialty: Optional[str],
+                          pdf_path: str, teaser: bool, user_role: str, ran_by: Optional[str]) -> None:
+    from datetime import datetime, date as _date
+    con = get_connection()
+    con.execute(
+        """INSERT INTO comparison_runs (id, run_id_a, run_id_b, entity_a, entity_b, location_a, location_b,
+                                        specialty, pdf_path, teaser, user_role, ran_by, generated_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [cid, run_id_a, run_id_b, entity_a, entity_b, location_a, location_b, specialty, pdf_path,
+         bool(teaser), user_role, ran_by, _date.today(), datetime.utcnow()])
+    # Side runs that exist only to feed this comparison (no PDF of their own) are tagged so
+    # History shows the comparison row instead of two empty clinic rows.
+    for rid in (run_id_a, run_id_b):
+        if rid:
+            con.execute("UPDATE analysis_runs SET comparison_id = ? WHERE run_id = ? AND pdf_path IS NULL "
+                        "AND comparison_id IS NULL", [cid, rid])
+    con.close()
+
+
+_CMP_COLS = ["id", "run_id_a", "run_id_b", "entity_a", "entity_b", "location_a", "location_b",
+             "specialty", "pdf_path", "teaser", "user_role", "ran_by", "generated_at", "created_at"]
+
+
+def get_comparison_run(cid: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute(f"SELECT {', '.join(_CMP_COLS)} FROM comparison_runs WHERE id = ?", [cid]).fetchone()
+    con.close()
+    return dict(zip(_CMP_COLS, r)) if r else None
+
+
+def delete_comparison_run(cid: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute("SELECT pdf_path FROM comparison_runs WHERE id = ?", [cid]).fetchone()
+    if not r:
+        con.close()
+        return None
+    con.execute("DELETE FROM comparison_runs WHERE id = ?", [cid])
+    con.execute("UPDATE analysis_runs SET comparison_id = NULL WHERE comparison_id = ?", [cid])
+    con.close()
+    return {"files": [r[0]] if r[0] else []}
 
 
 def record_trend_report(entity_id: str, entity_name: str, run_id: Optional[str], pdf_path: str,

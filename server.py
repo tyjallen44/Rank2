@@ -1041,9 +1041,22 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
             force_rerun_b=req_dict.get("force_rerun_b", False),
             override_today_lock=req_dict.get("override_today_lock", False),
         )
+        # Persist the comparison so History can list/download it and the link survives restarts.
+        cid = uuid.uuid4().hex[:12]
+        try:
+            from perception.db import create_comparison_run
+            create_comparison_run(
+                cid, getattr(result_a, "run_id", None), getattr(result_b, "run_id", None),
+                getattr(result_a, "report_title", None) or result_a.entity_name,
+                getattr(result_b, "report_title", None) or result_b.entity_name,
+                f"{req_dict['city_a']}, {req_dict['state_a']}", f"{req_dict['city_b']}, {req_dict['state_b']}",
+                result_a.specialty or result_b.specialty, str(pdf_path),
+                bool(req_dict.get("teaser_report")), job.get("role", ""), job.get("email"))
+        except Exception as _pexc:
+            emit({"type": "text", "text": f"\n(could not save the comparison to History: {type(_pexc).__name__})"})
         job["status"] = "done"
         job["result"] = {
-            "run_id": job_id,          # use job_id so download URL is /api/compare/{job_id}/pdf
+            "run_id": cid,             # download URL: /api/compare/{id}/pdf (persisted id; job id also accepted)
             "location": f"{result_a.entity_name} vs {result_b.entity_name}",
             "specialty": result_a.specialty,
             "provider_count": 2,
@@ -1071,12 +1084,18 @@ async def start_comparison(req: CompareRequest, payload: dict = Depends(get_curr
 
 @app.get("/api/compare/{job_id}/pdf")
 async def download_comparison_pdf(job_id: str, _: str = Depends(require_auth)):
+    """Accepts a persisted comparison id (History) or a live job id (result screen)."""
+    from perception.db import init_db, get_comparison_run
+    pdf_path = None
     job = _jobs.get(job_id)
-    if not job or job.get("status") != "done":
-        raise HTTPException(404, "Comparison report not found")
-    pdf_path = job.get("result", {}).get("pdf_path")
+    if job and job.get("status") == "done":
+        pdf_path = job.get("result", {}).get("pdf_path")
     if not pdf_path:
-        raise HTTPException(404, "PDF not available")
+        init_db()
+        rec = get_comparison_run("".join(ch for ch in job_id if ch.isalnum()))
+        pdf_path = rec.get("pdf_path") if rec else None
+    if not pdf_path:
+        raise HTTPException(404, "Comparison report not found")
     pdf = Path(pdf_path)
     if not pdf.exists():
         raise HTTPException(404, "PDF file not found on disk")
@@ -1291,10 +1310,10 @@ async def get_history(role: str = Depends(require_auth), days: int = 45,
 async def delete_report_run(run_id: str, _: dict = Depends(require_admin)):
     """Admin: delete one run (Deep Diagnostic / market / FQHC or Hospital Network) with its
     dependent rows and files. Cleanup for junk/test runs — History keeps everything else."""
-    from perception.db import init_db, delete_analysis_run, delete_network_run
+    from perception.db import init_db, delete_analysis_run, delete_network_run, delete_comparison_run
     init_db()
     safe = "".join(ch for ch in run_id if ch.isalnum() or ch in "-_")
-    res = delete_network_run(safe) or delete_analysis_run(safe)
+    res = delete_comparison_run(safe) or delete_network_run(safe) or delete_analysis_run(safe)
     if res is None:
         raise HTTPException(404, "Run not found")
     for p in res.get("files") or []:

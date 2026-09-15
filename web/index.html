@@ -7465,6 +7465,14 @@ function _dlCell(run, caRuns) {
   const files = [];   // [label, url]  (url null => info line)
   const acts = [];    // [label, onclickJs]
 
+  // Compare Two: one combined head-to-head PDF (teaser variant is baked in when chosen).
+  if (run.report_type === 'comparison') {
+    if (run.has_pdf) files.push([`Comparison${run.comparison && run.comparison.teaser ? ' — Teaser' : ''} (PDF)`, `/api/compare/${run.run_id}/pdf?token=${tok}`]);
+    else files.push(['Comparison PDF not on disk', null]);
+    if (_role === 'admin') acts.push(['🗑 Delete run', `histDeleteRun('${run.run_id}', this)`]);
+    return _dlMenu(run.run_id, files, acts);
+  }
+
   // Hospital Network: the content analysis is merged into the report itself, so
   // there's one base report plus optional Teaser and Full Detail variants.
   if (isNet) {
@@ -7772,6 +7780,8 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
             };
             const typeBadge = run.event_id
               ? `<span class="badge bg-teal">Event</span>`
+              : run.report_type === 'comparison'
+                ? `<span class="badge bg-teal" title="${(run.comparison || {}).entity_a || ''} vs ${(run.comparison || {}).entity_b || ''}">Compare Two${run.specialty ? ' · ' + run.specialty : ''}</span>`
               : run.entity_type === 'community_health'
                 ? `<span class="badge bg-teal">FQHC</span>`
                 : isNetwork
@@ -7782,6 +7792,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
                       ? `<span class="badge bg-gold">${run.specialty}</span>`
                       : `<span class="badge bg-muted">Hospitals</span>`;
             const analyzedCount = run.entity_type === 'community_health' ? '1'
+              : run.report_type === 'comparison' ? '2'
               : isNetwork ? `${run.provider_count} loc.`
               : run.provider_count;
             const _entName = run.entity_name || _historyFilename(run);
