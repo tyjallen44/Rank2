@@ -2498,3 +2498,18 @@ Commit: one shared chooser modal; sidebar "✦ Start a report" entry at the top 
 **T4 — Shared state.** Pick answers on the Home card, then open the modal from the sidebar: the modal starts blank (each open resets). Pick answers in the modal, close it, look at the Home card: it shows the modal's answers (one chooser, two views). Clear on the Home card resets both.
 
 **R1 — Help modal and other modals unchanged.** ⓘ links still open the help modal; Esc closes the chooser only (help modal keeps its own close behaviour).
+
+## HOME-VIDEO-HERO — welcome video moved into the green hero, small, right column
+
+Commit: the Home hero is two columns — title/lede/buttons on the left, the welcome video (≈280px wide, "WELCOME" label) on the right. The white featured card below is hidden when the Home content is only the video (and its title); any text the admin added stays in the card without the video. NEEDS BROWSER TESTING.
+
+**T1 — Hero layout.** Sign in → Home. The video sits inside the green box on the right, small, with a soft shadow; the title, lede and three buttons are on the left; the "Which report do I need?" card follows immediately below with no empty white card in between.
+- [ ] Video plays; end-of-video reset still returns it to the poster.
+
+**T2 — Home content with text.** As admin add a paragraph of text to the Home content (Learn → Manage Content → Home page) alongside the video link.
+- [ ] The video still moves to the hero; the white card below shows the title + text only.
+- [ ] Remove the text again → the card disappears.
+
+**T3 — No Home content.** With no Home content published, the hero has no right column and the placeholder card ("A short welcome video is coming soon") shows as before.
+
+**T4 — Narrow window.** Below ~860px the hero stacks: text first, video below at up to 360px wide.
