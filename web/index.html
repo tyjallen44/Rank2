@@ -9057,6 +9057,9 @@ async function loadTrackPage() {
 
 async function refreshTrackEntities() {
   const body = document.getElementById('track-entities-body');
+  if (_trackMyEmail === null) {
+    try { const me = await api('/api/auth/me'); const d = me.ok ? await me.json() : null; _trackMyEmail = (d && d.email) ? String(d.email).toLowerCase() : ''; } catch (e) { _trackMyEmail = ''; }
+  }
   try {
     const res = await api('/api/track/entities');
     _trackEntities = await res.json();
@@ -9067,6 +9070,99 @@ async function refreshTrackEntities() {
 }
 
 let _trackCfgOpen = new Set();   // entity ids whose configuration panel is expanded
+
+// ── Trends filter bar (client-side: the list is small and fully loaded) ──
+const _TRACK_FILTER_DEFAULTS = { q: '', type: '', status: 'active', cadence: '', by: '', attention: false, sort: 'default' };
+let _trackFilters = (() => { try { return Object.assign({}, _TRACK_FILTER_DEFAULTS, JSON.parse(sessionStorage.getItem('pulse_track_filters') || '{}')); } catch (e) { return Object.assign({}, _TRACK_FILTER_DEFAULTS); } })();
+function trackSetFilter(key, value) {
+  _trackFilters[key] = value;
+  try { sessionStorage.setItem('pulse_track_filters', JSON.stringify(_trackFilters)); } catch (e) {}
+  renderTrackEntityList();
+}
+function trackClearFilters() {
+  _trackFilters = Object.assign({}, _TRACK_FILTER_DEFAULTS);
+  try { sessionStorage.setItem('pulse_track_filters', JSON.stringify(_trackFilters)); } catch (e) {}
+  renderTrackEntityList();
+}
+function _trackExpectedRubric(e) { return (e.entity_type === 'practice' || e.entity_type === 'service_line') ? 'practice' : 'hospital'; }
+// "Needs attention": score fell, run is overdue, or history is on a different rubric than the type.
+function _trackNeedsAttention(e) {
+  const dropped = e.score_delta != null && e.score_delta < 0;
+  const overdue = !!e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) < new Date(Date.now() - 24 * 3600 * 1000);
+  const rubricOff = !!e.latest_rubric && e.latest_rubric !== _trackExpectedRubric(e);
+  return dropped || overdue || rubricOff;
+}
+function _trackAttentionReasons(e) {
+  const r = [];
+  if (e.score_delta != null && e.score_delta < 0) r.push(`score fell ${Math.abs(e.score_delta)}`);
+  if (!!e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) < new Date(Date.now() - 24 * 3600 * 1000)) r.push('run overdue');
+  if (!!e.latest_rubric && e.latest_rubric !== _trackExpectedRubric(e)) r.push('rubric mismatch');
+  return r;
+}
+function _trackFiltersActive() {
+  const f = _trackFilters, d = _TRACK_FILTER_DEFAULTS;
+  return !!(f.q.trim() || f.type || f.status !== d.status || f.cadence || f.by || f.attention);
+}
+function _trackApplyFilters(list) {
+  const f = _trackFilters, q = f.q.trim().toLowerCase();
+  const me = (_trackEntities.find(e => false), null);
+  return list.filter(e => {
+    if (f.status === 'active' && !e.active) return false;
+    if (f.status === 'paused' && e.active) return false;
+    if (f.type && e.entity_type !== f.type) return false;
+    if (f.cadence && e.schedule !== f.cadence) return false;
+    if (f.by && f.by !== '__mine__' && String(e.created_by || '').toLowerCase() !== f.by.toLowerCase()) return false;
+    if (f.by === '__mine__' && !_trackIsMine(e)) return false;
+    if (f.attention && !_trackNeedsAttention(e)) return false;
+    if (!q) return true;
+    const hay = [e.entity_name, e.city, e.state, `${e.city}, ${e.state}`, e.specialty, e.service_line, e.parent_system, e.notes]
+      .filter(Boolean).join(' · ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+let _trackMyEmail = null;   // resolved lazily from /api/auth/me for the "Mine" filter
+function _trackIsMine(e) {
+  const cb = String(e.created_by || '').toLowerCase();
+  if (_trackMyEmail) return cb === _trackMyEmail;
+  return !!_displayName && cb.split('@')[0].replace(/[._]/g, ' ').toLowerCase() === String(_displayName).toLowerCase();
+}
+function _trackSort(list) {
+  const s = _trackFilters.sort;
+  const byNext = (a, b) => String(a.next_run_at || '9999').localeCompare(String(b.next_run_at || '9999'));
+  const arr = list.slice();
+  if (s === 'score') arr.sort((a, b) => (b.latest_score ?? -1) - (a.latest_score ?? -1));
+  else if (s === 'change') arr.sort((a, b) => Math.abs(b.score_delta ?? 0) - Math.abs(a.score_delta ?? 0));
+  else if (s === 'next') arr.sort(byNext);
+  else if (s === 'name') arr.sort((a, b) => String(a.entity_name).localeCompare(String(b.entity_name)));
+  else arr.sort((a, b) => (!!a.active !== !!b.active) ? (a.active ? -1 : 1) : byNext(a, b));
+  return arr;
+}
+function _trackFilterBar() {
+  const f = _trackFilters;
+  const sel = (key, opts, title) => `<select class="input" style="width:auto;padding:8px 10px" title="${title}" onchange="trackSetFilter('${key}', this.value)">` +
+    opts.map(([v, l]) => `<option value="${v}" ${String(f[key]) === String(v) ? 'selected' : ''}>${l}</option>`).join('') + '</select>';
+  const creators = [...new Set(_trackEntities.map(e => e.created_by).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+  const byOpts = [['', 'Tracked by anyone'], ['__mine__', 'Mine']].concat(creators.map(c => [c, String(c).split('@')[0]]));
+  const chips = [];
+  if (f.q.trim()) chips.push(`"${_learnEsc(f.q.trim())}"`);
+  if (f.type) chips.push(_trackTypeLabel(f.type));
+  if (f.status !== 'active') chips.push(f.status === 'paused' ? 'Paused only' : 'Active + paused');
+  if (f.cadence) chips.push({ weekly: 'Weekly', monthly: 'Monthly', manual: 'Manual' }[f.cadence] || f.cadence);
+  if (f.by) chips.push('Tracked by ' + (f.by === '__mine__' ? 'me' : String(f.by).split('@')[0]));
+  if (f.attention) chips.push('Needs attention');
+  const chipHtml = chips.length
+    ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12px">${chips.map(c => `<span class="badge bg-teal" style="font-size:11px">${c}</span>`).join('')}<a href="#" onclick="trackClearFilters();return false" style="color:var(--teal);font-weight:600">Clear all</a></div>` : '';
+  return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <input id="track-search" type="text" class="input" placeholder="Search name, market, specialty, notes…" value="${_learnEsc(f.q)}" oninput="trackSetFilter('q', this.value)" style="max-width:300px">
+      ${sel('type', [['', 'All types'], ['hospital', 'Hospital'], ['service_line', 'Hospital Service Line'], ['practice', 'Specialty Practice']], 'Type')}
+      ${sel('status', [['active', 'Active'], ['paused', 'Paused'], ['all', 'All']], 'Status')}
+      ${sel('cadence', [['', 'Any cadence'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['manual', 'Manual']], 'Cadence')}
+      ${sel('by', byOpts, 'Tracked by')}
+      <label class="aggregate-toggle" style="margin:0" title="Score fell since the previous snapshot, a scheduled run is overdue, or the history is on a different rubric than the entity's type">
+        <input type="checkbox" ${f.attention ? 'checked' : ''} onchange="trackSetFilter('attention', this.checked)"><span class="agg-label">Needs attention</span></label>
+      ${sel('sort', [['default', 'Sort: active first'], ['score', 'Sort: latest score'], ['change', 'Sort: biggest change'], ['next', 'Sort: next run'], ['name', 'Sort: name']], 'Sort')}
+    </div>${chipHtml}`;
+}
 
 function toggleTrackCfg(id) {
   if (_trackCfgOpen.has(id)) _trackCfgOpen.delete(id); else _trackCfgOpen.add(id);
@@ -9215,11 +9311,8 @@ function renderTrackEntityList() {
   }
 
   const scheduleLabel = { monthly: 'Monthly', weekly: 'Weekly', manual: 'Manual' };
-  // Active entities first (soonest next run on top), paused ones last.
-  const ordered = _trackEntities.slice().sort((a, b) => {
-    if (!!a.active !== !!b.active) return a.active ? -1 : 1;
-    return String(a.next_run_at || '9999').localeCompare(String(b.next_run_at || '9999'));
-  });
+  const searchWasFocused = document.activeElement && document.activeElement.id === 'track-search';
+  const ordered = _trackSort(_trackApplyFilters(_trackEntities));
   const rows = ordered.map(e => {
     const last = _shortDate(e.last_run_at);
     const next = e.schedule !== 'manual' ? _shortDate(e.next_run_at) : { text: '—', title: 'Manual schedule' };
@@ -9242,10 +9335,12 @@ function renderTrackEntityList() {
         + ((e.rubrics || []).length > 1 ? ` <span title="This entity's history mixes both rubrics; compare only within a rubric" style="color:#b45309;cursor:help">mixed</span>` : '')
       : '';
     const sub = [`${e.city}, ${e.state}`, e.specialty || '', typeLbl].filter(Boolean).join(' · ');
+    const attn = _trackAttentionReasons(e);
+    const attnBadge = attn.length ? ` <span class="badge" style="background:#fff3cd;color:#856404;font-size:10px" title="${_learnEsc(attn.join(', '))}">Needs attention</span>` : '';
     return `<tr style="${e.active ? '' : 'opacity:.7'}">
       <td style="max-width:320px">
         <a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal);text-decoration:none">${e.entity_name}</a>
-        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${sub}${e.notes ? ` · ${e.notes}` : ''} ${rubricBadge}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${sub}${e.notes ? ` · ${e.notes}` : ''} ${rubricBadge}${attnBadge}</div>
       </td>
       <td style="white-space:nowrap">${latest}</td>
       <td title="${(e.recent_scores || []).map(s => `${s.date.slice(0, 10)}: ${s.score}`).join('\n')}">${_sparkSvg(e.recent_scores)}</td>
@@ -9262,7 +9357,11 @@ function renderTrackEntityList() {
     </tr>${_trackCfgOpen.has(e.id) ? _trackCfgPanel(e) : ''}`;
   }).join('');
 
-  body.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
+  const noMatch = !ordered.length
+    ? `<div class="empty" style="padding:36px 0"><div>No tracked entities match these filters. <a href="#" onclick="trackClearFilters();return false" style="color:var(--teal);font-weight:600">Clear all</a></div></div>` : '';
+  const matchLine = _trackFiltersActive()
+    ? `<div style="font-size:12px;color:var(--muted);margin:0 0 8px">${ordered.length} of ${_trackEntities.length} tracked entit${_trackEntities.length === 1 ? 'y' : 'ies'} match.</div>` : '';
+  body.innerHTML = `<div style="margin-bottom:12px">${_trackFilterBar()}</div>${matchLine}${noMatch}` + (ordered.length ? `<div class="card" style="padding:0;overflow:hidden">
     <table class="tbl">
       <thead><tr>
         <th>Entity</th><th>Latest score</th><th>Trend</th><th>Schedule</th>
@@ -9271,7 +9370,8 @@ function renderTrackEntityList() {
       <tbody>${rows}</tbody>
     </table>
   </div>
-  <div style="font-size:11.5px;color:var(--muted);margin-top:10px">View (or the entity name) opens the full trend. The Trend column shows the last ${12} runs on a 0–100 scale.</div>`;
+  <div style="font-size:11.5px;color:var(--muted);margin-top:10px">View (or the entity name) opens the full trend. The Trend column shows the last ${12} runs on a 0–100 scale.</div>` : '');
+  if (searchWasFocused) { const inp = document.getElementById('track-search'); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
 }
 
 // ── Add-entity search flow ─────────────────────────────────────────────────

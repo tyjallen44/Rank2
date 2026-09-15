@@ -2283,3 +2283,40 @@ widens; "Last 45 days" → default.
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Older runs may have no Run By recorded, so "Mine" only matches runs made
 since run attribution was added.
+
+## TRENDS-FILTERS — Trends list filter bar, "Needs attention", sort options; zigzag icon
+
+**Shipped:** 2026-09-15 · **Area:** Trends · **Type:** UX
+
+### What changed
+- Sidebar/empty-state icon for Trends is now an inline zigzag trend-line arrow.
+- Filter bar above the tracked list (client-side, instant, AND-combined, persisted per session):
+  search (name, market, specialty/service line, parent system, notes) · Type (Hospital / Hospital
+  Service Line / Specialty Practice) · Status (**Active** default / Paused / All) · Cadence ·
+  Tracked by (anyone / Mine / each creator) · **Needs attention** checkbox · Sort (active first /
+  latest score / biggest change / next run / name).
+- "Needs attention" = score fell since the previous snapshot, a scheduled run is >24 h overdue, or
+  the history is on a different rubric than the entity's type. Matching rows get an amber badge
+  whose tooltip lists the reasons.
+- Chips + Clear all; "N of M tracked entities match" line when filtering; empty-match state with a
+  Clear all link; search keeps focus while typing. "Mine" resolves your email via /api/auth/me.
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1**: type part of an entity name → list narrows instantly; type a client label from Notes → the
+entity appears; clear → all active entities.
+**T2**: Status = Paused → only paused; All → both; default Active hides paused.
+**T3**: Type + Tracked by → both apply; "Mine" → entities you created.
+**T4**: Needs attention → only entities with a drop / overdue run / rubric mismatch; each shows the
+amber badge with reasons on hover.
+**T5**: Sort by latest score, biggest change, next run, name → order changes accordingly.
+**T6**: navigate away and back → filters/chips persist; Clear all resets to defaults.
+**T7**: sidebar Trends icon is the zigzag arrow in the full sidebar and in the Home rail.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] T7
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.
