@@ -1696,3 +1696,20 @@ show ⚠ with tooltip.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## TRENDS-VIEW-BUTTON — View button restored on Trends rows
+
+**Shipped:** 2026-09-15 · **Area:** Trends · **Type:** fix
+
+### What changed
+- Each row's actions are now **View · ⚙ Details · Pause/Resume**. View opens the full trend (the
+  entity name link still does too). Footer note updated.
+
+### Test Cases
+**T1**: Trends → View on a row opens the trend detail; Details and Pause/Resume unchanged.
+
+### Acceptance Checklist
+- [ ] T1
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.

@@ -8938,6 +8938,7 @@ function renderTrackEntityList() {
       <td style="text-align:right">${runs}</td>
       <td>${status}</td>
       <td style="white-space:nowrap;text-align:right">
+        <button class="btn btn-ghost btn-sm" onclick="loadEntityTrend('${e.id}')" title="Open the full trend">View</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleTrackCfg('${e.id}')" title="Configuration">${_trackCfgOpen.has(e.id) ? '⚙ Hide' : '⚙ Details'}</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleTrackActive('${e.id}',${!e.active})">${e.active ? 'Pause' : 'Resume'}</button>
       </td>
@@ -8953,7 +8954,7 @@ function renderTrackEntityList() {
       <tbody>${rows}</tbody>
     </table>
   </div>
-  <div style="font-size:11.5px;color:var(--muted);margin-top:10px">Click an entity name to open its full trend. The Trend column shows the last ${12} runs on a 0–100 scale.</div>`;
+  <div style="font-size:11.5px;color:var(--muted);margin-top:10px">View (or the entity name) opens the full trend. The Trend column shows the last ${12} runs on a 0–100 scale.</div>`;
 }
 
 // ── Add-entity search flow ─────────────────────────────────────────────────
