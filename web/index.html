@@ -811,13 +811,13 @@ input[type="url"]::placeholder, textarea::placeholder {
 #learn-modal.open { display:flex; }
 
 /* ── Bulk "About this report" info modal ──────────────────────── */
-#np-about-modal, #ir-help-modal, #ev-help-modal, #ca-about-modal {
+#np-about-modal, #ir-help-modal, #ev-help-modal, #ca-about-modal, #composite-help-modal {
   display:none;position:fixed;inset:0;
   background:rgba(15,65,70,0.55);z-index:1000;
   align-items:center;justify-content:center;
 }
-#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open, #ca-about-modal.open { display:flex; }
-#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card, #ca-about-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
+#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open, #ca-about-modal.open, #composite-help-modal.open { display:flex; }
+#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card, #ca-about-modal .modal-card, #composite-help-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
 .npa-step { font-size:13.5px;color:var(--text);line-height:1.55;margin:0 0 9px;padding-left:26px;position:relative; }
 .npa-step b.n { position:absolute;left:0;top:0;color:var(--teal);font-weight:700; }
 .npa-h { font-size:12px;font-weight:700;color:var(--teal);text-transform:uppercase;
@@ -1686,9 +1686,9 @@ input[type="url"]::placeholder, textarea::placeholder {
               </label>
             </div>
             <!-- Practice Composite: explicit for Hospital, implicit (hidden) for practice types -->
-            <label class="aggregate-toggle" id="ir-practice-composite-wrap" style="margin-top:10px" title="Append a practice reputation table showing public ratings for associated practices and clinics.">
+            <label class="aggregate-toggle" id="ir-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
               <input type="checkbox" id="ir-practice-composite" onchange="onPracticeCompositeChange()">
-              <span class="agg-label">Practice Composite</span>
+              <span class="agg-label">Practice Composite</span><a href="#" onclick="compositeShowHelp(event);return false" title="What does Practice Composite add? Click for details." style="margin-left:6px;font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">ⓘ What is this?</a>
             </label>
             <label class="aggregate-toggle" id="ir-physician-composite-wrap" style="margin-top:6px;margin-left:20px" title="Include physician-level reputation sub-rows under each practice in the composite table.">
               <input type="checkbox" id="ir-physician-composite" onchange="onPhysicianCompositeChange()" disabled>
@@ -2010,9 +2010,9 @@ input[type="url"]::placeholder, textarea::placeholder {
             <span class="agg-label">Composite analysis related hospitals only</span>
           </label>
         </div>
-        <label class="aggregate-toggle" id="cmp-a-practice-composite-wrap" style="margin-top:10px">
+        <label class="aggregate-toggle" id="cmp-a-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
           <input type="checkbox" id="cmp-a-practice-composite">
-          <span class="agg-label">Practice Composite</span>
+          <span class="agg-label">Practice Composite</span><a href="#" onclick="compositeShowHelp(event);return false" title="What does Practice Composite add? Click for details." style="margin-left:6px;font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">ⓘ What is this?</a>
         </label>
       </div>
 
@@ -2076,9 +2076,9 @@ input[type="url"]::placeholder, textarea::placeholder {
               <span class="agg-label">Composite analysis related hospitals only</span>
             </label>
           </div>
-          <label class="aggregate-toggle" id="cmp-b-practice-composite-wrap" style="margin-top:10px">
+          <label class="aggregate-toggle" id="cmp-b-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
             <input type="checkbox" id="cmp-b-practice-composite">
-            <span class="agg-label">Practice Composite</span>
+            <span class="agg-label">Practice Composite</span><a href="#" onclick="compositeShowHelp(event);return false" title="What does Practice Composite add? Click for details." style="margin-left:6px;font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">ⓘ What is this?</a>
           </label>
         </div>
       </div>
@@ -2394,6 +2394,7 @@ input[type="url"]::placeholder, textarea::placeholder {
               <input type="checkbox" id="ev-practice-composite" style="margin-top:2px">
               <div>
                 Include Practice Composite
+                <a href="#" onclick="compositeShowHelp(event);return false" style="margin-left:6px;font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">ⓘ What is this?</a>
                 <span class="tooltip-anchor" style="margin-left:6px;cursor:help;color:var(--teal);font-size:12px;font-weight:600" title="When enabled, the app will automatically discover all clinic sites associated with each health center — including satellite locations, school-based sites, and mobile units in the area — and incorporate their online presence and reputation data into the report. This gives a fuller picture of the organization's AI reputation across its entire footprint, not just its main address.">ⓘ</span>
                 <div style="font-size:12px;color:var(--muted);margin-top:4px">Discovers all clinic sites for each health center and includes them in the AI reputation assessment.</div>
               </div>
@@ -3588,6 +3589,36 @@ input[type="url"]::placeholder, textarea::placeholder {
     <div class="modal-footer">
       <button class="btn btn-primary btn-sm" onclick="npCloseAbout()">Got it</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Practice Composite: what the checkbox does ──────────────────────────── -->
+<div id="composite-help-modal" onclick="if(event.target===this)compositeCloseHelp()">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div class="modal-title" style="margin-bottom:4px">What is Practice Composite?</div>
+      <button class="btn btn-ghost btn-sm" onclick="compositeCloseHelp()" style="flex-shrink:0">✕</button>
+    </div>
+    <div class="npa-p" style="margin-top:6px">Practice Composite adds a <strong>reputation table of the affiliated practices and clinics</strong> to the end of a hospital report. It is an appendix for context &mdash; it does <strong>not</strong> change the Pulse Score or the four pillars.</div>
+
+    <div class="npa-h">What you get</div>
+    <div class="npa-li">&bull; A row for every affiliated practice or clinic found for the organization (the analyzed hospital is pinned first).</div>
+    <div class="npa-li">&bull; For each: Google rating and review count, plus Healthgrades, Vitals, WebMD, Yelp and RateMDs where found, each linked to the public profile.</div>
+    <div class="npa-li">&bull; A review-weighted average rating and total review volume per practice, so weak or unclaimed listings stand out.</div>
+    <div class="npa-li">&bull; Optionally, <strong>Include Physicians in Composite</strong> adds physician-level rows under each practice (slower).</div>
+
+    <div class="npa-h">Where the list comes from</div>
+    <div class="npa-p">Pulse discovers the practices associated with the hospital or system and verifies each against its Google listing. On Deep Diagnostic you can review and uncheck entries before running; on Compare Two the discovery runs automatically for each side.</div>
+
+    <div class="npa-h">When to use it</div>
+    <div class="npa-li">&bull; The audience cares about the system's clinics and practices, not just the flagship hospital.</div>
+    <div class="npa-li">&bull; You want to show fragmented or unclaimed listings across a system in one table.</div>
+    <div class="npa-li">&bull; Skip it for a quick single-hospital read &mdash; it adds several minutes to the run.</div>
+
+    <div class="npa-h">Good to know</div>
+    <div class="npa-li">&bull; Specialty Practice and Hospital Service Line runs include the table automatically &mdash; their confirmed locations are the roster.</div>
+    <div class="npa-li">&bull; In Event Preparation for community health centers, &ldquo;Include Practice Composite&rdquo; means discovering every clinic site and rolling them into the assessment.</div>
+    <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="compositeCloseHelp()">Got it</button></div>
   </div>
 </div>
 
@@ -6553,6 +6584,8 @@ function npSetMode(mode) {
 function npShowAbout()  { document.getElementById('np-about-modal').classList.add('open'); }
 function npCloseAbout() { document.getElementById('np-about-modal').classList.remove('open'); }
 function showIrHelp()  { document.getElementById('ir-help-modal').classList.add('open'); }
+function compositeShowHelp(ev) { if (ev) { ev.preventDefault(); ev.stopPropagation(); } document.getElementById('composite-help-modal').classList.add('open'); }
+function compositeCloseHelp()  { document.getElementById('composite-help-modal').classList.remove('open'); }
 function irCloseHelp() { document.getElementById('ir-help-modal').classList.remove('open'); }
 function showEvHelp()  { document.getElementById('ev-help-modal').classList.add('open'); }
 function evCloseHelp() { document.getElementById('ev-help-modal').classList.remove('open'); }

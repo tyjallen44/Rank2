@@ -1983,3 +1983,30 @@ period, snapshot count, score + delta, and "reach <your name>"; PDF attached.
 
 ### Notes for the testing agent
 NEEDS INBOX TESTING. Dry run (mailer stubbed) produced the expected text; no button in the HTML.
+
+## COMPOSITE-HELP — "What is Practice Composite?" explainer wherever the checkbox appears
+
+**Shipped:** 2026-09-15 · **Area:** Deep Diagnostic (Hospital), Compare Two (both sides), Event Prep (FQHC) · **Type:** UX
+
+### What changed
+- Every Practice Composite checkbox now has (a) a hover tooltip with a one-sentence summary and
+  (b) an inline **ⓘ What is this?** link that opens a shared pop-over ("What is Practice
+  Composite?") describing what the table contains (affiliated practices with Google, Healthgrades,
+  Vitals, WebMD, Yelp, RateMDs ratings + links, weighted averages), where the list comes from,
+  when to use it, that it does not change the Pulse Score, the runtime cost, the optional physician
+  rows, that Specialty/Service Line runs include it automatically, and what the FQHC variant means.
+- Clicking ⓘ does not toggle the checkbox (event is stopped).
+
+### Test Cases
+**T1**: Deep Diagnostic → Hospital → Advanced options → hover "Practice Composite" shows the
+summary; click "ⓘ What is this?" → pop-over opens; ✕ / Got it / backdrop close it; the checkbox
+state is unchanged by clicking ⓘ.
+**T2**: Compare Two → both sides (Hospital type) show the same tooltip and link.
+**T3**: Event Prep → Community Health → "Include Practice Composite" has the ⓘ link (same pop-over,
+which mentions the FQHC meaning).
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.
