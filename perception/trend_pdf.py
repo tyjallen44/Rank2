@@ -269,6 +269,8 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
         f'<div class="small"><div class="small-h">{_e(r["label"])}</div>{_small_chart(points, r["key"])}</div>'
         for r in st["pillars"])
 
+    rubrics = sorted({(p.get("rubric") or "hospital") for p in points})
+    mixed = len(rubrics) > 1
     snap_rows = []
     prev = None
     for p in points:
@@ -286,6 +288,10 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
         g_rating = (str(p["google_rating"]) + "★") if p.get("google_rating") is not None else "—"
         g_count = p.get("google_count") if p.get("google_count") is not None else "—"
         flag_html = ' <span style="color:#b45309;font-weight:700">⚠</span>' if flagged else ""
+        if mixed:
+            rb = p.get("rubric") or "hospital"
+            flag_html = (f' <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:8px;'
+                         f'background:{_PALE};color:{_TEAL}">{"P" if rb == "practice" else "H"}</span>') + flag_html
         snap_rows.append(
             f'<tr><td style="white-space:nowrap">{_e(_fmt_date(p.get("generated_at")))}</td>'
             f'<td style="text-align:center;font-weight:700;color:{_color(s)}">{s if s is not None else "—"}</td>'
@@ -302,6 +308,12 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
     drift_html = "".join(
         f'<li><b>{_e(_fmt_date(d["date"]))}</b> — run settings differed from the current configuration ({_e(", ".join(d["flags"]))}); treat that point with care.</li>'
         for d in st["drift"])
+    if mixed:
+        first_p = next((p for p in points if (p.get("rubric") or "hospital") == "practice"), None)
+        drift_html += (f'<li><b>Rubric change</b> — snapshots marked <b>H</b> were scored on the hospital rubric and '
+                       f'those marked <b>P</b> on the practice rubric'
+                       + (f' (from {_e(_fmt_date(first_p["generated_at"]))})' if first_p else '')
+                       + '; scores are comparable only within a rubric.</li>')
 
     limitations_html = _e(DATA_LIMITATIONS_BLOCK).replace("\n\n", "<br><br>")
     best = st["best_pillar"]; worst = st["worst_pillar"]

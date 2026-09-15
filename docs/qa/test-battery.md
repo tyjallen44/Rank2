@@ -1843,3 +1843,68 @@ changes + methodology, with no chart or box split across pages and no near-empty
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Verified locally on the 33-snapshot entity.
+
+## TRENDS-RUBRIC — Tracked entities have a type; practices/service lines run on the practice rubric; rubric shown per snapshot; admin delete tracking
+
+**Shipped:** 2026-09-15 · **Area:** Trends (server, DB, UI, PDF) · **Type:** correctness + admin
+
+### What changed
+- **Entity type** on tracked entities (`entity_type`: hospital | practice | service_line, plus
+  `service_line`/`parent_system`), auto-migrated with **default 'hospital'** so every existing
+  row keeps the rubric it was actually scored on. Identity stays locked (not editable).
+- **Add flow**: Analysis Type now Hospital · Hospital Service Line · Specialty Practice (Health
+  System + Service Line fields for the service line, name dedupe as in Deep Diagnostic; aggregate
+  toggle hidden for practice types — always rolled up). Submit sends the type.
+- **Run routing** (`_launch_tracked_run`): hospital → hospital analyzer (unchanged); practice and
+  service line → practice analyzer (practice rubric, roster-based reviews pillar, auto profile),
+  data-only snapshot. Used by create, Run now, and the scheduler.
+- **Rubric per snapshot**: `get_entity_trend` returns `rubric` from each run's weighting profile;
+  the list carries `latest_rubric` + `rubrics`. UI: "Hospital rubric"/"Practice rubric" badge on
+  each row with ⚠ when it differs from the entity's type and "mixed" when the history has both;
+  detail meta shows type + rubric; pillar labels (summary card, chart legend, table headers)
+  follow the history's rubric, or neutral "Pillar 1–4" labels with per-row H/P badges when mixed.
+  PDF: H/P badges in the snapshot table and a "Rubric change" note when mixed.
+- **Nothing re-scored or relabelled**: old points keep hospital labels; new practice series start
+  via "track a new entity" (type carried over).
+- **Admin: Delete tracking…** in the configuration panel → `DELETE /api/track/entities/{id}`
+  (now admin-only, hard delete; previously any user and only paused). Two confirms: remove the
+  tracking instance; then optionally `?purge_runs=1` to also delete its snapshot runs (individual
+  runs matched by entity name) and files. Non-admins can still Pause.
+
+### Files changed
+`perception/db.py`, `server.py`, `perception/trend_pdf.py`, `web/index.html`,
+`docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Existing entities after deploy**: every current row shows Type "Hospital" and a "Hospital
+rubric" badge (no ⚠); trend lines and detail unchanged; scheduled runs continue on the hospital
+analyzer.
+**T2 — New practice**: Track New Entity → Specialty Practice → e.g. Orthosouth, Memphis TN,
+ORTHOPEDICS → first snapshot completes; row shows Type "Specialty Practice" and "Practice rubric";
+detail pillar labels are the practice rubric's; the PDF labels match.
+**T3 — Service line**: Track New Entity → Hospital Service Line → HOUSTON METHODIST / HOUSTON / TX /
+ORTHOPEDICS → snapshot runs on the practice analyzer; Type shows "Hospital Service Line —
+ORTHOPEDICS of HOUSTON METHODIST".
+**T4 — Track as new from an old practice**: ⚙ Details on Columbia Orthopaedic Group → "track a new
+entity" → add flow prefilled with type Hospital (its current type); switch to Specialty Practice →
+complete; the old entity keeps its history; pause it later.
+**T5 — Mixed history display**: (only reachable via a manual DB edit or an old entity whose type
+was changed) → neutral pillar labels, H/P badges per row, "mixed" tag in the list, "Rubric change"
+note in the PDF.
+**T6 — Admin delete**: ⚙ Details → "Delete tracking…" → first confirm → Cancel on purge → entity
+gone from Trends, its runs still in History. Repeat on another with OK on purge → runs gone from
+History too. Non-admin: no Delete button; `DELETE` → 403.
+**T7 — Email + PDF still work** for a practice entity (report labels practice pillars).
+
+### Regression Checks
+- **R1** Hospital entities: Run now / scheduled / email unchanged.
+- **R2** Suite at baseline; local: existing entity → type hospital, latest_rubric hospital;
+  simulated mixed history renders the note and badges.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] T7 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Production has 5 practice entities currently scored on the hospital rubric —
+after deploy they will (correctly) show "Hospital rubric" with no ⚠ because their type defaults to
+Hospital; re-track them as Specialty Practice when ready.

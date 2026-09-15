@@ -3705,6 +3705,38 @@ class TrackEntityRequest(BaseModel):
     aggregate: bool = True
     schedule: str = "monthly"   # "monthly" | "weekly" | "manual"
     notes: str = ""
+    entity_type: str = "hospital"          # "hospital" | "practice" | "service_line"
+    service_line: Optional[str] = None     # service_line type: the department (e.g. Orthopedics)
+    parent_system: Optional[str] = None    # service_line type: the health system
+
+
+def _launch_tracked_run(entity: dict, brand: str = "original") -> str:
+    """Create the snapshot job for a tracked entity, routed by its type: hospitals go through
+    the hospital analyzer, practices and service lines through the practice analyzer (practice
+    rubric, roster-based reviews pillar) — the same routing every other report uses."""
+    job_id = _new_job("admin", brand)
+    j = _jobs[job_id]
+    j["entity_name"] = entity["entity_name"]
+    j["individual_report"] = True
+    j["skip_pdf"] = True              # data-only snapshot; the Trend Report is the deliverable
+    j["patient_perspective"] = False
+    j["teaser_report"] = False
+    j["zip_code"] = None
+    etype = entity.get("entity_type") or "hospital"
+    if etype in ("practice", "service_line"):
+        j["entity_type"] = "practice"
+        j["practice_profile"] = None            # auto-classified from the specialty
+        j["practice_composite"] = False
+        j["practice_roster"] = []
+        j["physician_composite"] = False
+        j["physician_roster"] = {}
+        j["confirmed_siblings"] = None          # discovery inside the analyzer
+        j["org_name"] = None
+        if etype == "service_line":
+            j["service_line"] = entity.get("service_line")
+            j["parent_system"] = entity.get("parent_system")
+    _pool.submit(_run_tracked_and_notify, job_id, entity)
+    return job_id
 
 class TrackEntityUpdate(BaseModel):
     # Only fields that never change what is being measured are editable. Identity
@@ -3760,30 +3792,25 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_curr
         raise HTTPException(400, "schedule must be monthly, weekly, or manual")
     init_db()
     created_by = payload.get("email") or payload.get("uid") or "admin"
+    if req.entity_type not in ("hospital", "practice", "service_line"):
+        raise HTTPException(400, "entity_type must be hospital, practice, or service_line")
+    if req.entity_type == "service_line" and not (req.service_line and req.parent_system):
+        raise HTTPException(400, "service_line and parent_system are required for a service line")
     entity = create_tracked_entity(
         entity_name=_normalize_input(req.entity_name),
         city=_normalize_input(req.city),
         state=req.state.upper().strip(),
         specialty=_normalize_input(req.specialty) if req.specialty else None,
-        aggregate=req.aggregate,
+        aggregate=req.aggregate if req.entity_type == "hospital" else True,
         schedule=req.schedule,
         created_by=created_by,
         notes=req.notes,
+        entity_type=req.entity_type,
+        service_line=_normalize_input(req.service_line) if req.service_line else None,
+        parent_system=_normalize_input(req.parent_system) if req.parent_system else None,
     )
     # Fire initial collection run immediately so the first data point is captured now.
-    brand = payload.get("brand", "original")
-    job_id = _new_job("admin", brand)
-    _jobs[job_id]["entity_name"]        = entity["entity_name"]
-    _jobs[job_id]["individual_report"]  = True
-    _jobs[job_id]["skip_pdf"]           = True
-    _jobs[job_id]["patient_perspective"] = False
-    _jobs[job_id]["teaser_report"]      = False
-    _jobs[job_id]["zip_code"]           = None
-    _pool.submit(
-        _job_run_single, job_id,
-        entity["city"], entity["state"], entity.get("specialty"),
-        entity.get("aggregate", True), None,
-    )
+    job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
     mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
     for k in ("last_run_at", "next_run_at", "created_at"):
         if entity and entity.get(k):
@@ -3822,11 +3849,22 @@ async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends
 
 
 @app.delete("/api/track/entities/{entity_id}")
-async def track_delete(entity_id: str, _: dict = Depends(get_current_user_payload)):
-    from perception.db import init_db, update_tracked_entity
+async def track_delete(entity_id: str, purge_runs: int = 0, _: dict = Depends(require_admin)):
+    """Admin: delete a tracking instance. purge_runs=1 also deletes its snapshot runs
+    (individual runs matched by entity name) and their files — permanent."""
+    from perception.db import init_db, delete_tracked_entity
     init_db()
-    update_tracked_entity(entity_id, active=False)
-    return {"ok": True}
+    res = delete_tracked_entity(entity_id, purge_runs=bool(purge_runs))
+    if res is None:
+        raise HTTPException(404, "tracked entity not found")
+    for p in res.get("files") or []:
+        try:
+            Path(p).unlink(missing_ok=True)
+        except Exception:
+            pass
+    if res.get("runs_deleted"):
+        _DIR_LIST_CACHE.clear()
+    return {"ok": True, "runs_deleted": res.get("runs_deleted", 0)}
 
 
 @app.get("/api/track/entities/{entity_id}/trend")
@@ -3904,8 +3942,12 @@ def _email_trend_report(entity_id: str, emails: list, brand: str = "original") -
 
 def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
     """Run one tracked-entity snapshot, then (opt-in) email the refreshed Trend Report."""
-    _job_run_single(job_id, entity["city"], entity["state"], entity.get("specialty"),
-                    entity.get("aggregate", True), None)
+    if (entity.get("entity_type") or "hospital") in ("practice", "service_line"):
+        _job_run_practice(job_id, entity["entity_name"], entity["city"], entity["state"],
+                          entity.get("specialty"), True, None)
+    else:
+        _job_run_single(job_id, entity["city"], entity["state"], entity.get("specialty"),
+                        entity.get("aggregate", True), None)
     try:
         if _jobs.get(job_id, {}).get("status") != "done":
             return
@@ -3949,15 +3991,7 @@ async def track_run_now(entity_id: str, payload: dict = Depends(get_current_user
     if not entity:
         raise HTTPException(404, "tracked entity not found")
 
-    brand = payload.get("brand", "original")
-    job_id = _new_job("admin", brand)
-    _jobs[job_id]["entity_name"]      = entity["entity_name"]
-    _jobs[job_id]["individual_report"] = True
-    _jobs[job_id]["skip_pdf"]          = True
-    _jobs[job_id]["patient_perspective"] = False
-    _jobs[job_id]["teaser_report"]     = False
-    _jobs[job_id]["zip_code"]          = None
-    _pool.submit(_run_tracked_and_notify, job_id, entity)
+    job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
     mark_tracked_entity_ran(entity_id, entity.get("schedule", "monthly"))
     return {"job_id": job_id}
 
@@ -3976,14 +4010,7 @@ async def track_scheduled(request: Request):
     due = get_due_tracked_entities()
     launched = []
     for entity in due:
-        job_id = _new_job("admin", "original")
-        _jobs[job_id]["entity_name"]       = entity["entity_name"]
-        _jobs[job_id]["individual_report"]  = True
-        _jobs[job_id]["skip_pdf"]           = True
-        _jobs[job_id]["patient_perspective"] = False
-        _jobs[job_id]["teaser_report"]      = False
-        _jobs[job_id]["zip_code"]           = None
-        _pool.submit(_run_tracked_and_notify, job_id, entity)
+        job_id = _launch_tracked_run(entity, "original")
         mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
         launched.append({"entity_id": entity["id"], "entity_name": entity["entity_name"], "job_id": job_id})
     return {"launched": launched}

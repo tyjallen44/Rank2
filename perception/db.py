@@ -626,6 +626,14 @@ def init_db() -> None:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN email_report BOOLEAN DEFAULT FALSE")
     if "report_emails" not in _te_cols:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN report_emails VARCHAR DEFAULT '[]'")
+    if "entity_type" not in _te_cols:
+        # 'hospital' | 'practice' | 'service_line'. Existing rows were all scored on the
+        # hospital rubric, so the default keeps their history internally consistent.
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN entity_type VARCHAR DEFAULT 'hospital'")
+    if "service_line" not in _te_cols:
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN service_line VARCHAR")
+    if "parent_system" not in _te_cols:
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN parent_system VARCHAR")
 
     # ── FQHC Community Health Edition tables ─────────────────────────────────
     con.execute("""
@@ -1899,6 +1907,8 @@ def create_tracked_entity(
     entity_name: str, city: str, state: str,
     specialty: str | None, aggregate: bool,
     schedule: str, created_by: str, notes: str = "",
+    entity_type: str = "hospital", service_line: str | None = None,
+    parent_system: str | None = None,
 ) -> dict:
     import uuid
     from datetime import datetime
@@ -1909,13 +1919,39 @@ def create_tracked_entity(
     con.execute(
         """INSERT INTO tracked_entities
            (id, entity_name, city, state, specialty, aggregate, schedule,
-            last_run_at, next_run_at, created_by, created_at, active, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, TRUE, ?)""",
+            last_run_at, next_run_at, created_by, created_at, active, notes,
+            entity_type, service_line, parent_system)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, TRUE, ?, ?, ?, ?)""",
         [eid, entity_name, city, state, specialty, aggregate, schedule,
-         next_run, created_by, now, notes or ""],
+         next_run, created_by, now, notes or "",
+         entity_type or "hospital", service_line, parent_system],
     )
     con.close()
     return get_tracked_entity(eid)
+
+
+def delete_tracked_entity(entity_id: str, purge_runs: bool = False) -> Optional[dict]:
+    """Admin: remove a tracking instance. With purge_runs, also delete every snapshot run
+    (individual_report runs matched by entity name) and return their files to unlink."""
+    con = get_connection()
+    row = con.execute("SELECT entity_name FROM tracked_entities WHERE id = ?", [entity_id]).fetchone()
+    if not row:
+        con.close()
+        return None
+    name = row[0]
+    run_ids = []
+    if purge_runs:
+        run_ids = [r[0] for r in con.execute(
+            "SELECT run_id FROM analysis_runs WHERE LOWER(entity_name) = LOWER(?) AND individual_report = TRUE",
+            [name]).fetchall()]
+    con.execute("DELETE FROM tracked_entities WHERE id = ?", [entity_id])
+    con.close()
+    files = []
+    for rid in run_ids:
+        res = delete_analysis_run(rid)
+        if res:
+            files += res.get("files") or []
+    return {"entity_name": name, "runs_deleted": len(run_ids), "files": files}
 
 
 def get_tracked_entity(entity_id: str) -> dict | None:
@@ -1949,21 +1985,34 @@ def list_tracked_entities() -> list[dict]:
     hist: dict[str, list] = {k: [] for k in keys}
     if keys:
         ph = ",".join("?" * len(keys))
-        for k, gen, rid, score in con.execute(
-            f"""SELECT LOWER(a.entity_name), a.generated_at, a.run_id, p.ai_visibility_score
+        for k, gen, rid, score, prof in con.execute(
+            f"""SELECT LOWER(a.entity_name), a.generated_at, a.run_id, p.ai_visibility_score,
+                       a.weighting_profile
                 FROM analysis_runs a
                 JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
                 WHERE a.individual_report = TRUE AND LOWER(a.entity_name) IN ({ph})
                 ORDER BY a.generated_at ASC, a.run_id ASC""", keys).fetchall():
             if score is not None:
-                hist[k].append({"date": str(gen), "run_id": rid, "score": int(score)})
+                hist[k].append({"date": str(gen), "run_id": rid, "score": int(score),
+                                "rubric": rubric_for_profile(prof)})
     con.close()
     for e in ents:
         h = hist.get((e.get("entity_name") or "").lower(), [])[-12:]
         e["recent_scores"] = h
         e["latest_score"] = h[-1]["score"] if h else None
         e["score_delta"] = (h[-1]["score"] - h[-2]["score"]) if len(h) >= 2 else None
+        e["latest_rubric"] = h[-1]["rubric"] if h else None
+        e["rubrics"] = sorted({x["rubric"] for x in h})
     return ents
+
+
+def rubric_for_profile(weighting_profile) -> str:
+    """Which pillar rubric a run used: 'practice' for practice_* profiles, else 'hospital'."""
+    return "practice" if str(weighting_profile or "").startswith("practice_") else "hospital"
+
+
+def expected_rubric(entity_type) -> str:
+    return "practice" if entity_type in ("practice", "service_line") else "hospital"
 
 
 def update_tracked_entity(entity_id: str, **kwargs) -> None:
@@ -2057,6 +2106,7 @@ def get_entity_trend(entity_name: str) -> list[dict]:
         d["tier_access"]       = ts.get("access_fit")
         d["google_rating"]     = fd.get("rating")
         d["google_count"]      = fd.get("count")
+        d["rubric"]            = rubric_for_profile(d.get("run_profile"))
         d["generated_at"]      = str(d["generated_at"])
         results.append(d)
     return results

@@ -2586,12 +2586,14 @@ input[type="url"]::placeholder, textarea::placeholder {
           <div class="fg mt16" style="margin-bottom:0">
             <label class="fl">Analysis Type</label>
             <div class="tg-group">
-              <button class="tg-opt on" id="te-tg-hospital"  onclick="setTeType('hospital')">Hospital / Health System</button>
+              <button class="tg-opt on" id="te-tg-hospital"  onclick="setTeType('hospital')">Hospital</button>
+              <button class="tg-opt"    id="te-tg-service_line" onclick="setTeType('service_line')">Hospital Service Line</button>
               <button class="tg-opt"    id="te-tg-specialty" onclick="setTeType('specialty')">Specialty Practice</button>
             </div>
           </div>
+          <div id="te-type-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">Scores one department of a health system on the practice rubric — enter the <strong>health system</strong> above and the <strong>service line</strong> below.</div>
           <div id="te-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
-            <label class="fl">Specialty</label>
+            <label class="fl" id="te-specialty-label">Specialty</label>
             <input id="te-specialty" class="fi" type="text" placeholder="e.g. Orthopedics, Cardiology"
               oninput="this.value=this.value.toUpperCase()"
               onkeydown="if(event.key==='Enter')runTeSearch()">
@@ -8844,6 +8846,24 @@ function trackAsNewEntity(id) {
   set('te-schedule', e.schedule || 'monthly');
   const agg = document.getElementById('te-aggregate'); if (agg) agg.checked = !!e.aggregate;
   set('te-notes', `Supersedes "${e.entity_name}" (${(e.created_at || '').slice(0, 10)})`);
+  setTeType(e.entity_type === 'practice' ? 'specialty' : e.entity_type === 'service_line' ? 'service_line' : 'hospital');
+  if (e.entity_type === 'service_line') { set('te-name', (e.parent_system || '').toUpperCase()); set('te-specialty', e.service_line || ''); }
+}
+function _trackTypeLabel(t) {
+  return t === 'practice' ? 'Specialty Practice' : t === 'service_line' ? 'Hospital Service Line' : 'Hospital';
+}
+async function deleteTracking(id) {
+  const e = _trackEntities.find(x => x.id === id);
+  if (!e) return;
+  const runs = e.run_count != null ? e.run_count : 0;
+  if (!confirm(`Delete tracking for "${e.entity_name}"?\n\nThe schedule and configuration are removed. Its ${runs} snapshot run${runs === 1 ? '' : 's'} stay in History unless you choose to purge them next.`)) return;
+  const purge = runs > 0 && confirm(`Also permanently delete its ${runs} snapshot run${runs === 1 ? '' : 's'} (data and report files)?\n\nOK = delete runs too · Cancel = keep runs in History`);
+  try {
+    const r = await api(`/api/track/entities/${encodeURIComponent(id)}?purge_runs=${purge ? 1 : 0}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Delete failed'));
+    _trackCfgOpen.delete(id);
+    await refreshTrackEntities();
+  } catch (err) { alert(err.message); }
 }
 function _trackCfgPanel(e) {
   const created = (e.created_at || '').slice(0, 10);
@@ -8852,6 +8872,7 @@ function _trackCfgPanel(e) {
   return `<tr id="track-cfg-${e.id}"><td colspan="9" style="background:#f6fafa;padding:16px 20px;border-top:1px solid var(--pale)">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 22px;margin-bottom:14px">
       ${lock('Entity', e.entity_name)}
+      ${lock('Type', _trackTypeLabel(e.entity_type) + (e.entity_type === 'service_line' && e.parent_system ? ` — ${e.service_line} of ${e.parent_system}` : ''))}
       ${lock('Market', `${e.city}, ${e.state}`)}
       ${lock('Specialty', e.specialty || 'None (hospital rubric)')}
       ${lock('Scope', e.aggregate ? 'All locations rolled up' : 'Single location')}
@@ -8880,6 +8901,10 @@ function _trackCfgPanel(e) {
         <input id="tc-rcpts-${e.id}" class="fi" value="${_learnEsc((e.report_emails || []).join(', '))}" placeholder="name@organization.com, another@…" style="padding:7px 10px;font-size:13px"></div>
       <span style="font-size:11.5px;color:var(--muted);max-width:280px">Save applies these. Anything emailed can be forwarded — the report contains only this organization's data.</span>
     </div>
+    ${_role === 'admin' ? `<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);display:flex;gap:12px;align-items:center">
+      <button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="deleteTracking('${e.id}')">🗑 Delete tracking…</button>
+      <span style="font-size:11.5px;color:var(--muted)">Admin. Removes this tracking instance; you'll be asked whether to also delete its snapshot runs.</span>
+    </div>` : ''}
   </td></tr>`;
 }
 
@@ -8940,11 +8965,18 @@ function renderTrackEntityList() {
           ? (e.score_delta === 0 ? ` <span style="font-size:11px;color:var(--muted)">no change</span>` : '')
           : ` <span style="font-size:11px;font-weight:700;color:${e.score_delta > 0 ? '#1a7a4a' : '#b42318'}">${e.score_delta > 0 ? '▲' : '▼'}${Math.abs(e.score_delta)}</span>`)
       : `<span style="color:var(--muted);font-size:12px">no runs yet</span>`;
-    const sub = [`${e.city}, ${e.state}`, e.specialty || ''].filter(Boolean).join(' · ');
+    const typeLbl = _trackTypeLabel(e.entity_type);
+    const expected = (e.entity_type === 'practice' || e.entity_type === 'service_line') ? 'practice' : 'hospital';
+    const rubricBadge = e.latest_rubric
+      ? `<span class="badge bg-muted" style="font-size:10px" title="Pillar rubric of the latest snapshot">${e.latest_rubric === 'practice' ? 'Practice rubric' : 'Hospital rubric'}</span>`
+        + (e.latest_rubric !== expected ? ` <span title="Snapshots were scored on a different rubric than this entity's type — track a new entity to start a correctly scored series" style="color:#b45309;font-weight:700;cursor:help">⚠</span>` : '')
+        + ((e.rubrics || []).length > 1 ? ` <span title="This entity's history mixes both rubrics; compare only within a rubric" style="color:#b45309;cursor:help">mixed</span>` : '')
+      : '';
+    const sub = [`${e.city}, ${e.state}`, e.specialty || '', typeLbl].filter(Boolean).join(' · ');
     return `<tr style="${e.active ? '' : 'opacity:.7'}">
       <td style="max-width:320px">
         <a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal);text-decoration:none">${e.entity_name}</a>
-        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${sub}${e.notes ? ` · ${e.notes}` : ''}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${sub}${e.notes ? ` · ${e.notes}` : ''} ${rubricBadge}</div>
       </td>
       <td style="white-space:nowrap">${latest}</td>
       <td title="${(e.recent_scores || []).map(s => `${s.date.slice(0, 10)}: ${s.score}`).join('\n')}">${_sparkSvg(e.recent_scores)}</td>
@@ -8986,6 +9018,7 @@ function showAddEntityFlow() {
   });
   document.getElementById('te-schedule').value = 'monthly';
   document.getElementById('te-aggregate').checked = true;
+  setTeType('hospital');
   document.getElementById('te-step2').classList.add('hidden');
   document.getElementById('te-step3').classList.add('hidden');
   document.getElementById('te-search-err').classList.add('hidden');
@@ -9000,19 +9033,38 @@ function showAddEntityFlow() {
 
 function setTeType(type) {
   _teType = type;
-  ['hospital','specialty'].forEach(t => {
-    document.getElementById('te-tg-' + t).classList.toggle('on', t === type);
+  ['hospital', 'service_line', 'specialty'].forEach(t => {
+    const b = document.getElementById('te-tg-' + t); if (b) b.classList.toggle('on', t === type);
   });
-  document.getElementById('te-specialty-wrap').classList.toggle('hidden', type !== 'specialty');
+  const isPractice = (type === 'specialty' || type === 'service_line');
+  document.getElementById('te-specialty-wrap').classList.toggle('hidden', !isPractice);
+  document.getElementById('te-type-note').classList.toggle('hidden', type !== 'service_line');
+  const nl = document.querySelector('label[for="te-name"], #te-name-label');
+  const sl = document.getElementById('te-specialty-label');
+  const si = document.getElementById('te-specialty');
+  if (sl) sl.textContent = type === 'service_line' ? 'Service Line' : 'Specialty';
+  if (si) si.placeholder = type === 'service_line' ? 'e.g. Orthopedics, Cardiology, Oncology' : 'e.g. Orthopedics, Cardiology';
+  const nameInput = document.getElementById('te-name');
+  if (nameInput) nameInput.placeholder = type === 'service_line' ? 'e.g. HOUSTON METHODIST' : 'e.g. USA Health University Hospital';
+  const aggWrap = document.getElementById('te-aggregate')?.closest('label');
+  if (aggWrap) aggWrap.style.display = type === 'hospital' ? '' : 'none';   // practice types always roll up locations
 }
 
 async function runTeSearch() {
   const errEl = document.getElementById('te-search-err');
   errEl.classList.add('hidden');
-  const name  = document.getElementById('te-name').value.trim();
+  let name  = document.getElementById('te-name').value.trim();
   const city  = document.getElementById('te-city').value.trim();
   const state = document.getElementById('te-state').value.trim().toUpperCase();
-  if (!name)                         return showErr(errEl, 'Please enter an organization name.');
+  if (!name)                         return showErr(errEl, _teType === 'service_line' ? 'Please enter the health system name.' : 'Please enter an organization name.');
+  if (_teType === 'service_line') {
+    const line = document.getElementById('te-specialty').value.trim();
+    if (!line) return showErr(errEl, 'Please enter the service line (e.g. ORTHOPEDICS).');
+    const re = new RegExp('\\s*\\b' + line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 's?\\b\\s*', 'i');
+    const sys = name.replace(re, ' ').replace(/\s{2,}/g, ' ').trim() || name;
+    document.getElementById('te-name').value = sys;
+    name = `${sys} ${line}`;
+  }
   if (!city)                         return showErr(errEl, 'Please enter a city.');
   if (!state || state.length !== 2)  return showErr(errEl, 'Please enter a 2-letter state code.');
 
@@ -9139,6 +9191,8 @@ async function loadEntityTrend(entityId) {
   document.getElementById('trend-entity-meta').textContent  =
     `${_trackCurrentEntity.city}, ${_trackCurrentEntity.state}` +
     (_trackCurrentEntity.specialty ? ` · ${_trackCurrentEntity.specialty}` : '') +
+    ` · ${_trackTypeLabel(_trackCurrentEntity.entity_type)}` +
+    (_trackCurrentEntity.latest_rubric ? ` · ${_trackCurrentEntity.latest_rubric === 'practice' ? 'practice' : 'hospital'} rubric${(_trackCurrentEntity.rubrics || []).length > 1 ? ' (mixed history)' : ''}` : '') +
     ` · ${_trackCurrentEntity.schedule === 'manual' ? 'Manual collection' : _trackCurrentEntity.schedule + ' schedule'}`;
   document.getElementById('trend-run-status').textContent = '';
   document.getElementById('trend-no-data').style.display  = 'none';
@@ -9204,6 +9258,13 @@ function _deltaChip(delta) {
   return `<span style="color:${color};font-weight:600">${sign} ${Math.abs(delta)}</span>`;
 }
 
+// Pillar labels by rubric. null = mixed history → neutral labels + per-row H/P badges.
+function _pillarLabels(rubric) {
+  if (rubric === 'practice') return ['Practitioner Credentials & Clinical Quality', 'Reviews & Reputation', 'Identity & Machine-Readability', 'Access & Fit'];
+  if (rubric === 'hospital') return ['Outcomes & Safety', 'Credentials & Recognition', 'Experience & Reviews', 'Access & Fit'];
+  return ['Pillar 1 (H: Outcomes & Safety · P: Practitioner Credentials)', 'Pillar 2 (H: Credentials & Recognition · P: Reviews & Reputation)', 'Pillar 3 (H: Experience & Reviews · P: Identity & Machine-Readability)', 'Pillar 4 (Access & Fit)'];
+}
+
 function renderTrendCharts(dataPoints) {
   if (!dataPoints || dataPoints.length === 0) {
     document.getElementById('trend-no-data').style.display = '';
@@ -9223,9 +9284,12 @@ function renderTrendCharts(dataPoints) {
   const last   = dataPoints[dataPoints.length - 1];
 
   // Delta summary cards
+  const _rubrics = [...new Set(dataPoints.map(d => d.rubric || 'hospital'))];
+  const _mixed = _rubrics.length > 1;
+  const _PL = _pillarLabels(_mixed ? null : _rubrics[0]);
   const deltaMetrics = [
     { label: 'Pulse Score (AI Reputation)', first: first.ai_visibility_score, last: last.ai_visibility_score, suffix: '/100' },
-    { label: 'Outcomes & Safety',   first: first.tier_outcomes,        last: last.tier_outcomes,        suffix: '' },
+    { label: _PL[0],                first: first.tier_outcomes,        last: last.tier_outcomes,        suffix: '' },
     { label: 'Google Rating',       first: first.google_rating,        last: last.google_rating,        suffix: '★', decimals: 1 },
     { label: 'Reviews',             first: first.google_count,         last: last.google_count,         suffix: '' },
   ];
@@ -9268,10 +9332,10 @@ function renderTrendCharts(dataPoints) {
 
   // Tier scores chart
   const tierDatasets = [
-    { label: 'Outcomes & Safety',      key: 'tier_outcomes',     color: '#0F4146' },
-    { label: 'Credentials',            key: 'tier_credentials',  color: '#73D2E1' },
-    { label: 'Experience & Reviews',   key: 'tier_experience',   color: '#5ADCA0' },
-    { label: 'Access & Fit',           key: 'tier_access',       color: '#C8B8A2' },
+    { label: _PL[0],                   key: 'tier_outcomes',     color: '#0F4146' },
+    { label: _PL[1],                   key: 'tier_credentials',  color: '#73D2E1' },
+    { label: _PL[2],                   key: 'tier_experience',   color: '#5ADCA0' },
+    { label: _PL[3],                   key: 'tier_access',       color: '#C8B8A2' },
   ].map(t => ({
     label: t.label,
     data: dataPoints.map(d => d[t.key]),
@@ -9330,7 +9394,7 @@ function renderTrendCharts(dataPoints) {
       <td>${d.generated_at}</td>
       <td><strong>${d.ai_visibility_score ?? '—'}</strong> <span style="font-size:11px;color:var(--muted)">${_scoreLabel(d.ai_visibility_score)}</span></td>
       <td>${scoreDelta != null ? _deltaChip(scoreDelta) : (i === 0 ? '<span style="color:var(--muted);font-size:11px">baseline</span>' : '—')}</td>
-      <td>${d.tier_outcomes ?? '—'}</td>
+      <td>${_mixed ? `<span class="badge bg-muted" style="font-size:9px;margin-right:4px" title="${(d.rubric || 'hospital') === 'practice' ? 'Practice rubric' : 'Hospital rubric'}">${(d.rubric || 'hospital') === 'practice' ? 'P' : 'H'}</span>` : ''}${d.tier_outcomes ?? '—'}</td>
       <td>${d.tier_credentials ?? '—'}</td>
       <td>${d.tier_experience ?? '—'}</td>
       <td>${d.tier_access ?? '—'}</td>
@@ -9344,7 +9408,7 @@ function renderTrendCharts(dataPoints) {
     <table class="data-table" style="font-size:11.5px">
       <thead><tr>
         <th>Date</th><th>Score</th><th>Δ</th>
-        <th>Outcomes</th><th>Credentials</th><th>Experience</th><th>Access</th>
+        ${_PL.map(l => `<th title="${l}">${l.split(' & ')[0].split(' ')[0]}</th>`).join('')}
         <th>Google ★</th><th>Reviews</th><th title="Settings this snapshot was run with">Settings</th><th>Report</th>
       </tr></thead>
       <tbody>${tableRows}</tbody>
@@ -9399,22 +9463,29 @@ async function submitAddEntity() {
     return;
   }
   errEl.classList.add('hidden');
-  const specialty = _teType === 'specialty'
+  const specialty = (_teType === 'specialty' || _teType === 'service_line')
     ? (document.getElementById('te-specialty').value.trim() || null)
     : null;
+  const entity_type = _teType === 'specialty' ? 'practice' : _teType === 'service_line' ? 'service_line' : 'hospital';
+  const body = {
+    entity_name: _teSelected.name,
+    city:        _teResolvedCity,
+    state:       _teResolvedState,
+    specialty,
+    schedule:    document.getElementById('te-schedule').value,
+    aggregate:   entity_type === 'hospital' ? document.getElementById('te-aggregate').checked : true,
+    notes:       document.getElementById('te-notes').value.trim(),
+    entity_type,
+  };
+  if (entity_type === 'service_line') {
+    body.service_line = specialty;
+    body.parent_system = document.getElementById('te-name').value.trim();
+  }
   try {
     await api('/api/track/entities', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        entity_name: _teSelected.name,
-        city:        _teResolvedCity,
-        state:       _teResolvedState,
-        specialty,
-        schedule:    document.getElementById('te-schedule').value,
-        aggregate:   document.getElementById('te-aggregate').checked,
-        notes:       document.getElementById('te-notes').value.trim(),
-      }),
+      body: JSON.stringify(body),
     });
     await refreshTrackEntities();
     showTrackList();
