@@ -2305,33 +2305,47 @@ def _comparison_overview_block(result: AnalysisResult, label: str, mixed_rubric_
 
 
 def _comparison_summary_block(comparison) -> str:
-    """Renders the comparison summary section."""
-    sims = "".join(f"<li>{_e(s)}</li>" for s in comparison.similarities)
-    diffs = "".join(f"<li>{_e(d)}</li>" for d in comparison.differences)
+    """Renders the comparison summary section (headline, similar/different panels, verdict).
+    Panels are omitted when the model gave no bullets, so a parse fallback never prints
+    empty boxes; only the panel grid is kept unsplittable so a long verdict can flow."""
+    sims = "".join(f"<li>{_e(x)}</li>" for x in comparison.similarities)
+    diffs = "".join(f"<li>{_e(x)}</li>" for x in comparison.differences)
     verdict_paras = "".join(
         f"<p style='margin:0 0 10px'>{_e(para.strip())}</p>"
         for para in (comparison.verdict or "").split("\n")
         if para.strip()
     )
-    return f"""
-  <div style="margin-bottom:28px;page-break-inside:avoid">
-    <div class="section-title">Comparison Summary</div>
-    {f'<div style="font-size:11pt;font-weight:600;color:{_TEAL};margin-bottom:16px">{_e(comparison.headline)}</div>' if comparison.headline else ''}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px">
-      <div style="background:#f0faf7;border-radius:6px;padding:14px 16px">
-        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1a7a4a;margin-bottom:8px">Where They Are Similar</div>
-        <ul style="margin:0;padding-left:16px;font-size:9pt;line-height:1.7;color:#333">{sims}</ul>
-      </div>
-      <div style="background:#fdf4f4;border-radius:6px;padding:14px 16px">
-        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#991b1b;margin-bottom:8px">Key Differences</div>
-        <ul style="margin:0;padding-left:16px;font-size:9pt;line-height:1.7;color:#333">{diffs}</ul>
-      </div>
-    </div>
-    <div style="font-size:9pt;line-height:1.65;color:#333">{verdict_paras}</div>
-  </div>"""
+    headline_html = (
+        f'<div style="font-size:11pt;font-weight:600;color:{_TEAL};margin-bottom:16px;page-break-after:avoid">'
+        f'{_e(comparison.headline)}</div>'
+    ) if comparison.headline else ""
+    panels_html = ""
+    if comparison.similarities or comparison.differences:
+        panels_html = (
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px;page-break-inside:avoid">'
+            '<div style="background:#f0faf7;border-radius:6px;padding:14px 16px">'
+            '<div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1a7a4a;margin-bottom:8px">Where They Are Similar</div>'
+            f'<ul style="margin:0;padding-left:16px;font-size:9pt;line-height:1.7;color:#333">{sims}</ul>'
+            '</div>'
+            '<div style="background:#fdf4f4;border-radius:6px;padding:14px 16px">'
+            '<div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#991b1b;margin-bottom:8px">Key Differences</div>'
+            f'<ul style="margin:0;padding-left:16px;font-size:9pt;line-height:1.7;color:#333">{diffs}</ul>'
+            '</div></div>'
+        )
+    return (
+        '<div style="margin-bottom:28px">'
+        # title + headline + panels move together; only the verdict may flow across pages
+        '<div style="page-break-inside:avoid">'
+        '<div class="section-title">Comparison Summary</div>'
+        f'{headline_html}{panels_html}'
+        '</div>'
+        f'<div style="font-size:9pt;line-height:1.65;color:#333">{verdict_paras}</div>'
+        '</div>'
+    )
 
 
-def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True) -> str:
+def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
+                      include_disclaimer: bool = True) -> str:
     """Full individual-report content for one entity: card + assessment + improvement."""
     p = result.rankings[0] if result.rankings else None
     name = _e(result.report_title or result.entity_name or result.location)
@@ -2376,7 +2390,7 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True) -> s
   <div class="disclaimer" style="margin-top:20px">
     <strong>Data Limitations &amp; Disclaimer</strong><br>
     {_e(result.disclaimer)}
-  </div>"""
+  </div>""" if include_disclaimer else ""
 
     return f"""
   <div style="page-break-before:always">
@@ -2487,6 +2501,7 @@ def render_comparison_pdf(
     """Render a comparison report PDF from two AnalysisResult objects."""
     _rebrand_for_display(result_a)   # display-time AI Reputation naming
     _rebrand_for_display(result_b)   # display-time AI Reputation naming
+    _rebrand_for_display(comparison)   # display-time AI Reputation naming
     from playwright.sync_api import sync_playwright
 
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])

@@ -1587,62 +1587,7 @@ def compare_locations(
     emit({"type": "phase", "name": "comparison", "text": "Synthesizing comparison"})
     client = _get_client()
     sys_prompt, user_prompt = build_comparison_prompt(result_a, result_b)
-    raw = client.messages.create(
-        model=_MODEL,
-        max_tokens=4096,
-        system=sys_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    ).content[0].text.strip()
-
-    def _sanitize_json(s: str) -> str:
-        """Replace unescaped literal newlines inside JSON string values with a space.
-
-        The model occasionally wraps long strings across lines without escaping
-        the newline character, producing invalid JSON that json.loads rejects.
-        """
-        out = []
-        in_string = False
-        escape_next = False
-        for ch in s:
-            if escape_next:
-                out.append(ch)
-                escape_next = False
-            elif ch == "\\":
-                out.append(ch)
-                escape_next = True
-            elif ch == '"':
-                in_string = not in_string
-                out.append(ch)
-            elif ch == "\n" and in_string:
-                out.append(" ")
-            else:
-                out.append(ch)
-        return "".join(out)
-
-    try:
-        # Strip markdown fences that the model sometimes adds despite being told not to
-        cleaned = raw
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-            cleaned = re.sub(r"\s*```$", "", cleaned.rstrip())
-        # Fix unescaped newlines inside string values (invalid JSON but models do it)
-        cleaned = _sanitize_json(cleaned)
-        comp_data = json.loads(cleaned)
-    except Exception:
-        # Last resort: try to pull the JSON object out of any surrounding text
-        try:
-            first = raw.index("{")
-            last = raw.rindex("}")
-            comp_data = json.loads(_sanitize_json(raw[first:last + 1]))
-        except Exception:
-            comp_data = {"headline": "", "similarities": [], "differences": [], "verdict": raw}
-
-    comparison = ComparisonSummary(
-        headline=comp_data.get("headline", ""),
-        similarities=comp_data.get("similarities", []),
-        differences=comp_data.get("differences", []),
-        verdict=comp_data.get("verdict", ""),
-    )
+    comparison = synthesize_comparison(client, sys_prompt, user_prompt)
 
     # ── Phase 4: Build PDF ───────────────────────────────────────────────────
     emit({"type": "phase", "name": "pdf", "text": "Generating Comparison Report PDF"})
@@ -1659,6 +1604,100 @@ def compare_locations(
 
     return result_a, result_b, comparison, str(pdf_path)
 
+
+def _coerce_comparison(d: dict) -> "ComparisonSummary":
+    """Normalise a comparison payload: lists of clean strings, verdict as one string."""
+    from .models import ComparisonSummary
+    def _clean(x):
+        return re.sub(r"<[^>]+>", "", str(x)).strip()
+    def _strs(v):
+        if isinstance(v, str):
+            return [_clean(v)] if _clean(v) else []
+        return [_clean(x) for x in (v or []) if _clean(x)]
+    verdict = d.get("verdict", "")
+    if isinstance(verdict, (list, tuple)):
+        verdict = "\n\n".join(_clean(x) for x in verdict if _clean(x))
+    return ComparisonSummary(
+        headline=_clean(d.get("headline") or ""),
+        similarities=_strs(d.get("similarities")),
+        differences=_strs(d.get("differences")),
+        verdict=_clean(verdict or ""),
+    )
+
+
+def synthesize_comparison(client, sys_prompt: str, user_prompt: str) -> "ComparisonSummary":
+    """Ask the model for the four comparison fields as JSON text and parse it with
+    field-level salvage, so one malformed field (the model's habit of writing the
+    verdict as several bare strings) never wipes out the headline and bullet panels.
+    Never raises — the raw narrative is the last resort."""
+    resp = client.messages.create(
+        model=_MODEL,
+        max_tokens=4096,
+        system=sys_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    raw = "".join(b.text for b in resp.content if b.type == "text").strip()
+    return _coerce_comparison(parse_comparison_text(raw))
+
+
+def _json_string_list(fragment: str) -> list:
+    """Pull every JSON string literal out of a fragment ('"a", "b"' → ['a','b'])."""
+    out = []
+    for m in re.finditer(r'"((?:[^"\\]|\\.)*)"', fragment, re.S):
+        try:
+            out.append(json.loads('"' + m.group(1) + '"'))
+        except Exception:
+            out.append(m.group(1))
+    return [x.replace("\n", " ").strip() for x in out if x and x.strip()]
+
+
+def parse_comparison_text(raw: str) -> dict:
+    """Best-effort parse of the comparison JSON. Tries strict JSON (after stripping fences
+    and unescaped newlines); if that fails, salvages each field independently with
+    regexes, which also repairs a 'verdict' written as several bare strings."""
+    text = raw or ""
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text.rstrip())
+    if "{" in text and "}" in text:
+        text = text[text.index("{"):text.rindex("}") + 1]
+
+    def _sanitize(t: str) -> str:
+        out, in_s, esc = [], False, False
+        for ch in t:
+            if esc:
+                out.append(ch); esc = False
+            elif ch == "\\":
+                out.append(ch); esc = True
+            elif ch == '"':
+                in_s = not in_s; out.append(ch)
+            elif ch == "\n" and in_s:
+                out.append(" ")
+            else:
+                out.append(ch)
+        return "".join(out)
+    for variant in (text, _sanitize(text)):
+        try:
+            d = json.loads(variant)
+            if isinstance(d, dict):
+                return d
+        except Exception:
+            pass
+    # Field-level salvage
+    d: dict = {}
+    m = re.search(r'"headline"\s*:\s*"((?:[^"\\]|\\.)*)"', text, re.S)
+    d["headline"] = json.loads('"' + m.group(1) + '"') if m else ""
+    for key in ("similarities", "differences"):
+        m = re.search(r'"%s"\s*:\s*\[(.*?)\]' % key, text, re.S)
+        d[key] = _json_string_list(m.group(1)) if m else []
+    m = re.search(r'"verdict"\s*:\s*(.*)$', text, re.S)
+    if m:
+        tail = m.group(1).strip().rstrip("}").strip()
+        paras = _json_string_list(tail) if tail.startswith(("[", '"')) else [tail]
+        d["verdict"] = "\n\n".join(paras)
+    else:
+        d["verdict"] = "" if (d["headline"] or d["similarities"] or d["differences"]) else raw
+    return d
 
 def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
     con = get_connection()

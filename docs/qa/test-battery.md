@@ -2160,3 +2160,36 @@ enabled once both sides finish; a failed discovery on one side still allows runn
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. T1 is the key parity check against a Deep Diagnostic of the same practice.
+
+## COMPARE-SUMMARY-FIX — Comparison Summary no longer prints raw JSON; layout and naming fixed
+
+**Shipped:** 2026-09-15 · **Area:** Compare Two PDF · **Type:** bug fix
+
+### What changed
+- Root cause: the model occasionally writes the comparison `verdict` as several bare strings
+  instead of one string, which made the whole JSON invalid; the old parser then dumped the raw
+  text into the report (empty "Where they are similar"/"Key differences" panels, JSON on the page).
+- `synthesize_comparison` + `parse_comparison_text`: strict JSON first (fences/newlines repaired),
+  then **field-level salvage** with regexes — headline, both bullet arrays and the verdict (joined
+  from several strings if needed) are recovered independently, so one malformed field can't blank
+  the rest. Stray markup is stripped. A schema-enforced tool call was tried and rejected: with the
+  installed SDK/model pairing the arrays came back mangled.
+- PDF: the summary's title + headline + panels stay together as one block (verdict may flow);
+  panels are omitted only when there are genuinely no bullets; the comparison text now goes
+  through the display-time AI Reputation rename (headline said "AI Visibility").
+- Verified by regenerating the Orthosouth vs Campbell Clinic comparison from the stored side
+  results: 5 similarities, 6 differences, 3-paragraph verdict, panels rendered, no "AI Visibility"
+  text anywhere in the PDF.
+
+### Test Cases
+**T1**: run any Compare Two → page with "Comparison Summary" shows a headline, two filled panels and
+a multi-paragraph verdict; no braces/quotes/JSON keys visible.
+**T2**: text-search the PDF for "Visibility" → none.
+**T3**: unit: `parse_comparison_text` on a verdict-as-multiple-strings payload → 3 verdict
+paragraphs and intact bullets (checked locally).
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.
