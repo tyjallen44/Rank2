@@ -1300,6 +1300,20 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <!-- Patient Perspective manual form -->
       <div id="pp-form-manual" class="card" style="background:var(--bg);border-color:var(--border)">
         <div class="fg" style="margin-bottom:16px">
+          <label class="fl">Analysis Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
+          <div class="tg-group">
+            <button class="tg-opt on" id="pp-tg-hospital"  onclick="setPpType('hospital')">Hospital Market</button>
+            <button class="tg-opt"    id="pp-tg-specialty" onclick="setPpType('specialty')">Specialty Practice</button>
+          </div>
+        </div>
+        <div id="pp-specialty-wrap" class="fg hidden">
+          <label class="fl">Specialty</label>
+          <input id="pp-specialty" class="fi" type="text"
+            placeholder="e.g. Orthopedics, Cardiology, Dermatology"
+            oninput="this.value=this.value.toUpperCase()"
+            onkeydown="if(event.key==='Enter')runPatient()">
+        </div>
+        <div class="fg mt16" style="margin-bottom:16px">
           <label class="fl">Location of Analysis</label>
           <div class="tg-group">
             <button class="tg-opt on" id="pp-tg-bycity" onclick="setPpLocMode('city')" title="The market is the city and state you enter.">By City</button>
@@ -1365,31 +1379,17 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         </div>
 
         <div class="fg mt16" style="margin-bottom:0">
-          <label class="fl">Analysis Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
-          <div class="tg-group">
-            <button class="tg-opt on" id="pp-tg-hospital"  onclick="setPpType('hospital')">Hospital Market</button>
-            <button class="tg-opt"    id="pp-tg-specialty" onclick="setPpType('specialty')">Specialty Practice</button>
-          </div>
-        </div>
-        <div id="pp-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
-          <label class="fl">Specialty</label>
-          <input id="pp-specialty" class="fi" type="text"
-            placeholder="e.g. Orthopedics, Cardiology, Dermatology"
-            oninput="this.value=this.value.toUpperCase()"
-            onkeydown="if(event.key==='Enter')runPatient()">
-        </div>
-        <div class="fg mt16" style="margin-bottom:0">
           <label class="fl">Report Format <a href="#" class="help-link" onclick="showHelp('report-format',event);return false">ⓘ Which format?</a></label>
           <div class="tg-group">
-            <button class="tg-opt on" id="pp-tg-enticement" onclick="setPpFormat('enticement')"
+            <button class="tg-opt" id="pp-tg-enticement" onclick="setPpFormat('enticement')"
               title="Compact scorecards ranked by AI reputation. Your chosen prospect is shown in full; every competitor is obscured. Built to hand to a prospect.">Enticement</button>
-            <button class="tg-opt" id="pp-tg-summary" onclick="setPpFormat('summary')"
+            <button class="tg-opt on" id="pp-tg-summary" onclick="setPpFormat('summary')"
               title="Compact scorecards for every provider in the market — nothing hidden, no target needed. A clean at-a-glance summary.">Market Summary</button>
             <button class="tg-opt" id="pp-tg-full" onclick="setPpFormat('full')"
               title="The complete report: every provider with full detail — ratings, strengths, weaknesses, and recommendations.">Full Report</button>
           </div>
         </div>
-        <div id="pp-target-wrap" class="fg mt16" style="margin-bottom:0">
+        <div id="pp-target-wrap" class="fg mt16 hidden" style="margin-bottom:0">
           <label class="fl">Prospect / Target Entity</label>
           <div style="display:flex;gap:10px">
             <input id="pp-target" class="fi" type="text" style="flex:1"
@@ -1400,14 +1400,15 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
               onclick="resolvePpTarget()" style="white-space:nowrap">Resolve →</button>
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:6px">
-            The report shows this entity in full and obscures every competitor. Resolve to confirm the exact organization before running.
+            The report shows this prospect in full and obscures every competitor. Enter the name and press Enter or Resolve — the best Google match is picked automatically (click <em>change</em> if it's wrong).
           </div>
           <div id="pp-target-candidates" style="margin-top:12px"></div>
           <div id="pp-target-confirmed" class="hidden"
             style="margin-top:10px;padding:10px 14px;background:#e8f4f6;border:1.5px solid var(--teal);border-radius:8px;font-size:13px;color:var(--teal)"></div>
         </div>
-        <div class="fg mt16" style="margin-bottom:0">
-          <label class="fl">Options</label>
+        <details id="pp-advanced" style="margin-top:16px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
+          <div style="margin-top:10px">
           <label class="aggregate-toggle" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">
             <input type="checkbox" id="pp-agg-toggle" checked>
             <span class="agg-label" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">Aggregate related facilities into parent systems</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
@@ -1416,12 +1417,14 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <input type="checkbox" id="pp-force-rerun">
             <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
           </label>
-        </div>
+          </div>
+        </details>
         <div id="pp-err" class="err hidden mt16"></div>
-        <div class="mt20">
+        <div class="mt20 row-actions" style="align-items:center;gap:14px">
           <button class="btn btn-primary" id="pp-run-btn" onclick="runPatient()">
             Run Competitors Rankings →
           </button>
+          <span id="pp-run-note" style="font-size:12px;color:var(--muted)"></span>
         </div>
       </div>
 
@@ -4169,6 +4172,7 @@ function navigate(p) {
   if (p === 'track') loadTrackPage();
   if (p === 'learn') loadLearn();
   if (p === 'home') loadHome();
+  if (p === 'patient') _ppUpdateRunState();
 }
 
 // ── Video embeds: when a video ends, return it to its poster/play state instead of
@@ -4285,6 +4289,7 @@ function resetPage(p) {
     setPpMode('manual');
     setPpType('hospital');
     setPpLocMode('city');
+    setPpFormat('summary');
     clearPpCsv();
 
   } else if (p === 'individual') {
@@ -4590,7 +4595,7 @@ function setLocMode(m) {
 
 // ── Patient Perspective ───────────────────────────────────────────────────
 let _ppType    = 'hospital';
-let _ppFormat  = 'enticement';   // 'enticement' | 'summary' | 'full'
+let _ppFormat  = 'summary';      // 'enticement' | 'summary' | 'full' (Market Summary is the default)
 let _ppLocMode = 'city';
 let _ppMode    = 'manual';
 let _ppGroups  = [];
@@ -4820,6 +4825,7 @@ function setPpFormat(m) {
   document.getElementById('pp-target-wrap').classList.toggle('hidden', m !== 'enticement');
   // Reset the target resolve/confirm state whenever the format changes.
   _ppTargetCandidates = [];
+  _ppUpdateRunState();
   clearPpTargetConfirm();
   const cont = document.getElementById('pp-target-candidates');
   if (cont) cont.innerHTML = '';
@@ -4836,6 +4842,24 @@ function clearPpTargetConfirm() {
   _ppServiceLine = null;
   const d = document.getElementById('pp-target-confirmed');
   if (d) d.classList.add('hidden');
+  _ppUpdateRunState();
+}
+const _PP_RUN_NOTES = {
+  summary: 'Produces the Market Summary: compact scorecards for every provider, nothing hidden.',
+  enticement: 'Produces the Enticement report: your prospect in full, every competitor obscured.',
+  full: 'Produces the Full Report: the complete ranking with the detail behind every score.',
+};
+// Run is gated only when Enticement has no confirmed prospect yet.
+function _ppUpdateRunState() {
+  const btn = document.getElementById('pp-run-btn'); const note = document.getElementById('pp-run-note');
+  if (!btn) return;
+  const needTarget = (_ppFormat === 'enticement' && !_ppTargetConfirmed);
+  btn.disabled = needTarget;
+  btn.title = needTarget ? 'Enter and resolve the prospect first' : '';
+  if (note) note.textContent = needTarget ? 'Resolve the prospect above to enable the run.' : (_PP_RUN_NOTES[_ppFormat] || '');
+}
+function ppShowTargetCandidates() {
+  const c = document.getElementById('pp-target-candidates'); if (c) c.style.display = '';
 }
 
 async function resolvePpTarget() {
@@ -4896,6 +4920,8 @@ function renderPpTargetCandidates(enteredName) {
       <button class="btn btn-secondary btn-sm" type="button" onclick="selectPpTarget(-1)">Use This Name</button>
     </div>`;
   container.innerHTML = html;
+  container.style.display = '';
+  if (_ppTargetCandidates.length) selectPpTarget(0);   // best match first; "change" reopens the list
 }
 
 function selectPpTarget(idx) {
@@ -4941,8 +4967,11 @@ function selectPpTarget(idx) {
   else { const el = document.getElementById(`pp-tcand-${idx}`); if (el) { el.style.background = '#e8f4f6'; el.style.borderColor = 'var(--teal)'; } }
 
   const disp = document.getElementById('pp-target-confirmed');
-  disp.innerHTML = `&#10003; Target confirmed: <strong>${sel.name}</strong>` +
-    (sel.address ? ` <span style="font-weight:400;color:#3a5a60">— ${sel.address}</span>` : '');
+  disp.innerHTML = `<div style="display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0">&#10003; Prospect: <strong>${sel.name}</strong>` +
+    (sel.address ? ` <span style="font-weight:400;color:#3a5a60">— ${sel.address}</span>` : '') +
+    `</div><a href="#" onclick="ppShowTargetCandidates();return false" style="color:var(--teal);font-weight:600;white-space:nowrap">change</a></div>`;
+  const candBox = document.getElementById('pp-target-candidates'); if (candBox) candBox.style.display = 'none';
+  _ppUpdateRunState();
   disp.classList.remove('hidden');
 }
 

@@ -2193,3 +2193,48 @@ paragraphs and intact bullets (checked locally).
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## RANKINGS-STREAMLINE — Competitors Rankings form: type first, Market Summary default, collapsed prospect step, Advanced options, output note
+
+**Shipped:** 2026-09-15 · **Area:** Competitors Rankings (Enter Location mode) · **Type:** UX
+
+### What changed
+1. **Field order**: Analysis Type → Specialty (practice only) → Location of Analysis (By City /
+   By ZIP + Radius, map preview unchanged) → Report Format → Prospect (Enticement only) → Advanced
+   options → Run. (Was: Location → Type → Format → Prospect → Options.)
+2. **Report Format defaults to Market Summary**; the Prospect block is hidden unless Enticement is
+   chosen. Page reset also returns to Market Summary.
+3. **Prospect step**: after Resolve (or Enter), the best Google match is auto-selected and shown as
+   "✓ Prospect: X — address · change"; the candidate list collapses ("change" reopens it; "Use
+   This Name" still available). **Run is disabled** while Enticement has no confirmed prospect,
+   with the note "Resolve the prospect above to enable the run."
+4. **Advanced options** (collapsed): the aggregate toggle and the admin refresh override.
+5. **Output note** beside Run: "Produces the Market Summary: …" / "…the Enticement report: …" /
+   "…the Full Report: …", updated as the format changes.
+- Upload Spreadsheet and Student Health modes are unchanged.
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Order/default**: open Competitors Rankings → Analysis Type is first; Market Summary is
+selected; no Prospect field; note reads "Produces the Market Summary…"; Run enabled.
+**T2 — Enticement**: pick Enticement → Prospect block appears; Run disabled with the resolve note;
+type a name + Enter → best match auto-selected and shown on one line; Run enabled; "change" reopens
+the list; picking another updates the line. Run → Enticement report with that prospect.
+**T3 — Full Report**: pick Full → note updates; Run enabled; run works.
+**T4 — Specialty**: Specialty Practice → Specialty field appears directly under the type; ZIP mode
+map still works; a service-line prospect still auto-fills specialty and switches type as before.
+**T5 — Advanced**: expand → aggregate (checked) and, for admins, the refresh override; both still
+apply to the run.
+**T6 — Reset**: navigate away after a completed run and back → form back to Hospital Market /
+By City / Market Summary with empty fields.
+
+### Regression Checks
+- **R1** Upload Spreadsheet + Student Health flows unchanged. **R2** JS parses; element ids unchanged.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.
