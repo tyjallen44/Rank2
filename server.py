@@ -316,6 +316,98 @@ async def admin_jobs(payload: dict = Depends(require_admin)):
             "version": _APP_VERSION, "workers": getattr(_pool, "_max_workers", None)}
 
 
+_MAINT_REBRAND_PAIRS = [("AI Visibility Intelligence", "AI Reputation Analysis Platform"),
+                        ("AI Reputation Intelligence", "AI Reputation Analysis Platform"),
+                        ("AI Visibility", "AI Reputation"), ("AI-Visibility", "AI-Reputation"),
+                        ("AI visibility", "AI reputation"), ("AI-visibility", "AI-reputation")]
+
+_MAINT_TASKS = {
+    "rebrand-learn": "Rename 'AI Visibility' → 'AI Reputation' in the live Learn / Methodology articles (idempotent).",
+    "backfill-comparisons": "Record History rows for Compare Two PDFs on disk that pre-date persisted comparisons.",
+    "retrack-practices": "Tracked entities that have a specialty but are typed Hospital → type Specialty Practice so the next snapshot uses the practice rubric.",
+}
+
+
+@app.get("/api/admin/maintenance")
+async def admin_maintenance_list(_: dict = Depends(require_admin)):
+    return [{"task": k, "description": v} for k, v in _MAINT_TASKS.items()]
+
+
+@app.post("/api/admin/maintenance/{task}")
+async def admin_maintenance(task: str, apply: bool = False, _: dict = Depends(require_admin)):
+    """One-off data cleanups, run where the database and the reports volume are both
+    mounted. Dry run by default; ?apply=true writes. Same logic as scripts/*.py."""
+    if task not in _MAINT_TASKS:
+        raise HTTPException(404, f"Unknown task; choose one of {', '.join(_MAINT_TASKS)}")
+    from perception.db import init_db, get_connection
+    init_db()
+
+    def _go() -> dict:
+        import uuid as _uuid
+        from datetime import datetime as _dt
+        con = get_connection()
+        lines: list = []
+        try:
+            if task == "rebrand-learn":
+                total = 0
+                for col in ("title", "body", "category"):
+                    for old, new in _MAINT_REBRAND_PAIRS:
+                        if apply:
+                            cur = con.execute(f"UPDATE learn_articles SET {col} = replace({col}, ?, ?) WHERE {col} LIKE ?",
+                                              [old, new, f"%{old}%"])
+                            total += getattr(cur, "rowcount", 0) or 0
+                        else:
+                            total += con.execute(f"SELECT COUNT(*) FROM learn_articles WHERE {col} LIKE ?",
+                                                 [f"%{old}%"]).fetchone()[0]
+                lines.append(f"learn_articles row-edits {'applied' if apply else 'pending'}: {total}")
+            elif task == "backfill-comparisons":
+                from perception.strings import FILE_COMPARISON_PFX
+                known = {r[0] for r in con.execute("SELECT pdf_path FROM comparison_runs").fetchall()}
+                pat = re.compile(rf"^{re.escape(FILE_COMPARISON_PFX)}_(.+)_Vs_(.+?)_+([0-9a-f]{{8}})\.pdf$", re.I)
+                added = skipped = 0
+                for f in sorted(REPORTS_DIR.glob(f"{FILE_COMPARISON_PFX}*.pdf")):
+                    if str(f) in known:
+                        skipped += 1
+                        continue
+                    m = pat.match(f.name)
+                    if not m:
+                        lines.append(f"? unrecognised name: {f.name}")
+                        continue
+                    a = m.group(1).replace("_", " ").strip(); b = m.group(2).replace("_", " ").strip(); pfx = m.group(3)
+                    row = con.execute(
+                        "SELECT run_id, generated_at, user_role, ran_by, location, specialty, entity_name "
+                        "FROM analysis_runs WHERE run_id LIKE ? ORDER BY generated_at DESC LIMIT 1", [pfx + "%"]).fetchone()
+                    run_id_a, gen, role, ran_by, loc_a, spec, ent_a = row if row else (None, None, "admin", None, None, None, None)
+                    if not gen:
+                        gen = _dt.fromtimestamp(f.stat().st_mtime).date()
+                    lines.append(f"{'ADD' if apply else 'would add'}: {a} vs {b}  ({gen}, {role or 'admin'}, side-A run {run_id_a or 'unknown'})")
+                    if apply:
+                        con.execute(
+                            """INSERT INTO comparison_runs (id, run_id_a, run_id_b, entity_a, entity_b, location_a, location_b,
+                                                            specialty, pdf_path, teaser, user_role, ran_by, generated_at, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, ?, ?, ?, ?)""",
+                            [_uuid.uuid4().hex[:12], run_id_a, None, ent_a or a, b, loc_a, None, spec, str(f),
+                             role or "admin", ran_by, gen, _dt.combine(gen, _dt.min.time())])
+                    added += 1
+                lines.append(f"{'Added' if apply else 'Would add'} {added}, already recorded {skipped}.")
+            elif task == "retrack-practices":
+                rows = con.execute(
+                    "SELECT id, entity_name, specialty, city, state FROM tracked_entities "
+                    "WHERE COALESCE(entity_type, 'hospital') = 'hospital' AND COALESCE(specialty, '') <> '' "
+                    "ORDER BY entity_name").fetchall()
+                for eid, name, spec, city, state in rows:
+                    lines.append(f"{'SET' if apply else 'would set'} Specialty Practice: {name} — {spec} ({city}, {state})")
+                    if apply:
+                        con.execute("UPDATE tracked_entities SET entity_type = 'practice' WHERE id = ?", [eid])
+                lines.append(f"{'Updated' if apply else 'Would update'} {len(rows)} tracked entit{'y' if len(rows) == 1 else 'ies'}."
+                             + ("" if not rows else " Open each in Trends → configuration to confirm its Locations roster before the next run."))
+        finally:
+            con.close()
+        return {"task": task, "apply": apply, "lines": lines}
+
+    return await asyncio.get_running_loop().run_in_executor(None, _go)
+
+
 class SendReportRequest(BaseModel):
     emails: List[str]
     note: str = ""

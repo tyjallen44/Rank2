@@ -2539,3 +2539,13 @@ Commit: new `trend_annotations` table; GET/POST `/api/track/entities/{id}/annota
 **R1 — Entities with one snapshot / none.** One snapshot: marker sits on the single point. No snapshots: the charts area (and Notes card) stays hidden as before.
 
 **R2 — Tier and Google charts unchanged** (markers only on the score chart).
+
+## ADMIN-MAINTENANCE — server-side one-off cleanups (dry run / apply)
+
+Commit: `GET /api/admin/maintenance` lists tasks; `POST /api/admin/maintenance/{task}?apply=` runs one (admin only). Tasks: rebrand-learn, backfill-comparisons, retrack-practices. Admin → Operations gains a Maintenance card with Dry run / Apply per task and an output box. NEEDS BROWSER TESTING.
+
+**T1 — List + dry runs.** Admin → Operations → Maintenance shows three tasks with descriptions. Click Dry run on each: the output box shows "DRY RUN — <task>" and what would change; nothing is written (re-running shows the same).
+
+**T2 — Apply confirm.** Click Apply → a confirm dialog; Cancel does nothing. OK runs it and the box shows "APPLIED — <task>" with the lines; a second Apply reports nothing to do (idempotent).
+
+**T3 — Non-admin.** Integrations Admin / user roles get 403 on both endpoints and do not see the Operations tab.

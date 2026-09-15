@@ -2254,6 +2254,12 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div id="admin-ops-table"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
           <div style="font-size:11px;color:var(--muted);margin-top:10px">In-memory job registry for this server process: running jobs plus everything finished since the last restart. Users see only their own runs on Home.</div>
         </div>
+        <div class="card" style="margin-top:16px">
+          <div style="font-weight:600;font-size:15px;margin-bottom:4px">Maintenance</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px">One-off data cleanups run on the server (database + reports volume). Dry run shows what would change; Apply writes.</div>
+          <div id="admin-maint-list"><div class="empty" style="padding:12px 0"><div>Loading…</div></div></div>
+          <pre id="admin-maint-out" style="display:none;margin-top:12px;background:#f6f8f7;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;white-space:pre-wrap;max-height:320px;overflow:auto"></pre>
+        </div>
       </div>
 
       <!-- Users panel -->
@@ -8998,8 +9004,34 @@ function switchAdminTab(tab) {
   else if (tab === 'ops')          loadAdminOps();
 }
 
+async function loadAdminMaint() {
+  const host = document.getElementById('admin-maint-list'); if (!host) return;
+  try {
+    const r = await api('/api/admin/maintenance'); const tasks = r.ok ? await r.json() : [];
+    host.innerHTML = tasks.map(t => `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--border)">
+        <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${_learnEsc(t.task)}</div><div style="font-size:12px;color:var(--muted)">${_learnEsc(t.description)}</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="runAdminMaint('${t.task}', false, this)">Dry run</button>
+        <button class="btn btn-secondary btn-sm" onclick="runAdminMaint('${t.task}', true, this)">Apply</button>
+      </div>`).join('');
+  } catch (e) { host.innerHTML = `<div class="empty"><div>${_learnEsc(e.message || 'Failed')}</div></div>`; }
+}
+async function runAdminMaint(task, apply, btn) {
+  if (apply && !confirm(`Apply "${task}" to the live database now?`)) return;
+  const out = document.getElementById('admin-maint-out');
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  out.style.display = ''; out.textContent = `${apply ? 'Applying' : 'Dry run'}: ${task}…`;
+  try {
+    const r = await api(`/api/admin/maintenance/${encodeURIComponent(task)}?apply=${apply ? 'true' : 'false'}`, { method: 'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed'));
+    const d = await r.json();
+    out.textContent = `${d.apply ? 'APPLIED' : 'DRY RUN'} — ${d.task}\n` + (d.lines.length ? d.lines.join('\n') : '(nothing to do)');
+  } catch (e) { out.textContent = 'Error: ' + (e.message || e); }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
+}
+
 let _adminOpsTimer = null;
 async function loadAdminOps() {
+  loadAdminMaint();
   const host = document.getElementById('admin-ops-table');
   const meta = document.getElementById('admin-ops-meta');
   clearTimeout(_adminOpsTimer);
