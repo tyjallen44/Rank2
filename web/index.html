@@ -2661,6 +2661,15 @@ input[type="url"]::placeholder, textarea::placeholder {
           </div>
         </div>
 
+        <!-- Sent reports: the exact PDFs that were emailed for this entity (kept permanently) -->
+        <div id="trend-sent" class="card" style="display:none;margin-bottom:16px;padding:14px 20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Sent reports</div>
+            <span style="font-size:11.5px;color:var(--muted)">Each row is the exact file that went out. On-demand downloads always build the current version.</span>
+          </div>
+          <div id="trend-sent-list"></div>
+        </div>
+
         <div id="trend-no-data" class="card" style="display:none;text-align:center;padding:40px;color:var(--muted)">
           <div style="font-size:32px;margin-bottom:12px">📊</div>
           <div style="font-weight:600;margin-bottom:6px">No data yet</div>
@@ -9197,6 +9206,7 @@ async function loadEntityTrend(entityId) {
   document.getElementById('trend-run-status').textContent = '';
   document.getElementById('trend-no-data').style.display  = 'none';
   document.getElementById('trend-charts').style.display   = 'none';
+  loadTrendSentReports(entityId);
 
   try {
     const res = await api(`/api/track/entities/${entityId}/trend`);
@@ -9205,6 +9215,27 @@ async function loadEntityTrend(entityId) {
   } catch (e) {
     document.getElementById('trend-no-data').style.display = '';
   }
+}
+
+async function loadTrendSentReports(entityId) {
+  const box = document.getElementById('trend-sent'); const list = document.getElementById('trend-sent-list');
+  if (!box || !list) return;
+  try {
+    const r = await api(`/api/track/entities/${encodeURIComponent(entityId)}/reports`);
+    const rows = r.ok ? await r.json() : [];
+    if (!rows.length) { box.style.display = 'none'; return; }
+    const tok = encodeURIComponent(_token);
+    list.innerHTML = `<table class="tbl" style="font-size:12.5px"><thead><tr><th>Sent</th><th>To</th><th>By</th><th>Snapshot</th><th>Score</th><th></th></tr></thead><tbody>` +
+      rows.map(x => `<tr>
+        <td style="white-space:nowrap;color:var(--muted)">${_shortDate(x.sent_at).text}</td>
+        <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_learnEsc((x.sent_to || []).join(', '))}">${_learnEsc((x.sent_to || []).join(', '))}</td>
+        <td style="color:var(--muted)">${_learnEsc(x.kind === 'scheduled' ? 'Scheduled run' : (x.sent_by || '').split('@')[0])}</td>
+        <td style="color:var(--muted)">${x.snapshots != null ? `${x.snapshots} snapshots` : '—'}</td>
+        <td style="font-weight:600">${x.latest_score != null ? x.latest_score : '—'}</td>
+        <td style="text-align:right">${x.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/track/reports/${x.id}/pdf?token=${tok}">⬇ PDF</a>` : '<span style="font-size:11px;color:var(--muted)">file missing</span>'}</td>
+      </tr>`).join('') + `</tbody></table>`;
+    box.style.display = '';
+  } catch (e) { box.style.display = 'none'; }
 }
 
 async function sendTrendReportNow() {
@@ -9224,6 +9255,7 @@ async function sendTrendReportNow() {
     if (!r.ok) throw new Error(await errDetail(r, 'Send failed'));
     const d = await r.json();
     if (st) st.textContent = `Sent to ${d.emails.join(', ')}.`;
+    loadTrendSentReports(e.id);
   } catch (err) { if (st) st.textContent = err.message; }
 }
 

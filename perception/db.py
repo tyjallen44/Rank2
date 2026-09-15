@@ -635,6 +635,24 @@ def init_db() -> None:
     if "parent_system" not in _te_cols:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN parent_system VARCHAR")
 
+    # Sent Trend Reports — every emailed report is kept as an artifact so the exact
+    # file a customer received can be retrieved later. On-demand downloads are a cache.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS trend_reports (
+            id            VARCHAR PRIMARY KEY,
+            entity_id     VARCHAR NOT NULL,
+            entity_name   VARCHAR NOT NULL,
+            run_id        VARCHAR,
+            pdf_path      VARCHAR NOT NULL,
+            sent_by       VARCHAR,
+            sent_to       VARCHAR DEFAULT '[]',
+            kind          VARCHAR DEFAULT 'email',
+            snapshots     INTEGER,
+            latest_score  INTEGER,
+            sent_at       TIMESTAMP NOT NULL
+        )
+    """)
+
     # ── FQHC Community Health Edition tables ─────────────────────────────────
     con.execute("""
         CREATE TABLE IF NOT EXISTS fqhc_intake (
@@ -1928,6 +1946,63 @@ def create_tracked_entity(
     )
     con.close()
     return get_tracked_entity(eid)
+
+
+def record_trend_report(entity_id: str, entity_name: str, run_id: Optional[str], pdf_path: str,
+                        sent_by: str, sent_to: list, kind: str = "email",
+                        snapshots: Optional[int] = None, latest_score: Optional[int] = None) -> dict:
+    import json, uuid
+    from datetime import datetime
+    rid = uuid.uuid4().hex[:12]
+    con = get_connection()
+    con.execute(
+        """INSERT INTO trend_reports (id, entity_id, entity_name, run_id, pdf_path, sent_by, sent_to,
+                                      kind, snapshots, latest_score, sent_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [rid, entity_id, entity_name, run_id, pdf_path, sent_by, json.dumps(sent_to or []),
+         kind, snapshots, latest_score, datetime.utcnow()])
+    con.close()
+    return {"id": rid}
+
+
+_TR_COLS = ["id", "entity_id", "entity_name", "run_id", "pdf_path", "sent_by", "sent_to", "kind",
+            "snapshots", "latest_score", "sent_at"]
+
+
+def list_trend_reports(entity_id: str) -> list[dict]:
+    import json
+    con = get_connection()
+    rows = con.execute(
+        f"SELECT {', '.join(_TR_COLS)} FROM trend_reports WHERE entity_id = ? ORDER BY sent_at DESC",
+        [entity_id]).fetchall()
+    con.close()
+    out = []
+    for r in rows:
+        d = dict(zip(_TR_COLS, r))
+        try:
+            d["sent_to"] = json.loads(d.get("sent_to") or "[]")
+        except Exception:
+            d["sent_to"] = []
+        d["sent_at"] = str(d["sent_at"])
+        out.append(d)
+    return out
+
+
+def get_trend_report(report_id: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute(f"SELECT {', '.join(_TR_COLS)} FROM trend_reports WHERE id = ?", [report_id]).fetchone()
+    con.close()
+    return dict(zip(_TR_COLS, r)) if r else None
+
+
+def delete_trend_reports_for_entity(entity_id: str) -> list:
+    """Delete the sent-report rows for an entity; returns their file paths."""
+    con = get_connection()
+    paths = [r[0] for r in con.execute("SELECT pdf_path FROM trend_reports WHERE entity_id = ?",
+                                       [entity_id]).fetchall()]
+    con.execute("DELETE FROM trend_reports WHERE entity_id = ?", [entity_id])
+    con.close()
+    return paths
 
 
 def delete_tracked_entity(entity_id: str, purge_runs: bool = False) -> Optional[dict]:

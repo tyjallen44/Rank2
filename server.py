@@ -3852,12 +3852,17 @@ async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends
 async def track_delete(entity_id: str, purge_runs: int = 0, _: dict = Depends(require_admin)):
     """Admin: delete a tracking instance. purge_runs=1 also deletes its snapshot runs
     (individual runs matched by entity name) and their files — permanent."""
-    from perception.db import init_db, delete_tracked_entity
+    from perception.db import init_db, delete_tracked_entity, delete_trend_reports_for_entity
     init_db()
     res = delete_tracked_entity(entity_id, purge_runs=bool(purge_runs))
     if res is None:
         raise HTTPException(404, "tracked entity not found")
-    for p in res.get("files") or []:
+    files = list(res.get("files") or [])
+    safe_id = "".join(ch for ch in entity_id if ch.isalnum() or ch in "-_")
+    files += [str(p) for p in (REPORTS_DIR / "trends").glob(f"trend_{safe_id}_*.pdf")]   # download cache
+    if purge_runs:
+        files += delete_trend_reports_for_entity(entity_id)                               # sent artifacts
+    for p in files:
         try:
             Path(p).unlink(missing_ok=True)
         except Exception:
@@ -3912,12 +3917,23 @@ def _trend_report_file(entity: dict, points: list, brand: str = "original") -> P
             if ent.get(k):
                 ent[k] = str(ent[k])
         render_trend_report_pdf(ent, points, str(pdf_path), brand=brand)
+        # The download cache holds only the current version; sent copies live in trends/sent/.
+        for old in out_dir.glob(f"trend_{safe_id}_*.pdf"):
+            if old != pdf_path:
+                try:
+                    old.unlink()
+                except Exception:
+                    pass
     return pdf_path
 
 
-def _email_trend_report(entity_id: str, emails: list, brand: str = "original") -> int:
-    """Render the current Trend Report and email it to each address. Returns sends."""
-    from perception.db import get_tracked_entity, get_entity_trend
+def _email_trend_report(entity_id: str, emails: list, brand: str = "original",
+                        sent_by: str = "scheduler", kind: str = "email") -> int:
+    """Render the current Trend Report, email it to each address, and keep the exact file
+    that went out as a permanent 'sent report' artifact. Returns the number of sends."""
+    import shutil
+    from datetime import datetime as _dt
+    from perception.db import get_tracked_entity, get_entity_trend, record_trend_report
     from perception.email_utils import send_trend_report
     entity = get_tracked_entity(entity_id)
     if not entity:
@@ -3929,15 +3945,27 @@ def _email_trend_report(entity_id: str, emails: list, brand: str = "original") -
     scored = [p for p in points if p.get("ai_visibility_score") is not None]
     latest = scored[-1]["ai_visibility_score"] if scored else None
     delta = (scored[-1]["ai_visibility_score"] - scored[-2]["ai_visibility_score"]) if len(scored) >= 2 else None
-    sent = 0
+    delivered = []
     for addr in _clean_emails(emails):
         try:
             send_trend_report(addr, entity["entity_name"], str(pdf_path),
                               latest_score=latest, delta=delta, snapshots=len(scored))
-            sent += 1
+            delivered.append(addr)
         except Exception as exc:
             print(f"[trend-email] FAILED entity={entity_id} to={addr}: {type(exc).__name__}: {exc}")
-    return sent
+    if delivered:
+        try:
+            sent_dir = REPORTS_DIR / "trends" / "sent"
+            sent_dir.mkdir(parents=True, exist_ok=True)
+            safe_id = "".join(ch for ch in entity_id if ch.isalnum() or ch in "-_")
+            stamp = _dt.utcnow().strftime("%Y%m%d-%H%M%S")
+            keep = sent_dir / f"{safe_id}_{stamp}.pdf"
+            shutil.copyfile(str(pdf_path), str(keep))
+            record_trend_report(entity_id, entity["entity_name"], points[-1].get("run_id"), str(keep),
+                                sent_by, delivered, kind=kind, snapshots=len(scored), latest_score=latest)
+        except Exception as exc:
+            print(f"[trend-email] could not archive sent report entity={entity_id}: {type(exc).__name__}: {exc}")
+    return len(delivered)
 
 
 def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
@@ -3955,7 +3983,7 @@ def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
             return
         emails = _entity_report_emails(entity)
         if emails:
-            n = _email_trend_report(entity["id"], emails)
+            n = _email_trend_report(entity["id"], emails, sent_by="scheduled run", kind="scheduled")
             print(f"[trend-email] entity={entity['id']} sent={n}")
     except Exception as exc:
         print(f"[trend-email] hook error entity={entity.get('id')}: {type(exc).__name__}: {exc}")
@@ -3976,11 +4004,38 @@ async def track_report_send(entity_id: str, req: TrendSendRequest,
     emails = _clean_emails(req.emails)
     if not emails:
         raise HTTPException(400, "Provide at least one valid email address")
+    who = payload.get("email") or payload.get("name") or payload.get("role") or "user"
     sent = await asyncio.get_running_loop().run_in_executor(
-        None, lambda: _email_trend_report(entity_id, emails, payload.get("brand", "original")))
+        None, lambda: _email_trend_report(entity_id, emails, payload.get("brand", "original"),
+                                          sent_by=str(who), kind="send_now"))
     if sent == 0:
         raise HTTPException(502, "The report could not be sent — check the email service configuration.")
     return {"sent": sent, "emails": emails}
+
+
+@app.get("/api/track/entities/{entity_id}/reports")
+async def track_reports_list(entity_id: str, _: str = Depends(require_auth)):
+    """Sent Trend Reports for an entity (newest first) — the exact files that went out."""
+    from perception.db import init_db, list_trend_reports
+    init_db()
+    rows = list_trend_reports(entity_id)
+    for r in rows:
+        r["has_pdf"] = bool(r.get("pdf_path") and Path(r["pdf_path"]).exists())
+        r.pop("pdf_path", None)
+    return rows
+
+
+@app.get("/api/track/reports/{report_id}/pdf")
+async def track_report_download(report_id: str, _: str = Depends(require_auth)):
+    from perception.db import init_db, get_trend_report
+    init_db()
+    r = get_trend_report("".join(ch for ch in report_id if ch.isalnum()))
+    if not r or not Path(r["pdf_path"]).exists():
+        raise HTTPException(404, "Sent report file not found")
+    slug = "".join(ch if ch.isalnum() else "-" for ch in str(r.get("entity_name") or "entity")).strip("-")[:60]
+    stamp = str(r.get("sent_at") or "")[:10]
+    return FileResponse(r["pdf_path"], media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{slug}_AI_Reputation_Trend_Report_{stamp}.pdf"'})
 
 
 @app.post("/api/track/entities/{entity_id}/run")

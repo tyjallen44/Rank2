@@ -1908,3 +1908,50 @@ History too. Non-admin: no Delete button; `DELETE` → 403.
 NEEDS BROWSER TESTING. Production has 5 practice entities currently scored on the hospital rubric —
 after deploy they will (correctly) show "Hospital rubric" with no ⚠ because their type defaults to
 Hospital; re-track them as Specialty Practice when ready.
+
+## TRENDS-SENT-REPORTS — Sent Trend Reports kept as artifacts; download cache cleaned; delete handling
+
+**Shipped:** 2026-09-15 · **Area:** Trends · **Type:** data retention / UX
+
+### What changed
+- New `trend_reports` table: every emailed Trend Report (scheduled, after Run now, or Send now)
+  is copied to `REPORTS_DIR/trends/sent/<entity>_<timestamp>.pdf` and recorded with entity,
+  snapshot run_id, sender ("scheduled run" or the user), recipients that were delivered, kind,
+  snapshot count, latest score, sent time. Kept permanently.
+- Trend detail: **Sent reports** card (hidden when none) — Sent · To · By · Snapshot · Score ·
+  ⬇ PDF (`GET /api/track/reports/{id}/pdf`, exact file that went out). Refreshes after Send now.
+  `GET /api/track/entities/{id}/reports` lists them.
+- On-demand download cache: rendering a new version deletes the entity's older cache files, so
+  the trends folder holds one cached PDF per entity (plus the sent archive).
+- Delete tracking: always removes the entity's cache files; with purge it also deletes the sent
+  reports (rows + files). Without purge, sent reports are retained.
+- History is unchanged (trend reports live with the entity on Trends).
+
+### Files changed
+`perception/db.py`, `server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Send now → archive**: detail → "✉ Send report…" → after "Sent to …", a Sent reports card
+appears with today's row (To = the addresses, By = your name, snapshot count + score); ⬇ PDF
+downloads a file named `<Entity>_AI_Reputation_Trend_Report_<date>.pdf` identical to what was
+emailed.
+**T2 — Scheduled send**: with delivery on, after a scheduled run the row shows By = "Scheduled
+run".
+**T3 — Exact file retained**: Run now (new snapshot) → download the current report (differs) →
+the earlier Sent row's PDF is still the old version.
+**T4 — Cache cleanup**: after T3, the trends folder contains one `trend_<id>_*.pdf` for the entity
+(older cache removed) and the sent copies under `trends/sent/`.
+**T5 — Delete without purge**: admin deletes tracking, Cancel on purge → cache file gone; sent
+files remain on disk (rows retained). **T6 — Delete with purge**: sent rows and files removed too.
+**T7 — Partial delivery**: with one bad + one good address, the row lists only the delivered one.
+
+### Regression Checks
+- **R1** Download button unchanged; **R2** email content unchanged; **R3** suite at baseline;
+  local dry run (mailer stubbed): 1 send → 1 row (send_now, 33 snapshots, score 67), sent file
+  exists, 1 cache file; test artifact removed.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] T7 · [ ] R1–R3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING + inbox.
