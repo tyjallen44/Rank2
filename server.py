@@ -3410,6 +3410,12 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
   <footer>Pulse &middot; AI Reputation Intelligence &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
 <!-- video embeds: return to poster when a video ends -->
 <script>
+function _resetVideoEmbed(f){
+  // Reload the frame: guaranteed poster + play button, independent of the host's API.
+  if(f.dataset.resetting) return; f.dataset.resetting='1';
+  var src=f.getAttribute('src'); f.setAttribute('src','about:blank');
+  setTimeout(function(){ f.setAttribute('src',src); delete f.dataset.resetting; },60);
+}
 function _bindVideoEmbeds(root){
   (root||document).querySelectorAll('.video-embed iframe[data-host]').forEach(function(f){
     if(f.dataset.bound) return; f.dataset.bound='1';
@@ -3432,9 +3438,9 @@ window.addEventListener('message',function(ev){
     try{
       if(host==='vimeo'){
         if(d.event==='ready') w.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*');
-        if(d.event==='ended'){ w.postMessage(JSON.stringify({method:'unload'}),'*'); }
+        if(d.event==='ended'){ try{ w.postMessage(JSON.stringify({method:'unload'}),'*'); }catch(e){} _resetVideoEmbed(f); }
       } else if(host==='youtube' && d.event==='infoDelivery' && d.info && d.info.playerState===0){
-        w.postMessage(JSON.stringify({event:'command',func:'stopVideo',args:[]}),'*');
+        try{ w.postMessage(JSON.stringify({event:'command',func:'stopVideo',args:[]}),'*'); }catch(e){} _resetVideoEmbed(f);
       }
     }catch(e){}
   });

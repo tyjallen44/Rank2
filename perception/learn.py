@@ -41,7 +41,7 @@ def video_embed_html(url: str) -> str | None:
         host = "youtube"
     elif (m := _VIDEO_VIMEO.match(u)):
         # dnt: no tracking; title/byline/portrait off: no uploader chrome over the video
-        src = f"https://player.vimeo.com/video/{m.group(1)}?dnt=1&title=0&byline=0&portrait=0"
+        src = f"https://player.vimeo.com/video/{m.group(1)}?dnt=1&api=1&title=0&byline=0&portrait=0"
         if m.group(2):   # unlisted-video hash
             src += f"&h={m.group(2)}"
         host = "vimeo"

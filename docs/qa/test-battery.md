@@ -1382,3 +1382,24 @@ restarts from 0:00. No uploader name/avatar overlay while playing.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Use a video shorter than a minute for the end-of-video checks.
+
+## VIDEO-END-RESET-2 — Hard reset of the player frame on video end
+
+**Shipped:** 2026-09-14 · **Area:** Home / Learn / public pages · **Type:** fix
+
+### What changed
+- Vimeo embed URL adds `api=1` so the player reliably emits `ended` over postMessage.
+- On `ended` (Vimeo) / `playerState 0` (YouTube) the page now also **reloads the iframe** (blank →
+  original src) — guaranteed poster frame + play button on any host, even if the host ignores the
+  `unload` / `stopVideo` command. Applied in the app and on the public pages.
+
+### Test Cases
+**T1**: Vimeo video plays to the end → player returns to the poster (brief reload flicker is
+acceptable); no end-screen grid; play restarts from 0:00. **T2**: same for YouTube.
+**T3**: local dev — restart the server after pulling (Python change) and hard-refresh.
+
+### Acceptance Checklist
+- [ ] T1 Vimeo · [ ] T2 YouTube · [ ] T3 restart note
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Production must be on ≥ this commit; earlier builds show the host end screen.
