@@ -2372,3 +2372,52 @@ failed discovery still allows adding (roster = whatever is listed).
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Find more makes up to ~22 Places queries (a few cents); results depend on
 Google's listing names — prune physical-therapy / rehab locations if they shouldn't count.
+
+## HANDOFFS + COMPLETION EMAILS — next steps after every run, "Runs in progress" on Home
+
+Commit: handoffs at the end of every run (Track in Trends / Compare against… / Email report…) on the completion screen and in each History Downloads menu; completion emails for long runs with a per-user preference; "Runs in progress" strip on Home. NEEDS BROWSER TESTING.
+
+**T1 — Completion screen shows a Next row (Deep Diagnostic hospital).** Run a hospital Deep Diagnostic to completion. Below the Download / New Deep Diagnostic buttons, a "NEXT" row shows: 📈 Track in Trends, ⇄ Compare against…, ✉ Email report…, History.
+- [ ] All four buttons visible; existing Download / Teaser / Briefing buttons unchanged.
+
+**T2 — Track in Trends prefills and searches.** Click Track in Trends on the T1 screen. Trends opens on the Track New Entity form with type Hospital, name/city/state filled from the report, a flash message at the bottom, and the Locations/listing search already running.
+- [ ] Type, name, city and state match the run; step 2 (listing candidates) appears without typing anything.
+
+**T3 — Track in Trends for a practice and a service line.** Repeat T1/T2 for a Specialty Practice run and for a Hospital Service Line run.
+- [ ] Practice: type Specialty Practice, specialty filled. Service line: type Hospital Service Line, name = health system, Service Line = the line.
+
+**T4 — Compare against… prefills side A.** On a Deep Diagnostic completion screen click Compare against…. Compare Two opens reset, side A type/name/city/state(/specialty) prefilled, the side-A search runs, flash message shown.
+- [ ] Side A candidates appear; side B is empty and ready for input.
+
+**T5 — Email report… (completion screen).** Click Email report…, enter one valid address and an optional note. Button shows "Sending…", then a flash "Report sent to …".
+- [ ] Email arrives with subject "<Kind> — <Title>", the PDF attached, the note (if any) at the top, and "Sent from Pulse by <name>" in the footer. No app button.
+
+**T6 — Email validation.** Enter `not-an-email` → alert "Please check these addresses". Cancel either prompt → nothing sent.
+- [ ] Both behaviors.
+
+**T7 — History Downloads menu actions.** Open History → Downloads ▾ on: a Deep Diagnostic row, a Compare Two row, a Hospital Network row, a Competitors Rankings row.
+- [ ] Deep Diagnostic row: 📈 Track in Trends, ⇄ Compare against…, ✉ Email report… present (admin also sees Delete).
+- [ ] Compare Two and Network rows: ✉ Email report… only (no Track / Compare).
+- [ ] Rankings row (no single organization): no Track / Compare; Email present when a PDF exists.
+- [ ] Track/Compare from History prefill from the row (city/state parsed from "City, ST").
+
+**T8 — Email endpoint for network and comparison rows.** Use ✉ Email report… on a Network row and a Compare Two row.
+- [ ] Network email attaches Report + Teaser + Full Detail when they exist; comparison email attaches the head-to-head PDF.
+
+**T9 — Completion email for a long run (preference on).** On Home, ensure "Email me when a long run finishes" is checked. Start a Deep Diagnostic and let it finish.
+- [ ] Email "Ready — <Title>" arrives to the signed-in user with the report PDF(s) attached, a line "It took about N minutes" (when ≥1 min), and an "Open Pulse" button.
+- [ ] Also for: Hospital Network (base + teaser + full detail attached), Compare Two (one PDF), Community Health, Competitors Rankings (report PDF), Event Preparation (no attachment; "Sign in to download it").
+
+**T10 — Preference off.** Uncheck the Home checkbox (flash "Completion emails turned off"), reload Home (stays unchecked), run a short Deep Diagnostic.
+- [ ] No completion email. Re-check → next run emails again. `GET /api/me/prefs` reflects the value.
+
+**T11 — Runs in progress strip.** Start a Network run, then click Home while it runs.
+- [ ] "1 run in progress" card above the featured video with a spinner, the network name, and elapsed minutes; it refreshes every ~20 s; after completion it shows ✓ with "Open in History".
+- [ ] With nothing running the card still shows the preference checkbox and the "No runs in progress" note.
+
+**R1 — Notification never breaks a run.** Temporarily break RESEND_API_KEY locally and run a Deep Diagnostic.
+- [ ] The run completes normally; the server log shows `[notify] failed:` and nothing else changes.
+
+**R2 — Existing completion buttons and History downloads.** Regress: Download Report, Teaser, Briefing, Full Detail links, Delete run (admin), MQCR battery, content-plan actions all unchanged.
+
+**R3 — Users table migration.** Fresh boot on a DB without `users.notify_complete`: the column is added with DEFAULT TRUE; `/api/me/prefs` returns `{"notify_complete": true}` for a user with no row.

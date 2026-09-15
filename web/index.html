@@ -2767,6 +2767,18 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
     </div>
 
     <!-- ── Home (landing page after login) ──────────────────────────────── -->
+    <style>
+      .home-runs{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin:0 0 18px}
+      .home-runs .hr-h{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+      .home-runs .hr-title{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+      .home-runs .hr-pref{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer}
+      .home-runs .hr-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:13px}
+      .home-runs .hr-row:first-of-type{border-top:0}
+      .home-runs .hr-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .home-runs .hr-meta{font-size:11px;color:var(--muted);white-space:nowrap}
+      .pulse-flash{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#0F4146;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 6px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .2s}
+      .pulse-flash.show{opacity:1}
+    </style>
     <div id="page-home" class="page" style="max-width:1040px">
       <div class="home-hero">
         <img class="home-rl-logo" src="/assets/logo-dark.svg" alt="RLDatix">
@@ -2782,6 +2794,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
       <!-- Featured content: admin-editable (Learn → Manage Content → Home page). A pasted
            YouTube / Vimeo / Loom link on its own line renders as an embedded player. -->
+      <div id="home-runs" class="home-runs hidden"></div>
+
       <div class="home-feature" id="home-feature">
         <div class="home-placeholder"><div class="ph-icon">▶</div><div>Loading…</div></div>
       </div>
@@ -4237,6 +4251,7 @@ window.addEventListener('message',function(ev){
 async function loadHome() {
   const host = document.getElementById('home-feature');
   if (!host) return;
+  loadHomeRuns();
   try {
     const r = await fetch('/api/learn?page=home');
     const arts = r.ok ? await r.json() : [];
@@ -6644,6 +6659,126 @@ function onSSE(ev) {
   }
 }
 
+// ── Flash message (bottom-center, auto-hides) ────────────────────────────────
+function _flash(msg, ms) {
+  let el = document.getElementById('pulse-flash');
+  if (!el) { el = document.createElement('div'); el.id = 'pulse-flash'; el.className = 'pulse-flash'; document.body.appendChild(el); }
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), ms || 3200);
+}
+
+// ── Handoffs: carry a finished run straight into Trends, Compare Two or an email ──
+// Accepts either a completion result (r.city / r.state) or a History row (r.location "City, ST").
+const _histRunIndex = {};
+function _handoffCtx(r) {
+  let city = r.city || '', state = r.state || '';
+  if ((!city || !state) && r.location) {
+    const parts = String(r.location).split(',');
+    city  = city  || (parts[0] || '').trim();
+    state = state || (parts[1] || '').trim().slice(0, 2).toUpperCase();
+  }
+  const et = r.entity_type || 'hospital';
+  const type = (et === 'service_line' || r.service_line) ? 'service_line' : et === 'practice' ? 'specialty' : 'hospital';
+  const name = type === 'service_line' ? (r.parent_system || r.entity_name || '') : (r.entity_name || '');
+  const specialty = type === 'service_line' ? (r.service_line || r.specialty || '') : (r.specialty || '');
+  return { name, city, state, type, specialty, run_id: r.run_id };
+}
+function _handoffable(r) {
+  if (!r || r.comparison || r.report_type === 'comparison' || r.report_type === 'network') return false;
+  if (r.entity_type === 'hospital_network' || r.entity_type === 'community_health') return false;
+  if (r.individual_report === false) return false;           // market rankings: no single organization to carry
+  return !!r.entity_name;
+}
+function handoffTrack(ctx) {
+  navigate('track');
+  showAddEntityFlow();
+  setTeType(ctx.type);
+  document.getElementById('te-name').value  = ctx.name || '';
+  document.getElementById('te-city').value  = ctx.city || '';
+  document.getElementById('te-state').value = ctx.state || '';
+  if (ctx.type !== 'hospital') document.getElementById('te-specialty').value = ctx.specialty || '';
+  _flash('Prefilled from your report — confirm the listing, then choose a schedule.');
+  if (ctx.name && ctx.city && ctx.state && (ctx.type === 'hospital' || ctx.specialty)) runTeSearch();
+}
+function handoffCompare(ctx) {
+  navigate('compare');
+  resetComparison();
+  setCmpType('a', ctx.type);
+  document.getElementById('cmp-a-name').value  = ctx.name || '';
+  document.getElementById('cmp-a-city').value  = ctx.city || '';
+  document.getElementById('cmp-a-state').value = ctx.state || '';
+  if (ctx.type !== 'hospital') document.getElementById('cmp-a-specialty').value = ctx.specialty || '';
+  _flash('Side A prefilled from your report — confirm it, then enter the organization to compare against.');
+  if (ctx.name && ctx.city && ctx.state && (ctx.type === 'hospital' || ctx.specialty)) runCmpSearch('a');
+}
+function handoffTrackRun(runId)   { const r = _histRunIndex[runId]; if (r) handoffTrack(_handoffCtx(r)); }
+function handoffCompareRun(runId) { const r = _histRunIndex[runId]; if (r) handoffCompare(_handoffCtx(r)); }
+async function emailReport(runId, btn) {
+  const raw = prompt('Email this report to (separate multiple addresses with commas):');
+  if (raw == null) return;
+  const emails = raw.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  if (!emails.length) return;
+  const bad = emails.filter(x => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+  if (bad.length) { alert('Please check these addresses: ' + bad.join(', ')); return; }
+  const note = prompt('Optional note to include in the email (leave blank for none):');
+  if (note == null) return;
+  const orig = btn ? btn.innerHTML : null;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Sending…'; }
+  try {
+    const r = await api(`/api/reports/${encodeURIComponent(runId)}/send`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails, note: note || '' }),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Send failed'));
+    const d = await r.json();
+    _flash(`Report sent to ${d.emails.join(', ')}.`);
+  } catch (e) {
+    alert('Could not send the report: ' + (e.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// ── Home: "Runs in progress" strip + completion-email preference ─────────────
+let _homeRunsTimer = null;
+async function loadHomeRuns() {
+  const el = document.getElementById('home-runs');
+  if (!el) return;
+  clearTimeout(_homeRunsTimer);
+  let jobs = [], pref = null;
+  try {
+    const [jr, pr] = await Promise.all([api('/api/jobs/mine'), api('/api/me/prefs')]);
+    jobs = jr.ok ? await jr.json() : [];
+    pref = pr.ok ? await pr.json() : null;
+  } catch (e) { /* keep the strip hidden */ }
+  const running = jobs.filter(j => j.status === 'running');
+  const done    = jobs.filter(j => j.status !== 'running');
+  const prefHtml = pref ? `<label class="hr-pref"><input type="checkbox" ${pref.notify_complete ? 'checked' : ''} onchange="setNotifyPref(this.checked)"> Email me when a long run finishes</label>` : '';
+  if (!running.length && !done.length) {
+    // Nothing to show but still let the user manage the preference.
+    if (!pref) { el.classList.add('hidden'); return; }
+    el.innerHTML = `<div class="hr-h"><div class="hr-title">Your runs</div>${prefHtml}</div><div class="hr-meta">No runs in progress. Long reports keep running if you close this tab — the result lands in History${pref.notify_complete ? ' and in your inbox' : ''}.</div>`;
+    el.classList.remove('hidden');
+    return;
+  }
+  const row = j => {
+    const esc = _learnEsc(j.label || 'Report');
+    if (j.status === 'running') return `<div class="hr-row"><span class="spinner"></span><span class="hr-lbl">${esc}</span><span class="hr-meta">running · ${j.minutes < 1 ? 'just started' : Math.round(j.minutes) + ' min'}</span></div>`;
+    if (j.status === 'error')   return `<div class="hr-row"><span style="color:#c0392b">✕</span><span class="hr-lbl">${esc}</span><span class="hr-meta">failed</span></div>`;
+    return `<div class="hr-row"><span style="color:var(--teal)">✓</span><span class="hr-lbl">${esc}</span><span class="hr-meta">done</span><button class="btn btn-ghost btn-sm" onclick="navigate('history')">Open in History</button></div>`;
+  };
+  el.innerHTML = `<div class="hr-h"><div class="hr-title">${running.length ? `${running.length} run${running.length !== 1 ? 's' : ''} in progress` : 'Recently finished'}</div>${prefHtml}</div>${running.map(row).join('')}${done.slice(0, 4).map(row).join('')}`;
+  el.classList.remove('hidden');
+  if (running.length && document.getElementById('page-home').classList.contains('active')) _homeRunsTimer = setTimeout(loadHomeRuns, 20000);
+}
+async function setNotifyPref(on) {
+  try {
+    const r = await api('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notify_complete: !!on }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not save'));
+    _flash(on ? 'You will get an email when a long run finishes.' : 'Completion emails turned off.');
+  } catch (e) { alert(e.message || e); }
+}
+
 function showSingleDone(r) {
   _completedPages.add(_lastPage);
   const isComparison = !!r.comparison;
@@ -6721,13 +6856,24 @@ function showSingleDone(r) {
   const fullDetailBtn = (isNetwork && r.full_detail_pdf_path)
     ? `<button class="btn btn-secondary" onclick="window.location.href='/api/network/${r.run_id}/full-detail-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Full Detail</button>`
     : '';
+  // Handoffs: what a user typically does next with this report.
+  _histRunIndex[r.run_id] = r;
+  const canHand = _handoffable(r);
+  const nextHtml = `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-right:4px">Next</span>
+      ${canHand ? `<button class="btn btn-ghost btn-sm" onclick="handoffTrackRun('${r.run_id}')" title="Track this organization on a schedule and see the score move over time">📈 Track in Trends</button>` : ''}
+      ${canHand ? `<button class="btn btn-ghost btn-sm" onclick="handoffCompareRun('${r.run_id}')" title="Put this organization on side A of a head-to-head report">⇄ Compare against…</button>` : ''}
+      <button class="btn btn-ghost btn-sm" onclick="emailReport('${r.run_id}', this)" title="Send the PDF to a customer or colleague">✉ Email report…</button>
+      ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}
+    </div>`;
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
     ${teaserBtn}
     ${briefingBtn}
     ${fullDetailBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
-    ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}`;
+    ${nextHtml}`;
   document.getElementById('prog-done').classList.remove('hidden');
 }
 
@@ -7636,10 +7782,12 @@ function _dlCell(run, caRuns) {
   const tok = encodeURIComponent(_token);
   const files = [];   // [label, url]  (url null => info line)
   const acts = [];    // [label, onclickJs]
+  _histRunIndex[run.run_id] = run;
+  const emailAct = ['✉ Email report…', `emailReport('${run.run_id}', this)`];
 
   // Compare Two: one combined head-to-head PDF (teaser variant is baked in when chosen).
   if (run.report_type === 'comparison') {
-    if (run.has_pdf) files.push([`Comparison${run.comparison && run.comparison.teaser ? ' — Teaser' : ''} (PDF)`, `/api/compare/${run.run_id}/pdf?token=${tok}`]);
+    if (run.has_pdf) { files.push([`Comparison${run.comparison && run.comparison.teaser ? ' — Teaser' : ''} (PDF)`, `/api/compare/${run.run_id}/pdf?token=${tok}`]); acts.push(emailAct); }
     else files.push(['Comparison PDF not on disk', null]);
     if (_role === 'admin') acts.push(['🗑 Delete run', `histDeleteRun('${run.run_id}', this)`]);
     return _dlMenu(run.run_id, files, acts);
@@ -7651,6 +7799,7 @@ function _dlCell(run, caRuns) {
     if (run.has_pdf) files.push(['Report (PDF)', `/api/network/${run.run_id}/pdf?token=${tok}`]);
     if (run.has_teaser_pdf) files.push(['Teaser (PDF)', `/api/network/${run.run_id}/teaser-pdf?token=${tok}`]);
     if (run.has_full_detail_pdf) files.push(['Full Detail (PDF)', `/api/network/${run.run_id}/full-detail-pdf?token=${tok}`]);
+    if (run.has_pdf) acts.push(emailAct);
     return _dlMenu(run.run_id, files, acts);
   }
 
@@ -7674,6 +7823,11 @@ function _dlCell(run, caRuns) {
     if (!ca.drafted) acts.push(['Generate Full Content Plan', `caDraftFromHistory('${ca.id}', this)`]);
     acts.push(['Rebuild content report', `caRerender('${ca.id}', this)`]);
   }
+  if (_handoffable(run)) {
+    acts.push(['📈 Track in Trends', `handoffTrackRun('${run.run_id}')`]);
+    acts.push(['⇄ Compare against…', `handoffCompareRun('${run.run_id}')`]);
+  }
+  if (run.has_pdf) acts.push(emailAct);
   if (_role === 'admin') acts.push(['🗑 Delete run', `histDeleteRun('${run.run_id}', this)`]);
   return _dlMenu(run.run_id, files, acts);
 }

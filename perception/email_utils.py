@@ -211,3 +211,56 @@ def send_trend_report(email: str, entity_name: str, pdf_path: str, *, latest_sco
     """
     _send(email, f"Trend Report — {entity_name}", _wrap(body),
           attachments=[{"filename": f"{slug}_AI_Reputation_Trend_Report.pdf", "content": data}])
+
+
+def _attach(paths: list) -> list:
+    import base64
+    from pathlib import Path
+    out = []
+    total = 0
+    for p in paths or []:
+        try:
+            pp = Path(p)
+            if not pp.exists():
+                continue
+            size = pp.stat().st_size
+            if total + size > 25 * 1024 * 1024:     # keep well under Resend's message limit
+                continue
+            total += size
+            out.append({"filename": pp.name, "content": base64.b64encode(pp.read_bytes()).decode()})
+        except Exception:
+            continue
+    return out
+
+
+def send_run_complete(email: str, kind: str, title: str, files: list, minutes: Optional[float] = None) -> None:
+    """'Your report is ready' — sent to the person who started a long run."""
+    import html as _html
+    atts = _attach(files)
+    took = f" It took about {int(round(minutes))} minute{'s' if int(round(minutes)) != 1 else ''}." if minutes and minutes >= 1 else ""
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">Your {_html.escape(kind)} is ready</h2>
+    <p style="margin-bottom:8px"><strong>{_html.escape(title)}</strong> has finished.{took}</p>
+    <p style="margin-bottom:8px">{'The report is attached.' if atts else 'Sign in to download it.'} It is also under <strong>History</strong> in Pulse.</p>
+    <p style="margin:20px 0">{_btn(APP_URL, "Open Pulse")}</p>
+    <p style="font-size:11px;color:#8a9aaa;margin:0">You can turn these notifications off on the Pulse Home page.</p>
+    """
+    _send(email, f"Ready — {title}", _wrap(body), attachments=atts)
+
+
+def send_report_copy(email: str, kind: str, title: str, files: list, sender: str = "", note: str = "") -> None:
+    """A report forwarded to a customer or colleague by a Pulse user."""
+    import html as _html
+    atts = _attach(files)
+    who = _html.escape(sender or "")
+    note_html = f'<p style="margin:0 0 14px;white-space:pre-wrap">{_html.escape(note.strip())}</p>' if note and note.strip() else ""
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">{_html.escape(kind)} — {_html.escape(title)}</h2>
+    {note_html}
+    <p style="margin-bottom:6px">Attached is the {_html.escape(kind)} for <strong>{_html.escape(title)}</strong>: how AI assistants currently present
+    the organization, scored on public signals, with what to change.</p>
+    <p style="margin:0 0 4px">Questions about the report? Just reply to this email{f" and it will reach {who}" if who else ""}.</p>
+    <hr style="border:0;border-top:1px solid #d7e7e2;margin:22px 0 12px">
+    <p style="font-size:11px;color:#8a9aaa;margin:0">Sent from Pulse{f" by {who}" if who else ""}.</p>
+    """
+    _send(email, f"{kind} — {title}", _wrap(body), attachments=atts)

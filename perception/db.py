@@ -302,6 +302,7 @@ def init_db() -> None:
     ).fetchall()}
     for col, definition in [
         ("brand", "VARCHAR DEFAULT 'original'"),
+        ("notify_complete", "BOOLEAN DEFAULT TRUE"),   # email when a long run finishes
     ]:
         if col not in existing_user_cols:
             con.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
@@ -2665,3 +2666,21 @@ def delete_network_run(run_id: str) -> Optional[dict]:
     _exec(con, "DELETE FROM network_runs WHERE run_id = ?", [run_id])
     con.close()
     return {"files": files}
+
+
+# ── Per-user notification preference ─────────────────────────────────────────
+def get_notify_pref(email: str) -> bool:
+    """Whether this user wants an email when a long run finishes (default True;
+    users without a users row, e.g. legacy role logins, default True too)."""
+    if not email:
+        return False
+    con = get_connection()
+    r = con.execute("SELECT notify_complete FROM users WHERE LOWER(email) = LOWER(?)", [email]).fetchone()
+    con.close()
+    return True if (r is None or r[0] is None) else bool(r[0])
+
+
+def set_notify_pref(email: str, on: bool) -> None:
+    con = get_connection()
+    con.execute("UPDATE users SET notify_complete = ? WHERE LOWER(email) = LOWER(?)", [bool(on), email])
+    con.close()

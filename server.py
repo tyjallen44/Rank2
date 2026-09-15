@@ -231,6 +231,102 @@ def _get_commit_sha() -> str:
         return "unknown"
 
 
+class PrefsRequest(BaseModel):
+    notify_complete: Optional[bool] = None
+
+
+@app.get("/api/me/prefs")
+async def me_prefs(payload: dict = Depends(get_current_user_payload)):
+    from perception.db import init_db, get_notify_pref
+    init_db()
+    return {"notify_complete": get_notify_pref(payload.get("email") or "")}
+
+
+@app.put("/api/me/prefs")
+async def me_prefs_update(req: PrefsRequest, payload: dict = Depends(get_current_user_payload)):
+    from perception.db import init_db, set_notify_pref, get_notify_pref
+    init_db()
+    email = payload.get("email") or ""
+    if req.notify_complete is not None and email:
+        set_notify_pref(email, req.notify_complete)
+    return {"notify_complete": get_notify_pref(email)}
+
+
+@app.get("/api/jobs/mine")
+async def jobs_mine(payload: dict = Depends(get_current_user_payload)):
+    """This user's runs known to this server process: running, and recently finished."""
+    me = (payload.get("email") or "").lower()
+    out = []
+    now = time.time()
+    for jid, j in list(_jobs.items()):
+        if (j.get("email") or "").lower() != me:
+            continue
+        started = j.get("started_at") or now
+        if j.get("status") != "running" and now - started > 6 * 3600:
+            continue
+        res = j.get("result") or {}
+        label = (j.get("label") or j.get("entity_name") or res.get("network_name") or res.get("location")
+                 or ("Compare Two" if res.get("comparison") else "Report"))
+        out.append({"job_id": jid, "status": j.get("status", "running"), "label": label,
+                    "started_at": started, "minutes": round((now - started) / 60, 1),
+                    "run_id": res.get("run_id"), "error": (j.get("error") if j.get("status") == "error" else None)})
+    out.sort(key=lambda x: -x["started_at"])
+    return out[:12]
+
+
+class SendReportRequest(BaseModel):
+    emails: List[str]
+    note: str = ""
+
+
+def _report_files_for(run_id: str) -> tuple:
+    """(kind, title, [files]) for an analysis, network or comparison run id."""
+    from perception.db import get_comparison_run, get_connection
+    safe = "".join(ch for ch in run_id if ch.isalnum() or ch in "-_")
+    c = get_comparison_run(safe)
+    if c:
+        return "Compare Two report", f"{c['entity_a']} vs {c['entity_b']}", [c.get("pdf_path")]
+    con = get_connection()
+    r = con.execute("SELECT network_name, pdf_path, teaser_pdf_path, full_detail_pdf_path FROM network_runs WHERE run_id = ?", [safe]).fetchone()
+    if r:
+        con.close()
+        return "Hospital Network report", r[0], [r[1], r[2], r[3]]
+    r = con.execute("SELECT entity_name, location, pdf_path, teaser_pdf_path, briefing_pdf_path, individual_report FROM analysis_runs WHERE run_id = ?", [safe]).fetchone()
+    con.close()
+    if r:
+        kind = "Deep Diagnostic" if r[5] else "Competitors Rankings report"
+        return kind, r[0] or r[1], [r[2], r[3], r[4]]
+    return None, None, []
+
+
+@app.post("/api/reports/{run_id}/send")
+async def send_report(run_id: str, req: SendReportRequest, payload: dict = Depends(get_current_user_payload)):
+    """Email a finished report (PDF attached) to one or more addresses."""
+    from perception.db import init_db
+    from perception.email_utils import send_report_copy
+    init_db()
+    emails = _clean_emails(req.emails)
+    if not emails:
+        raise HTTPException(400, "Provide at least one valid email address")
+    kind, title, files = _report_files_for(run_id)
+    files = [f for f in files if f and Path(f).exists()]
+    if not kind or not files:
+        raise HTTPException(404, "Report file not found")
+    sender = payload.get("name") or (payload.get("email") or "").split("@")[0].replace(".", " ").title()
+    sent = []
+    def _go():
+        for addr in emails:
+            try:
+                send_report_copy(addr, kind, title, files[:1] if kind != "Hospital Network report" else files, sender=sender, note=req.note or "")
+                sent.append(addr)
+            except Exception as exc:
+                print(f"[send-report] FAILED to={addr}: {type(exc).__name__}: {exc}")
+    await asyncio.get_running_loop().run_in_executor(None, _go)
+    if not sent:
+        raise HTTPException(502, "The report could not be sent — check the email service configuration.")
+    return {"sent": len(sent), "emails": sent}
+
+
 @app.get("/api/version")
 async def version():
     return {"version": _APP_VERSION, "commit": _get_commit_sha(), "deployed": _SERVER_START}
@@ -355,7 +451,15 @@ def _job_run_single(
             "pdf_path": result.pdf_path,
             "briefing_pdf_path": result.briefing_pdf_path,
             "briefing_skipped_reason": result.briefing_skipped_reason,
+            "entity_name": job.get("entity_name"),
+            "entity_type": entity_type or "hospital",
+            "city": city, "state": state,
+            "individual_report": bool(job.get("individual_report")),
         }
+        if not job.get("skip_pdf"):
+            _title = job.get("entity_name") or result.report_title or result.location
+            _kind = "Deep Diagnostic" if job.get("individual_report") else "Competitors Rankings report"
+            _notify_run_complete(job, _kind, _title, [result.pdf_path, result.teaser_pdf_path, result.briefing_pdf_path])
     except Exception as exc:
         job["status"] = "error"
         job["error"] = _job_error(exc)
@@ -654,7 +758,14 @@ def _job_run_practice(
             "teaser_pdf_path": result.teaser_pdf_path,
             "briefing_pdf_path": result.briefing_pdf_path,
             "briefing_skipped_reason": result.briefing_skipped_reason,
+            "entity_name": entity_name,
+            "entity_type": "service_line" if job.get("service_line") else "practice",
+            "service_line": job.get("service_line"), "parent_system": job.get("parent_system"),
+            "city": city, "state": state, "individual_report": True,
         }
+        if not job.get("skip_pdf"):
+            _notify_run_complete(job, "Deep Diagnostic", result.report_title or entity_name,
+                                 [result.pdf_path, result.teaser_pdf_path, result.briefing_pdf_path])
     except Exception as exc:
         job["status"] = "error"
         job["error"] = _job_error(exc)
@@ -707,7 +818,11 @@ def _job_run_fqhc(
             "pdf_path": result.pdf_path,
             "briefing_pdf_path": result.briefing_pdf_path,
             "briefing_skipped_reason": result.briefing_skipped_reason,
+            "entity_name": job.get("entity_name"), "city": city, "state": state, "individual_report": True,
         }
+        if not job.get("skip_pdf"):
+            _notify_run_complete(job, "Community Health report", job.get("entity_name") or result.location,
+                                 [result.pdf_path, result.briefing_pdf_path])
     except Exception as exc:
         job["status"] = "error"
         job["error"] = _job_error(exc)
@@ -840,8 +955,26 @@ def _new_job(role: str, brand: str = "original", email: Optional[str] = None) ->
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role,
-                     "brand": brand, "email": email}
+                     "brand": brand, "email": email, "started_at": time.time()}
     return job_id
+
+
+def _notify_run_complete(job: dict, kind: str, title: str, files: list) -> None:
+    """Email the person who started a long run when it finishes (per-user preference,
+    default on). Fail-soft: never affects the run."""
+    try:
+        email = job.get("email")
+        if not email:
+            return
+        from perception.db import get_notify_pref
+        from perception.email_utils import send_run_complete
+        if not get_notify_pref(email):
+            return
+        minutes = (time.time() - job.get("started_at", time.time())) / 60.0
+        job["label"] = title
+        send_run_complete(email, kind, title, [p for p in (files or []) if p], minutes=minutes)
+    except Exception as exc:
+        print(f"[notify] failed: {type(exc).__name__}: {exc}")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -1071,6 +1204,7 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
             "pdf_path": pdf_path,
             "comparison": True,
         }
+        _notify_run_complete(job, "Compare Two report", f"{result_a.entity_name} vs {result_b.entity_name}", [pdf_path])
     except Exception as exc:
         job["status"] = "error"
         job["error"] = _job_error(exc)
@@ -1569,6 +1703,8 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
                 _con.execute("UPDATE network_runs SET ran_by = ? WHERE run_id = ?",
                              [job.get("email"), result.run_id])
         job["status"] = "done"
+        _notify_run_complete(job, "Hospital Network report", result.network_canonical_name or result.network_name,
+                             [result.pdf_path, result.teaser_pdf_path, getattr(result, "full_detail_pdf_path", None)])
         job["result"] = {
             "run_id": result.run_id,
             "entity_type": "hospital_network",
@@ -4805,6 +4941,7 @@ def _run_event_job(
         finalize_event_run(event_id, str(csv_path), str(zip_path))
         job["status"] = "done"
         job["result"] = {"event_id": event_id, "csv_filename": csv_name, "zip_filename": zip_name}
+        _notify_run_complete(job, "Event Preparation batch", job.get("label") or f"Event {event_id[:8]}", [])
 
     except Exception as exc:
         job["status"] = "error"
