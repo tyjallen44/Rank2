@@ -2320,3 +2320,55 @@ amber badge with reasons on hover.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## TRENDS-ROSTER — Practice tracking uses a fixed, confirmable Locations roster; "Find more locations" for large groups
+
+**Shipped:** 2026-09-15 · **Area:** Trends (add flow, runs, list/Details), Places search · **Type:** feature + data quality
+
+### What changed
+- **Track New Entity** (Specialty Practice / Hospital Service Line): after the listing is chosen, a
+  **Locations to track** step discovers the practice's locations (`/api/practice/siblings`, scoped to
+  the service line when applicable), seeds them from the same-brand Google candidates with address,
+  rating and pinned place_id, and lets you uncheck strays. "Add to Trends" is disabled while
+  discovery runs.
+- **Find more locations** (`POST /api/practice/find-more`): widens the Google search — brand alone,
+  brand + state, brand near the market city, plus the brand's **acronym** ("IBJI …" listings) —
+  then **snowballs** through every city seen in a found address (capped at 14 city queries).
+  Results merge by place_id, keep only brand/acronym name matches, and append as checked rows
+  tagged "new". Illinois Bone & Joint Institute: 1 → 70 listings across 25 cities in ~14 s.
+- **Saved roster**: `tracked_entities.confirmed_roster` (JSON) + `anchor_listing` (auto-migrated).
+  Every snapshot (create, Run now, scheduler) passes the saved roster and flagship listing to the
+  practice analyzer, so **each snapshot measures the same locations** (no roster drift between
+  runs). Entities created before this keep discovering each run and are labelled so.
+- List row sub-line shows "N locations" (or "locations discovered each run"); Details panel has a
+  locked **Locations** field with a "view" toggle listing the flagship + roster. The roster is part of
+  the locked identity (track a new entity to change it).
+
+### Files changed
+`perception/db.py`, `server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — IBJI**: Track New Entity → Specialty Practice → ILLINOIS BONE AND JOINT INSTITUTE / CHICAGO /
+IL / ORTHOPEDICS → Search → listing auto-selected → Locations to track shows the discovered rows;
+click **Find more locations** → dozens more append (tagged new, checked), many named "IBJI Doctors'
+Office - <city>"; uncheck physical-therapy/rehab rows if unwanted → Add to Trends → row shows
+"N locations"; first snapshot runs; Details → Locations "N fixed locations · view" lists them.
+**T2 — Stability**: Run now twice → both snapshots use the same roster (composite table rows
+identical set); score movement only reflects reputation.
+**T3 — Service line**: Hospital Service Line add → Locations scoped to the line; Find more works.
+**T4 — Hospital**: no Locations step; unchanged.
+**T5 — Legacy**: an older practice entity shows "locations discovered each run" and Details says
+to track a new entity to fix the roster.
+**T6 — Gating**: Add to Trends disabled ("Discovering locations…") until discovery completes; a
+failed discovery still allows adding (roster = whatever is listed).
+
+### Regression Checks
+- **R1** Deep Diagnostic / Compare Two Locations steps unchanged (shared seeding helper).
+- **R2** Suite at baseline; find-more exercised live against Google Places.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Find more makes up to ~22 Places queries (a few cents); results depend on
+Google's listing names — prune physical-therapy / rehab locations if they shouldn't count.

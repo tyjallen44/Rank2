@@ -635,6 +635,11 @@ def init_db() -> None:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN service_line VARCHAR")
     if "parent_system" not in _te_cols:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN parent_system VARCHAR")
+    if "confirmed_roster" not in _te_cols:
+        # Fixed location roster (JSON list) so every snapshot measures the same locations
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN confirmed_roster VARCHAR")
+    if "anchor_listing" not in _te_cols:
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN anchor_listing VARCHAR")
 
     # Compare Two (head-to-head) reports — one row per comparison so History can list
     # and download the combined PDF (previously only the in-memory job knew the path).
@@ -1982,7 +1987,8 @@ def create_tracked_entity(
     specialty: str | None, aggregate: bool,
     schedule: str, created_by: str, notes: str = "",
     entity_type: str = "hospital", service_line: str | None = None,
-    parent_system: str | None = None,
+    parent_system: str | None = None, confirmed_roster: str | None = None,
+    anchor_listing: str | None = None,
 ) -> dict:
     import uuid
     from datetime import datetime
@@ -1994,11 +2000,11 @@ def create_tracked_entity(
         """INSERT INTO tracked_entities
            (id, entity_name, city, state, specialty, aggregate, schedule,
             last_run_at, next_run_at, created_by, created_at, active, notes,
-            entity_type, service_line, parent_system)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, TRUE, ?, ?, ?, ?)""",
+            entity_type, service_line, parent_system, confirmed_roster, anchor_listing)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, TRUE, ?, ?, ?, ?, ?, ?)""",
         [eid, entity_name, city, state, specialty, aggregate, schedule,
          next_run, created_by, now, notes or "",
-         entity_type or "hospital", service_line, parent_system],
+         entity_type or "hospital", service_line, parent_system, confirmed_roster, anchor_listing],
     )
     con.close()
     return get_tracked_entity(eid)

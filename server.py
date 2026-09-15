@@ -3763,6 +3763,22 @@ class TrackEntityRequest(BaseModel):
     entity_type: str = "hospital"          # "hospital" | "practice" | "service_line"
     service_line: Optional[str] = None     # service_line type: the department (e.g. Orthopedics)
     parent_system: Optional[str] = None    # service_line type: the health system
+    confirmed_roster: Optional[List[dict]] = None   # practice types: the fixed Locations list every snapshot uses
+    anchor_listing: Optional[dict] = None           # flagship Google listing (place_id, rating, …)
+
+
+def _entity_roster(entity: dict):
+    """(confirmed_roster list or None, anchor_listing dict or None) from a tracked entity row."""
+    def _load(v):
+        if v is None or v == "":
+            return None
+        if isinstance(v, (list, dict)):
+            return v
+        try:
+            return json.loads(v)
+        except Exception:
+            return None
+    return _load(entity.get("confirmed_roster")), _load(entity.get("anchor_listing"))
 
 
 def _launch_tracked_run(entity: dict, brand: str = "original") -> str:
@@ -3779,13 +3795,17 @@ def _launch_tracked_run(entity: dict, brand: str = "original") -> str:
     j["zip_code"] = None
     etype = entity.get("entity_type") or "hospital"
     if etype in ("practice", "service_line"):
+        roster, anchor = _entity_roster(entity)
         j["entity_type"] = "practice"
         j["practice_profile"] = None            # auto-classified from the specialty
         j["practice_composite"] = False
         j["practice_roster"] = []
         j["physician_composite"] = False
         j["physician_roster"] = {}
-        j["confirmed_siblings"] = None          # discovery inside the analyzer
+        # A saved roster makes every snapshot measure the SAME locations (no drift);
+        # without one the analyzer discovers locations each run (legacy entities).
+        j["confirmed_siblings"] = roster if roster is not None else None
+        j["anchor_listing"] = anchor
         j["org_name"] = None
         if etype == "service_line":
             j["service_line"] = entity.get("service_line")
@@ -3837,6 +3857,10 @@ async def track_list(_: dict = Depends(get_current_user_payload)):
             if e.get(k):
                 e[k] = str(e[k])
         e["report_emails"] = _entity_report_emails(e)
+        roster, anchor = _entity_roster(e)
+        e["confirmed_roster"] = roster
+        e["anchor_listing"] = anchor
+        e["roster_count"] = (1 + len(roster)) if roster is not None else None
     return entities
 
 
@@ -3863,6 +3887,8 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_curr
         entity_type=req.entity_type,
         service_line=_normalize_input(req.service_line) if req.service_line else None,
         parent_system=_normalize_input(req.parent_system) if req.parent_system else None,
+        confirmed_roster=json.dumps(req.confirmed_roster) if (req.entity_type != "hospital" and req.confirmed_roster is not None) else None,
+        anchor_listing=json.dumps(req.anchor_listing) if req.anchor_listing else None,
     )
     # Fire initial collection run immediately so the first data point is captured now.
     job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
@@ -4182,6 +4208,89 @@ async def practice_discover(
         return {"practices": practices, "count": len(practices)}
     except Exception as exc:
         raise HTTPException(500, f"Practice discovery error: {exc}")
+
+
+class FindMoreRequest(BaseModel):
+    brand: str
+    city: str
+    state: str
+    exclude_place_ids: List[str] = []
+
+
+@app.post("/api/practice/find-more")
+async def practice_find_more(req: FindMoreRequest, _: str = Depends(require_auth)):
+    """Widen the Google search for a multi-office practice: several query variants
+    (brand alone, brand + state, brand near the market city) merged by place_id and
+    kept only when the listing name matches the brand."""
+    from perception.data.places import search_entity_candidates, _tokens
+    brand = _normalize_input(req.brand)
+    btoks = _tokens(brand)
+    # Acronym brands: "Illinois Bone and Joint Institute" lists many offices as "IBJI Doctors' Office - …"
+    _stop = {"the", "of", "and", "at", "for", "&"}
+    _words = [w for w in re.findall(r"[A-Za-z]+", brand) if w.lower() not in _stop]
+    acronym = "".join(w[0] for w in _words).lower() if len(_words) >= 3 else ""
+    seen = set(req.exclude_place_ids or [])
+    out = []
+    def _city_of(addr: str) -> str:
+        parts = [p.strip() for p in str(addr or "").split(",")]
+        return parts[-3] if len(parts) >= 3 else ""
+
+    def _run(name, city, state):
+        try:
+            return search_entity_candidates(name, city, state, max_results=20) or []
+        except TypeError:
+            return search_entity_candidates(name, city, state) or []
+        except Exception:
+            return []
+
+    def _take(cands):
+        added = 0
+        for c in cands:
+            pid = c.get("place_id")
+            if not pid or pid in seen:
+                continue
+            cname = (c.get("name") or "").lower()
+            ctoks = _tokens(cname)
+            by_tokens = bool(btoks) and len(btoks & ctoks) / len(btoks) >= 0.5
+            by_acronym = bool(acronym) and re.search(r"\b" + re.escape(acronym) + r"\b", cname) is not None
+            if not (by_tokens or by_acronym):
+                continue
+            seen.add(pid)
+            out.append(c)
+            added += 1
+        return added
+
+    # Round 1: brand-level variants around the market
+    variants = [(brand, None, req.state), (brand, req.city, req.state),
+                (f"{brand} clinic", None, req.state), (f"{brand} near {req.city}", None, req.state)]
+    if acronym:
+        variants += [(acronym.upper(), None, req.state), (acronym.upper(), req.city, req.state),
+                     (f"{acronym.upper()} doctors office", None, req.state)]
+    for name, city, state in variants:
+        _take(_run(name, city, state))
+    # Round 2+: snowball — every city seen in a found address becomes its own query, so a
+    # suburban multi-office group is built up from its own footprint (capped).
+    queried = {str(req.city).strip().lower()}
+    max_queries, n = 14, 0
+    frontier = [c for c in out]
+    while frontier and n < max_queries:
+        nxt = []
+        for c in frontier:
+            city = _city_of(c.get("address"))
+            key = city.lower()
+            if not city or key in queried:
+                continue
+            queried.add(key)
+            n += 1
+            if n > max_queries:
+                break
+            before = len(out)
+            _take(_run(brand, city, req.state))
+            if acronym:
+                _take(_run(acronym.upper(), city, req.state))
+            nxt.extend(out[before:])
+        frontier = nxt
+    return {"candidates": out, "queries": n + len(variants)}
 
 
 @app.post("/api/practice/siblings")

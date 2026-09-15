@@ -2657,6 +2657,25 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Selected Organization</div>
           <div id="te-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:20px"></div>
 
+          <!-- Locations (practice types): the fixed roster every snapshot will use -->
+          <div id="te-locations" class="hidden" style="margin-bottom:20px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:8px">Locations to track <span id="te-loc-badge"></span></div>
+            <div id="te-loc-loading" style="padding:8px 0 12px;text-align:center">
+              <span class="spinner" style="display:block;margin:0 auto 10px"></span>
+              <div style="font-size:13px;font-weight:600;color:var(--teal)">Discovering locations…</div>
+              <div style="font-size:11px;color:var(--muted)">10–20 seconds.</div>
+            </div>
+            <div id="te-loc-content" class="hidden">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Every snapshot measures exactly these locations, so the trend reflects reputation rather than a changing roster. Uncheck any that don't belong; use <strong>Find more locations</strong> for large groups.</div>
+              <div id="te-loc-list"></div>
+              <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+                <button class="btn btn-secondary btn-sm" id="te-find-more-btn" onclick="teFindMore()">Find more locations</button>
+                <span id="te-find-more-msg" style="font-size:12px;color:var(--muted)"></span>
+              </div>
+            </div>
+            <div id="te-loc-err" class="err hidden mt8"></div>
+          </div>
+
           <div class="fg">
             <label class="fl">Collection Schedule <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a></label>
             <select class="fi" id="te-schedule">
@@ -2678,7 +2697,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           </div>
           <div id="te-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
-            <button class="btn btn-primary" onclick="submitAddEntity()">Add to Trends</button>
+            <button class="btn btn-primary" id="te-add-btn" onclick="submitAddEntity()">Add to Trends</button>
             <button class="btn btn-ghost btn-sm" onclick="teResetSearch()">← Search Again</button>
           </div>
         </div>
@@ -9048,6 +9067,95 @@ let _teCandidates       = [];
 let _teSelected         = null;
 let _teResolvedCity     = null;
 let _teResolvedState    = null;
+let _teServiceLine      = null;   // {parent_system, service_line} for the service-line type
+let _teDiscovered       = [];     // Locations list (seeded from Google + discovery); checkboxes te-sib-i
+let _teDiscovering      = false;
+
+function _teIsPractice() { return _teType === 'specialty' || _teType === 'service_line'; }
+function _teSetBusy(busy) {
+  const btn = document.getElementById('te-add-btn'); if (!btn) return;
+  btn.disabled = !!busy;
+  btn.innerHTML = busy ? '<span class="spinner"></span> Discovering locations…' : 'Add to Trends';
+}
+function _teConfirmedRoster() {
+  return (_teDiscovered || []).filter((_, i) => { const cb = document.getElementById(`te-sib-${i}`); return cb ? cb.checked : true; });
+}
+async function teStartDiscovery() {
+  const box = document.getElementById('te-locations');
+  box.classList.remove('hidden');
+  document.getElementById('te-loc-loading').classList.remove('hidden');
+  document.getElementById('te-loc-content').classList.add('hidden');
+  document.getElementById('te-loc-err').classList.add('hidden');
+  _teDiscovering = true; _teSetBusy(true);
+  try {
+    const r = await api('/api/practice/siblings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_name: _teSelected.name, city: _teResolvedCity, state: _teResolvedState,
+        service_line: _teServiceLine ? _teServiceLine.service_line : undefined,
+        parent_system: _teServiceLine ? _teServiceLine.parent_system : undefined }),
+    });
+    if (!r.ok) throw new Error(await errDetail(r, 'Location discovery failed'));
+    const data = await r.json();
+    _teDiscovered = _seedFromCandidates(_teSelected, _teCandidates, _teResolvedCity, _teResolvedState, data.siblings || []);
+    teRenderLocations();
+  } catch (e) {
+    document.getElementById('te-loc-loading').classList.add('hidden');
+    showErr(document.getElementById('te-loc-err'), e.message);
+  } finally { _teDiscovering = false; _teSetBusy(false); }
+}
+function teRenderLocations() {
+  document.getElementById('te-loc-loading').classList.add('hidden');
+  document.getElementById('te-loc-content').classList.remove('hidden');
+  const checkedBefore = new Set(_teConfirmedRoster().map(x => x.place_id || x.name));
+  const total = 1 + _teDiscovered.length;
+  document.getElementById('te-loc-badge').innerHTML = `<span style="font-weight:700;background:var(--teal);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px;letter-spacing:0">${total}</span>`;
+  const sel = _teSelected;
+  let html = `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1.5px solid var(--teal);border-radius:6px;margin-bottom:6px">
+      <input type="checkbox" checked disabled style="accent-color:var(--teal);flex-shrink:0;width:15px;height:15px">
+      <div style="flex:1;min-width:0"><span style="font-size:13px;font-weight:700;color:var(--teal)">${sel.name}</span>
+        ${sel.address ? `<span style="font-size:11px;color:var(--muted);margin-left:6px">${sel.address}</span>` : ''}
+        ${sel.rating != null ? `<span style="font-size:11px;color:var(--teal);font-weight:600;margin-left:8px">${sel.rating.toFixed(1)}★${sel.review_count ? ` (${sel.review_count.toLocaleString()})` : ''}</span>` : ''}
+        <span style="font-size:11px;color:var(--muted);margin-left:6px">${_teType === 'service_line' ? 'flagship' : 'selected listing'}</span></div></div>`;
+  _teDiscovered.forEach((s2, i) => {
+    const loc = s2.address ? s2.address : (s2.city && s2.state ? `${s2.city}, ${s2.state}` : (s2.city || ''));
+    const rating = s2.rating != null ? `<span style="font-size:11px;color:var(--teal);font-weight:600;margin-left:8px;white-space:nowrap">${Number(s2.rating).toFixed(1)}★${s2.review_count ? ` (${Number(s2.review_count).toLocaleString()})` : ''}</span>` : '';
+    const isNew = s2._new ? ` <span class="badge bg-teal" style="font-size:9px">new</span>` : '';
+    html += `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1.5px solid var(--border);border-radius:6px;margin-bottom:6px">
+        <input type="checkbox" id="te-sib-${i}" ${(s2._new || checkedBefore.size === 0 || checkedBefore.has(s2.place_id || s2.name)) ? 'checked' : ''} style="accent-color:var(--teal);flex-shrink:0;width:15px;height:15px">
+        <label for="te-sib-${i}" style="flex:1;min-width:0;cursor:pointer;margin:0;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">${s2.original_name || s2.name}</span>
+          ${loc ? `<span style="font-size:11px;color:var(--muted)">${loc}</span>` : ''}${rating}${isNew}</label></div>`;
+  });
+  document.getElementById('te-loc-list').innerHTML = html;
+}
+async function teFindMore() {
+  const btn = document.getElementById('te-find-more-btn'); const msg = document.getElementById('te-find-more-msg');
+  btn.disabled = true; msg.textContent = 'Searching Google for more offices…';
+  try {
+    const brand = _teServiceLine ? `${_teServiceLine.parent_system} ${_teServiceLine.service_line}` : (_teSelected.original_name || _teSelected.name);
+    const exclude = [_teSelected.place_id].concat(_teDiscovered.map(x => x.place_id)).filter(Boolean);
+    const r = await api('/api/practice/find-more', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand, city: _teResolvedCity, state: _teResolvedState, exclude_place_ids: exclude }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Search failed'));
+    const data = await r.json();
+    const known = new Set(_teDiscovered.map(x => (x.original_name || x.name).toLowerCase() + '|' + _irStreet(x.address).toLowerCase()));
+    let added = 0;
+    (data.candidates || []).forEach(c => {
+      const key = String(c.name).toLowerCase() + '|' + _irStreet(c.address).toLowerCase();
+      if (known.has(key)) return;
+      known.add(key);
+      const dup = _teDiscovered.some(x => (x.original_name || x.name).toLowerCase() === String(c.name).toLowerCase()) || String(c.name).toLowerCase() === _teSelected.name.toLowerCase();
+      _teDiscovered.push({ name: dup && _irStreet(c.address) ? `${c.name} (${_irStreet(c.address)})` : c.name, original_name: c.name, entity_type: 'clinic',
+        city: _irCityFromAddr(c.address) || _teResolvedCity, state: c.resolved_state || _teResolvedState, address: c.address || '',
+        place_id: c.place_id || null, rating: c.rating ?? null, review_count: c.review_count ?? null, maps_url: c.maps_url || null, seeded: true, _new: true });
+      added++;
+    });
+    teRenderLocations();
+    _teDiscovered.forEach(x => { delete x._new; });
+    msg.textContent = added ? `Added ${added} more location${added === 1 ? '' : 's'} — uncheck any that don't belong.` : 'No additional locations found.';
+  } catch (e) { msg.textContent = e.message; }
+  finally { btn.disabled = false; }
+}
 let _teType             = 'hospital';
 
 async function loadTrackPage() {
@@ -9164,6 +9272,7 @@ function _trackFilterBar() {
     </div>${chipHtml}`;
 }
 
+function toggleTrackRoster(id) { const el = document.getElementById(`tc-roster-${id}`); if (el) el.classList.toggle('hidden'); }
 function toggleTrackCfg(id) {
   if (_trackCfgOpen.has(id)) _trackCfgOpen.delete(id); else _trackCfgOpen.add(id);
   renderTrackEntityList();
@@ -9241,7 +9350,14 @@ function _trackCfgPanel(e) {
       ${lock('Market', `${e.city}, ${e.state}`)}
       ${lock('Specialty', e.specialty || 'None (hospital rubric)')}
       ${lock('Scope', e.aggregate ? 'All locations rolled up' : 'Single location')}
+      ${(e.entity_type === 'practice' || e.entity_type === 'service_line') ? lock('Locations', e.roster_count != null
+          ? `${e.roster_count} fixed location${e.roster_count === 1 ? '' : 's'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`
+          : 'Discovered each run (older entity) — track as a new entity to fix the roster') : ''}
       <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Tracking since</div><div style="font-size:13px;margin-top:2px">${created || '—'}${e.created_by ? ` · ${String(e.created_by).split('@')[0]}` : ''}</div></div>
+    </div>
+    <div id="tc-roster-${e.id}" class="hidden" style="margin:-4px 0 14px;padding:10px 12px;background:#fff;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.6">
+      ${e.anchor_listing ? `<div><strong>${_learnEsc(e.entity_name)}</strong> <span style="color:var(--muted)">${_learnEsc(e.anchor_listing.address || '')}</span> <span style="font-size:11px;color:var(--muted)">flagship</span></div>` : ''}
+      ${(e.confirmed_roster || []).map(x => `<div>${_learnEsc(x.original_name || x.name)} <span style="color:var(--muted)">${_learnEsc(x.address || ((x.city && x.state) ? `${x.city}, ${x.state}` : ''))}</span></div>`).join('')}
     </div>
     <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">🔒 Identity fields define what is measured, so they can't be edited here. To change them, <a href="#" onclick="trackAsNewEntity('${e.id}');return false" style="color:var(--teal);font-weight:600">track a new entity</a> prefilled from this one — the existing trend line stays intact.</div>
     <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
@@ -9334,7 +9450,9 @@ function renderTrackEntityList() {
         + (e.latest_rubric !== expected ? ` <span title="Snapshots were scored on a different rubric than this entity's type — track a new entity to start a correctly scored series" style="color:#b45309;font-weight:700;cursor:help">⚠</span>` : '')
         + ((e.rubrics || []).length > 1 ? ` <span title="This entity's history mixes both rubrics; compare only within a rubric" style="color:#b45309;cursor:help">mixed</span>` : '')
       : '';
-    const sub = [`${e.city}, ${e.state}`, e.specialty || '', typeLbl].filter(Boolean).join(' · ');
+    const rosterLbl = (e.entity_type === 'practice' || e.entity_type === 'service_line')
+      ? (e.roster_count != null ? `${e.roster_count} location${e.roster_count === 1 ? '' : 's'}` : 'locations discovered each run') : '';
+    const sub = [`${e.city}, ${e.state}`, e.specialty || '', typeLbl, rosterLbl].filter(Boolean).join(' · ');
     const attn = _trackAttentionReasons(e);
     const attnBadge = attn.length ? ` <span class="badge" style="background:#fff3cd;color:#856404;font-size:10px" title="${_learnEsc(attn.join(', '))}">Needs attention</span>` : '';
     return `<tr style="${e.active ? '' : 'opacity:.7'}">
@@ -9520,11 +9638,26 @@ function selectTeCandidate(idx) {
     <div style="font-weight:700;font-size:15px;color:var(--teal)">${_teSelected.name}${ratingLine}</div>
     ${addrLine}
     <div style="font-size:12px;color:var(--muted);margin-top:4px">${_teResolvedCity}, ${_teResolvedState}</div>`;
+  _teDiscovered = [];
+  if (_teIsPractice()) {
+    if (_teType === 'service_line') {
+      const line = document.getElementById('te-specialty').value.trim();
+      _teServiceLine = { parent_system: document.getElementById('te-name').value.trim(), service_line: line };
+    } else { _teServiceLine = null; }
+    teStartDiscovery();
+  } else {
+    _teServiceLine = null;
+    document.getElementById('te-locations').classList.add('hidden');
+    _teSetBusy(false);
+  }
 }
 
 function teResetSearch() {
   _teSelected = null;
   _teCandidates = [];
+  _teDiscovered = []; _teServiceLine = null;
+  const loc = document.getElementById('te-locations'); if (loc) loc.classList.add('hidden');
+  _teSetBusy(false);
   document.getElementById('te-step2').classList.add('hidden');
   document.getElementById('te-step3').classList.add('hidden');
   document.getElementById('te-search-err').classList.add('hidden');
@@ -9872,6 +10005,12 @@ async function submitAddEntity() {
   if (entity_type === 'service_line') {
     body.service_line = specialty;
     body.parent_system = document.getElementById('te-name').value.trim();
+  }
+  if (entity_type !== 'hospital') {
+    if (_teDiscovering) { errEl.textContent = 'Locations are still being discovered — one moment.'; errEl.classList.remove('hidden'); return; }
+    body.confirmed_roster = _teConfirmedRoster();
+    if (_teSelected.place_id) body.anchor_listing = { place_id: _teSelected.place_id, address: _teSelected.address || '',
+      rating: _teSelected.rating ?? null, review_count: _teSelected.review_count ?? null, maps_url: _teSelected.maps_url || null };
   }
   try {
     await api('/api/track/entities', {
