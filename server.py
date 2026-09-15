@@ -1166,20 +1166,76 @@ async def start_fqhc_battery(run_id: str, role: str = Depends(require_auth)):
     return {"job_id": job_id}
 
 
+_DIR_LIST_CACHE: dict[str, tuple[float, set]] = {}
+_DIR_LIST_TTL = 30.0
+
+
+def _existing_files(paths: list, recent: Optional[set] = None) -> set:
+    """Return the subset of `paths` that exist, using ONE directory listing per
+    distinct parent folder (cached 30 s) instead of a stat per file. REPORTS_DIR
+    is a Cloud Storage FUSE mount in production, where every stat is a network
+    round trip — History used to do ~1,000 of them per load. Paths in `recent`
+    (files that may have been written since the listing was cached) fall back to a
+    direct existence check so a just-finished run shows its download immediately."""
+    import os as _os, time as _time
+    by_dir: dict[str, set] = {}
+    for p in paths:
+        if p:
+            by_dir.setdefault(str(Path(p).parent), set()).add(Path(p).name)
+    present: set = set()
+    now = _time.monotonic()
+    for d, names in by_dir.items():
+        cached = _DIR_LIST_CACHE.get(d)
+        if not cached or now - cached[0] > _DIR_LIST_TTL:
+            try:
+                listing = set(_os.listdir(d))
+            except OSError:
+                listing = set()
+            cached = (now, listing)
+            _DIR_LIST_CACHE[d] = cached
+        for n in names:
+            full = str(Path(d) / n)
+            if n in cached[1]:
+                present.add(full)
+            elif recent and full in recent and Path(full).exists():
+                present.add(full)
+                cached[1].add(n)
+    return present
+
+
 @app.get("/api/history")
 async def get_history(role: str = Depends(require_auth)):
     from perception.db import init_db, query_history
+    from datetime import datetime as _dt, timedelta as _td
     init_db()
+    rows = query_history(role)
+    # Files that might post-date the cached listing: rows created in the last 10 min.
+    cutoff = _dt.utcnow() - _td(minutes=10)
+    recent: set = set()
+    to_check: list = []
+    for r in rows:
+        if r.get("report_type") == "network":
+            continue   # network PDFs regenerate on demand; presence of a path is enough
+        for key in ("pdf_path", "briefing_pdf_path"):
+            p = r.get(key)
+            if p:
+                to_check.append(p)
+                ca = r.get("created_at")
+                try:
+                    if ca and _dt.fromisoformat(str(ca).replace("Z", "")).replace(tzinfo=None) >= cutoff:
+                        recent.add(str(Path(p)))
+                except Exception:
+                    pass
+    present = _existing_files(to_check, recent)
+
     result = []
-    for r in query_history(role):
+    for r in rows:
         pdf_path = r.get("pdf_path")
         if r.get("report_type") == "network":
-            # Network PDFs are regenerated on-demand from result_json if missing.
-            # Show the download button whenever a pdf_path was recorded — the file
-            # existing on the current container's disk is not required.
             has_pdf = bool(pdf_path)
         else:
-            has_pdf = bool(pdf_path and Path(pdf_path).exists())
+            has_pdf = bool(pdf_path and str(Path(pdf_path)) in present)
+        bp = r.get("briefing_pdf_path")
         result.append({
             **r,
             "generated_at": str(r["generated_at"]),
@@ -1187,9 +1243,7 @@ async def get_history(role: str = Depends(require_auth)):
             "has_pdf": has_pdf,
             "has_teaser_pdf": bool(r.get("teaser_pdf_path")),
             "has_full_detail_pdf": bool(r.get("full_detail_pdf_path")),
-            "has_briefing_pdf": bool(
-                r.get("briefing_pdf_path") and Path(r["briefing_pdf_path"]).exists()
-            ),
+            "has_briefing_pdf": bool(bp and str(Path(bp)) in present),
         })
     return result
 

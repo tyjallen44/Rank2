@@ -1454,3 +1454,66 @@ gracefully narrower.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## HISTORY-FAST — History page: no per-row storage stats, instant cached paint, collapsed batch control, chunked rows
+
+**Shipped:** 2026-09-15 · **Area:** History (server + client) · **Type:** performance + UX
+
+### What changed
+1. **Server** (`GET /api/history`): the per-row `Path.exists()` checks (one stat per PDF and per
+   briefing — ~1,000 Cloud Storage FUSE round trips per load) are replaced by `_existing_files`:
+   ONE `os.listdir` per distinct parent folder, cached 30 s in-process. Rows created in the last
+   10 minutes fall back to a direct check so a just-finished run shows its download immediately.
+   Network rows unchanged (path presence only).
+2. **Instant paint**: the last `/api/history` + content-run payload is kept in `sessionStorage`
+   and rendered immediately on the next visit, then refreshed from the server (stale-while-
+   revalidate).
+3. **Batch control**: Event Runs, National Entity Runs and Student Health Runs now live inside ONE
+   collapsed `<details>` ("Batch runs — Event Prep · Bulk lists · Student Health", Show/Hide).
+   Their three endpoints are fetched only when it is expanded; open state persists for the session;
+   counts and a "Running" badge appear in the summary once loaded. The 8-second poll runs only while
+   the control is open and something is running.
+4. **Chunked rows**: the All Reports table renders the first 60 rows synchronously and streams the
+   rest in chunks of 120 on subsequent ticks (guarded so a re-render/sort/search supersedes a
+   stale stream).
+
+### Files changed
+`server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Speed (prod)**: open History → table visible in well under a second (previously many
+seconds). Network tab: initial load makes 2 calls (`/api/history`, `/api/content-analysis/runs`).
+**T2 — Cached paint**: navigate away and back → table appears instantly (no spinner), then
+refreshes. New browser tab (new session) → normal load with spinner.
+**T3 — Batch control**: collapsed by default; expand → "Loading batch runs…" then the three
+sections with counts in the summary; Event/Bulk/Student inner "View All"/"Hide" toggles still
+work; collapse → stays collapsed after re-render; reload the tab → remembered open/closed state.
+**T4 — Running badge + poll**: start an Event Prep run → expand Batch runs → summary shows
+"Running"; the row updates every ~8 s; collapse → polling stops (Network tab).
+**T5 — Fresh download**: run any report → on completion open History → its Report (PDF) link
+is present immediately (fresh-file fallback), and after 30 s (cache expiry) too.
+**T6 — Chunked rows**: with >60 rows, the first 60 show at once and the rest fill in without a
+visible pause; sorting and searching re-render correctly (no duplicated rows); scroll to the
+bottom shows the total count of rows.
+**T7 — Downloads**: Deep Diagnostic (PDF) / Content Report / Teaser / Briefing links on rows
+behave as before; a row whose PDF file was deleted from storage shows no Report link.
+
+### Regression Checks
+- **R1** Empty database (fresh account with no runs) → "No reports yet" state still renders after
+  the batch control has loaded.
+- **R2** Admin Event/Bulk row actions (Edit/Replace/Delete/Resume) unchanged inside the control.
+- **R3** Unit suite at baseline (same 15 pre-existing failures).
+
+### Acceptance Checklist
+- [ ] T1 speed + 2 initial calls
+- [ ] T2 cached paint
+- [ ] T3 batch control
+- [ ] T4 running badge / poll
+- [ ] T5 fresh download link
+- [ ] T6 chunked rows + sort/search
+- [ ] T7 downloads
+- [ ] R1–R3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. The big win (item 1) only shows on production where REPORTS_DIR is a GCS
+FUSE mount; locally the difference is small.

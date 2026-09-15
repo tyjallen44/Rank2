@@ -7306,26 +7306,32 @@ let _cachedContentRuns = [];
 
 async function loadHistory() {
   const el = document.getElementById('history-body');
-  el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
+  _historySortField = 'date';
+  _historySortDir = 'desc';
+  _historySearch = '';
+  // 1) Instant paint from the session cache (stale-while-revalidate), if we have one.
+  let painted = false;
   try {
-    const [runsResp, eventsResp, bulkResp, shResp, caResp] = await Promise.all([
-      api('/api/history'),
-      api('/api/events'),
-      api('/api/network/bulk/runs'),
-      api('/api/student-health/runs'),
-      api('/api/content-analysis/runs'),
-    ]);
+    const cached = JSON.parse(sessionStorage.getItem(_HIST_CACHE_KEY) || 'null');
+    if (cached && Array.isArray(cached.runs)) {
+      _historyRuns = cached.runs;
+      renderHistory(undefined, undefined, undefined, cached.content || []);
+      painted = true;
+    }
+  } catch (e) { /* ignore a bad cache */ }
+  if (!painted) el.innerHTML = '<div class="empty"><div class="ei">⏳</div><div>Loading…</div></div>';
+  // 2) Fresh data: only the main list + the content-run links it needs. The batch
+  //    sections load when their control is expanded.
+  try {
+    const [runsResp, caResp] = await Promise.all([api('/api/history'), api('/api/content-analysis/runs')]);
     _historyRuns = await runsResp.json();
-    const events  = await eventsResp.json();
-    const bulkRuns = await bulkResp.json();
-    const studentRuns = shResp.ok ? await shResp.json() : [];
     const contentRuns = caResp.ok ? await caResp.json() : [];
-    _historySortField = 'date';
-    _historySortDir = 'desc';
-    _historySearch = '';
-    renderHistory(events, bulkRuns, studentRuns, contentRuns);
+    try { sessionStorage.setItem(_HIST_CACHE_KEY, JSON.stringify({ runs: _historyRuns, content: contentRuns, ts: Date.now() })); }
+    catch (e) { /* storage quota — fine */ }
+    renderHistory(undefined, undefined, undefined, contentRuns);
+    if (_histBatchOpen) _loadHistBatch();
   } catch(e) {
-    el.innerHTML = `<div class="err">${e.message}</div>`;
+    if (!painted) el.innerHTML = `<div class="err">${e.message}</div>`;
   }
 }
 
@@ -7652,7 +7658,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
   // their base report row's Downloads menu (option b). caHtml stays empty.
   let caHtml = '';
 
-  if (!_historyRuns.length && !evHtml && !nbHtml && !shHtml && !caHtml) {
+  if (!_historyRuns.length && !evHtml && !nbHtml && !shHtml && !caHtml && _histBatchLoaded) {
     el.innerHTML = '<div class="empty"><div class="ei">◷</div><div>No reports yet. Run your first analysis to get started.</div></div>';
     return;
   }
@@ -7693,27 +7699,8 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
     return `<th onclick="historySort('${field}')" style="cursor:pointer;user-select:none${align ? ';text-align:' + align : ''}">${label}${icon}</th>`;
   };
 
-  el.innerHTML = evHtml + nbHtml + shHtml + caHtml + `
-    <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">All Reports</div>
-    <div style="margin-bottom:16px">
-      <input id="history-search" type="text" class="input"
-        placeholder="Search by location or name…"
-        value="${_historySearch.replace(/"/g, '&quot;')}"
-        oninput="historySearch(this.value)"
-        style="max-width:320px">
-    </div>
-    <div class="card" style="padding:0;overflow:hidden">
-      <table class="tbl">
-        <thead><tr>
-          ${th('Date', 'date')}
-          ${th('Name', 'name')}
-          ${th('Type', 'type')}
-          ${th('Analyzed', 'providers', 'right')}
-          ${th('Run By', 'ranby')}
-          <th>Downloads</th>
-        </tr></thead>
-        <tbody>
-          ${runs.length ? runs.map(run => {
+  const _seq = ++_histRenderSeq;
+  const rowHtml = runs.map(run => {
             const isNetwork = run.report_type === 'network' || run.entity_type === 'hospital_network';
             const NP_TYPE_BADGE = {
               hospital: 'Hospital Network', asc: 'ASC Network', urgent_care: 'Urgent Care',
@@ -7743,11 +7730,46 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
               <td style="font-size:12px;color:var(--muted);white-space:nowrap" title="${run.ran_by || ''}">${_ranBy}</td>
               <td>${_dlCell(run, _caByBase[run.run_id] || [])}</td>
             </tr>`;
-          }).join('')
+          });
+  const firstRows = rowHtml.slice(0, _HIST_FIRST_CHUNK).join('');
+  el.innerHTML = _histBatchWrap(evHtml + nbHtml + shHtml) + `
+    <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">All Reports</div>
+    <div style="margin-bottom:16px">
+      <input id="history-search" type="text" class="input"
+        placeholder="Search by location or name…"
+        value="${_historySearch.replace(/"/g, '&quot;')}"
+        oninput="historySearch(this.value)"
+        style="max-width:320px">
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="tbl">
+        <thead><tr>
+          ${th('Date', 'date')}
+          ${th('Name', 'name')}
+          ${th('Type', 'type')}
+          ${th('Analyzed', 'providers', 'right')}
+          ${th('Run By', 'ranby')}
+          <th>Downloads</th>
+        </tr></thead>
+        <tbody id="history-tbody">
+          ${runs.length ? firstRows
           : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
         </tbody>
       </table>
     </div>`;
+  // Progressive render: stream the remaining rows in chunks after first paint.
+  if (rowHtml.length > _HIST_FIRST_CHUNK) {
+    let i = _HIST_FIRST_CHUNK;
+    const step = () => {
+      if (_seq !== _histRenderSeq) return;            // a newer render superseded this one
+      const tb = document.getElementById('history-tbody');
+      if (!tb) return;
+      tb.insertAdjacentHTML('beforeend', rowHtml.slice(i, i + 120).join(''));
+      i += 120;
+      if (i < rowHtml.length) setTimeout(step, 0);
+    };
+    setTimeout(step, 0);
+  }
   _applyEvHistState();
   _scheduleHistPoll();
   if (searchWasFocused) {
@@ -7830,6 +7852,54 @@ async function evResume(id) {
 // Auto-refresh History while any run is still in progress, so live progress and
 // finished status appear without a manual reload. Polls only when work is active.
 let _histPollTimer = null;
+// Batch control (Event Prep / Bulk lists / Student Health) — collapsed by default;
+// its three endpoints are fetched only when expanded. Open state persists per session.
+let _histBatchOpen = sessionStorage.getItem('pulse_hist_batch_open') === '1';
+let _histBatchLoaded = false;
+let _histBatchLoading = false;
+let _histRenderSeq = 0;           // guards chunked row appends against re-renders
+const _HIST_FIRST_CHUNK = 60;     // rows rendered synchronously; the rest stream in
+const _HIST_CACHE_KEY = 'pulse_history_cache';
+
+async function _loadHistBatch() {
+  if (_histBatchLoaded || _histBatchLoading) return;
+  _histBatchLoading = true;
+  try {
+    const [eventsResp, bulkResp, shResp] = await Promise.all([
+      api('/api/events'), api('/api/network/bulk/runs'), api('/api/student-health/runs'),
+    ]);
+    _histBatchLoaded = true;
+    renderHistory(await eventsResp.json(), await bulkResp.json(), shResp.ok ? await shResp.json() : []);
+  } catch (e) { /* leave the placeholder; user can re-open */ }
+  finally { _histBatchLoading = false; }
+}
+function onHistBatchToggle(el) {
+  _histBatchOpen = !!el.open;
+  sessionStorage.setItem('pulse_hist_batch_open', _histBatchOpen ? '1' : '0');
+  const lbl = el.querySelector('.hist-batch-toggle-lbl');
+  if (lbl) lbl.textContent = _histBatchOpen ? 'Hide ▲' : 'Show ▼';
+  if (_histBatchOpen) _loadHistBatch();
+  _scheduleHistPoll();
+}
+function _histBatchWrap(inner) {
+  const ev = _cachedEvents || [], nb = _cachedBulkRuns || [], sh = _cachedStudentRuns || [];
+  const running = _histBatchLoaded && (ev.some(e => e.status !== 'complete') || nb.some(b => b.status === 'running') || sh.some(s => s.status === 'running'));
+  const counts = _histBatchLoaded
+    ? ` <span style="font-weight:500;color:var(--muted)">· ${ev.length} event${ev.length === 1 ? '' : 's'} · ${nb.length} bulk list${nb.length === 1 ? '' : 's'} · ${sh.length} student health</span>`
+    : '';
+  const body = _histBatchLoaded
+    ? (inner || '<div style="font-size:13px;color:var(--muted);padding:6px 0 14px">No batch runs yet.</div>')
+    : '<div style="font-size:13px;color:var(--muted);padding:6px 0 14px">Loading batch runs…</div>';
+  return `<details id="hist-batch" ${_histBatchOpen ? 'open' : ''} ontoggle="onHistBatchToggle(this)" style="margin-bottom:22px">
+    <summary style="cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:12px;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;background:#fff">
+      <span style="font-size:18px;color:var(--teal-mid);line-height:1">≡</span>
+      <span style="flex:1;font-size:14px;font-weight:700;color:var(--body)">Batch runs${counts}${running ? ' <span class="badge bg-muted" style="font-size:10px;margin-left:6px">Running</span>' : ''}</span>
+      <span style="font-size:12px;color:var(--muted)">Event Prep · Bulk lists · Student Health</span>
+      <span class="hist-batch-toggle-lbl" style="font-size:12px;color:var(--teal);font-weight:600">${_histBatchOpen ? 'Hide ▲' : 'Show ▼'}</span>
+    </summary>
+    <div style="padding-top:16px">${body}</div>
+  </details>`;
+}
 async function _pollHistory() {
   try {
     const [eventsResp, bulkResp, shResp, caResp] = await Promise.all([
@@ -7846,9 +7916,10 @@ function _scheduleHistPoll() {
     || (_cachedBulkRuns || []).some(b => b.status === 'running')
     || (_cachedStudentRuns || []).some(s => s.status === 'running')
     || (_cachedContentRuns || []).some(c => c.status === 'running');
-  if (anyRunning && !_histPollTimer) {
+  const shouldPoll = anyRunning && _histBatchOpen && _histBatchLoaded;
+  if (shouldPoll && !_histPollTimer) {
     _histPollTimer = setInterval(_pollHistory, 8000);
-  } else if (!anyRunning && _histPollTimer) {
+  } else if (!shouldPoll && _histPollTimer) {
     clearInterval(_histPollTimer); _histPollTimer = null;
   }
 }
