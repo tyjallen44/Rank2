@@ -2010,3 +2010,53 @@ which mentions the FQHC meaning).
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## HELP-EVERYWHERE — "ⓘ What is this?" links and tooltips on every decision point (Tiers 1–3)
+
+**Shipped:** 2026-09-15 · **Area:** all report pages, Trends · **Type:** UX
+
+### What changed
+- One shared help pop-over (`#help-modal`) driven by a topic map (`_HELP_TOPICS`); `showHelp(topic)`
+  from any link; clicking a link inside a label never toggles the checkbox. The earlier
+  Practice Composite pop-over is now one topic of this system.
+- **Tier 1 (changes what is measured)**: "Which type?" link on every Analysis Type / Type toggle
+  (Competitors Rankings, Deep Diagnostic, Compare Two both sides, Trends add flow) →
+  "Which analysis type should I pick?" with the four types, the market-page types, and the two
+  common mistakes. "Composite analysis related hospitals only" (Deep Diagnostic, Compare Two A/B),
+  the market aggregate toggle and the Trends aggregate toggle → tooltip + "Composite analysis of
+  related hospitals" topic. **Cache overrides standardized** to one label everywhere — "Refresh
+  from scratch — ignore cached results (Admin only)" — with one tooltip and the "Cached results and
+  refreshing from scratch" topic (Competitors Rankings, Student Health, Deep Diagnostic, Hospital
+  Network, Compare Two, Event Prep).
+- **Tier 2**: Report Format ("Which format?"), Include Physicians in Composite, Pulse Briefing,
+  Hospital Network service-line scorecard, Facility Type, Create Teaser (Compare Two) and teaser
+  per entity (Event Prep), Event Prep state-discrepancy confirmation → "Event Preparation options".
+- **Tier 3**: By City / By ZIP tooltips on every market page + "Location" link on Deep Diagnostic
+  ("By City or By ZIP Code"); Compare Two service-line toggles ("Analyze as a service line");
+  Trends Collection Schedule (add flow) and Cadence (Details panel) → "Tracking schedule and scope".
+
+### Files changed
+`web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Every link opens the right topic**: walk each page and click every ⓘ link (30 in total);
+the pop-over title matches the control; ✕ / Got it / backdrop close it; no checkbox toggles when
+clicking a link inside its label; no console errors.
+**T2 — Cache label**: on every page the admin cache option reads "Refresh from scratch — ignore
+cached results (Admin only)" with the same tooltip; behaviour unchanged (still admin-gated).
+**T3 — Type links**: Deep Diagnostic / Compare Two / Trends / Competitors Rankings type toggles
+show "ⓘ Which type?"; the pop-over lists Hospital, Hospital Service Line, Specialty Practice,
+Community Health and the two mistakes.
+**T4 — Deep Diagnostic location label** keeps its ⓘ link after switching types (Market ↔ Location).
+**T5 — Tooltips**: hover By City / By ZIP on each market page; hover the related-hospitals,
+teaser, physicians, briefing and service-line scorecard labels.
+
+### Regression Checks
+- **R1** Practice Composite link (COMPOSITE-HELP) still opens its content.
+- **R2** Form behaviour unchanged everywhere (links are display-only).
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.

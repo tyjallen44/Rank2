@@ -811,13 +811,13 @@ input[type="url"]::placeholder, textarea::placeholder {
 #learn-modal.open { display:flex; }
 
 /* ── Bulk "About this report" info modal ──────────────────────── */
-#np-about-modal, #ir-help-modal, #ev-help-modal, #ca-about-modal, #composite-help-modal {
+#np-about-modal, #ir-help-modal, #ev-help-modal, #ca-about-modal, #help-modal {
   display:none;position:fixed;inset:0;
   background:rgba(15,65,70,0.55);z-index:1000;
   align-items:center;justify-content:center;
 }
-#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open, #ca-about-modal.open, #composite-help-modal.open { display:flex; }
-#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card, #ca-about-modal .modal-card, #composite-help-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
+#np-about-modal.open, #ir-help-modal.open, #ev-help-modal.open, #ca-about-modal.open, #help-modal.open { display:flex; }
+#np-about-modal .modal-card, #ir-help-modal .modal-card, #ev-help-modal .modal-card, #ca-about-modal .modal-card, #help-modal .modal-card { width:720px;max-height:86vh;overflow-y:auto; }
 .npa-step { font-size:13.5px;color:var(--text);line-height:1.55;margin:0 0 9px;padding-left:26px;position:relative; }
 .npa-step b.n { position:absolute;left:0;top:0;color:var(--teal);font-weight:700; }
 .npa-h { font-size:12px;font-weight:700;color:var(--teal);text-transform:uppercase;
@@ -868,6 +868,11 @@ input[type="url"]::placeholder, textarea::placeholder {
 .home-card .hc-title{font-weight:700;font-size:15px;color:var(--text);margin-bottom:4px}
 .home-card .hc-desc{font-size:12.5px;color:var(--muted);line-height:1.45}
 @media (max-width:760px){.home-hero{padding:30px 24px}.home-h1{font-size:36px}}
+
+/* ── "What is this?" help links ─────────────────────────────── */
+.help-link { margin-left:6px; font-size:12px; color:var(--teal); font-weight:600; text-decoration:none; white-space:nowrap; }
+.help-link:hover { text-decoration:underline; }
+label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
 /* ── Learn reader ─────────────────────────────────────────────── */
 .learn-cat-h { font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--teal);
@@ -1140,8 +1145,8 @@ input[type="url"]::placeholder, textarea::placeholder {
         <div class="fg" style="margin-bottom:16px">
           <label class="fl">Location of Analysis</label>
           <div class="tg-group">
-            <button class="tg-opt on" id="tg-bycity" onclick="setLocMode('city')">By City</button>
-            <button class="tg-opt"    id="tg-byzip"  onclick="setLocMode('zip')">By ZIP Code &amp; Radius</button>
+            <button class="tg-opt on" id="tg-bycity" onclick="setLocMode('city')" title="The market is the city and state you enter.">By City</button>
+            <button class="tg-opt"    id="tg-byzip"  onclick="setLocMode('zip')" title="The market is a radius (1–25 miles) around the ZIP code.">By ZIP Code &amp; Radius</button>
           </div>
         </div>
 
@@ -1204,7 +1209,7 @@ input[type="url"]::placeholder, textarea::placeholder {
           </div>
         </div>
         <div class="fg mt16" style="margin-bottom:0">
-          <label class="fl">Analysis Type</label>
+          <label class="fl">Analysis Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
           <div class="tg-group">
             <button class="tg-opt on" id="tg-hospital"  onclick="setType('hospital')">Hospital Market</button>
             <button class="tg-opt"    id="tg-specialty" onclick="setType('specialty')">Specialty Practice</button>
@@ -1297,8 +1302,8 @@ input[type="url"]::placeholder, textarea::placeholder {
         <div class="fg" style="margin-bottom:16px">
           <label class="fl">Location of Analysis</label>
           <div class="tg-group">
-            <button class="tg-opt on" id="pp-tg-bycity" onclick="setPpLocMode('city')">By City</button>
-            <button class="tg-opt"    id="pp-tg-byzip"  onclick="setPpLocMode('zip')">By ZIP Code &amp; Radius</button>
+            <button class="tg-opt on" id="pp-tg-bycity" onclick="setPpLocMode('city')" title="The market is the city and state you enter.">By City</button>
+            <button class="tg-opt"    id="pp-tg-byzip"  onclick="setPpLocMode('zip')" title="The market is a radius (1–25 miles) around the ZIP code.">By ZIP Code &amp; Radius</button>
           </div>
         </div>
 
@@ -1360,7 +1365,7 @@ input[type="url"]::placeholder, textarea::placeholder {
         </div>
 
         <div class="fg mt16" style="margin-bottom:0">
-          <label class="fl">Analysis Type</label>
+          <label class="fl">Analysis Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
           <div class="tg-group">
             <button class="tg-opt on" id="pp-tg-hospital"  onclick="setPpType('hospital')">Hospital Market</button>
             <button class="tg-opt"    id="pp-tg-specialty" onclick="setPpType('specialty')">Specialty Practice</button>
@@ -1374,7 +1379,7 @@ input[type="url"]::placeholder, textarea::placeholder {
             onkeydown="if(event.key==='Enter')runPatient()">
         </div>
         <div class="fg mt16" style="margin-bottom:0">
-          <label class="fl">Report Format</label>
+          <label class="fl">Report Format <a href="#" class="help-link" onclick="showHelp('report-format',event);return false">ⓘ Which format?</a></label>
           <div class="tg-group">
             <button class="tg-opt on" id="pp-tg-enticement" onclick="setPpFormat('enticement')"
               title="Compact scorecards ranked by AI reputation. Your chosen prospect is shown in full; every competitor is obscured. Built to hand to a prospect.">Enticement</button>
@@ -1405,11 +1410,11 @@ input[type="url"]::placeholder, textarea::placeholder {
           <label class="fl">Options</label>
           <label class="aggregate-toggle" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">
             <input type="checkbox" id="pp-agg-toggle" checked>
-            <span class="agg-label" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">Aggregate related facilities into parent systems</span>
+            <span class="agg-label" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">Aggregate related facilities into parent systems</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
           </label>
-          <label class="aggregate-toggle" style="margin-top:10px;display:none" id="pp-refresh-label" title="Admin only: ignore the cached market analysis for this market and run a fresh one. Use sparingly — it re-runs the full AI analysis.">
+          <label class="aggregate-toggle" style="margin-top:10px;display:none" id="pp-refresh-label" title="Admin only: ignore the 30-day canonical score and today's same-day lock and recompute from live sources. Costs a full run; the fresh score is reused by other reports for 30 days. Click ⓘ for details.">
             <input type="checkbox" id="pp-force-rerun">
-            <span class="agg-label">Refresh data &mdash; force a new analysis <span style="font-size:11px;color:#888">(Admin only)</span></span>
+            <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
           </label>
         </div>
         <div id="pp-err" class="err hidden mt16"></div>
@@ -1516,9 +1521,9 @@ input[type="url"]::placeholder, textarea::placeholder {
                 <tbody id="sh-roster-tbody"></tbody>
               </table>
             </div>
-            <label class="aggregate-toggle mt10" style="display:none" id="sh-override-label" title="Admin only: ignore the 30-day cache and re-score every clinic from scratch.">
+            <label class="aggregate-toggle mt10" style="display:none" id="sh-override-label" title="Admin only: ignore the 30-day canonical score and today's same-day lock and recompute from live sources. Costs a full run; the fresh score is reused by other reports for 30 days. Click ⓘ for details.">
               <input type="checkbox" id="sh-override">
-              <span class="agg-label">Ignore 30-day cache &mdash; re-score fresh <span style="font-size:11px;color:#888">(Admin only)</span></span>
+              <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
             </label>
             <div class="row-actions mt16">
               <button class="btn btn-primary" id="sh-run-btn" onclick="shRun()">Score &amp; Rank →</button>
@@ -1552,7 +1557,7 @@ input[type="url"]::placeholder, textarea::placeholder {
            (labels, service-line note, market vs location) before the user types. -->
       <div id="ir-step1" class="card">
         <div class="fg" style="margin-bottom:16px">
-          <label class="fl">Analysis Type</label>
+          <label class="fl">Analysis Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
           <div class="tg-group">
             <button class="tg-opt on" id="ir-tg-hospital"    onclick="setIrType('hospital')">Hospital</button>
             <button class="tg-opt"    id="ir-tg-serviceline" onclick="setIrType('service_line')">Hospital Service Line</button>
@@ -1578,10 +1583,10 @@ input[type="url"]::placeholder, textarea::placeholder {
         </div>
 
         <div class="fg" style="margin-bottom:16px">
-          <label class="fl" id="ir-loc-label">Location</label>
+          <label class="fl" id="ir-loc-label">Location <a href="#" class="help-link" onclick="showHelp('location-mode',event);return false">ⓘ What is this?</a></label>
           <div class="tg-group" id="ir-loc-mode-toggle">
-            <button class="tg-opt on" id="ir-tg-bycity" onclick="setIrLocMode('city')">By City</button>
-            <button class="tg-opt"    id="ir-tg-byzip"  onclick="setIrLocMode('zip')">By ZIP Code</button>
+            <button class="tg-opt on" id="ir-tg-bycity" onclick="setIrLocMode('city')" title="The market is the city and state you enter.">By City</button>
+            <button class="tg-opt"    id="ir-tg-byzip"  onclick="setIrLocMode('zip')" title="The market is a radius (1–25 miles) around the ZIP code.">By ZIP Code</button>
           </div>
           <!-- Service line: no city/ZIP toggle — the city names which metro of the system to analyze -->
           <div id="ir-loc-market-hint" class="hidden" style="font-size:12px;color:var(--muted);line-height:1.5">The metro to analyze. Clinics of this service line within about 50 miles are discovered.</div>
@@ -1680,9 +1685,9 @@ input[type="url"]::placeholder, textarea::placeholder {
           <div style="margin-top:10px;padding-left:2px">
             <!-- Hospital-only options -->
             <div id="ir-composite-opts">
-              <label class="aggregate-toggle" title="Analyze related hospitals and aggregate their data into this report.">
+              <label class="aggregate-toggle" title="Roll the system's related hospitals into this score (the organization is presented as a system). Uncheck to score only this hospital. Click ⓘ for details.">
                 <input type="checkbox" id="ir-agg-toggle" checked>
-                <span class="agg-label">Composite analysis related hospitals only</span>
+                <span class="agg-label">Composite analysis related hospitals only</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
               </label>
             </div>
             <!-- Practice Composite: explicit for Hospital, implicit (hidden) for practice types -->
@@ -1692,11 +1697,11 @@ input[type="url"]::placeholder, textarea::placeholder {
             </label>
             <label class="aggregate-toggle" id="ir-physician-composite-wrap" style="margin-top:6px;margin-left:20px" title="Include physician-level reputation sub-rows under each practice in the composite table.">
               <input type="checkbox" id="ir-physician-composite" onchange="onPhysicianCompositeChange()" disabled>
-              <span class="agg-label">Include Physicians in Composite</span>
+              <span class="agg-label">Include Physicians in Composite</span><a href="#" class="help-link" onclick="showHelp('physicians',event);return false">ⓘ What is this?</a>
             </label>
             <label class="aggregate-toggle" id="ir-briefing-wrap" style="margin-top:10px" title="Generate a one-page Pulse Briefing companion with talking points for a sales or CS meeting. Requires full data collection scope.">
               <input type="checkbox" id="ir-briefing-toggle" onchange="onBriefingToggle()">
-              <span class="agg-label">Include Pulse Briefing (talking points)</span>
+              <span class="agg-label">Include Pulse Briefing (talking points)</span><a href="#" class="help-link" onclick="showHelp('briefing',event);return false">ⓘ What is this?</a>
             </label>
             <div id="ir-briefing-variant-wrap" style="display:none;margin-top:6px;margin-left:20px">
               <select id="ir-briefing-variant" style="font-size:12px;padding:3px 6px;border:1px solid #cde0e2;border-radius:4px;color:#1c1c1e">
@@ -1715,9 +1720,9 @@ input[type="url"]::placeholder, textarea::placeholder {
               <input type="checkbox" id="ir-skip-pdf-toggle">
               <span class="agg-label">Skip PDF — collect data only <span style="font-size:11px;color:#888">(Admin only)</span></span>
             </label>
-            <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
+            <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-override-lock-label" title="Admin only: ignore the 30-day canonical score and today's same-day lock and recompute from live sources. Costs a full run; the fresh score is reused by other reports for 30 days. Click ⓘ for details.">
               <input type="checkbox" id="ir-force-rerun">
-              <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
+              <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
             </label>
 
             <!-- Practice composite list: Hospital = discovered affiliated practices (checkboxes);
@@ -1882,7 +1887,7 @@ input[type="url"]::placeholder, textarea::placeholder {
       <!-- Step 1: Network identity -->
       <div id="np-step1" class="card">
         <div class="fg" style="margin-bottom:14px">
-          <label class="fl">Facility Type</label>
+          <label class="fl">Facility Type <a href="#" class="help-link" onclick="showHelp('network-type',event);return false">ⓘ What is this?</a></label>
           <select id="np-type" class="fi" onchange="npUpdateType()">
             <option value="hospital">Hospital Network</option>
             <option value="asc">Ambulatory Surgery Centers (ASCs)</option>
@@ -1918,14 +1923,14 @@ input[type="url"]::placeholder, textarea::placeholder {
           <label class="fl">Website URL <span style="font-weight:400;color:var(--muted)">(optional — helps AI find recently added locations)</span></label>
           <input id="np-url" class="fi" type="url" placeholder="https://example.com/locations">
         </div>
-        <label class="aggregate-toggle mt10" style="display:none" id="np-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
+        <label class="aggregate-toggle mt10" style="display:none" id="np-override-lock-label" title="Admin only: ignore the 30-day canonical score and today's same-day lock and recompute from live sources. Costs a full run; the fresh score is reused by other reports for 30 days. Click ⓘ for details.">
           <input type="checkbox" id="np-ignore-cache">
-          <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
+          <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
         </label>
         <div style="font-size:12px;color:var(--muted);margin-top:12px;padding-left:2px;line-height:1.5">Every run automatically produces all three reports: the <strong>Hospital Network report</strong>, a <strong>Teaser</strong> version, and the <strong>Full Detail</strong> report (the full content analysis with drafted remediation for every finding).</div>
         <label class="aggregate-toggle" style="margin-top:12px" title="Also analyze the system's individual departments / service lines and score each one's listings for patient attraction. Adds several minutes and appends a scorecard section to the reports.">
           <input type="checkbox" id="np-service-line">
-          <span class="agg-label">Also analyze individual departments (service-line listing scorecard) <span style="font-size:11px;color:#888">(adds several minutes)</span></span>
+          <span class="agg-label">Also analyze individual departments (service-line listing scorecard) <span style="font-size:11px;color:#888">(adds several minutes)</span></span><a href="#" class="help-link" onclick="showHelp('service-line-scorecard',event);return false">ⓘ What is this?</a>
         </label>
         <div id="np-step1-err" class="err hidden mt8"></div>
         <button class="btn btn-primary" id="np-find-btn" onclick="npFindFacilities()">Find Hospitals via AI →</button>
@@ -1975,7 +1980,7 @@ input[type="url"]::placeholder, textarea::placeholder {
           </div>
         </div>
         <div class="fg mt16" style="margin-bottom:0">
-          <label class="fl">Type</label>
+          <label class="fl">Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
           <div class="tg-group">
             <button class="tg-opt on" id="cmp-a-tg-hospital"  onclick="setCmpType('a','hospital')">Hospital / Health System</button>
             <button class="tg-opt"    id="cmp-a-tg-specialty" onclick="setCmpType('a','specialty')">Specialty Practice</button>
@@ -2002,12 +2007,12 @@ input[type="url"]::placeholder, textarea::placeholder {
         <div id="cmp-a-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
         <label class="aggregate-toggle hidden" id="cmp-a-sl-wrap" style="margin-bottom:12px;border-color:var(--teal)">
           <input type="checkbox" id="cmp-a-sl-toggle" checked>
-          <span class="agg-label" id="cmp-a-sl-label"></span>
+          <span class="agg-label" id="cmp-a-sl-label"></span><a href="#" class="help-link" onclick="showHelp('compare-service-line',event);return false">ⓘ What is this?</a>
         </label>
         <div id="cmp-a-hosp-opts">
-          <label class="aggregate-toggle">
+          <label class="aggregate-toggle" title="Roll the system's related hospitals into this score (the organization is presented as a system). Uncheck to score only this hospital. Click ⓘ for details.">
             <input type="checkbox" id="cmp-a-agg" checked>
-            <span class="agg-label">Composite analysis related hospitals only</span>
+            <span class="agg-label">Composite analysis related hospitals only</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
           </label>
         </div>
         <label class="aggregate-toggle" id="cmp-a-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
@@ -2041,7 +2046,7 @@ input[type="url"]::placeholder, textarea::placeholder {
             </div>
           </div>
           <div class="fg mt16" style="margin-bottom:0">
-            <label class="fl">Type</label>
+            <label class="fl">Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
             <div class="tg-group">
               <button class="tg-opt on" id="cmp-b-tg-hospital"  onclick="setCmpType('b','hospital')">Hospital / Health System</button>
               <button class="tg-opt"    id="cmp-b-tg-specialty" onclick="setCmpType('b','specialty')">Specialty Practice</button>
@@ -2068,12 +2073,12 @@ input[type="url"]::placeholder, textarea::placeholder {
           <div id="cmp-b-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px"></div>
           <label class="aggregate-toggle hidden" id="cmp-b-sl-wrap" style="margin-bottom:12px;border-color:var(--teal)">
             <input type="checkbox" id="cmp-b-sl-toggle" checked>
-            <span class="agg-label" id="cmp-b-sl-label"></span>
+            <span class="agg-label" id="cmp-b-sl-label"></span><a href="#" class="help-link" onclick="showHelp('compare-service-line',event);return false">ⓘ What is this?</a>
           </label>
           <div id="cmp-b-hosp-opts">
-            <label class="aggregate-toggle">
+            <label class="aggregate-toggle" title="Roll the system's related hospitals into this score (the organization is presented as a system). Uncheck to score only this hospital. Click ⓘ for details.">
               <input type="checkbox" id="cmp-b-agg" checked>
-              <span class="agg-label">Composite analysis related hospitals only</span>
+              <span class="agg-label">Composite analysis related hospitals only</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
             </label>
           </div>
           <label class="aggregate-toggle" id="cmp-b-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
@@ -2086,13 +2091,13 @@ input[type="url"]::placeholder, textarea::placeholder {
       <!-- Run -->
       <div id="cmp-run-section" class="hidden mt24">
         <div class="card" style="background:var(--bg);border-color:var(--border)">
-          <label class="aggregate-toggle">
+          <label class="aggregate-toggle" title="A copy with everything below the headline score blurred, for sending to a prospect. Same scores. Click ⓘ for details.">
             <input type="checkbox" id="cmp-teaser">
-            <span class="agg-label">Create Teaser version</span>
+            <span class="agg-label">Create Teaser version</span><a href="#" class="help-link" onclick="showHelp('teaser',event);return false">ⓘ What is this?</a>
           </label>
-          <label class="aggregate-toggle mt10" style="display:none" id="cmp-override-lock-label" title="Admin only: bypass today's cache lock and regenerate from scratch.">
+          <label class="aggregate-toggle mt10" style="display:none" id="cmp-override-lock-label" title="Admin only: ignore the 30-day canonical score and today's same-day lock and recompute from live sources. Costs a full run; the fresh score is reused by other reports for 30 days. Click ⓘ for details.">
             <input type="checkbox" id="cmp-force-rerun">
-            <span class="agg-label">Override today's cache lock <span style="font-size:11px;color:#888">(Admin only)</span></span>
+            <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
           </label>
           <div id="cmp-run-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
@@ -2418,7 +2423,7 @@ input[type="url"]::placeholder, textarea::placeholder {
           <div style="margin-bottom:16px">
             <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px">
               <input type="checkbox" id="ev-include-teaser">
-              Also generate a teaser report for each entity
+              Also generate a teaser report for each entity<a href="#" class="help-link" onclick="showHelp('teaser',event);return false">ⓘ What is this?</a>
             </label>
             <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Each entity will produce both a full Deep Diagnostic and a teaser (summary-only) PDF.</div>
           </div>
@@ -2426,7 +2431,7 @@ input[type="url"]::placeholder, textarea::placeholder {
           <div style="margin-bottom:16px">
             <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px">
               <input type="checkbox" id="ev-override-cache">
-              Override cache — re-analyze from scratch
+              Refresh from scratch — ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
             </label>
             <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Bypasses today's cache lock and the 90-day score cache. Use when you need fresh results for entities already run today.</div>
           </div>
@@ -2459,7 +2464,7 @@ input[type="url"]::placeholder, textarea::placeholder {
               <strong>City/State discrepancy detected.</strong> One or more entities have a CSV state that differs from the Google Places–resolved state. Verify the entries above, then check the box below to proceed.
               <label style="display:block;margin-top:8px;cursor:pointer">
                 <input type="checkbox" id="ev-state-override" onchange="evUpdateCounts()">
-                &nbsp;I have reviewed the discrepancies and confirm the entries are correct
+                &nbsp;I have reviewed the discrepancies and confirm the entries are correct<a href="#" class="help-link" onclick="showHelp('event-options',event);return false">ⓘ What is this?</a>
               </label>
             </div>
             <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--pale);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -2585,7 +2590,7 @@ input[type="url"]::placeholder, textarea::placeholder {
             </div>
           </div>
           <div class="fg mt16" style="margin-bottom:0">
-            <label class="fl">Analysis Type</label>
+            <label class="fl">Analysis Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
             <div class="tg-group">
               <button class="tg-opt on" id="te-tg-hospital"  onclick="setTeType('hospital')">Hospital</button>
               <button class="tg-opt"    id="te-tg-service_line" onclick="setTeType('service_line')">Hospital Service Line</button>
@@ -2620,7 +2625,7 @@ input[type="url"]::placeholder, textarea::placeholder {
           <div id="te-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:20px"></div>
 
           <div class="fg">
-            <label class="fl">Collection Schedule</label>
+            <label class="fl">Collection Schedule <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a></label>
             <select class="fi" id="te-schedule">
               <option value="monthly">Monthly (recommended)</option>
               <option value="weekly">Weekly</option>
@@ -2631,7 +2636,7 @@ input[type="url"]::placeholder, textarea::placeholder {
             <label class="fl">Options</label>
             <label class="aggregate-toggle" title="Include affiliated campuses and aggregate their data.">
               <input type="checkbox" id="te-aggregate" checked>
-              <span class="agg-label">Aggregate related facilities into parent system</span>
+              <span class="agg-label">Aggregate related facilities into parent system</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
             </label>
           </div>
           <div class="fg">
@@ -3592,33 +3597,15 @@ input[type="url"]::placeholder, textarea::placeholder {
   </div>
 </div>
 
-<!-- ── Practice Composite: what the checkbox does ──────────────────────────── -->
-<div id="composite-help-modal" onclick="if(event.target===this)compositeCloseHelp()">
+<!-- ── Shared "What is this?" help pop-over (content in _HELP_TOPICS) ──────── -->
+<div id="help-modal" onclick="if(event.target===this)closeHelp()">
   <div class="modal-card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-      <div class="modal-title" style="margin-bottom:4px">What is Practice Composite?</div>
-      <button class="btn btn-ghost btn-sm" onclick="compositeCloseHelp()" style="flex-shrink:0">✕</button>
+      <div class="modal-title" id="help-modal-title" style="margin-bottom:4px"></div>
+      <button class="btn btn-ghost btn-sm" onclick="closeHelp()" style="flex-shrink:0">✕</button>
     </div>
-    <div class="npa-p" style="margin-top:6px">Practice Composite adds a <strong>reputation table of the affiliated practices and clinics</strong> to the end of a hospital report. It is an appendix for context &mdash; it does <strong>not</strong> change the Pulse Score or the four pillars.</div>
-
-    <div class="npa-h">What you get</div>
-    <div class="npa-li">&bull; A row for every affiliated practice or clinic found for the organization (the analyzed hospital is pinned first).</div>
-    <div class="npa-li">&bull; For each: Google rating and review count, plus Healthgrades, Vitals, WebMD, Yelp and RateMDs where found, each linked to the public profile.</div>
-    <div class="npa-li">&bull; A review-weighted average rating and total review volume per practice, so weak or unclaimed listings stand out.</div>
-    <div class="npa-li">&bull; Optionally, <strong>Include Physicians in Composite</strong> adds physician-level rows under each practice (slower).</div>
-
-    <div class="npa-h">Where the list comes from</div>
-    <div class="npa-p">Pulse discovers the practices associated with the hospital or system and verifies each against its Google listing. On Deep Diagnostic you can review and uncheck entries before running; on Compare Two the discovery runs automatically for each side.</div>
-
-    <div class="npa-h">When to use it</div>
-    <div class="npa-li">&bull; The audience cares about the system's clinics and practices, not just the flagship hospital.</div>
-    <div class="npa-li">&bull; You want to show fragmented or unclaimed listings across a system in one table.</div>
-    <div class="npa-li">&bull; Skip it for a quick single-hospital read &mdash; it adds several minutes to the run.</div>
-
-    <div class="npa-h">Good to know</div>
-    <div class="npa-li">&bull; Specialty Practice and Hospital Service Line runs include the table automatically &mdash; their confirmed locations are the roster.</div>
-    <div class="npa-li">&bull; In Event Preparation for community health centers, &ldquo;Include Practice Composite&rdquo; means discovering every clinic site and rolling them into the assessment.</div>
-    <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="compositeCloseHelp()">Got it</button></div>
+    <div id="help-modal-body"></div>
+    <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="closeHelp()">Got it</button></div>
   </div>
 </div>
 
@@ -5039,11 +5026,11 @@ function setIrType(t) {
   if (t === 'service_line') {
     setIrLocMode('city');
     if (locToggle) locToggle.style.display = 'none';
-    if (locLabel)  locLabel.textContent = 'Market';
+    if (locLabel)  locLabel.innerHTML = 'Market ' + _helpLinkHtml('location-mode');
     if (locHint)   locHint.classList.remove('hidden');
   } else {
     if (locToggle) locToggle.style.display = '';
-    if (locLabel)  locLabel.textContent = 'Location';
+    if (locLabel)  locLabel.innerHTML = 'Location ' + _helpLinkHtml('location-mode');
     if (locHint)   locHint.classList.add('hidden');
   }
   if (t === 'service_line') {
@@ -6584,8 +6571,22 @@ function npSetMode(mode) {
 function npShowAbout()  { document.getElementById('np-about-modal').classList.add('open'); }
 function npCloseAbout() { document.getElementById('np-about-modal').classList.remove('open'); }
 function showIrHelp()  { document.getElementById('ir-help-modal').classList.add('open'); }
-function compositeShowHelp(ev) { if (ev) { ev.preventDefault(); ev.stopPropagation(); } document.getElementById('composite-help-modal').classList.add('open'); }
-function compositeCloseHelp()  { document.getElementById('composite-help-modal').classList.remove('open'); }
+const _HELP_TOPICS = {"analysis-type": {"title": "Which analysis type should I pick?", "html": "<div class=\"npa-p\">The type decides <strong>which rubric scores the organization</strong> and which pillars appear in the report. Pick it first — the fields below adapt to it.</div>\n<div class=\"npa-h\">Deep Diagnostic · Compare Two · Trends</div>\n<div class=\"npa-li\">&bull; <strong>Hospital</strong> — one hospital on the hospital rubric (Outcomes &amp; Safety, Credentials &amp; Recognition, Experience &amp; Reviews, Access &amp; Fit). Optionally roll in the system's related hospitals.</div>\n<div class=\"npa-li\">&bull; <strong>Hospital Service Line</strong> — one department of a health system (e.g. Houston Methodist Orthopedics). Every clinic of that line is rolled up and scored on the <em>practice</em> rubric, with a per-location reputation table.</div>\n<div class=\"npa-li\">&bull; <strong>Specialty Practice</strong> — an independent practice or group, all locations included, on the practice rubric (Practitioner Credentials &amp; Clinical Quality, Reviews &amp; Reputation, Identity &amp; Machine-Readability, Access &amp; Fit).</div>\n<div class=\"npa-li\">&bull; <strong>Community Health (FQHC)</strong> — the Community Health Edition: five pillars calibrated to safety-net centers, with a short intake form.</div>\n<div class=\"npa-h\">Competitors Rankings</div>\n<div class=\"npa-li\">&bull; <strong>Hospital Market</strong> ranks the hospitals in a market; <strong>Specialty Practice</strong> ranks the practices in a market for one specialty. Each uses its own rubric.</div>\n<div class=\"npa-h\">Two common mistakes</div>\n<div class=\"npa-li\">&bull; A hospital <em>department</em> entered as a Specialty Practice — use <strong>Hospital Service Line</strong> so it's scored as one rolled-up entity of the system.</div>\n<div class=\"npa-li\">&bull; A whole <em>health system</em> entered as a Hospital — use the <strong>Hospital Network</strong> report instead; it scores every facility.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">Scores from different rubrics are not comparable, so an organization's type should stay the same across the reports you compare.</div>"}, "related-hospitals": {"title": "Composite analysis of related hospitals", "html": "<div class=\"npa-p\">When checked, Pulse discovers the <strong>other hospitals and campuses in the same system</strong> and combines their public signals with the selected hospital into one score — the organization is presented as a system. When unchecked, only the selected hospital's own listing and data are scored.</div>\n<div class=\"npa-h\">Use it when</div>\n<div class=\"npa-li\">&bull; The audience thinks of the organization as one brand (a multi-campus system).</div>\n<div class=\"npa-li\">&bull; You want the report to reflect the whole footprint patients and AI assistants see.</div>\n<div class=\"npa-h\">Uncheck it when</div>\n<div class=\"npa-li\">&bull; The conversation is about a single campus, or the related hospitals would dilute what you want to show.</div>\n<div class=\"npa-h\">On the market pages and in Trends</div>\n<div class=\"npa-p\">The equivalent option combines a provider's multiple locations inside the market area into one ranked entity (or one tracked entity), rather than ranking each address separately. Changing it changes what is being measured — keep it consistent between runs you intend to compare.</div>"}, "cache": {"title": "Cached results and refreshing from scratch", "html": "<div class=\"npa-p\">Pulse reuses recent results so an organization reads the same across reports and runs stay fast:</div>\n<div class=\"npa-li\">&bull; <strong>30-day canonical score</strong> — once an organization is scored, that four-pillar score is reused by other reports for 30 days (same rubric and same set of locations).</div>\n<div class=\"npa-li\">&bull; <strong>Same-day lock</strong> — running the same entity or market again on the same day returns today's result instead of recomputing.</div>\n<div class=\"npa-h\">Refresh from scratch (admin only)</div>\n<div class=\"npa-p\">Ignores both caches and recomputes everything from live sources. Use it when a source has changed (a listing was fixed, a rating moved) or a bad run needs replacing. It costs a full run, and the fresh score becomes the canonical one other reports will reuse for the next 30 days.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">The option is labelled the same way on every page: <strong>Refresh from scratch — ignore cached results</strong>.</div>"}, "practice-composite": {"title": "What is Practice Composite?", "html": "<div class=\"npa-p\">Practice Composite adds a <strong>reputation table of the affiliated practices and clinics</strong> to the end of a hospital report. It is an appendix for context &mdash; it does <strong>not</strong> change the Pulse Score or the four pillars.</div>\n<div class=\"npa-h\">What you get</div>\n<div class=\"npa-li\">&bull; A row for every affiliated practice or clinic found for the organization (the analyzed hospital is pinned first).</div>\n<div class=\"npa-li\">&bull; For each: Google rating and review count, plus Healthgrades, Vitals, WebMD, Yelp and RateMDs where found, each linked to the public profile.</div>\n<div class=\"npa-li\">&bull; A review-weighted average rating and total review volume per practice, so weak or unclaimed listings stand out.</div>\n<div class=\"npa-li\">&bull; Optionally, <strong>Include Physicians in Composite</strong> adds physician-level rows under each practice (slower).</div>\n<div class=\"npa-h\">Where the list comes from</div>\n<div class=\"npa-p\">Pulse discovers the practices associated with the hospital or system and verifies each against its Google listing. On Deep Diagnostic you can review and uncheck entries before running; on Compare Two the discovery runs automatically for each side.</div>\n<div class=\"npa-h\">When to use it</div>\n<div class=\"npa-li\">&bull; The audience cares about the system's clinics and practices, not just the flagship hospital.</div>\n<div class=\"npa-li\">&bull; You want to show fragmented or unclaimed listings across a system in one table.</div>\n<div class=\"npa-li\">&bull; Skip it for a quick single-hospital read &mdash; it adds several minutes to the run.</div>\n<div class=\"npa-h\">Good to know</div>\n<div class=\"npa-li\">&bull; Specialty Practice and Hospital Service Line runs include the table automatically &mdash; their confirmed locations are the roster.</div>\n<div class=\"npa-li\">&bull; In Event Preparation for community health centers, &ldquo;Include Practice Composite&rdquo; means discovering every clinic site and rolling them into the assessment.</div>"}, "physicians": {"title": "Include Physicians in Composite", "html": "<div class=\"npa-p\">Adds <strong>physician-level rows</strong> under each practice in the Practice Composite table.</div>\n<div class=\"npa-li\">&bull; Pulse looks up the organization's physician roster in the national provider registry (NPPES), then collects each physician's Healthgrades, Vitals and Google ratings.</div>\n<div class=\"npa-li\">&bull; Useful for procedural specialties where patients and AI assistants search physician-first; unreviewed doctors are invisible in that discovery regardless of the practice's rating.</div>\n<div class=\"npa-li\">&bull; Adds meaningful time (one lookup per physician). You can uncheck individual physicians before running.</div>\n<div class=\"npa-li\">&bull; Does not change the Pulse Score.</div>"}, "report-format": {"title": "Which report format?", "html": "<div class=\"npa-p\">All three formats use the <strong>same scores</strong>; they differ in what is shown and who they're for.</div>\n<div class=\"npa-li\">&bull; <strong>Enticement</strong> (prospect-facing) — your prospect is shown in full at its true rank; every competitor's name and detail are obscured. Built to hand to a prospect without giving away the market.</div>\n<div class=\"npa-li\">&bull; <strong>Market Summary</strong> — compact scorecards for every provider, nothing hidden, no target needed. A clean at-a-glance view of the market.</div>\n<div class=\"npa-li\">&bull; <strong>Full Report</strong> (customer-facing) — the complete ranking with the detail behind every score, for an existing customer.</div>"}, "briefing": {"title": "Pulse Briefing", "html": "<div class=\"npa-p\">A <strong>one-page companion</strong> with talking points for a meeting, generated alongside the report.</div>\n<div class=\"npa-li\">&bull; <strong>Sales edition</strong> — for a prospect meeting: where they stand, what's costing them, the opening conversation.</div>\n<div class=\"npa-li\">&bull; <strong>Customer Success edition</strong> — for an existing customer: progress, what to fix next, how to talk about the score.</div>\n<div class=\"npa-li\">&bull; Requires full data collection — all locations, physician listings and battery metrics — so it forces Practice Composite and physician rows on and makes the run noticeably longer.</div>"}, "service-line-scorecard": {"title": "Service-line listing scorecard", "html": "<div class=\"npa-p\">Adds a section to the Hospital Network report that grades <strong>each department's online listings</strong> (Orthopedics, Cardiology, Oncology, …) for patient attraction: findability, completeness, reputation and content.</div>\n<div class=\"npa-li\">&bull; Pulse crawls the system's website to find its service lines, then checks a flagship listing plus a small sample per line.</div>\n<div class=\"npa-li\">&bull; It's the slow step — adds several minutes — and can come back <strong>empty</strong> when the website blocks crawlers. The rest of the report is unaffected.</div>\n<div class=\"npa-li\">&bull; For a deep read of <em>one</em> department across all its clinics, run a Deep Diagnostic as a Hospital Service Line instead.</div>"}, "network-type": {"title": "Facility type", "html": "<div class=\"npa-p\">Tells Pulse what kind of facilities make up the network so discovery builds the right roster and the cover is labelled correctly.</div>\n<div class=\"npa-li\">&bull; <strong>Hospitals</strong> — acute-care hospitals and campuses (the default).</div>\n<div class=\"npa-li\">&bull; <strong>ASC</strong>, <strong>Urgent care</strong>, <strong>Imaging</strong>, <strong>Behavioral health</strong> — networks of that facility type; the roster is limited to it.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">The scoring rubric is the same four-pillar market rubric for every type; only the roster and labels change.</div>"}, "teaser": {"title": "Teaser version", "html": "<div class=\"npa-p\">A copy of the report with <strong>everything below the headline score blurred</strong> and a call to action left readable — built for sending to a prospect who hasn't bought the full report.</div>\n<div class=\"npa-li\">&bull; Deep Diagnostic and Hospital Network produce the teaser automatically with every run.</div>\n<div class=\"npa-li\">&bull; Compare Two and Event Preparation make it an option because it adds a file per entity.</div>\n<div class=\"npa-li\">&bull; The teaser uses exactly the same scores; nothing is recomputed.</div>"}, "event-options": {"title": "Event Preparation options", "html": "<div class=\"npa-li\">&bull; <strong>Entity type</strong> applies to the whole upload — keep hospitals, practices and community health centers in separate files.</div>\n<div class=\"npa-li\">&bull; <strong>Combined practice report</strong> (practices) — each attendee gets the content analysis and drafted prescription merged into its report, using the row's website URL if given. Adds minutes per attendee.</div>\n<div class=\"npa-li\">&bull; <strong>Teaser per entity</strong> — also produce the blurred prospect version of every report (one extra file each).</div>\n<div class=\"npa-li\">&bull; <strong>Refresh from scratch</strong> (admin) — ignore cached results and recompute every attendee.</div>\n<div class=\"npa-li\">&bull; <strong>State discrepancies</strong> — rows whose state doesn't match the Google listing are flagged; ticking the confirmation says you've checked them and want to proceed as entered.</div>"}, "trend-schedule": {"title": "Tracking schedule and scope", "html": "<div class=\"npa-li\">&bull; <strong>Weekly</strong> / <strong>Monthly</strong> — Pulse takes a new snapshot automatically on that cadence (a full data-only analysis each time). You can also snapshot any time with Run now.</div>\n<div class=\"npa-li\">&bull; <strong>Manual</strong> — no automatic snapshots; only when you click Run now.</div>\n<div class=\"npa-li\">&bull; <strong>Aggregate related facilities</strong> (hospitals) — roll the system's related hospitals into the tracked score. Practice types always roll up their locations.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">Cadence, next run, notes and email delivery can be changed later from the row's Details. The entity's identity (name, market, specialty, scope, type) is locked once tracking starts, because changing it would make earlier snapshots non-comparable — track a new entity instead.</div>"}, "compare-service-line": {"title": "Analyze as a service line", "html": "<div class=\"npa-p\">This side resolved to a <strong>department of a larger health system</strong>. Leave the box checked to analyze it as that service line — every clinic of the department rolled up and scored on the practice rubric. Uncheck it to compare just the single listing you selected.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">For a like-for-like comparison, both sides should be the same kind of entity (two service lines, two practices, or two hospitals).</div>"}, "location-mode": {"title": "By City or By ZIP Code", "html": "<div class=\"npa-li\">&bull; <strong>By City</strong> — the market is the city and state you enter.</div>\n<div class=\"npa-li\">&bull; <strong>By ZIP Code</strong> — the market is a radius (1–25 miles) around the ZIP. Useful for dense metros or when the organization sits between cities.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">On the rankings pages this decides which competitors are in the field; on Deep Diagnostic it decides which Google listing is matched. Hospital Service Line always uses a city, since the city picks the metro whose clinics are discovered.</div>"}};
+// Shared help pop-over. showHelp('topic', event) from any "ⓘ What is this?" link; the
+// event is stopped so a link inside a <label> never toggles its checkbox.
+function showHelp(topic, ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const t = _HELP_TOPICS[topic]; if (!t) return;
+  document.getElementById('help-modal-title').textContent = t.title;
+  document.getElementById('help-modal-body').innerHTML = t.html;
+  document.getElementById('help-modal').classList.add('open');
+}
+function closeHelp() { document.getElementById('help-modal').classList.remove('open'); }
+function _helpLinkHtml(topic, label) {
+  return `<a href="#" class="help-link" onclick="showHelp('${topic}',event);return false">ⓘ ${label || 'What is this?'}</a>`;
+}
+function compositeShowHelp(ev) { showHelp('practice-composite', ev); }
+function compositeCloseHelp()  { closeHelp(); }
 function irCloseHelp() { document.getElementById('ir-help-modal').classList.remove('open'); }
 function showEvHelp()  { document.getElementById('ev-help-modal').classList.add('open'); }
 function evCloseHelp() { document.getElementById('ev-help-modal').classList.remove('open'); }
@@ -8922,7 +8923,7 @@ function _trackCfgPanel(e) {
     </div>
     <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">🔒 Identity fields define what is measured, so they can't be edited here. To change them, <a href="#" onclick="trackAsNewEntity('${e.id}');return false" style="color:var(--teal);font-weight:600">track a new entity</a> prefilled from this one — the existing trend line stays intact.</div>
     <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
-      <div><div class="fl">Cadence</div>
+      <div><div class="fl">Cadence <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a></div>
         <select id="tc-sched-${e.id}" class="fi" style="width:150px;padding:7px 10px;font-size:13px">
           <option value="weekly" ${e.schedule === 'weekly' ? 'selected' : ''}>Weekly</option>
           <option value="monthly" ${e.schedule === 'monthly' ? 'selected' : ''}>Monthly</option>
