@@ -7513,14 +7513,15 @@ async function loadHistory() {
   const el = document.getElementById('history-body');
   _historySortField = 'date';
   _historySortDir = 'desc';
-  _historySearch = '';
+  // (search text + filters persist for the session)
   // 1) Instant paint from the session cache (stale-while-revalidate), if we have one.
   let painted = false;
   try {
     const cached = JSON.parse(sessionStorage.getItem(_HIST_CACHE_KEY) || 'null');
     if (cached && Array.isArray(cached.runs)) {
       _historyRuns = cached.runs; _histHasMore = !!cached.has_more; _histSince = cached.since || null;
-      _histShowingAll = false; _histSearchRuns = null;
+      _histShowingAll = false;
+      if (Array.isArray(cached.ran_by_options)) _histRanByOptions = cached.ran_by_options;
       renderHistory(undefined, undefined, undefined, cached.content || []);
       painted = true;
     }
@@ -7529,13 +7530,17 @@ async function loadHistory() {
   // 2) Fresh data: only the main list + the content-run links it needs. The batch
   //    sections load when their control is expanded.
   try {
-    const [runsResp, caResp] = await Promise.all([api(`/api/history?days=${_HIST_WINDOW_DAYS}`), api('/api/content-analysis/runs')]);
+    const [runsResp, caResp] = await Promise.all([api(_histQueryUrl()), api('/api/content-analysis/runs')]);
     const data = await runsResp.json();
     _historyRuns = data.runs || []; _histHasMore = !!data.has_more; _histSince = data.since || null;
-    _histShowingAll = false; _histSearchRuns = null;
+    _histShowingAll = (_histFilters.range === 'all'); _histFilteredTotal = data.filtered_total ?? null;
+    if (Array.isArray(data.ran_by_options)) _histRanByOptions = data.ran_by_options;
     const contentRuns = caResp.ok ? await caResp.json() : [];
-    try { sessionStorage.setItem(_HIST_CACHE_KEY, JSON.stringify({ runs: _historyRuns, has_more: _histHasMore, since: _histSince, content: contentRuns, ts: Date.now() })); }
-    catch (e) { /* storage quota — fine */ }
+    if (!_histFiltersActive() && _histFilters.range === '45') {
+      try { sessionStorage.setItem(_HIST_CACHE_KEY, JSON.stringify({ runs: _historyRuns, has_more: _histHasMore, since: _histSince, content: contentRuns, ran_by_options: _histRanByOptions, ts: Date.now() })); }
+      catch (e) { /* storage quota — fine */ }
+    }
+
     renderHistory(undefined, undefined, undefined, contentRuns);
     if (_histBatchOpen) _loadHistBatch();
   } catch(e) {
@@ -7557,17 +7562,7 @@ function historySearch(v) {
   _historySearch = v;
   renderHistory();                       // instant: filter what's loaded
   clearTimeout(_histSearchTimer);
-  if (!v.trim()) { _histSearchRuns = null; renderHistory(); return; }
-  const seq = ++_histSearchSeq;
-  _histSearchTimer = setTimeout(async () => {   // then: ask the server across ALL history
-    try {
-      const r = await api('/api/history?q=' + encodeURIComponent(v.trim()));
-      const data = await r.json();
-      if (seq !== _histSearchSeq || !_historySearch) return;
-      _histSearchRuns = data.runs || [];
-      renderHistory();
-    } catch (e) { /* keep the client-side filter */ }
-  }, 300);
+  _histSearchTimer = setTimeout(histApplyFilters, 300);   // then: the server, across ALL history
 }
 
 function _historyFilename(r) {
@@ -7892,16 +7887,16 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
     return;
   }
 
-  const q = _historySearch.toLowerCase();
-  const baseRuns = (q && _histSearchRuns) ? _histSearchRuns : _historyRuns;
-  let runs = q
-    ? baseRuns.filter(r => {
-        const fn = _historyFilename(r).toLowerCase();
-        const en = (r.entity_name || '').toLowerCase();
-        const rb = (r.ran_by || '').toLowerCase();
-        return r.location.toLowerCase().includes(q) || fn.includes(q) || en.includes(q) || rb.includes(q);
-      })
-    : baseRuns.slice();
+  const q = (_historySearch || '').toLowerCase().trim();
+  let runs = _historyRuns.filter(r => {
+    if (_histFilters.type && _histRowType(r) !== _histFilters.type) return false;
+    if (_histFilters.ran_by && _histFilters.ran_by !== '__mine__' && String(r.ran_by || '').toLowerCase() !== String(_histFilters.ran_by).toLowerCase()) return false;
+    if (!q) return true;
+    const fn = _historyFilename(r).toLowerCase();
+    const en = (r.entity_name || '').toLowerCase();
+    const sp = (r.specialty || '').toLowerCase();
+    return (r.location || '').toLowerCase().includes(q) || fn.includes(q) || en.includes(q) || sp.includes(q);
+  });
 
   runs.sort((a, b) => {
     let va, vb;
@@ -7967,13 +7962,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
   const firstRows = rowHtml.slice(0, _HIST_FIRST_CHUNK).join('');
   el.innerHTML = _histBatchWrap(evHtml + nbHtml + shHtml) + `
     <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">All Reports</div>
-    <div style="margin-bottom:16px">
-      <input id="history-search" type="text" class="input"
-        placeholder="Search by location or name…"
-        value="${_historySearch.replace(/"/g, '&quot;')}"
-        oninput="historySearch(this.value)"
-        style="max-width:320px">
-    </div>
+    <div style="margin-bottom:14px">${_histFilterBar()}</div>
     <div class="card" style="padding:0;overflow:hidden">
       <table class="tbl">
         <thead><tr>
@@ -8100,9 +8089,75 @@ const _HIST_OLDER_DAYS = 90;
 let _histHasMore = false;     // older runs exist beyond what's loaded
 let _histSince = null;        // ISO start of the oldest loaded slice
 let _histShowingAll = false;
-let _histSearchRuns = null;   // server-side search results while a search is active
 let _histSearchTimer = null;
 let _histSearchSeq = 0;
+// Filter bar (AND-combined; sent to the server so results span all history)
+const _HIST_TYPES = { '': 'All types', hospital: 'Hospital', network: 'Hospital Network', service_line: 'Hospital Service Line',
+                      practice: 'Specialty Practice', community_health: 'Community Health', comparison: 'Compare Two', event: 'Event' };
+const _HIST_RANGES = { '45': 'Last 45 days', '90': 'Last 90 days', '365': 'Last 12 months', 'all': 'All time' };
+let _histFilters = (() => { try { return Object.assign({ type: '', ran_by: '', range: '45' }, JSON.parse(sessionStorage.getItem('pulse_hist_filters') || '{}')); } catch (e) { return { type: '', ran_by: '', range: '45' }; } })();
+let _histRanByOptions = [];
+let _histFilteredTotal = null;
+function _histRowType(r) {
+  if (r.report_type === 'comparison') return 'comparison';
+  if (r.report_type === 'network' || r.entity_type === 'hospital_network') return 'network';
+  if (r.event_id) return 'event';
+  if (r.entity_type === 'community_health') return 'community_health';
+  if (r.service_line) return 'service_line';
+  if (r.entity_type === 'practice' || r.specialty) return 'practice';
+  return 'hospital';
+}
+function _histFiltersActive() { return !!(_histFilters.type || _histFilters.ran_by || (_historySearch || '').trim()); }
+function _histQueryUrl() {
+  const p = new URLSearchParams();
+  const q = (_historySearch || '').trim();
+  if (q) p.set('q', q); else if (_histFilters.range === 'all') p.set('all', '1'); else p.set('days', _histFilters.range || '45');
+  if (_histFilters.type) p.set('type', _histFilters.type);
+  if (_histFilters.ran_by === '__mine__') p.set('mine', '1'); else if (_histFilters.ran_by) p.set('ran_by', _histFilters.ran_by);
+  return '/api/history?' + p.toString();
+}
+function histSetFilter(key, value) {
+  _histFilters[key] = value;
+  try { sessionStorage.setItem('pulse_hist_filters', JSON.stringify(_histFilters)); } catch (e) {}
+  renderHistory();            // instant: apply to what's loaded
+  histApplyFilters();         // then: ask the server across all history
+}
+function histClearFilters() {
+  _histFilters = { type: '', ran_by: '', range: '45' }; _historySearch = '';
+  try { sessionStorage.setItem('pulse_hist_filters', JSON.stringify(_histFilters)); } catch (e) {}
+  renderHistory(); histApplyFilters();
+}
+async function histApplyFilters() {
+  const seq = ++_histSearchSeq;
+  try {
+    const r = await api(_histQueryUrl());
+    const data = await r.json();
+    if (seq !== _histSearchSeq) return;
+    _historyRuns = data.runs || []; _histHasMore = !!data.has_more; _histSince = data.since || null;
+    _histShowingAll = (_histFilters.range === 'all'); _histFilteredTotal = data.filtered_total ?? null;
+    if (Array.isArray(data.ran_by_options)) _histRanByOptions = data.ran_by_options;
+    renderHistory();
+  } catch (e) { /* keep what's shown */ }
+}
+function _histFilterBar() {
+  const q = (_historySearch || '').replace(/"/g, '&quot;');
+  const typeOpts = Object.entries(_HIST_TYPES).map(([k, v]) => `<option value="${k}" ${_histFilters.type === k ? 'selected' : ''}>${v}</option>`).join('');
+  const rbOpts = ['<option value="">Everyone</option>', `<option value="__mine__" ${_histFilters.ran_by === '__mine__' ? 'selected' : ''}>Mine</option>`]
+    .concat(_histRanByOptions.map(e => `<option value="${_learnEsc(e)}" ${_histFilters.ran_by === e ? 'selected' : ''}>${_learnEsc(String(e).split('@')[0])}</option>`)).join('');
+  const rangeOpts = Object.entries(_HIST_RANGES).map(([k, v]) => `<option value="${k}" ${_histFilters.range === k ? 'selected' : ''}>${v}</option>`).join('');
+  const chips = [];
+  if ((_historySearch || '').trim()) chips.push(`"${_learnEsc(_historySearch.trim())}"`);
+  if (_histFilters.type) chips.push(_HIST_TYPES[_histFilters.type]);
+  if (_histFilters.ran_by) chips.push('Run by ' + (_histFilters.ran_by === '__mine__' ? 'me' : String(_histFilters.ran_by).split('@')[0]));
+  const chipHtml = chips.length
+    ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12px">${chips.map(c => `<span class="badge bg-teal" style="font-size:11px">${c}</span>`).join('')}<a href="#" onclick="histClearFilters();return false" style="color:var(--teal);font-weight:600">Clear all</a></div>` : '';
+  return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <input id="history-search" type="text" class="input" placeholder="Search name, location, specialty…" value="${q}" oninput="historySearch(this.value)" style="max-width:300px">
+      <select class="input" style="width:auto;padding:8px 10px" onchange="histSetFilter('type', this.value)" title="Report type">${typeOpts}</select>
+      <select class="input" style="width:auto;padding:8px 10px" onchange="histSetFilter('ran_by', this.value)" title="Run by">${rbOpts}</select>
+      <select class="input" style="width:auto;padding:8px 10px" onchange="histSetFilter('range', this.value)" title="Date range">${rangeOpts}</select>
+    </div>${chipHtml}`;
+}
 
 async function histLoadOlder(all) {
   const btn = document.getElementById('hist-older-btn');
@@ -8128,7 +8183,6 @@ async function histDeleteRun(runId, btn) {
     const r = await api('/api/reports/' + encodeURIComponent(runId), { method: 'DELETE' });
     if (!r.ok) throw new Error(await errDetail(r, 'Delete failed'));
     _historyRuns = _historyRuns.filter(x => x.run_id !== runId);
-    if (_histSearchRuns) _histSearchRuns = _histSearchRuns.filter(x => x.run_id !== runId);
     try {
       const cached = JSON.parse(sessionStorage.getItem(_HIST_CACHE_KEY) || 'null');
       if (cached && Array.isArray(cached.runs)) { cached.runs = cached.runs.filter(x => x.run_id !== runId); sessionStorage.setItem(_HIST_CACHE_KEY, JSON.stringify(cached)); }
@@ -8137,7 +8191,10 @@ async function histDeleteRun(runId, btn) {
   } catch (e) { alert(e.message); if (btn) btn.disabled = false; }
 }
 function _histFooter(shownCount) {
-  if (_historySearch) return `<div style="font-size:12px;color:var(--muted);padding:12px 4px">${shownCount} match${shownCount === 1 ? '' : 'es'} across all history.</div>`;
+  if (_histFiltersActive()) {
+    const scope = (_historySearch || '').trim() ? 'across all history' : (_histFilters.range === 'all' ? 'across all history' : `in the ${(_HIST_RANGES[_histFilters.range] || '').toLowerCase()}`);
+    return `<div style="font-size:12px;color:var(--muted);padding:12px 4px">${shownCount} run${shownCount === 1 ? '' : 's'} match ${scope}. <a href="#" onclick="histClearFilters();return false" style="color:var(--teal);font-weight:600">Clear filters</a></div>`;
+  }
   const sinceLbl = _histSince ? new Date(_histSince).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '';
   const scope = _histShowingAll ? 'Showing all runs' : (sinceLbl ? `Showing runs since ${sinceLbl}` : 'Showing recent runs');
   return `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 4px 4px">

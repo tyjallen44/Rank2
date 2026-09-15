@@ -1244,16 +1244,43 @@ def _row_ts(r: dict):
     return _dt.min
 
 
+def _history_row_type(r: dict) -> str:
+    """Classify a history row for the Type filter."""
+    if r.get("report_type") == "comparison":
+        return "comparison"
+    if r.get("report_type") == "network" or r.get("entity_type") == "hospital_network":
+        return "network"
+    if r.get("event_id"):
+        return "event"
+    if r.get("entity_type") == "community_health":
+        return "community_health"
+    if r.get("service_line"):
+        return "service_line"
+    if r.get("entity_type") == "practice" or r.get("specialty"):
+        return "practice"
+    return "hospital"
+
+
 @app.get("/api/history")
-async def get_history(role: str = Depends(require_auth), days: int = 45,
-                      before: Optional[str] = None, q: Optional[str] = None, all: int = 0):
+async def get_history(payload: dict = Depends(get_current_user_payload), days: int = 45,
+                      before: Optional[str] = None, q: Optional[str] = None, all: int = 0,
+                      type: Optional[str] = None, ran_by: Optional[str] = None, mine: int = 0):
     """History rows, newest first. Default: the last `days` days (45). `before=<iso>`
     with `days` returns the next older slice; `q` searches ALL history (no window);
-    `all=1` returns everything. Response: {runs, has_more, since, until}."""
+    `all=1` returns everything. `type` (hospital|network|service_line|practice|
+    community_health|comparison|event), `ran_by` (email) and `mine=1` are AND filters that
+    apply in every mode. Response: {runs, has_more, since, until, total, filtered_total,
+    ran_by_options}."""
     from perception.db import init_db, query_history
     from datetime import datetime as _dt, timedelta as _td
+    role = payload.get("role", "")
     init_db()
-    every = query_history(role)
+    everything = query_history(role)
+    ran_by_options = sorted({str(r.get("ran_by")) for r in everything if r.get("ran_by")}, key=str.lower)
+    rb = (payload.get("email") or "").strip().lower() if mine else (ran_by or "").strip().lower()
+    every = [r for r in everything
+             if (not type or _history_row_type(r) == type)
+             and (not rb or str(r.get("ran_by") or "").strip().lower() == rb)]
     days = max(1, min(int(days or 45), 3650))
     since = until = None
     has_more = False
@@ -1311,7 +1338,8 @@ async def get_history(role: str = Depends(require_auth), days: int = 45,
     return {"runs": result, "has_more": has_more,
             "since": since.isoformat() if since else None,
             "until": until.isoformat() if until else None,
-            "total": len(every)}
+            "total": len(everything), "filtered_total": len(every),
+            "ran_by_options": ran_by_options}
 
 
 @app.delete("/api/reports/{run_id}")

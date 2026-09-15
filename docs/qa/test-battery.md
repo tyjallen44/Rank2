@@ -2238,3 +2238,48 @@ By City / Market Summary with empty fields.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## HISTORY-FILTERS — History filter bar: search + Type + Run By + date range, AND-combined, server-backed
+
+**Shipped:** 2026-09-15 · **Area:** History · **Type:** UX
+
+### What changed
+- The single "Search by location or name" box is now a **filter bar**: search text (name, location,
+  specialty), **Type** (All / Hospital / Hospital Network / Hospital Service Line / Specialty
+  Practice / Community Health / Compare Two / Event), **Run By** (Everyone / Mine / each user who
+  has runs), and **Date range** (Last 45 days / 90 days / 12 months / All time). All AND-combine.
+- Filters are sent to the server (`type`, `ran_by`, `mine=1`, `days` / `all=1`, `q`) so a filtered
+  view spans all history, not just the loaded rows; the loaded rows are filtered instantly first.
+- Active filters show as chips with **Clear all**; the footer reads "N runs match in the last 45
+  days / across all history · Clear filters" when any filter is active.
+- Search text and filters persist for the session (coming back to History keeps them). The instant
+  session cache is used only for the unfiltered 45-day default.
+- `GET /api/history` also returns `filtered_total` and `ran_by_options`; the endpoint now reads the
+  user payload (for Mine) instead of the bare role.
+
+### Files changed
+`server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Type**: pick "Compare Two" → only comparison rows; "Hospital Network" → only network rows;
+chip appears; footer count; Clear all resets.
+**T2 — Run By**: pick a user → only their runs; "Mine" → only yours (matches your email on the
+run); combine with Type → both apply.
+**T3 — Search + filters**: type "ortho" with Type = Specialty Practice → practice rows matching
+"ortho" across all history (older than 45 days included); clear the text → back to the type filter
+within the date range.
+**T4 — Date range**: "All time" → every run (Show older buttons hidden); "Last 12 months" → window
+widens; "Last 45 days" → default.
+**T5 — Persistence**: set filters, navigate to Home and back → filters and chips still applied.
+**T6 — Sort** still works on filtered results; Downloads menus unchanged; admin Delete run works.
+
+### Regression Checks
+- **R1** Unfiltered default load unchanged (instant paint, 45-day window, Show older runs).
+- **R2** Suite at baseline; local: type buckets sum to the total (547); mine/ran_by/q combine.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Older runs may have no Run By recorded, so "Mine" only matches runs made
+since run attribution was added.
