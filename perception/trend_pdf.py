@@ -223,12 +223,12 @@ def _google_chart(points: list[dict], w: int = 640, h: int = 160) -> str:
     pts = [p for p in points if p.get("google_rating") is not None]
     if len(pts) < 2:
         return f'<div style="font-size:10px;color:{_MUTE};padding:20px 0">Not enough Google snapshots to chart.</div>'
-    L, R, T, B = 30, 44, 10, 24
+    L, R, T, B = 30, 78, 10, 24
     iw, ih = w - L - R, h - T - B
     n = len(pts)
     x = lambda i: L + iw * i / (n - 1)
     yr = lambda v: T + ih - ih * max(0, min(5, float(v))) / 5
-    cmax = max((p.get("google_count") or 0) for p in pts) or 1
+    cmax = (max((p.get("google_count") or 0) for p in pts) or 1) * 1.3   # headroom so a flat count isn't glued to the top
     yc = lambda v: T + ih - ih * (float(v or 0)) / cmax
     out = [f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" font-family="Inter,Arial,sans-serif">']
     for v in (1, 2, 3, 4, 5):
@@ -238,8 +238,8 @@ def _google_chart(points: list[dict], w: int = 640, h: int = 160) -> str:
     out.append(f'<polyline points="{dc}" fill="none" stroke="#9FD8CF" stroke-width="2" stroke-dasharray="4 3"/>')
     dr = " ".join(f"{x(i):.1f},{yr(p['google_rating']):.1f}" for i, p in enumerate(pts))
     out.append(f'<polyline points="{dr}" fill="none" stroke="{_TEAL2}" stroke-width="2.2"/>')
-    out.append(f'<text x="{L+iw+4}" y="{T+8}" font-size="8" fill="{_MUTE}">{cmax:,}</text>')
-    out.append(f'<text x="{L+iw+4}" y="{T+ih}" font-size="8" fill="{_MUTE}">0 reviews</text>')
+    last_c = pts[-1].get("google_count") or 0
+    out.append(f'<text x="{L+iw+4}" y="{yc(last_c)+3:.1f}" font-size="8" fill="{_MUTE}">{int(last_c):,} reviews</text>')
     out.append(f'<text x="{x(0):.1f}" y="{h-8}" font-size="8.5" fill="{_MUTE}" text-anchor="start">{_e(_fmt_date(pts[0]["generated_at"]))}</text>')
     out.append(f'<text x="{x(n-1):.1f}" y="{h-8}" font-size="8.5" fill="{_MUTE}" text-anchor="end">{_e(_fmt_date(pts[-1]["generated_at"]))}</text>')
     out.append("</svg>")
@@ -340,9 +340,15 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
       table.t td {{ padding:6px 7px; border-bottom:1px solid #e6efec; vertical-align:middle; }}
       table.t tr:nth-child(even) td {{ background:#fafcfb; }}
       ul.notes {{ margin:6px 0 0 18px; line-height:1.6; }}
-      .note {{ margin:18px 40px 30px; padding:12px 16px; background:{_PALE}; border-radius:8px; font-size:9.5px; color:{_MUTE}; line-height:1.55; }}
+      .note {{ margin:14px 40px 24px; padding:12px 16px; background:{_PALE}; border-radius:8px; font-size:9.5px; color:{_MUTE}; line-height:1.55; }}
       .note b {{ color:{_TEAL}; }}
-      .pb {{ page-break-before:always; }}
+      .pb {{ break-before:page; page-break-before:always; }}
+      .blk {{ break-inside:avoid; page-break-inside:avoid; }}
+      h2 {{ break-after:avoid; page-break-after:avoid; }}
+      table.t thead {{ display:table-header-group; }}
+      table.t tr {{ break-inside:avoid; page-break-inside:avoid; }}
+      .chart, .small, .kpi, .analyst, .note {{ break-inside:avoid; page-break-inside:avoid; }}
+      table.snap td {{ padding:4.5px 7px; }}
     </style></head><body>
       <div class="band">
         <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI REPUTATION<br>TREND REPORT</div></div>
@@ -358,37 +364,47 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
         <div><b>{_e(today)}</b>prepared{(" for " + _e(prepared_for)) if prepared_for else ""}</div>
       </div>
 
+      <section class="blk">
       <h2>Executive summary</h2>
       <div class="sec">
         <div class="kpis">{"".join(summary_bits)}</div>
         {f'<div class="analyst">{analyst}</div>' if analyst else ''}
       </div>
+      </section>
 
+      <section class="blk">
       <h2>Pulse Score over time</h2>
       <div class="sec"><div class="chart">{_score_chart(points)}</div>
         <div style="font-size:9px;color:{_MUTE};margin-top:6px">Shaded bands are the national quartiles (1st: 75+, 2nd: 68–74, 3rd: 58–67, 4th: below 58).</div></div>
+      </section>
 
-      <h2>Pillar trends</h2>
+      <section class="blk pb">
+      <h2 style="margin-top:28px">Pillar trends</h2>
       <div class="sec">
         <div class="smalls">{smalls}</div>
         <table class="t"><thead><tr><th>Pillar</th><th style="text-align:center">First</th><th style="text-align:center">Latest</th><th style="text-align:center">Change</th></tr></thead>
         <tbody>{pillar_rows}</tbody></table>
         {f'<div style="font-size:9px;color:{_MUTE};margin-top:6px">Scored on the practice rubric.</div>' if st["practice_rubric"] else ''}
       </div>
+      </section>
 
+      <section class="blk">
       <h2>Google reputation over time</h2>
       <div class="sec"><div class="chart">{_google_chart(points)}</div>
         <div style="font-size:9px;color:{_MUTE};margin-top:6px">Solid line: Google rating (left axis). Dashed line: review count (right axis).</div></div>
+      </section>
 
-      <h2 class="pb">Snapshots</h2>
+      <h2>Snapshots</h2>
       <div class="sec">
-        <table class="t"><thead><tr><th>Date</th><th style="text-align:center">Score</th><th style="text-align:center">Δ</th>{pillar_ths}
+        <table class="t snap"><thead><tr><th>Date</th><th style="text-align:center">Score</th><th style="text-align:center">Δ</th>{pillar_ths}
           <th style="text-align:center">Google</th><th style="text-align:center">Reviews</th><th>Run settings</th></tr></thead>
         <tbody>{"".join(snap_rows)}</tbody></table>
       </div>
 
+      <section class="blk">
       <h2>Notable changes</h2>
       <div class="sec"><ul class="notes">{moves_html}{drift_html}</ul></div>
+      </section>
 
       <div class="note"><b>Methodology.</b> {_e(AIVS_DISCLAIMER)}<br><br>{limitations_html}</div>
     </body></html>"""

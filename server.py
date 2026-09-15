@@ -3867,7 +3867,7 @@ def _trend_report_file(entity: dict, points: list, brand: str = "original") -> P
     out_dir = REPORTS_DIR / "trends"
     out_dir.mkdir(parents=True, exist_ok=True)
     safe_id = "".join(ch for ch in str(entity.get("id", "")) if ch.isalnum() or ch in "-_")
-    pdf_path = out_dir / f"trend_{safe_id}_{latest}.pdf"
+    pdf_path = out_dir / f"trend_{safe_id}_{latest}_v2.pdf"   # bump suffix when the layout changes
     if not pdf_path.exists():
         ent = dict(entity)
         for k in ("last_run_at", "next_run_at", "created_at"):

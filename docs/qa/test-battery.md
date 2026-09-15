@@ -1819,3 +1819,27 @@ shows `[trend-email] FAILED …`; Send now returns 502 with a clear message.
 ### Notes for the testing agent
 NEEDS BROWSER TESTING + a real inbox. Resend must have RESEND_API_KEY configured in the
 environment; attachments count toward Resend's 40 MB message limit (reports are ~0.3 MB).
+
+## TRENDS-REPORT-PDF-2 — Trend Report page flow fixed
+
+**Shipped:** 2026-09-15 · **Area:** Trends PDF · **Type:** layout fix
+
+### What changed
+- Pillar trends now start page 2 as a whole block (previously the four charts were sliced across
+  the page 1/2 break); every section keeps its heading with its content (`break-inside: avoid`);
+  the snapshot table flows naturally behind the Google chart with its header repeated on each
+  page (was forced to its own page, leaving half of page 2 empty); the methodology box stays whole;
+  snapshot rows are slightly tighter. Google chart: review-count line no longer hugs the top edge
+  and the "N reviews" label no longer clips.
+- Cache filename bumped (`_v2`) so previously rendered reports are rebuilt.
+
+### Test Cases
+**T1**: download the report for an entity with ~30 snapshots → 3 pages: p1 summary + score chart;
+p2 pillar charts + table + Google chart + start of snapshots; p3 rest of snapshots + notable
+changes + methodology, with no chart or box split across pages and no near-empty page.
+
+### Acceptance Checklist
+- [ ] T1
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Verified locally on the 33-snapshot entity.
