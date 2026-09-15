@@ -573,7 +573,7 @@ def _tier_row(label: str, value: int | None) -> str:
     )
 
 
-def _aivs_block(p: RankedProvider, methodology_note: bool = True) -> str:
+def _aivs_block(p: RankedProvider, methodology_note: bool = True, confidence: dict = None) -> str:
     """AI Reputation score + computed letter grade + weighting profile + the four tier bars.
 
     `methodology_note=False` drops the "Scored per Appendix A methodology" footnote
@@ -614,11 +614,23 @@ def _aivs_block(p: RankedProvider, methodology_note: bool = True) -> str:
         {nat_q_html}
         <div class="profile-chip">{profile_label}</div>
         {f'<div class="ceiling-note">⚠ Score capped at 74 ({_e(p.score_ceiling_reason)})</div>' if p.score_ceiling_applied else ""}
+        {_confidence_line(confidence)}
       </div>
       <div class="tier-bars">{rows}
         {'<div style="font-size:6pt;color:#aabcc0;margin-top:3px;font-style:italic">Scored per Appendix A methodology</div>' if methodology_note else ''}
       </div>
     </div>"""
+
+
+def _confidence_line(conf: dict = None) -> str:
+    """'Evidence: High · 312 reviews across 4 locations' under the score — how much
+    public data sits behind the number."""
+    if not conf:
+        return ""
+    color = {"high": "#1a7a4a", "medium": "#b8860b", "low": "#b42318"}.get(conf.get("level"), "#7a9095")
+    return (f'<div style="font-size:6.5pt;color:#5a7075;margin-top:5px;line-height:1.3">'
+            f'Evidence: <strong style="color:{color}">{_e(conf.get("label", ""))}</strong>'
+            f' &middot; {_e(conf.get("note", ""))}</div>')
 
 
 def _google_stat(p: RankedProvider) -> str:
@@ -870,7 +882,7 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
     </div>"""
 
 
-def _individual_entity_card(p: RankedProvider) -> str:
+def _individual_entity_card(p: RankedProvider, confidence: dict = None) -> str:
     """Full-width card for individual entity reports — no rank badge."""
     strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
     weaknesses_html = "".join(
@@ -898,7 +910,7 @@ def _individual_entity_card(p: RankedProvider) -> str:
           {_rating_pill(p)}
         </div>
         {f'<div class="provider-url"><a href="{_e(p.website_url)}">{_e(p.website_url)}</a></div>' if p.website_url else ""}
-        {_aivs_block(p)}
+        {_aivs_block(p, confidence=confidence)}
         {_ai_says_block(p)}
         {_google_stat(p)}
         {_patient_voice_block(p)}
@@ -1462,6 +1474,14 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
+
+    /* Print flow: keep headings with their content, no orphan lines, rows stay whole,
+       table headers repeat on every page. */
+    h1, h2, h3, h4, .section-title {{ break-after: avoid; page-break-after: avoid; }}
+    p, li {{ orphans: 3; widows: 3; }}
+    tr {{ break-inside: avoid; page-break-inside: avoid; }}
+    thead {{ display: table-header-group; }}
+    img, svg {{ break-inside: avoid; page-break-inside: avoid; }}
     @page {{ size: Letter; }}
 
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -2350,7 +2370,12 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
     p = result.rankings[0] if result.rankings else None
     name = _e(result.report_title or result.entity_name or result.location)
 
-    card_html = _individual_entity_card(p) if p else ""
+    try:
+        from .confidence import score_confidence
+        _conf = score_confidence(result)
+    except Exception:
+        _conf = None
+    card_html = _individual_entity_card(p, confidence=_conf) if p else ""
 
     # AI Reputation Assessment
     assessment = _e(_strip_md(result.top_recommendation or ""))

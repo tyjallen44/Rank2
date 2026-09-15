@@ -158,6 +158,14 @@ def _build_fqhc_html(result: AnalysisResult, brand_cfg: dict) -> str:
 <meta charset="utf-8">
 <title>Pulse — Community Health Edition — {entity}</title>
 <style>
+
+    /* Print flow: keep headings with their content, no orphan lines, rows stay whole,
+       table headers repeat on every page. */
+    h1, h2, h3, h4, .section-title {{ break-after: avoid; page-break-after: avoid; }}
+    p, li {{ orphans: 3; widows: 3; }}
+    tr {{ break-inside: avoid; page-break-inside: avoid; }}
+    thead {{ display: table-header-group; }}
+    img, svg {{ break-inside: avoid; page-break-inside: avoid; }}
 {css}
 {css_overrides}
 </style>

@@ -162,6 +162,14 @@ def render_network_full_detail(result: NetworkResult, pdf_path: str, findings,
 <html lang="en"><head><meta charset="utf-8">
 <title>Hospital Network — Full Detail — {_e(entity_name)}</title>
 <style>
+
+    /* Print flow: keep headings with their content, no orphan lines, rows stay whole,
+       table headers repeat on every page. */
+    h1, h2, h3, h4, .section-title {{ break-after: avoid; page-break-after: avoid; }}
+    p, li {{ orphans: 3; widows: 3; }}
+    tr {{ break-inside: avoid; page-break-inside: avoid; }}
+    thead {{ display: table-header-group; }}
+    img, svg {{ break-inside: avoid; page-break-inside: avoid; }}
 {net_css}
 {css_overrides}
 {_content_css(include_reset=False)}
@@ -272,6 +280,14 @@ def _build_network_html(result: NetworkResult, cfg: dict, teaser: bool = False,
 <meta charset="utf-8">
 <title>Hospital Network — {title}</title>
 <style>
+
+    /* Print flow: keep headings with their content, no orphan lines, rows stay whole,
+       table headers repeat on every page. */
+    h1, h2, h3, h4, .section-title {{ break-after: avoid; page-break-after: avoid; }}
+    p, li {{ orphans: 3; widows: 3; }}
+    tr {{ break-inside: avoid; page-break-inside: avoid; }}
+    thead {{ display: table-header-group; }}
+    img, svg {{ break-inside: avoid; page-break-inside: avoid; }}
 {css}
 {css_overrides}
 </style>

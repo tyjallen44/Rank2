@@ -213,6 +213,7 @@ async def me(payload: dict = Depends(get_current_user_payload)):
 
 
 _APP_VERSION = "1.09"
+_SERVER_STARTED = time.time()
 _SERVER_START = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
@@ -272,6 +273,47 @@ async def jobs_mine(payload: dict = Depends(get_current_user_payload)):
                     "run_id": res.get("run_id"), "error": (j.get("error") if j.get("status") == "error" else None)})
     out.sort(key=lambda x: -x["started_at"])
     return out[:12]
+
+
+class RecentMatchRequest(BaseModel):
+    kind: str = "analysis"          # analysis | network | comparison
+    name: str
+    name_b: str = ""
+    city: str = ""
+    days: int = 14
+
+
+@app.post("/api/runs/recent-match")
+async def runs_recent_match(req: RecentMatchRequest, payload: dict = Depends(get_current_user_payload)):
+    """Finished runs of the same organization within `days` — the duplicate-run warning."""
+    from perception.db import init_db, recent_runs_matching
+    init_db()
+    days = max(1, min(int(req.days or 14), 90))
+    return recent_runs_matching(req.kind, (req.name or "").strip(), (req.name_b or "").strip(),
+                                role=payload.get("role"), city=(req.city or "").strip(), days=days)
+
+
+@app.get("/api/admin/jobs")
+async def admin_jobs(payload: dict = Depends(require_admin)):
+    """Every job this server process knows about, across all users (Admin → Operations)."""
+    now = time.time()
+    out = []
+    for jid, j in list(_jobs.items()):
+        started = j.get("started_at") or now
+        res = j.get("result") or {}
+        label = (j.get("label") or j.get("entity_name") or res.get("network_name") or res.get("location")
+                 or ("Compare Two" if res.get("comparison") else "—"))
+        out.append({"job_id": jid, "status": j.get("status", "running"), "kind": j.get("kind") or "—",
+                    "label": label, "email": j.get("email") or "", "role": j.get("role") or "",
+                    "started_at": started, "minutes": round((now - started) / 60, 1),
+                    "run_id": res.get("run_id"), "error": j.get("error") if j.get("status") == "error" else None})
+    out.sort(key=lambda x: -x["started_at"])
+    stats = {"running": sum(1 for o in out if o["status"] == "running"),
+             "done": sum(1 for o in out if o["status"] == "done"),
+             "error": sum(1 for o in out if o["status"] == "error")}
+    return {"jobs": out[:200], "stats": stats, "server_started": _SERVER_STARTED,
+            "uptime_minutes": round((now - _SERVER_STARTED) / 60),
+            "version": _APP_VERSION, "workers": getattr(_pool, "_max_workers", None)}
 
 
 class SendReportRequest(BaseModel):
@@ -392,6 +434,8 @@ def _job_run_single(
     entity_type: Optional[str] = None,
 ) -> None:
     job = _jobs[job_id]
+    job["kind"] = "Deep Diagnostic" if job.get("individual_report") else "Competitors Rankings"
+    job.setdefault("label", job.get("entity_name") or f"{city}, {state}")
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
 
@@ -455,6 +499,7 @@ def _job_run_single(
             "entity_type": entity_type or "hospital",
             "city": city, "state": state,
             "individual_report": bool(job.get("individual_report")),
+            "confidence": _run_confidence(result) if job.get("individual_report") else None,
         }
         if not job.get("skip_pdf"):
             _title = job.get("entity_name") or result.report_title or result.location
@@ -698,6 +743,8 @@ def _job_run_practice(
     radius_miles: Optional[int] = None,
 ) -> None:
     job = _jobs[job_id]
+    job["kind"] = "Deep Diagnostic"
+    job.setdefault("label", entity_name)
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
 
@@ -762,6 +809,7 @@ def _job_run_practice(
             "entity_type": "service_line" if job.get("service_line") else "practice",
             "service_line": job.get("service_line"), "parent_system": job.get("parent_system"),
             "city": city, "state": state, "individual_report": True,
+            "confidence": _run_confidence(result),
         }
         if not job.get("skip_pdf"):
             _notify_run_complete(job, "Deep Diagnostic", result.report_title or entity_name,
@@ -778,6 +826,8 @@ def _job_run_fqhc(
     aggregate: bool = False,
 ) -> None:
     job = _jobs[job_id]
+    job["kind"] = "Community Health"
+    job.setdefault("label", entity_name)
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
 
@@ -819,6 +869,7 @@ def _job_run_fqhc(
             "briefing_pdf_path": result.briefing_pdf_path,
             "briefing_skipped_reason": result.briefing_skipped_reason,
             "entity_name": job.get("entity_name"), "city": city, "state": state, "individual_report": True,
+            "confidence": _run_confidence(result),
         }
         if not job.get("skip_pdf"):
             _notify_run_complete(job, "Community Health report", job.get("entity_name") or result.location,
@@ -957,6 +1008,20 @@ def _new_job(role: str, brand: str = "original", email: Optional[str] = None) ->
     _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role,
                      "brand": brand, "email": email, "started_at": time.time()}
     return job_id
+
+
+def _run_confidence(result) -> Optional[dict]:
+    """Compute + persist the evidence level behind a Deep Diagnostic score. Fail-soft."""
+    try:
+        from perception.confidence import score_confidence
+        from perception.db import set_run_confidence
+        conf = score_confidence(result)
+        if conf:
+            set_run_confidence(result.run_id, conf["level"], conf["note"])
+        return conf
+    except Exception as exc:
+        print(f"[confidence] failed: {type(exc).__name__}: {exc}")
+        return None
 
 
 def _notify_run_complete(job: dict, kind: str, title: str, files: list) -> None:
@@ -1140,6 +1205,8 @@ async def start_batch(req: BatchRequest, payload: dict = Depends(get_current_use
 
 def _job_run_comparison(job_id: str, req_dict: dict) -> None:
     job = _jobs[job_id]
+    job["kind"] = "Compare Two"
+    job.setdefault("label", f"{req_dict.get('entity_a_name') or 'A'} vs {req_dict.get('entity_b_name') or 'B'}")
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
     try:
@@ -1677,6 +1744,8 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
                           service_line_audit: bool = False,
                           full_detail: bool = False) -> None:
     job = _jobs[job_id]
+    job["kind"] = "Hospital Network"
+    job.setdefault("label", network_name)
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
     try:

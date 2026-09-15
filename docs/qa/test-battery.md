@@ -2421,3 +2421,51 @@ Commit: handoffs at the end of every run (Track in Trends / Compare against… /
 **R2 — Existing completion buttons and History downloads.** Regress: Download Report, Teaser, Briefing, Full Detail links, Delete run (admin), MQCR battery, content-plan actions all unchanged.
 
 **R3 — Users table migration.** Fresh boot on a DB without `users.notify_complete`: the column is added with DEFAULT TRUE; `/api/me/prefs` returns `{"notify_complete": true}` for a user with no row.
+
+## CHOOSER + DUPLICATE WARNING + SCORE EVIDENCE + ADMIN OPERATIONS
+
+Commit: "Which report do I need?" helper on Home; duplicate-run warning before Deep Diagnostic / Hospital Network / Compare Two; score confidence ("Score Evidence") on the completion screen, History rows, Trends list and the Deep Diagnostic PDF; Admin → Operations tab (all users' runs on this server); PDF print-flow rules. NEEDS BROWSER TESTING.
+
+**T1 — Chooser renders and recommends.** Home shows a "Which report do I need?" card under the hero with "I'm looking at…" pills. Pick "One hospital" → an "I want to…" row appears. Pick "Diagnose it and get the fixes".
+- [ ] A green recommendation box shows "→ Deep Diagnostic" with a one-line reason and an "Open Deep Diagnostic →" button.
+
+**T2 — Chooser routing matrix.** For each combination check the page opened and the type preselected:
+- [ ] Whole health system + Diagnose → Hospital Network. + Compare → Compare Two (both sides Hospital). + Track → Trends (Hospital).
+- [ ] One hospital + Rank → Competitors Rankings (Hospital). Practice + Rank → Competitors Rankings (Specialty Practice).
+- [ ] Service line + Diagnose → Deep Diagnostic with Hospital Service Line selected. Practice + Compare → Compare Two with Specialty Practice on both sides. Practice + Track → Trends add flow with Specialty Practice.
+- [ ] Community health center + Rank/Compare/Track → Deep Diagnostic (Community Health) with the explanatory note.
+- [ ] A list of organizations → Event Preparation immediately (no second question).
+- [ ] Clear resets both rows.
+
+**T3 — Duplicate warning (Deep Diagnostic).** Run a Deep Diagnostic for a hospital to completion. Start a new Deep Diagnostic for the same listing and click Run Diagnostic.
+- [ ] An amber notice appears above the Run button: "<Name> was already run today by <user>…" with "⬇ Open that report", "History" and "Run anyway →". The run has NOT started.
+- [ ] "Open that report" downloads the earlier PDF. "Run anyway →" starts the run normally; the notice disappears.
+- [ ] Changing the listing (different organization) → no notice.
+
+**T4 — Duplicate warning (Network, Compare Two).** Repeat with a Hospital Network run of the same system name, and a Compare Two of the same pair (also with A/B swapped).
+- [ ] Both show the notice; swapped pair still matches; "Run anyway" proceeds.
+
+**T5 — Duplicate warning role scope.** As a non-admin user, a run by another role is not reported; as admin, all roles' runs are reported.
+
+**T6 — Score Evidence on completion.** Finish a Deep Diagnostic.
+- [ ] The completion stats show a "Score Evidence" box (High / Medium / Low, colored) with a note like "640 reviews" or "only 12 reviews; no CMS star rating on record".
+- [ ] Community Health completion also shows the box. Competitors Rankings, Network and Compare Two do not.
+
+**T7 — Score Evidence in History and Trends.** Open History: Deep Diagnostic rows run after this deploy show a small "High/Medium/Low evidence" chip after the type badge (hover shows the note). Older rows show nothing. Open Trends: entities whose latest snapshot has evidence show the chip after the score.
+
+**T8 — Score Evidence in the PDF.** Open the Deep Diagnostic PDF (hospital and practice).
+- [ ] Under the score's profile chip: "Evidence: High · 312 reviews across 4 locations" (color by level). Practice reports count reviews across confirmed locations.
+
+**T9 — Admin → Operations.** As admin open Admin → Operations.
+- [ ] Table of runs: Started, Kind (Deep Diagnostic / Competitors Rankings / Community Health / Compare Two / Hospital Network), Run, User, Status, Elapsed; header line "N running · N done · N failed · vX · up N m · N workers".
+- [ ] With a run in progress the table refreshes every ~15 s; Refresh button works; finished rows show a History button.
+- [ ] Integrations Admin role does not see the Operations tab.
+
+**T10 — PDF print flow.** Generate a Deep Diagnostic, Hospital Network and Community Health PDF.
+- [ ] No heading stranded at the bottom of a page, table rows not split across pages, table headers repeat on continued pages, no single orphan lines.
+
+**R1 — Regression.** Existing Home cards, "Runs in progress" strip, Run buttons (with no earlier run → no notice, run starts directly), Admin Users / Requests / Integrations tabs unchanged.
+
+**R2 — Fail-soft.** If the recent-match call fails (e.g. offline), the Run button proceeds without a notice. If confidence computation fails, the run completes and the log shows `[confidence] failed:`.
+
+**R3 — Migration.** Fresh boot adds `analysis_runs.confidence` and `confidence_note`; History and Trends load with NULLs (no chip).

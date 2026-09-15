@@ -2216,6 +2216,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <button class="admin-tab active" id="atab-users" onclick="switchAdminTab('users')">Users</button>
           <button class="admin-tab" id="atab-requests" onclick="switchAdminTab('requests')">Access Requests</button>
           <button class="admin-tab" id="atab-integrations" onclick="switchAdminTab('integrations')">Integrations</button>
+          <button class="admin-tab" id="atab-ops" onclick="switchAdminTab('ops')">Operations</button>
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn" id="admin-clear-sl-btn" onclick="adminClearServiceLineCache()" title="Clear all cached service-line audits so the next network run recomputes fresh." style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#128465; Clear Service-Line Cache</button>
@@ -2223,6 +2224,21 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         </div>
       </div>
       <div id="admin-email-test-result" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:6px;font-size:13px"></div>
+
+      <!-- Operations panel: every job on this server, all users -->
+      <div id="admin-ops-panel" style="display:none">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">
+            <div style="font-weight:600;font-size:15px">Runs on this server</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span id="admin-ops-meta" style="font-size:12px;color:var(--muted)"></span>
+              <button class="btn btn-ghost btn-sm" onclick="loadAdminOps()">↻ Refresh</button>
+            </div>
+          </div>
+          <div id="admin-ops-table"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">In-memory job registry for this server process: running jobs plus everything finished since the last restart. Users see only their own runs on Home.</div>
+        </div>
+      </div>
 
       <!-- Users panel -->
       <div id="admin-users-panel">
@@ -2778,6 +2794,19 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       .home-runs .hr-meta{font-size:11px;color:var(--muted);white-space:nowrap}
       .pulse-flash{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#0F4146;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 6px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .2s}
       .pulse-flash.show{opacity:1}
+      .home-chooser{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:0 0 18px}
+      .home-chooser .hc-q{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin:10px 0 6px}
+      .home-chooser .hc-q:first-child{margin-top:0}
+      .home-chooser .hc-pills{display:flex;flex-wrap:wrap;gap:6px}
+      .home-chooser .hc-pill{border:1px solid var(--border);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;color:var(--text)}
+      .home-chooser .hc-pill.on{background:#0F4146;color:#fff;border-color:#0F4146}
+      .home-chooser .hc-rec{margin-top:12px;padding:12px 14px;background:#EEF7F1;border-radius:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+      .home-chooser .hc-rec .t{font-weight:700;color:#0F4146}
+      .home-chooser .hc-rec .w{flex:1;min-width:220px;font-size:13px;color:#2f4a45}
+      .dup-notice{margin:12px 0;padding:12px 14px;border:1px solid #f0d9a8;background:#fff8e6;border-radius:8px;font-size:13px;color:#5a4a1a;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+      .dup-notice .d{flex:1;min-width:220px}
+      .conf-chip{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap}
+      .conf-high{background:#e3f4ea;color:#1a7a4a}.conf-medium{background:#fff3d6;color:#8a6508}.conf-low{background:#fde8e6;color:#b42318}
     </style>
     <div id="page-home" class="page" style="max-width:1040px">
       <div class="home-hero">
@@ -2794,6 +2823,14 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
       <!-- Featured content: admin-editable (Learn → Manage Content → Home page). A pasted
            YouTube / Vimeo / Loom link on its own line renders as an embedded player. -->
+      <div class="home-chooser" id="home-chooser">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+          <div style="font-weight:700;font-size:15px;color:#0F4146">Which report do I need?</div>
+          <button class="btn btn-ghost btn-sm" onclick="chooserReset()">Clear</button>
+        </div>
+        <div id="home-chooser-body"></div>
+      </div>
+
       <div id="home-runs" class="home-runs hidden"></div>
 
       <div class="home-feature" id="home-feature">
@@ -4252,6 +4289,7 @@ async function loadHome() {
   const host = document.getElementById('home-feature');
   if (!host) return;
   loadHomeRuns();
+  renderChooser();
   try {
     const r = await fetch('/api/learn?page=home');
     const arts = r.ok ? await r.json() : [];
@@ -4574,6 +4612,7 @@ async function npRunAnalysis() {
     return;
   }
 
+  if (await _dupGate('network', { name }, 'np-step2-err', npRunAnalysis)) return;
   const ignoreCache = document.getElementById('np-ignore-cache')?.checked || false;
   const serviceLine = document.getElementById('np-service-line')?.checked || false;
   // All three reports (standard + teaser + full detail) are always generated.
@@ -6098,6 +6137,7 @@ function _cmpSideBody(side, suffix) {
 
 async function runComparison() {
   if (!_cmp.a.selected || !_cmp.b.selected) return;
+  if (await _dupGate('comparison', { name: _cmp.a.selected.name, name_b: _cmp.b.selected.name }, 'cmp-run-err', runComparison)) return;
   const errEl = document.getElementById('cmp-run-err');
   errEl.classList.add('hidden');
   for (const side of ['a', 'b']) {
@@ -6127,6 +6167,7 @@ async function runComparison() {
 
 async function runIndividual() {
   if (!_irSelected) return;
+  if (await _dupGate('analysis', { name: _irSelected.name, city: _irResolvedCity || '' }, 'ir-run-err', runIndividual)) return;
   const errEl = document.getElementById('ir-run-err');
   errEl.classList.add('hidden');
 
@@ -6659,6 +6700,92 @@ function onSSE(ev) {
   }
 }
 
+// ── Home: "Which report do I need?" ──────────────────────────────────────────
+const _chooser = { what: null, goal: null };
+const _CHOOSER_WHAT = [['system','A whole health system'],['hospital','One hospital'],['service_line','A hospital service line'],['specialty','A physician practice or group'],['community_health','A community health center'],['list','A list of organizations']];
+const _CHOOSER_GOAL = [['diagnose','Diagnose it and get the fixes'],['rank','See how it ranks in its market'],['compare','Compare it with one competitor'],['track','Track it over time']];
+function chooserPick(k, v) { _chooser[k] = v; renderChooser(); }
+function chooserReset() { _chooser.what = null; _chooser.goal = null; renderChooser(); }
+function _chooserRec() {
+  const { what, goal } = _chooser;
+  if (!what) return null;
+  if (what === 'list') return { page: 'event', title: 'Event Preparation', why: 'Upload the attendee list and get a report for every organization on it before the meeting.' };
+  if (!goal) return null;
+  if (what === 'system') {
+    if (goal === 'compare') return { page: 'compare', type: 'hospital', title: 'Compare Two', why: 'Compare Two is head-to-head between two organizations — pick the flagship hospital for each system.' };
+    if (goal === 'track')   return { page: 'track', type: 'hospital', title: 'Trends', why: 'Track the flagship hospital on a schedule. Whole-system tracking is not available yet.' };
+    return { page: 'network', title: 'Hospital Network', why: 'Every hospital in the system scored, with the content analysis and a drafted prescription, plus Teaser and Full Detail versions.' };
+  }
+  const label = { hospital: 'Hospital', service_line: 'Hospital Service Line', specialty: 'Specialty Practice', community_health: 'Community Health' }[what];
+  if (what === 'community_health' && goal !== 'diagnose')
+    return { page: 'individual', type: what, title: 'Deep Diagnostic', why: 'Rankings, Compare Two and Trends are not available for community health centers yet — the Deep Diagnostic covers the center itself with the Mission Query battery.' };
+  if (goal === 'rank')    return { page: 'patient', type: what === 'hospital' ? 'hospital' : 'specialty', title: 'Competitors Rankings', why: `Ranks every ${what === 'hospital' ? 'hospital' : 'practice'} in the market, prospect-facing or full format.` };
+  if (goal === 'compare') return { page: 'compare', type: what, title: 'Compare Two', why: `Two organizations head-to-head in one report — set both sides to ${label}.` };
+  if (goal === 'track')   return { page: 'track', type: what, title: 'Trends', why: `Re-runs the ${label} Deep Diagnostic on a schedule and charts the score over time.` };
+  return { page: 'individual', type: what, title: 'Deep Diagnostic', why: `The full four-pillar diagnosis of one ${label.toLowerCase()} with the fixes that move the score.` };
+}
+function renderChooser() {
+  const host = document.getElementById('home-chooser-body');
+  if (!host) return;
+  const pills = (k, opts) => `<div class="hc-pills">${opts.map(([v, l]) => `<button class="hc-pill ${_chooser[k] === v ? 'on' : ''}" onclick="chooserPick('${k}','${v}')">${l}</button>`).join('')}</div>`;
+  const rec = _chooserRec();
+  host.innerHTML = `
+    <div class="hc-q">I'm looking at…</div>${pills('what', _CHOOSER_WHAT)}
+    ${_chooser.what && _chooser.what !== 'list' ? `<div class="hc-q">I want to…</div>${pills('goal', _CHOOSER_GOAL)}` : ''}
+    ${rec ? `<div class="hc-rec"><div><div class="t">→ ${rec.title}</div></div><div class="w">${rec.why}</div><button class="btn btn-primary btn-sm" onclick="chooserGo()">Open ${rec.title} →</button></div>` : ''}`;
+}
+function chooserGo() {
+  const rec = _chooserRec(); if (!rec) return;
+  navigate(rec.page);
+  try {
+    if (rec.page === 'individual' && rec.type) setIrType(rec.type);
+    else if (rec.page === 'patient' && rec.type) setPpType(rec.type);
+    else if (rec.page === 'compare' && rec.type) { setCmpType('a', rec.type); setCmpType('b', rec.type); }
+    else if (rec.page === 'track') { showAddEntityFlow(); setTeType(rec.type || 'hospital'); }
+  } catch (e) { /* page already open with defaults */ }
+}
+
+// ── Duplicate-run warning: same organization already run in the last 14 days ──
+const _dupAck = {};
+async function _dupGate(kind, params, errElId, retryFn) {
+  const key = kind + '|' + JSON.stringify(params).toLowerCase();
+  const old = document.getElementById(errElId + '-dup'); if (old) old.remove();
+  if (_dupAck[key]) return false;
+  let matches = [];
+  try {
+    const r = await api('/api/runs/recent-match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ kind }, params)) });
+    matches = r.ok ? await r.json() : [];
+  } catch (e) { return false; }
+  if (!matches.length) return false;
+  const errEl = document.getElementById(errElId);
+  if (!errEl) return false;
+  const m = matches[0];
+  const when = m.days_ago === 0 ? 'today' : m.days_ago === 1 ? 'yesterday' : `${m.days_ago} days ago`;
+  const who = m.ran_by ? String(m.ran_by).split('@')[0] : 'someone on your team';
+  const box = document.createElement('div');
+  box.id = errElId + '-dup'; box.className = 'dup-notice';
+  box.innerHTML = `<span style="font-size:16px">⚠</span><div class="d"><strong>${_learnEsc(m.title)}</strong> was already run ${when} by ${_learnEsc(who)}${matches.length > 1 ? ` (${matches.length} runs in the last 14 days)` : ''}. Scores rarely move within two weeks.</div>
+    ${m.has_pdf ? `<a class="btn btn-secondary btn-sm" href="${m.url}?token=${encodeURIComponent(_token)}">⬇ Open that report</a>` : ''}
+    <button class="btn btn-ghost btn-sm" onclick="navigate('history')">History</button>
+    <button class="btn btn-primary btn-sm" id="${errElId}-dup-go">Run anyway →</button>`;
+  errEl.parentNode.insertBefore(box, errEl);
+  document.getElementById(errElId + '-dup-go').onclick = () => { _dupAck[key] = true; box.remove(); retryFn(); };
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return true;
+}
+
+// ── Score confidence chip: evidence behind the number ────────────────────────
+function _confChip(level, note) {
+  if (!level) return '';
+  const lbl = { high: 'High evidence', medium: 'Medium evidence', low: 'Low evidence' }[level] || level;
+  return `<span class="conf-chip conf-${level}" title="${_learnEsc(note || 'How much public data sits behind this score: reviews, locations, CMS record, scored pillars')}">${lbl}</span>`;
+}
+function _confBox(c) {
+  if (!c || !c.level) return '';
+  const color = { high: '#1a7a4a', medium: '#8a6508', low: '#b42318' }[c.level] || 'var(--text)';
+  return `<div class="stat-box" title="${_learnEsc(c.note || '')}"><div class="stat-val" style="color:${color};font-size:22px">${c.label || c.level}</div><div class="stat-lbl">Score Evidence</div><div style="font-size:11px;color:var(--muted);margin-top:4px;max-width:220px">${_learnEsc(c.note || '')}</div></div>`;
+}
+
 // ── Flash message (bottom-center, auto-hides) ────────────────────────────────
 function _flash(msg, ms) {
   let el = document.getElementById('pulse-flash');
@@ -6821,11 +6948,11 @@ function showSingleDone(r) {
     const mqcrLine = mqcrPct != null
       ? `<div class="stat-box"><div class="stat-val">${mqcrPct}%</div><div class="stat-lbl">Mission Query Capture</div></div>`
       : '';
-    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">1</div><div class="stat-lbl">Health Center Analyzed</div></div>${mqcrLine}</div>`;
+    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">1</div><div class="stat-lbl">Health Center Analyzed</div></div>${mqcrLine}${_confBox(r.confidence)}</div>`;
   } else {
     const cnt = r.provider_count || 0;
     subText = `${cnt} provider${cnt !== 1 ? 's' : ''} analyzed`;
-    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">${cnt}</div><div class="stat-lbl">Providers Analyzed</div></div></div>`;
+    bodyHtml = `<div class="stat-row"><div class="stat-box"><div class="stat-val">${cnt}</div><div class="stat-lbl">Providers Analyzed</div></div>${_confBox(r.confidence)}</div>`;
   }
   document.getElementById('done-sub').textContent = subText;
   document.getElementById('done-body').innerHTML = bodyHtml;
@@ -8126,7 +8253,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
             return `<tr>
               <td style="color:var(--muted);font-size:13px;white-space:nowrap;line-height:1.4">${_fmtRunDate(run)}</td>
               <td style="font-weight:500;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_entName}">${_entName}</td>
-              <td>${typeBadge}</td>
+              <td>${typeBadge}${_confChip(run.confidence, run.confidence_note)}</td>
               <td style="text-align:right">${analyzedCount}</td>
               <td style="font-size:12px;color:var(--muted);white-space:nowrap" title="${run.ran_by || ''}">${_ranBy}</td>
               <td>${_dlCell(run, _caByBase[run.run_id] || [])}</td>
@@ -8789,7 +8916,7 @@ async function learnTogglePreview(){
 }
 
 function switchAdminTab(tab) {
-  ['users','requests','integrations'].forEach(t => {
+  ['users','requests','integrations','ops'].forEach(t => {
     const btn = document.getElementById('atab-' + t);
     const panel = document.getElementById('admin-' + t + '-panel');
     if (btn)   btn.classList.toggle('active', t === tab);
@@ -8798,12 +8925,46 @@ function switchAdminTab(tab) {
   if (tab === 'users')             loadAdminUsers();
   else if (tab === 'requests')     loadAdminRequests();
   else if (tab === 'integrations') loadIntegrations();
+  else if (tab === 'ops')          loadAdminOps();
+}
+
+let _adminOpsTimer = null;
+async function loadAdminOps() {
+  const host = document.getElementById('admin-ops-table');
+  const meta = document.getElementById('admin-ops-meta');
+  clearTimeout(_adminOpsTimer);
+  try {
+    const r = await api('/api/admin/jobs');
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to load'));
+    const d = await r.json();
+    const st = d.stats || {};
+    if (meta) meta.textContent = `${st.running || 0} running · ${st.done || 0} done · ${st.error || 0} failed · v${d.version} · up ${d.uptime_minutes >= 60 ? Math.floor(d.uptime_minutes / 60) + ' h ' + (d.uptime_minutes % 60) + ' m' : (d.uptime_minutes || 0) + ' m'}${d.workers ? ' · ' + d.workers + ' workers' : ''}`;
+    if (!(d.jobs || []).length) { host.innerHTML = '<div class="empty" style="padding:24px 0"><div>No runs since this server started.</div></div>'; return; }
+    const badge = j => j.status === 'running' ? '<span class="badge bg-muted" style="font-size:10px"><span class="spinner" style="width:9px;height:9px;border-width:2px;margin-right:4px"></span>Running</span>'
+      : j.status === 'done' ? '<span class="badge bg-teal" style="font-size:10px">Done</span>'
+      : `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px" title="${_learnEsc(j.error || '')}">Failed</span>`;
+    host.innerHTML = `<div style="overflow-x:auto"><table class="tbl" style="width:100%"><thead><tr>
+        <th style="text-align:left">Started</th><th style="text-align:left">Kind</th><th style="text-align:left">Run</th><th style="text-align:left">User</th><th style="text-align:left">Status</th><th style="text-align:right">Elapsed</th><th></th>
+      </tr></thead><tbody>${d.jobs.map(j => `<tr>
+        <td style="white-space:nowrap;color:var(--muted);font-size:12px">${new Date(j.started_at * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}</td>
+        <td style="white-space:nowrap">${_learnEsc(j.kind)}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_learnEsc(j.label)}">${_learnEsc(j.label)}</td>
+        <td style="font-size:12px;color:var(--muted)" title="${_learnEsc(j.email)}">${_learnEsc((j.email || '').split('@')[0] || j.role || '—')}</td>
+        <td>${badge(j)}</td>
+        <td style="text-align:right;white-space:nowrap;font-size:12px">${j.minutes < 1 ? '<1 min' : Math.round(j.minutes) + ' min'}</td>
+        <td>${j.status === 'done' && j.run_id ? `<button class="btn btn-ghost btn-sm" onclick="navigate('history')">History</button>` : ''}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+    if ((st.running || 0) > 0 && document.getElementById('page-admin').classList.contains('active')
+        && document.getElementById('admin-ops-panel').style.display !== 'none') _adminOpsTimer = setTimeout(loadAdminOps, 15000);
+  } catch (e) {
+    host.innerHTML = `<div class="empty" style="padding:24px 0"><div>${_learnEsc(e.message || 'Failed to load')}</div></div>`;
+  }
 }
 
 async function loadAdminPage() {
   // Integrations Admins get a scoped view: only the Integrations tab, no user mgmt.
   const superAdmin = (_role === 'admin');
-  ['atab-users','atab-requests','admin-test-email-btn'].forEach(id => {
+  ['atab-users','atab-requests','atab-ops','admin-test-email-btn'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = superAdmin ? '' : 'none';
   });
   const sub = document.querySelector('#page-admin .page-sub');
@@ -9595,7 +9756,7 @@ function renderTrackEntityList() {
       ? `<span style="font-weight:700;font-size:15px;color:var(--text)">${e.latest_score}</span>` +
         (e.score_delta == null || e.score_delta === 0
           ? (e.score_delta === 0 ? ` <span style="font-size:11px;color:var(--muted)">no change</span>` : '')
-          : ` <span style="font-size:11px;font-weight:700;color:${e.score_delta > 0 ? '#1a7a4a' : '#b42318'}">${e.score_delta > 0 ? '▲' : '▼'}${Math.abs(e.score_delta)}</span>`)
+          : ` <span style="font-size:11px;font-weight:700;color:${e.score_delta > 0 ? '#1a7a4a' : '#b42318'}">${e.score_delta > 0 ? '▲' : '▼'}${Math.abs(e.score_delta)}</span>`) + _confChip(e.latest_confidence)
       : `<span style="color:var(--muted);font-size:12px">no runs yet</span>`;
     const typeLbl = _trackTypeLabel(e.entity_type);
     const expected = (e.entity_type === 'practice' || e.entity_type === 'service_line') ? 'practice' : 'hospital';

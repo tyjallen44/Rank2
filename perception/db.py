@@ -214,6 +214,8 @@ def init_db() -> None:
         ("event_id", "VARCHAR"),
         ("comparison_id", "VARCHAR"),    # side run created for a Compare Two report (no own PDF)
         ("created_at", "TIMESTAMP"),
+        ("confidence", "VARCHAR"),       # evidence behind the score: high | medium | low
+        ("confidence_note", "VARCHAR"),  # e.g. "312 reviews across 4 locations"
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -1655,7 +1657,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
     analysis_cols = ["run_id", "location", "specialty", "generated_at",
                      "pdf_path", "teaser_pdf_path", "md_path", "briefing_pdf_path", "event_id",
                      "entity_type", "mqcr", "entity_name", "ran_by", "provider_count", "created_at",
-                     "service_line", "parent_system"]
+                     "service_line", "parent_system", "confidence", "confidence_note"]
 
     if role == "admin":
         analysis_rows = con.execute("""
@@ -2166,16 +2168,16 @@ def list_tracked_entities() -> list[dict]:
     hist: dict[str, list] = {k: [] for k in keys}
     if keys:
         ph = ",".join("?" * len(keys))
-        for k, gen, rid, score, prof in con.execute(
+        for k, gen, rid, score, prof, conf in con.execute(
             f"""SELECT LOWER(a.entity_name), a.generated_at, a.run_id, p.ai_visibility_score,
-                       a.weighting_profile
+                       a.weighting_profile, a.confidence
                 FROM analysis_runs a
                 JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
                 WHERE a.individual_report = TRUE AND LOWER(a.entity_name) IN ({ph})
                 ORDER BY a.generated_at ASC, a.run_id ASC""", keys).fetchall():
             if score is not None:
                 hist[k].append({"date": str(gen), "run_id": rid, "score": int(score),
-                                "rubric": rubric_for_profile(prof)})
+                                "rubric": rubric_for_profile(prof), "confidence": conf})
     con.close()
     for e in ents:
         h = hist.get((e.get("entity_name") or "").lower(), [])[-12:]
@@ -2183,6 +2185,7 @@ def list_tracked_entities() -> list[dict]:
         e["latest_score"] = h[-1]["score"] if h else None
         e["score_delta"] = (h[-1]["score"] - h[-2]["score"]) if len(h) >= 2 else None
         e["latest_rubric"] = h[-1]["rubric"] if h else None
+        e["latest_confidence"] = h[-1].get("confidence") if h else None
         e["rubrics"] = sorted({x["rubric"] for x in h})
     return ents
 
@@ -2684,3 +2687,61 @@ def set_notify_pref(email: str, on: bool) -> None:
     con = get_connection()
     con.execute("UPDATE users SET notify_complete = ? WHERE LOWER(email) = LOWER(?)", [bool(on), email])
     con.close()
+
+
+# ── Score confidence + duplicate-run lookup ──────────────────────────────────
+def set_run_confidence(run_id: str, level: str, note: str) -> None:
+    con = get_connection()
+    con.execute("UPDATE analysis_runs SET confidence = ?, confidence_note = ? WHERE run_id = ?",
+                [level, note, run_id])
+    con.close()
+
+
+def recent_runs_matching(kind: str, name: str, name_b: str = "", role: str = None,
+                         city: str = "", days: int = 14) -> list:
+    """Finished runs of the same organization in the last `days` days, newest first —
+    used to warn before launching a duplicate. Non-admin roles only see their role's runs."""
+    from datetime import date, timedelta
+    if not name:
+        return []
+    since = date.today() - timedelta(days=days)
+    role_sql, role_args = ("", []) if role in (None, "", "admin") else (" AND user_role = ?", [role])
+    con = get_connection()
+    out = []
+    if kind == "network":
+        rows = con.execute(
+            f"SELECT run_id, network_name, generated_at, ran_by, pdf_path FROM network_runs "
+            f"WHERE LOWER(network_name) = LOWER(?) AND generated_at >= ?{role_sql} "
+            f"ORDER BY generated_at DESC, created_at DESC NULLS LAST LIMIT 3",
+            [name, since] + role_args).fetchall()
+        out = [{"run_id": r[0], "title": r[1], "date": str(r[2]), "ran_by": r[3],
+                "has_pdf": bool(r[4]), "url": f"/api/network/{r[0]}/pdf"} for r in rows]
+    elif kind == "comparison":
+        rows = con.execute(
+            f"SELECT id, entity_a, entity_b, generated_at, ran_by, pdf_path FROM comparison_runs "
+            f"WHERE ((LOWER(entity_a) = LOWER(?) AND LOWER(entity_b) = LOWER(?)) "
+            f"   OR (LOWER(entity_a) = LOWER(?) AND LOWER(entity_b) = LOWER(?))) "
+            f"AND generated_at >= ?{role_sql} ORDER BY generated_at DESC, created_at DESC LIMIT 3",
+            [name, name_b or "", name_b or "", name, since] + role_args).fetchall()
+        out = [{"run_id": r[0], "title": f"{r[1]} vs {r[2]}", "date": str(r[3]), "ran_by": r[4],
+                "has_pdf": bool(r[5]), "url": f"/api/compare/{r[0]}/pdf"} for r in rows]
+    else:
+        loc_sql, loc_args = ("", [])
+        if city:
+            loc_sql, loc_args = " AND LOWER(location) LIKE LOWER(?)", [f"%{city}%"]
+        rows = con.execute(
+            f"SELECT run_id, entity_name, location, generated_at, ran_by, pdf_path FROM analysis_runs "
+            f"WHERE individual_report = TRUE AND comparison_id IS NULL AND LOWER(entity_name) = LOWER(?) "
+            f"AND generated_at >= ?{loc_sql}{role_sql} "
+            f"ORDER BY generated_at DESC, created_at DESC NULLS LAST LIMIT 3",
+            [name, since] + loc_args + role_args).fetchall()
+        out = [{"run_id": r[0], "title": r[1], "location": r[2], "date": str(r[3]), "ran_by": r[4],
+                "has_pdf": bool(r[5]), "url": f"/api/reports/{r[0]}/pdf"} for r in rows]
+    con.close()
+    today = date.today()
+    for o in out:
+        try:
+            o["days_ago"] = (today - date.fromisoformat(o["date"][:10])).days
+        except Exception:
+            o["days_ago"] = None
+    return out
