@@ -7314,7 +7314,8 @@ async function loadHistory() {
   try {
     const cached = JSON.parse(sessionStorage.getItem(_HIST_CACHE_KEY) || 'null');
     if (cached && Array.isArray(cached.runs)) {
-      _historyRuns = cached.runs;
+      _historyRuns = cached.runs; _histHasMore = !!cached.has_more; _histSince = cached.since || null;
+      _histShowingAll = false; _histSearchRuns = null;
       renderHistory(undefined, undefined, undefined, cached.content || []);
       painted = true;
     }
@@ -7323,10 +7324,12 @@ async function loadHistory() {
   // 2) Fresh data: only the main list + the content-run links it needs. The batch
   //    sections load when their control is expanded.
   try {
-    const [runsResp, caResp] = await Promise.all([api('/api/history'), api('/api/content-analysis/runs')]);
-    _historyRuns = await runsResp.json();
+    const [runsResp, caResp] = await Promise.all([api(`/api/history?days=${_HIST_WINDOW_DAYS}`), api('/api/content-analysis/runs')]);
+    const data = await runsResp.json();
+    _historyRuns = data.runs || []; _histHasMore = !!data.has_more; _histSince = data.since || null;
+    _histShowingAll = false; _histSearchRuns = null;
     const contentRuns = caResp.ok ? await caResp.json() : [];
-    try { sessionStorage.setItem(_HIST_CACHE_KEY, JSON.stringify({ runs: _historyRuns, content: contentRuns, ts: Date.now() })); }
+    try { sessionStorage.setItem(_HIST_CACHE_KEY, JSON.stringify({ runs: _historyRuns, has_more: _histHasMore, since: _histSince, content: contentRuns, ts: Date.now() })); }
     catch (e) { /* storage quota — fine */ }
     renderHistory(undefined, undefined, undefined, contentRuns);
     if (_histBatchOpen) _loadHistBatch();
@@ -7345,9 +7348,21 @@ function historySort(field) {
   renderHistory();
 }
 
-function historySearch(val) {
-  _historySearch = val;
-  renderHistory();
+function historySearch(v) {
+  _historySearch = v;
+  renderHistory();                       // instant: filter what's loaded
+  clearTimeout(_histSearchTimer);
+  if (!v.trim()) { _histSearchRuns = null; renderHistory(); return; }
+  const seq = ++_histSearchSeq;
+  _histSearchTimer = setTimeout(async () => {   // then: ask the server across ALL history
+    try {
+      const r = await api('/api/history?q=' + encodeURIComponent(v.trim()));
+      const data = await r.json();
+      if (seq !== _histSearchSeq || !_historySearch) return;
+      _histSearchRuns = data.runs || [];
+      renderHistory();
+    } catch (e) { /* keep the client-side filter */ }
+  }, 300);
 }
 
 function _historyFilename(r) {
@@ -7664,14 +7679,15 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
   }
 
   const q = _historySearch.toLowerCase();
+  const baseRuns = (q && _histSearchRuns) ? _histSearchRuns : _historyRuns;
   let runs = q
-    ? _historyRuns.filter(r => {
+    ? baseRuns.filter(r => {
         const fn = _historyFilename(r).toLowerCase();
         const en = (r.entity_name || '').toLowerCase();
         const rb = (r.ran_by || '').toLowerCase();
         return r.location.toLowerCase().includes(q) || fn.includes(q) || en.includes(q) || rb.includes(q);
       })
-    : _historyRuns.slice();
+    : baseRuns.slice();
 
   runs.sort((a, b) => {
     let va, vb;
@@ -7756,7 +7772,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
           : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px 0">No results match your search.</td></tr>`}
         </tbody>
       </table>
-    </div>`;
+    </div>` + _histFooter(runs.length);
   // Progressive render: stream the remaining rows in chunks after first paint.
   if (rowHtml.length > _HIST_FIRST_CHUNK) {
     let i = _HIST_FIRST_CHUNK;
@@ -7860,6 +7876,45 @@ let _histBatchLoading = false;
 let _histRenderSeq = 0;           // guards chunked row appends against re-renders
 const _HIST_FIRST_CHUNK = 60;     // rows rendered synchronously; the rest stream in
 const _HIST_CACHE_KEY = 'pulse_history_cache';
+// Default window: the last 45 days. "Show older runs" appends 90-day slices; search
+// asks the server to look across ALL history. Nothing is ever deleted by the window.
+const _HIST_WINDOW_DAYS = 45;
+const _HIST_OLDER_DAYS = 90;
+let _histHasMore = false;     // older runs exist beyond what's loaded
+let _histSince = null;        // ISO start of the oldest loaded slice
+let _histShowingAll = false;
+let _histSearchRuns = null;   // server-side search results while a search is active
+let _histSearchTimer = null;
+let _histSearchSeq = 0;
+
+async function histLoadOlder(all) {
+  const btn = document.getElementById('hist-older-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+  try {
+    const url = all ? '/api/history?all=1'
+                    : `/api/history?before=${encodeURIComponent(_histSince || new Date().toISOString())}&days=${_HIST_OLDER_DAYS}`;
+    const r = await api(url);
+    const data = await r.json();
+    if (all) { _historyRuns = data.runs || []; _histShowingAll = true; _histHasMore = false; }
+    else {
+      const seen = new Set(_historyRuns.map(x => x.run_id));
+      (data.runs || []).forEach(x => { if (!seen.has(x.run_id)) _historyRuns.push(x); });
+      _histHasMore = !!data.has_more; _histSince = data.since;
+    }
+    renderHistory();
+  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Show older runs'; } }
+}
+function _histFooter(shownCount) {
+  if (_historySearch) return `<div style="font-size:12px;color:var(--muted);padding:12px 4px">${shownCount} match${shownCount === 1 ? '' : 'es'} across all history.</div>`;
+  const sinceLbl = _histSince ? new Date(_histSince).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '';
+  const scope = _histShowingAll ? 'Showing all runs' : (sinceLbl ? `Showing runs since ${sinceLbl}` : 'Showing recent runs');
+  return `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 4px 4px">
+    <span style="font-size:12px;color:var(--muted)">${scope} · ${shownCount} run${shownCount === 1 ? '' : 's'}. Older runs are kept for Trends and can be loaded here.</span>
+    ${_histHasMore ? `<button id="hist-older-btn" class="btn btn-secondary btn-sm" onclick="histLoadOlder(false)">Show older runs (${_HIST_OLDER_DAYS} days)</button>
+    <button class="btn btn-ghost btn-sm" onclick="histLoadOlder(true)">Show all</button>` : ''}
+  </div>`;
+}
+
 
 async function _loadHistBatch() {
   if (_histBatchLoaded || _histBatchLoading) return;

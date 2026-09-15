@@ -1517,3 +1517,44 @@ behave as before; a row whose PDF file was deleted from storage shows no Report 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. The big win (item 1) only shows on production where REPORTS_DIR is a GCS
 FUSE mount; locally the difference is small.
+
+## HISTORY-WINDOW — 45-day default window, "Show older runs", search across all history
+
+**Shipped:** 2026-09-15 · **Area:** History (server + client) · **Type:** UX
+
+### What changed
+- `GET /api/history` now returns `{runs, has_more, since, until, total}` and accepts `days`
+  (default 45), `before=<iso>` + `days` (next older slice), `q` (search across ALL history, no
+  window) and `all=1`. The file-existence pass runs only on the returned slice.
+- History loads the **last 45 days** by default. Footer: "Showing runs since <date> · N runs.
+  Older runs are kept for Trends and can be loaded here." with **Show older runs (90 days)**
+  (appends the next slice, repeatable) and **Show all**. Nothing is deleted by the window.
+- **Search** filters loaded rows instantly, then (300 ms debounce) asks the server for matches
+  across all history; clearing the box returns to the window. Footer: "N matches across all
+  history".
+- Session cache stores the window payload with has_more/since.
+
+### Files changed
+`server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Window**: History shows only the last 45 days; footer states the since-date and count;
+Network tab shows `/api/history?days=45`.
+**T2 — Older**: "Show older runs (90 days)" appends older rows (no duplicates) and moves the
+since-date back; repeat until the buttons disappear. "Show all" → every run.
+**T3 — Search across history**: type part of an entity name older than 45 days → it appears
+within ~0.5 s with "N matches across all history"; clear → back to the window.
+**T4 — Sort**: column sorts work on the window, on appended slices, and on search results.
+**T5 — Cached paint**: navigate away/back → instant paint of the window; older-slice state resets.
+
+### Regression Checks
+- **R1** Trends unaffected (reads the database directly, not the window).
+- **R2** Batch control, chunked rows, download links from HISTORY-FAST unchanged.
+- **R3** Local endpoint sanity: 45-day window 209 of 543 runs (has_more true); older 90-day slice
+  334 (has_more false); search "houston" 14; all == total.
+
+### Acceptance Checklist
+- [ ] T1 window · [ ] T2 older/all · [ ] T3 search · [ ] T4 sort · [ ] T5 cache · [ ] R1–R3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.

@@ -2328,3 +2328,4 @@ def log_gbp_binding(
          datetime.utcnow().isoformat()],
     )
     con.close()
+

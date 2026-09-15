@@ -1203,12 +1203,48 @@ def _existing_files(paths: list, recent: Optional[set] = None) -> set:
     return present
 
 
+def _row_ts(r: dict):
+    """Best-effort timestamp for a history row (created_at, else generated_at date)."""
+    from datetime import datetime as _dt
+    for key in ("created_at", "generated_at"):
+        v = r.get(key)
+        if not v:
+            continue
+        try:
+            return _dt.fromisoformat(str(v).replace("Z", "")).replace(tzinfo=None)
+        except Exception:
+            continue
+    return _dt.min
+
+
 @app.get("/api/history")
-async def get_history(role: str = Depends(require_auth)):
+async def get_history(role: str = Depends(require_auth), days: int = 45,
+                      before: Optional[str] = None, q: Optional[str] = None, all: int = 0):
+    """History rows, newest first. Default: the last `days` days (45). `before=<iso>`
+    with `days` returns the next older slice; `q` searches ALL history (no window);
+    `all=1` returns everything. Response: {runs, has_more, since, until}."""
     from perception.db import init_db, query_history
     from datetime import datetime as _dt, timedelta as _td
     init_db()
-    rows = query_history(role)
+    every = query_history(role)
+    days = max(1, min(int(days or 45), 3650))
+    since = until = None
+    has_more = False
+    if q and q.strip():
+        needle = q.strip().lower()
+        def _hit(r):
+            return any(needle in str(r.get(k) or "").lower()
+                       for k in ("location", "entity_name", "ran_by", "specialty", "run_id",
+                                 "service_line", "parent_system"))
+        rows = [r for r in every if _hit(r)]
+    elif all:
+        rows = every
+    else:
+        until = _dt.fromisoformat(before.replace("Z", "")).replace(tzinfo=None) if before else _dt.utcnow()
+        since = until - _td(days=days)
+        rows = [r for r in every if since <= _row_ts(r) < until] if before else \
+               [r for r in every if _row_ts(r) >= since]
+        has_more = any(_row_ts(r) < since for r in every)
     # Files that might post-date the cached listing: rows created in the last 10 min.
     cutoff = _dt.utcnow() - _td(minutes=10)
     recent: set = set()
@@ -1245,7 +1281,10 @@ async def get_history(role: str = Depends(require_auth)):
             "has_full_detail_pdf": bool(r.get("full_detail_pdf_path")),
             "has_briefing_pdf": bool(bp and str(Path(bp)) in present),
         })
-    return result
+    return {"runs": result, "has_more": has_more,
+            "since": since.isoformat() if since else None,
+            "until": until.isoformat() if until else None,
+            "total": len(every)}
 
 
 @app.get("/api/reports/{run_id}/pdf")
