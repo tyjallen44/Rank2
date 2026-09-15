@@ -2469,3 +2469,14 @@ Commit: "Which report do I need?" helper on Home; duplicate-run warning before D
 **R2 — Fail-soft.** If the recent-match call fails (e.g. offline), the Run button proceeds without a notice. If confidence computation fails, the run completes and the log shows `[confidence] failed:`.
 
 **R3 — Migration.** Fresh boot adds `analysis_runs.confidence` and `confidence_note`; History and Trends load with NULLs (no chip).
+
+## HOME-VIDEO-SIZE — welcome video at about a third of the card width
+
+Commit: Home featured video is floated right at ~36% of the card width (max 360px); the text wraps beside it. Learn/Methodology embeds are unchanged. NEEDS BROWSER TESTING.
+
+**T1 — Home layout.** Sign in → Home. The welcome video sits on the right at roughly a third of the card width; the title and text fill the space to its left; nothing overlaps the "Which report do I need?" card below.
+- [ ] Video plays; the end-of-video reset still works (returns to poster, no host end screen).
+
+**T2 — Narrow window.** Below ~760px wide the video returns to full width above/below the text.
+
+**R1 — Learn pages.** Video embeds in Learn / Methodology articles stay full width.
