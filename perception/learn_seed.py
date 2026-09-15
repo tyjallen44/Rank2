@@ -13,18 +13,18 @@ STARTER_ARTICLES: list[dict] = [
         "category": "Overview",
         "title": "What is Pulse?",
         "body": (
-            "Pulse is the **AI Reputation Analysis Platform** for healthcare. "
-            "It measures how your organization shows up when patients and consumers "
-            "ask AI assistants — like ChatGPT, Gemini, and Copilot — for help choosing "
-            "where to get care.\n\n"
-            "Every report produces a **Pulse Score** (0–100) and a **national quartile** "
-            "(Q1–Q4), built from four pillars:\n\n"
-            "- **Outcomes & Safety** — quality, safety, and clinical reputation\n"
-            "- **Credentials & Recognition** — accreditations, awards, and affiliations\n"
-            "- **Experience & Reviews** — patient sentiment and ratings\n"
-            "- **Access & Fit** — location, availability, and how well you match what patients ask for\n\n"
-            "Together they tell you not just *whether* AI assistants mention you, but "
-            "*how favorably* — and where you stand against everyone else in your market."
+            'Pulse is the **AI Reputation Analysis Platform** for healthcare. It measures how your organization shows up when patients and consumers ask AI assistants — like ChatGPT, Gemini, Claude, and Copilot — for help choosing where to get care, and it tells you exactly what to change.\n'
+            '\n'
+            'Every report produces a **Pulse Score** (0–100) and a **national quartile** (1st through 4th), built from four pillars. For hospitals and health systems they are:\n'
+            '\n'
+            '- **Outcomes & Safety** — quality, safety, and clinical reputation\n'
+            '- **Credentials & Recognition** — accreditations, awards, and affiliations\n'
+            '- **Experience & Reviews** — patient sentiment and ratings\n'
+            '- **Access & Fit** — location, availability, and how well you match what patients ask for\n'
+            '\n'
+            'Specialty practices and hospital service lines are scored on a practice rubric with its own four pillars (Practitioner Credentials & Clinical Quality, Reviews & Reputation, Identity & Machine-Readability, Access & Fit), and community health centers use a five-pillar rubric — see the Methodology page.\n'
+            '\n'
+            'Together they tell you not just *whether* AI assistants mention you, but *how favorably* — and every Deep Diagnostic and Hospital Network report now includes a **content analysis with a drafted prescription**: the specific pages, listings, and structured data to fix, written out and ready to publish.'
         ),
     },
     {
@@ -46,78 +46,87 @@ STARTER_ARTICLES: list[dict] = [
         "category": "The Reports",
         "title": "Deep Diagnostic",
         "body": (
-            "A focused, in-depth report for a **single hospital or practice**.\n\n"
-            "**What it shows**\n\n"
-            "- Your Pulse Score and national quartile\n"
-            "- A full breakdown across the four pillars\n"
-            "- What AI assistants currently say about you — in their own words\n"
-            "- Specific, prioritized recommendations to improve\n\n"
-            "**Best for:** understanding one organization in detail, preparing for a "
-            "meeting, or establishing a baseline before making changes."
+            'A focused, in-depth report for **one organization**. Choose the analysis type first:\n'
+            '\n'
+            '- **Hospital** — a single hospital.\n'
+            '- **Hospital Service Line** — one department of a health system (e.g. *Houston Methodist Orthopedics*): every clinic of that service line rolled up and scored on the practice rubric.\n'
+            '- **Specialty Practice** — an independent practice or group, all locations included.\n'
+            '- **Community Health (FQHC)** — the Community Health Edition, on its five-pillar rubric.\n'
+            '\n'
+            '**What it shows**\n'
+            '\n'
+            '- Your Pulse Score and national quartile, with a full breakdown across the four pillars\n'
+            '- What AI assistants currently say about you — in their own words\n'
+            '- A **content analysis and drafted prescription** — the exact website, listing, Wikidata, and structured-data fixes, written out\n'
+            "- For practices and service lines, a **per-location reputation table**: every location's Google and third-party ratings and review volume\n"
+            '\n'
+            'Every run also produces a **Teaser** version (details blurred) for sending to a prospect.\n'
+            '\n'
+            '**Best for:** understanding one organization in detail, preparing for a meeting, or establishing a baseline before making changes.'
         ),
     },
     {
         "category": "The Reports",
         "title": "Hospital Network",
         "body": (
-            "An AI Reputation report for a **multi-facility or multi-state hospital "
-            "network**.\n\n"
-            "**What it shows**\n\n"
-            "- A network-level Pulse Score and quartile\n"
-            "- A **facility scorecard** ranking every hospital in the network\n"
-            "- Score-breakdown detail and network-wide patterns\n\n"
-            "**Best for:** health systems that need to see visibility across all their "
-            "facilities at once and spot which locations need attention."
+            'An AI Reputation report for a **multi-facility or multi-state hospital system**, designed for C-suite audiences and industry benchmarking.\n'
+            '\n'
+            '**What it shows**\n'
+            '\n'
+            '- A system-level Pulse Score and national quartile\n'
+            '- A facility scorecard ranking every hospital in the system\n'
+            "- The **content analysis and drafted prescription** for the system's digital footprint\n"
+            "- Optionally, a **service-line scorecard** grading each department's listings\n"
+            '\n'
+            'Every run produces three files: the **standard report**, a **Teaser** for prospects, and a **Full Detail** report with the complete content analysis and a publication-ready remediation draft for every finding.\n'
+            '\n'
+            '**Best for:** health systems that need to see their AI reputation across every facility at once and spot which locations need attention.'
         ),
     },
     {
         "category": "The Reports",
         "title": "Hospital Network — Bulk List Scoring",
         "body": (
-            "Score an **entire list of hospital systems at once**, instead of one "
-            "report at a time. Upload a spreadsheet of health systems and get the same "
-            "file back with an AI Reputation **Pulse Score**, a **national quartile**, "
-            "and all four pillar scores filled in for every entity.\n\n"
-            "**What it shows**\n\n"
-            "For each system in your list:\n\n"
-            "- A **Pulse Score** (0–100) and **national quartile** (Q1–Q4)\n"
-            "- All four pillar scores, on the same 0–100 scale:\n"
-            "  - **Outcomes & Safety** — quality, safety, and clinical reputation\n"
-            "  - **Credentials & Recognition** — accreditations, awards, and affiliations\n"
-            "  - **Experience & Reviews** — patient sentiment and ratings\n"
-            "  - **Access & Fit** — findability and match to what patients ask for\n\n"
-            "**How it works**\n\n"
-            "Switch the Hospital Network page to **Bulk List (CSV)** and upload a file "
-            "with a system-name column (city and state are optional). Pulse scores every "
-            "entity in the background — no individual reports to open — and you download "
-            "the enriched CSV when it's done. Each run is also saved under **National "
-            "Entity Runs** on the History page, so you can re-download it any time.\n\n"
-            "**Why the pillar detail matters**\n\n"
-            "The four pillar columns let you see *where* each system is strong or weak at "
-            "a glance. Sort or filter any column to find the systems with the biggest gaps "
-            "— whether in reputation, quality recognition, or findability.\n\n"
-            "**Good to know**\n\n"
-            "- Uses the same four-pillar engine as the Hospital Network and Hospital "
-            "Market reports, so a system reads the same score across every report.\n"
-            "- Fast and repeatable — recent scores are reused, and long lists can be "
-            "resumed if a run is interrupted.\n\n"
-            "**Best for:** sizing up a whole market, region, or target list quickly — and "
-            "spotting which systems most need attention."
+            "*Admin-only feature.* Score an entire list of hospital systems at once, instead of one report at a time. Upload a spreadsheet of health systems and get the same file back with each system's **Pulse Score (AI Reputation)**, national quartile, and all four pillar scores filled in.\n"
+            '\n'
+            '**What it shows**\n'
+            '\n'
+            'For each system in your list:\n'
+            '\n'
+            '- A Pulse Score (0–100) and national quartile (1st through 4th)\n'
+            '- All four pillar scores on the same 0–100 scale: Outcomes & Safety, Credentials & Recognition, Experience & Reviews, Access & Fit\n'
+            '\n'
+            '**How it works**\n'
+            '\n'
+            "Admins switch the Hospital Network page to **Bulk List (CSV)** and upload a file with a system-name column (city and state are optional). Pulse scores every entity in the background — no individual reports to open — and the enriched CSV is ready to download when it's done. Each run is also saved under *National Entity Runs* on the History page.\n"
+            '\n'
+            '**Good to know**\n'
+            '\n'
+            '- Uses the same four-pillar engine as the Hospital Network and Competitors Rankings reports, so a system reads the same score across every report.\n'
+            '- Fast and repeatable — recent scores are reused, and long lists can be resumed if a run is interrupted.\n'
+            '\n'
+            '**Best for:** sizing up a whole market, region, or target list quickly — and spotting which systems most need attention.'
         ),
     },
     {
         "category": "The Reports",
         "title": "Competitors Rankings",
         "body": (
-            "Ranks the providers in a market from **most to least AI-visible**, exactly "
-            "as they surface when patients ask.\n\n"
-            "Two ways to run it:\n\n"
-            "- **Enticement (prospect-facing)** — your prospect is shown clearly at their "
-            "true rank while every other competitor is obscured. Perfect for showing a "
-            "prospect where they really stand without revealing competitor detail.\n"
-            "- **Full report (customer-facing)** — the complete, un-obscured market "
-            "ranking for an existing customer.\n\n"
-            "**Best for:** business development and competitive positioning conversations."
+            'Ranks the providers in a market from strongest to weakest AI reputation, exactly as they surface when patients ask.\n'
+            '\n'
+            '**Three ways to define the field**\n'
+            '\n'
+            '- **Enter a market** — a city and state, or a ZIP code and radius.\n'
+            '- **Upload a spreadsheet** — your own list of organizations.\n'
+            '- **Student Health Clinics** — on-campus university clinics by state, radius, or athletic conference, on a rubric tailored to student health.\n'
+            '\n'
+            '**Three report formats**\n'
+            '\n'
+            '- **Enticement** (prospect-facing) — your prospect is shown in full at their true rank while every competitor is obscured.\n'
+            '- **Market Summary** — compact scorecards for every provider, nothing hidden.\n'
+            '- **Full report** (customer-facing) — the complete market ranking with the detail behind every score.\n'
+            '\n'
+            '**Best for:** business development and competitive positioning conversations.'
         ),
     },
     {
@@ -137,13 +146,16 @@ STARTER_ARTICLES: list[dict] = [
         "category": "The Reports",
         "title": "Event Preparation",
         "body": (
-            "Generates AI-reputation diagnostics for a **list of event attendees** in one "
-            "batch.\n\n"
-            "**What it shows**\n\n"
-            "- A diagnostic for each organization on your list\n"
-            "- An exportable summary (including letter grades) for quick review\n\n"
-            "**Best for:** conferences and events — walk in already knowing every "
-            "attendee's AI reputation."
+            'Generates an AI Reputation diagnostic for **every organization on an attendee list** in one batch.\n'
+            '\n'
+            '**What you get**\n'
+            '\n'
+            '- A report PDF for each organization, delivered together in a ZIP\n'
+            "- Your list back as an **enriched CSV** with each attendee's Pulse Score, quartile, and letter grade for quick review\n"
+            '- For specialty-practice attendees, the full combined report with the content analysis and drafted prescription\n'
+            '- Optionally, a Teaser version of each report\n'
+            '\n'
+            "**Best for:** conferences and events — walk in already knowing every attendee's AI reputation and what you'd tell them to fix."
         ),
     },
     # ── Who It's For ──────────────────────────────────────────────────────────
@@ -165,12 +177,12 @@ STARTER_ARTICLES: list[dict] = [
         "category": "Getting Started",
         "title": "How to run a report",
         "body": (
-            "1. Sign in and choose a report type from **Report Creation** in the sidebar.\n"
-            "2. Enter the organization or market details the report asks for.\n"
-            "3. Start the run — Pulse gathers and analyzes the data live and shows progress "
-            "as it works.\n"
-            "4. When it finishes, review the report on screen and **download the PDF**.\n\n"
-            "Past reports are always available under **History**."
+            '- Sign in — you land on the **Home** page, with a short welcome video and a card for every report type.\n'
+            '- Pick a report from the Home cards or from **Report Creation** in the sidebar.\n'
+            '- Enter the organization or market details the report asks for, confirm the locations Pulse finds, and start the run — progress streams live as it works.\n'
+            '- When it finishes, review the report on screen and download the PDF (and the Teaser, where one is produced).\n'
+            '\n'
+            'Past reports are always available under **History**.'
         ),
     },
     {
@@ -193,37 +205,25 @@ METHODOLOGY_ARTICLES: list[dict] = [
         "category": "Overview",
         "title": "What the Pulse Score measures",
         "body": (
-            "The **Pulse Score** (0–100) measures how visible and favorable an "
-            "organization is when patients and referring professionals ask AI "
-            "assistants — ChatGPT, Claude, and Gemini — where to get care. It is a "
-            "**market-perception measure**, not a clinical-quality verdict: it reflects "
-            "how the public signals AI assistants rely on add up, not the underlying "
-            "quality of care.\n\n"
-            "Every report — Deep Diagnostic, Hospital Network, Competitors Rankings, "
-            "Compare Two, and Event Preparation — uses this same score, so a given "
-            "organization reads consistently across reports."
+            'The **Pulse Score** (0–100) measures how favorably an organization is represented when patients and referring professionals ask AI assistants — ChatGPT, Gemini, Claude, and Copilot — where to get care. It is a **market-perception measure**, not a clinical-quality verdict: it reflects how the public signals AI assistants rely on add up, not the underlying quality of care.\n'
+            '\n'
+            'Every report — Deep Diagnostic, Hospital Network, Competitors Rankings, Compare Two, and Event Preparation — uses this same score, and a scored organization is cached for 30 days so it reads identically across reports run in that window.'
         ),
     },
     {
         "category": "Scoring — The Four Pillars",
         "title": "The four pillars",
         "body": (
-            "For hospitals, practices, and markets, the Pulse Score is a weighted blend "
-            "of four pillars, each scored 0–100:\n\n"
-            "- **Outcomes & Safety** — clinical quality, safety, and reputation (e.g. the "
-            "CMS Overall Hospital Quality Star Rating; for practices, procedure depth and "
-            "accreditations).\n"
-            "- **Credentials & Recognition** — accreditations, awards, national rankings "
-            "(e.g. U.S. News), fellowship training, and academic affiliation.\n"
-            "- **Experience & Reviews** — patient sentiment and verified review volume and "
-            "ratings.\n"
-            "- **Access & Fit** — location, availability, online scheduling, insurance "
-            "breadth, and how well the organization matches what patients ask for.\n\n"
-            "The weighting of the four pillars is set by a **profile** matched to the "
-            "organization type (e.g. procedural vs. relationship-based specialties), so the "
-            "blend reflects what actually drives patient choice in that setting. An "
-            "unscored pillar (a signal that could not be established) is shown in red rather "
-            "than guessed."
+            'For hospitals and health systems, the Pulse Score is a weighted blend of four pillars, each scored 0–100:\n'
+            '\n'
+            '- **Outcomes & Safety** — clinical quality, safety, and reputation (e.g. the CMS Overall Hospital Quality Star Rating and the Leapfrog Hospital Safety Grade).\n'
+            '- **Credentials & Recognition** — accreditations, awards, national rankings (e.g. U.S. News), fellowship training, and academic affiliation.\n'
+            '- **Experience & Reviews** — patient sentiment and verified review volume and ratings.\n'
+            '- **Access & Fit** — location, availability, online scheduling, insurance breadth, and how well the organization matches what patients ask for.\n'
+            '\n'
+            "Specialty practices and hospital service lines use the **practice rubric**, whose four pillars are **Practitioner Credentials & Clinical Quality**, **Reviews & Reputation**, **Identity & Machine-Readability**, and **Access & Fit**. The Reviews & Reputation pillar is computed from **every confirmed location** — a review-count-weighted average of their Google ratings and their combined review volume — so it always agrees with the per-location reputation table in the report and is never taken from a parent hospital's main listing.\n"
+            '\n'
+            'The weighting of the pillars is set by a profile matched to the organization type (e.g. procedural vs. relationship-based specialties), so the blend reflects what actually drives patient choice in that setting. An unscored pillar (a signal that could not be established) is shown in red rather than guessed.'
         ),
     },
     {
@@ -244,34 +244,31 @@ METHODOLOGY_ARTICLES: list[dict] = [
         "category": "Data Sources",
         "title": "Where the signals come from",
         "body": (
-            "Scores and rankings are derived from publicly available signals collected at "
-            "the time of the report. No quotes, patient statements, or clinical outcomes "
-            "are fabricated. Primary sources include:\n\n"
-            "- **CMS Care Compare** — Overall Hospital Quality Star Rating.\n"
-            "- **The Leapfrog Group** — Hospital Safety Grade (A–F).\n"
-            "- **Google (Places)** — verified ratings and review volume, sampled across a "
-            "system's locations.\n"
-            "- **U.S. News & World Report** — national and specialty rankings.\n"
-            "- **NPPES** — provider/organization identity and physician rosters.\n\n"
-            "Ratings, review counts, accreditation statuses, and quality designations change "
-            "over time; verify current standings directly with the primary source before "
-            "making coverage, referral, or treatment decisions."
+            'Scores, rankings, and content findings are derived from publicly available signals collected at the time of the report. No quotes, patient statements, or clinical outcomes are fabricated. Primary sources include:\n'
+            '\n'
+            '- **CMS Care Compare** — Overall Hospital Quality Star Rating.\n'
+            '- **The Leapfrog Group** — Hospital Safety Grade (A–F).\n'
+            '- **Google Business Profiles** — verified ratings and review volume, with each location pinned to its own listing.\n'
+            '- **Healthgrades, Vitals, WebMD, Yelp, and RateMDs** — third-party ratings for the per-location reputation table.\n'
+            '- **U.S. News & World Report** — national and specialty rankings.\n'
+            '- **NPPES** — provider/organization identity and physician rosters.\n'
+            "- **The organization's own website** — crawled for structured data (schema.org), an llms.txt file, and AI-crawler access — plus **Wikidata** and **Wikipedia** for the content analysis.\n"
+            '- **HRSA Find-a-Health-Center** — for the Community Health Edition.\n'
+            '\n'
+            'Ratings, review counts, accreditation statuses, and quality designations change over time; verify current standings directly with the primary source before making coverage, referral, or treatment decisions.'
         ),
     },
     {
-        "category": "The Prompt Battery",
-        "title": "How AI assistants are queried",
+        "category": "Scoring Method",
+        "title": "How the score is produced",
         "body": (
-            "Pulse evaluates visibility by running a **battery of realistic patient and "
-            "referrer queries** against today's leading AI assistants — the same kinds of "
-            "questions people actually ask (*\"best orthopedic surgeon near me,\" \"which "
-            "hospital for heart surgery in [city],\"* and so on) — spanning brand, local, "
-            "specialty, and referral framings.\n\n"
-            "The final score is a **usage-weighted blend across assistants**, so an "
-            "organization that surfaces well on the assistants patients actually use counts "
-            "for more. Divergence between assistants is itself diagnostic — strong on one "
-            "assistant but weak on another typically points to an uneven digital footprint "
-            "(for example, Google-listings-heavy but thin in the training-data record)."
+            'Pulse does not ask a single AI assistant for a verdict and repeat it. Each report is built in three steps:\n'
+            '\n'
+            "1. **Evidence first.** Pulse gathers the public signals an AI assistant would find — Google listings for every confirmed location, CMS and Leapfrog quality data, U.S. News rankings, NPPES identity records, and the organization's own website, Wikidata, and Wikipedia presence.\n"
+            '2. **Rubric-scored analysis.** An AI analyst model assesses each pillar against that evidence using a fixed rubric — the same questions patients and referrers actually ask (*"best orthopedic surgeon near me," "which hospital for heart surgery in [city]"*) across brand, local, specialty, and referral framings — and reports what AI assistants currently say in their own words.\n'
+            "3. **Deterministic scoring.** The four pillar scores are combined by the organization's weighting profile into the Pulse Score. Google-verified signals override the model where they disagree, so a rating or review count in a report is always the real one.\n"
+            '\n'
+            'The Community Health Edition adds a true query battery: the **Mission Query Capture Rate (MQCR)** measures how often a health center is actually surfaced for the mission-related questions its patients ask.'
         ),
     },
     {
