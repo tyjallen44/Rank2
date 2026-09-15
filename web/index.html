@@ -7447,6 +7447,7 @@ function _dlCell(run, caRuns) {
     if (!ca.drafted) acts.push(['Generate Full Content Plan', `caDraftFromHistory('${ca.id}', this)`]);
     acts.push(['Rebuild content report', `caRerender('${ca.id}', this)`]);
   }
+  if (_role === 'admin') acts.push(['🗑 Delete run', `histDeleteRun('${run.run_id}', this)`]);
   return _dlMenu(run.run_id, files, acts);
 }
 
@@ -7903,6 +7904,21 @@ async function histLoadOlder(all) {
     }
     renderHistory();
   } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Show older runs'; } }
+}
+async function histDeleteRun(runId, btn) {
+  if (!confirm('Delete this run, its data and its report files? This cannot be undone.')) return;
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/reports/' + encodeURIComponent(runId), { method: 'DELETE' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Delete failed'));
+    _historyRuns = _historyRuns.filter(x => x.run_id !== runId);
+    if (_histSearchRuns) _histSearchRuns = _histSearchRuns.filter(x => x.run_id !== runId);
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(_HIST_CACHE_KEY) || 'null');
+      if (cached && Array.isArray(cached.runs)) { cached.runs = cached.runs.filter(x => x.run_id !== runId); sessionStorage.setItem(_HIST_CACHE_KEY, JSON.stringify(cached)); }
+    } catch (e) {}
+    renderHistory();
+  } catch (e) { alert(e.message); if (btn) btn.disabled = false; }
 }
 function _histFooter(shownCount) {
   if (_historySearch) return `<div style="font-size:12px;color:var(--muted);padding:12px 4px">${shownCount} match${shownCount === 1 ? '' : 'es'} across all history.</div>`;

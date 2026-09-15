@@ -1558,3 +1558,48 @@ within ~0.5 s with "N matches across all history"; clear → back to the window.
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING.
+
+## HISTORY-ADMIN-DELETE — Admin can delete a single run (data + report files)
+
+**Shipped:** 2026-09-15 · **Area:** History · **Type:** admin capability (explicitly approved; permanent)
+
+### What changed
+- Admin-only **🗑 Delete run** action in a History row's Downloads menu → confirm dialog →
+  `DELETE /api/reports/{run_id}` (`require_admin`; 403 otherwise; 404 if unknown).
+- Server cascade (`delete_analysis_run` / `delete_network_run` in `perception/db.py`):
+  ranked_providers, content-analysis runs bound to the run (+ their report files) and
+  content_findings, practice reputation runs/practices/physicians/log, FQHC intake/audit/battery,
+  the run's own canonical `entity_scores` row; loose pointers are nulled (event_entities,
+  gbp_identity, public_report_requests). Files unlinked: PDF, teaser, briefing, markdown, content
+  report 1/2 (network: standard/teaser/full-detail). The storage listing cache is cleared so
+  History reflects it immediately.
+- Client removes the row from the loaded set, search results and the session cache, then re-renders.
+- This is a cleanup tool for junk/test runs. The 45-day window (HISTORY-WINDOW) is the retention
+  answer; nothing is deleted automatically.
+
+### Files changed
+`server.py`, `perception/db.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Admin delete (Deep Diagnostic)**: create a throwaway run → History → Downloads → "🗑 Delete
+run" → confirm → row disappears at once; reload → still gone; the old PDF URL returns 404; Trends
+for that entity no longer includes the run.
+**T2 — Hospital Network run**: same flow on a network row → standard / Teaser / Full Detail files
+removed; row gone.
+**T3 — Cancel**: click Delete then Cancel → nothing changes.
+**T4 — Non-admin**: no Delete item in the menu; a direct `DELETE /api/reports/<id>` returns 403.
+**T5 — Unknown id**: `DELETE /api/reports/does-not-exist` as admin → 404.
+**T6 — Dependent data**: for a practice run with a composite table and content analysis, after
+delete the content report links are gone and no orphaned content-analysis row remains in
+`/api/content-analysis/runs`.
+
+### Regression Checks
+- **R1** Deleting one run leaves other runs of the same entity intact (Trends still shows them).
+- **R2** Event Prep / bulk / student-health deletes unchanged (separate endpoints).
+- **R3** Unit suite at baseline; helpers return None for unknown ids.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] R1–R3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Deletion is permanent — use throwaway runs only.

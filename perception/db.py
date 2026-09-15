@@ -2329,3 +2329,75 @@ def log_gbp_binding(
     )
     con.close()
 
+
+# ── Admin: delete a single run (cleanup of junk/test runs; NOT a retention tool) ──
+def _rows(con, sql, params):
+    try:
+        return con.execute(sql, params).fetchall()
+    except Exception:
+        return []
+
+
+def _exec(con, sql, params) -> None:
+    try:
+        con.execute(sql, params)
+    except Exception:
+        pass   # optional table/column missing on this schema — skip
+
+
+def delete_analysis_run(run_id: str) -> Optional[dict]:
+    """Delete a Deep Diagnostic / market run and everything hanging off it.
+    Returns {"files": [paths]} for the caller to unlink, or None if not found."""
+    con = get_connection()
+    row = _rows(con, "SELECT pdf_path, teaser_pdf_path, briefing_pdf_path, md_path "
+                     "FROM analysis_runs WHERE run_id = ?", [run_id])
+    if not row:
+        con.close()
+        return None
+    files = [p for p in row[0] if p]
+    # Content analysis bound to this run (reports + findings)
+    for r in _rows(con, "SELECT id, report1_path, report2_path FROM content_analysis_runs "
+                        "WHERE base_run_id = ?", [run_id]):
+        files += [p for p in r[1:] if p]
+        _exec(con, "DELETE FROM content_analysis_runs WHERE id = ?", [r[0]])
+    _exec(con, "DELETE FROM content_findings WHERE run_id = ?", [run_id])
+    # Practice reputation tables
+    for r in _rows(con, "SELECT id FROM practice_reputation_runs WHERE run_id = ?", [run_id]):
+        _exec(con, "DELETE FROM practice_reputation_practices WHERE rep_run_id = ?", [r[0]])
+        _exec(con, "DELETE FROM practice_reputation_physicians WHERE rep_run_id = ?", [r[0]])
+    _exec(con, "DELETE FROM practice_reputation_runs WHERE run_id = ?", [run_id])
+    _exec(con, "DELETE FROM practice_reputation_run_log WHERE run_id = ?", [run_id])
+    # FQHC edition
+    _exec(con, "DELETE FROM fqhc_battery_runs WHERE fqhc_run_id = ?", [run_id])
+    _exec(con, "DELETE FROM fqhc_fact_audit WHERE run_id = ?", [run_id])
+    _exec(con, "DELETE FROM fqhc_intake WHERE run_id = ?", [run_id])
+    # Canonical score seeded by this run should not outlive it
+    _exec(con, "DELETE FROM entity_scores WHERE run_id = ?", [run_id])
+    # Loose references: keep the rows, drop the pointer
+    _exec(con, "UPDATE event_entities SET run_id = NULL WHERE run_id = ?", [run_id])
+    _exec(con, "UPDATE gbp_identity SET run_id = NULL WHERE run_id = ?", [run_id])
+    _exec(con, "UPDATE public_report_requests SET run_id = NULL WHERE run_id = ?", [run_id])
+    _exec(con, "DELETE FROM ranked_providers WHERE run_id = ?", [run_id])
+    _exec(con, "DELETE FROM analysis_runs WHERE run_id = ?", [run_id])
+    con.close()
+    return {"files": files}
+
+
+def delete_network_run(run_id: str) -> Optional[dict]:
+    """Delete a Hospital Network run (+ bound content analysis). Returns files to unlink."""
+    con = get_connection()
+    row = _rows(con, "SELECT pdf_path, teaser_pdf_path, full_detail_pdf_path FROM network_runs "
+                     "WHERE run_id = ?", [run_id])
+    if not row:
+        con.close()
+        return None
+    files = [p for p in row[0] if p]
+    for r in _rows(con, "SELECT id, report1_path, report2_path FROM content_analysis_runs "
+                        "WHERE base_run_id = ?", [run_id]):
+        files += [p for p in r[1:] if p]
+        _exec(con, "DELETE FROM content_analysis_runs WHERE id = ?", [r[0]])
+    _exec(con, "DELETE FROM content_findings WHERE run_id = ?", [run_id])
+    _exec(con, "UPDATE public_report_requests SET run_id = NULL WHERE run_id = ?", [run_id])
+    _exec(con, "DELETE FROM network_runs WHERE run_id = ?", [run_id])
+    con.close()
+    return {"files": files}

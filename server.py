@@ -1287,6 +1287,25 @@ async def get_history(role: str = Depends(require_auth), days: int = 45,
             "total": len(every)}
 
 
+@app.delete("/api/reports/{run_id}")
+async def delete_report_run(run_id: str, _: dict = Depends(require_admin)):
+    """Admin: delete one run (Deep Diagnostic / market / FQHC or Hospital Network) with its
+    dependent rows and files. Cleanup for junk/test runs — History keeps everything else."""
+    from perception.db import init_db, delete_analysis_run, delete_network_run
+    init_db()
+    safe = "".join(ch for ch in run_id if ch.isalnum() or ch in "-_")
+    res = delete_network_run(safe) or delete_analysis_run(safe)
+    if res is None:
+        raise HTTPException(404, "Run not found")
+    for p in res.get("files") or []:
+        try:
+            Path(p).unlink(missing_ok=True)
+        except Exception:
+            pass
+    _DIR_LIST_CACHE.clear()
+    return Response(status_code=204)
+
+
 @app.get("/api/reports/{run_id}/pdf")
 async def download_pdf(run_id: str, role: str = Depends(require_auth)):
     from perception.db import query_history
