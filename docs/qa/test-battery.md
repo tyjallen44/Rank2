@@ -1648,3 +1648,51 @@ tooltip shows the full date and "in N days"/"N days ago".
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Production has 8 tracked entities — good coverage for T2/T3.
+
+## TRENDS-CONFIG — Per-entity configuration panel (safe edits only), run now, track-as-new, snapshot settings
+
+**Shipped:** 2026-09-15 · **Area:** Trends · **Type:** feature
+
+### What changed
+- **⚙ Details** on each Trends row expands an inline configuration panel:
+  - Locked identity (🔒): Entity, Market (city/state), Specialty, Scope (all locations / single),
+    plus "Tracking since" (date · creator). A note explains why they're locked and offers
+    **track a new entity** (prefills the add flow from this one; notes say "Supersedes …").
+  - Editable: **Cadence** (weekly/monthly/manual), **Next run** (date), **Notes** → **Save**.
+  - **Run now** starts an immediate snapshot run from the list.
+- Server: `PUT /api/track/entities/{id}` no longer accepts `aggregate` (identity locked);
+  accepts `next_run_at` (ISO date). Entity name/city/state/specialty were never editable.
+- Trend detail: new **Settings** column per snapshot ("All locations · Orthopedics · Houston, TX ·
+  practice_procedural") with a ⚠ when a snapshot's settings differ from the entity's current
+  configuration. `get_entity_trend` returns `run_aggregate`, `run_specialty`, `run_location`,
+  `run_profile`.
+
+### Files changed
+`perception/db.py`, `server.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Panel**: Trends → ⚙ Details on a row → panel shows the four locked fields with 🔒 and
+tooltip, Tracking since, and the editable Cadence / Next run / Notes with Save and Run now.
+**T2 — Safe edits**: change cadence to Weekly, set Next run to tomorrow, edit Notes → Save →
+"Saved."; row updates (Schedule badge, Next run, second line); reload → persisted; the trend line
+is unchanged.
+**T3 — Locked**: no controls to change name/market/specialty/scope; `PUT` with `{"aggregate":
+false}` is ignored (field not in the model); `next_run_at: "not-a-date"` → 400.
+**T4 — Track as new**: click "track a new entity" → add flow opens prefilled (name, city, state,
+specialty, cadence, scope, "Supersedes …" note); complete it → a second entity appears; the
+original keeps its history.
+**T5 — Run now**: click → message "Run started…"; a new snapshot appears in the trend detail when
+the run finishes; Last run / Runs update.
+**T6 — Snapshot settings**: open an entity's trend → Settings column filled per row; for an entity
+whose scope/specialty changed historically (or after T4 on the old entity), the differing rows
+show ⚠ with tooltip.
+
+### Regression Checks
+- **R1** Pause/Resume and the sparkline list (TRENDS-LIST) unchanged.
+- **R2** Suite at baseline.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] R1–R2
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.

@@ -3707,10 +3707,13 @@ class TrackEntityRequest(BaseModel):
     notes: str = ""
 
 class TrackEntityUpdate(BaseModel):
+    # Only fields that never change what is being measured are editable. Identity
+    # (entity_name, city/state, specialty, aggregate) is locked: changing any of them
+    # would make earlier snapshots non-comparable — track a new entity instead.
     active: Optional[bool] = None
     schedule: Optional[str] = None
     notes: Optional[str] = None
-    aggregate: Optional[bool] = None
+    next_run_at: Optional[str] = None      # ISO date or datetime
 
 
 @app.get("/api/track/entities")
@@ -3773,6 +3776,13 @@ async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends
     updates = {k: v for k, v in req.dict().items() if v is not None}
     if "schedule" in updates and updates["schedule"] not in ("monthly", "weekly", "manual"):
         raise HTTPException(400, "schedule must be monthly, weekly, or manual")
+    if "next_run_at" in updates:
+        from datetime import datetime as _dt
+        try:
+            v = str(updates["next_run_at"]).strip()
+            updates["next_run_at"] = _dt.fromisoformat(v + ("T00:00:00" if len(v) == 10 else ""))
+        except Exception:
+            raise HTTPException(400, "next_run_at must be an ISO date (YYYY-MM-DD)")
     update_tracked_entity(entity_id, **updates)
     entity = get_tracked_entity(entity_id)
     for k in ("last_run_at", "next_run_at", "created_at"):

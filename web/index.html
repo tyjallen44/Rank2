@@ -8793,6 +8793,80 @@ async function refreshTrackEntities() {
   }
 }
 
+let _trackCfgOpen = new Set();   // entity ids whose configuration panel is expanded
+
+function toggleTrackCfg(id) {
+  if (_trackCfgOpen.has(id)) _trackCfgOpen.delete(id); else _trackCfgOpen.add(id);
+  renderTrackEntityList();
+}
+async function saveTrackCfg(id) {
+  const body = {
+    schedule: document.getElementById(`tc-sched-${id}`)?.value,
+    notes:    (document.getElementById(`tc-notes-${id}`)?.value || '').trim(),
+  };
+  const nr = (document.getElementById(`tc-next-${id}`)?.value || '').trim();
+  if (nr) body.next_run_at = nr;
+  const msg = document.getElementById(`tc-msg-${id}`);
+  try {
+    const r = await api(`/api/track/entities/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Save failed'));
+    if (msg) msg.textContent = 'Saved.';
+    await refreshTrackEntities();
+  } catch (e) { if (msg) msg.textContent = e.message; }
+}
+async function runTrackNowFromList(id) {
+  const msg = document.getElementById(`tc-msg-${id}`);
+  if (msg) msg.textContent = 'Starting a run…';
+  try {
+    const r = await api(`/api/track/entities/${id}/run`, { method: 'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Run failed to start'));
+    if (msg) msg.textContent = 'Run started — a new snapshot will appear when it finishes.';
+  } catch (e) { if (msg) msg.textContent = e.message; }
+}
+// Start a NEW tracked entity prefilled from this one (the safe way to change identity
+// fields without breaking the existing trend line).
+function trackAsNewEntity(id) {
+  const e = _trackEntities.find(x => x.id === id);
+  showAddEntityFlow();
+  if (!e) return;
+  const set = (elId, v) => { const el = document.getElementById(elId); if (el) el.value = v || ''; };
+  set('te-name', (e.entity_name || '').toUpperCase());
+  set('te-city', (e.city || '').toUpperCase());
+  set('te-state', (e.state || '').toUpperCase());
+  set('te-specialty', e.specialty || '');
+  set('te-schedule', e.schedule || 'monthly');
+  const agg = document.getElementById('te-aggregate'); if (agg) agg.checked = !!e.aggregate;
+  set('te-notes', `Supersedes "${e.entity_name}" (${(e.created_at || '').slice(0, 10)})`);
+}
+function _trackCfgPanel(e) {
+  const created = (e.created_at || '').slice(0, 10);
+  const nextVal = e.next_run_at ? String(e.next_run_at).slice(0, 10) : '';
+  const lock = (label, value) => `<div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">${label} <span title="Locked — changing this would make earlier scores non-comparable" style="cursor:help">🔒</span></div><div style="font-size:13px;color:var(--text);margin-top:2px">${value || '—'}</div></div>`;
+  return `<tr id="track-cfg-${e.id}"><td colspan="9" style="background:#f6fafa;padding:16px 20px;border-top:1px solid var(--pale)">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 22px;margin-bottom:14px">
+      ${lock('Entity', e.entity_name)}
+      ${lock('Market', `${e.city}, ${e.state}`)}
+      ${lock('Specialty', e.specialty || 'None (hospital rubric)')}
+      ${lock('Scope', e.aggregate ? 'All locations rolled up' : 'Single location')}
+      <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Tracking since</div><div style="font-size:13px;margin-top:2px">${created || '—'}${e.created_by ? ` · ${String(e.created_by).split('@')[0]}` : ''}</div></div>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">🔒 Identity fields define what is measured, so they can't be edited here. To change them, <a href="#" onclick="trackAsNewEntity('${e.id}');return false" style="color:var(--teal);font-weight:600">track a new entity</a> prefilled from this one — the existing trend line stays intact.</div>
+    <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
+      <div><div class="fl">Cadence</div>
+        <select id="tc-sched-${e.id}" class="fi" style="width:150px;padding:7px 10px;font-size:13px">
+          <option value="weekly" ${e.schedule === 'weekly' ? 'selected' : ''}>Weekly</option>
+          <option value="monthly" ${e.schedule === 'monthly' ? 'selected' : ''}>Monthly</option>
+          <option value="manual" ${e.schedule === 'manual' ? 'selected' : ''}>Manual</option>
+        </select></div>
+      <div><div class="fl">Next run</div><input id="tc-next-${e.id}" class="fi" type="date" value="${nextVal}" style="width:170px;padding:7px 10px;font-size:13px"></div>
+      <div style="flex:1;min-width:220px"><div class="fl">Notes</div><input id="tc-notes-${e.id}" class="fi" value="${(e.notes || '').replace(/"/g, '&quot;')}" placeholder="Internal label or client name" style="padding:7px 10px;font-size:13px"></div>
+      <button class="btn btn-primary btn-sm" onclick="saveTrackCfg('${e.id}')">Save</button>
+      <button class="btn btn-secondary btn-sm" onclick="runTrackNowFromList('${e.id}')">Run now</button>
+      <span id="tc-msg-${e.id}" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </td></tr>`;
+}
+
 // Inline sparkline of recent Pulse Scores (last ≤12 runs). Fixed 0–100 domain so
 // two entities' lines are comparable at a glance; last point is dotted.
 function _sparkSvg(scores) {
@@ -8864,9 +8938,10 @@ function renderTrackEntityList() {
       <td style="text-align:right">${runs}</td>
       <td>${status}</td>
       <td style="white-space:nowrap;text-align:right">
+        <button class="btn btn-ghost btn-sm" onclick="toggleTrackCfg('${e.id}')" title="Configuration">${_trackCfgOpen.has(e.id) ? '⚙ Hide' : '⚙ Details'}</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleTrackActive('${e.id}',${!e.active})">${e.active ? 'Pause' : 'Resume'}</button>
       </td>
-    </tr>`;
+    </tr>${_trackCfgOpen.has(e.id) ? _trackCfgPanel(e) : ''}`;
   }).join('');
 
   body.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
@@ -9019,6 +9094,22 @@ function teResetSearch() {
 }
 
 // ── Trend view ─────────────────────────────────────────────────────────────
+
+// "All locations · Orthopedics · Houston, TX · practice_procedural", flagged when it
+// differs from the entity's current configuration (a drifted snapshot).
+function _snapshotSettings(d) {
+  const e = _trackCurrentEntity || {};
+  const parts = [
+    d.run_aggregate == null ? null : (d.run_aggregate ? 'All locations' : 'Single location'),
+    d.run_specialty || null,
+    d.run_location || null,
+    d.run_profile || null,
+  ].filter(Boolean);
+  const drift = (d.run_aggregate != null && e.aggregate != null && !!d.run_aggregate !== !!e.aggregate)
+    || (d.run_specialty && e.specialty && d.run_specialty.toLowerCase() !== e.specialty.toLowerCase())
+    || (d.run_location && e.city && !d.run_location.toLowerCase().startsWith(String(e.city).toLowerCase()));
+  return `${parts.join(' · ') || '—'}${drift ? ' <span title="Differs from the current tracking configuration" style="color:#b45309;font-weight:700;cursor:help">⚠</span>' : ''}`;
+}
 
 async function loadEntityTrend(entityId) {
   _trackCurrentEntity = _trackEntities.find(e => e.id === entityId);
@@ -9200,6 +9291,7 @@ function renderTrendCharts(dataPoints) {
       <td>${d.tier_access ?? '—'}</td>
       <td>${d.google_rating != null ? d.google_rating + '★' : '—'}</td>
       <td>${d.google_count ?? '—'}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${_snapshotSettings(d)}</td>
       <td>${d.pdf_path ? `<a href="/api/reports/${encodeURIComponent(d.run_id)}/pdf" target="_blank" style="color:var(--teal)">PDF</a>` : '—'}</td>
     </tr>`;
   }).join('');
@@ -9208,7 +9300,7 @@ function renderTrendCharts(dataPoints) {
       <thead><tr>
         <th>Date</th><th>Score</th><th>Δ</th>
         <th>Outcomes</th><th>Credentials</th><th>Experience</th><th>Access</th>
-        <th>Google ★</th><th>Reviews</th><th>Report</th>
+        <th>Google ★</th><th>Reviews</th><th title="Settings this snapshot was run with">Settings</th><th>Report</th>
       </tr></thead>
       <tbody>${tableRows}</tbody>
     </table>`;

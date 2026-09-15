@@ -2018,7 +2018,11 @@ def get_entity_trend(entity_name: str) -> list[dict]:
                p.google_footprint,
                p.leapfrog_grade,
                p.cms_star_rating,
-               p.accreditations
+               p.accreditations,
+               a.aggregate,
+               a.specialty,
+               a.location,
+               a.weighting_profile
            FROM analysis_runs a
            JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
            WHERE LOWER(a.entity_name) = LOWER(?)
@@ -2028,7 +2032,8 @@ def get_entity_trend(entity_name: str) -> list[dict]:
     ).fetchall()
     cols = ["run_id", "generated_at", "pdf_path", "ai_visibility_score",
             "tier_scores", "google_footprint", "leapfrog_grade",
-            "cms_star_rating", "accreditations"]
+            "cms_star_rating", "accreditations",
+            "run_aggregate", "run_specialty", "run_location", "run_profile"]
     con.close()
 
     results = []
