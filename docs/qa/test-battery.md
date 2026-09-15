@@ -1403,3 +1403,23 @@ acceptable); no end-screen grid; play restarts from 0:00. **T2**: same for YouTu
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Production must be on ≥ this commit; earlier builds show the host end screen.
+
+## VIDEO-END-RESET-3 — Vimeo end event is "finish" under the messaging API
+
+**Shipped:** 2026-09-14 · **Area:** Home / Learn / public pages · **Type:** fix (verified headless)
+
+### What changed
+- With `api=1`, the Vimeo player uses its legacy postMessage protocol and reports the end of
+  playback as `{"event":"finish"}` (not `ended`). The handler now subscribes to and acts on BOTH
+  `ended` and `finish`. Verified with a headless Chromium probe against the real welcome video:
+  `finish` → `unload` → iframe reload → fresh `ready` (poster state). No "More from …" screen.
+
+### Test Cases
+**T1**: Home page (local: hard-refresh; public pages need a server restart) → play the welcome
+video to the end → returns to poster + play button; click play → restarts at 0:00.
+
+### Acceptance Checklist
+- [ ] T1
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING (headless-verified for the event flow; confirm visually).

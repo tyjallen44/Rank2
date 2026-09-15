@@ -3422,7 +3422,7 @@ function _bindVideoEmbeds(root){
     var host=f.dataset.host;
     var arm=function(){
       try{
-        if(host==='vimeo') f.contentWindow.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*');
+        if(host==='vimeo'){ f.contentWindow.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*'); f.contentWindow.postMessage(JSON.stringify({method:'addEventListener',value:'finish'}),'*'); }
         else if(host==='youtube') f.contentWindow.postMessage(JSON.stringify({event:'listening',id:f.id||'yt',channel:'widget'}),'*');
       }catch(e){}
     };
@@ -3437,8 +3437,8 @@ window.addEventListener('message',function(ev){
     var host=f.dataset.host, w=f.contentWindow;
     try{
       if(host==='vimeo'){
-        if(d.event==='ready') w.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*');
-        if(d.event==='ended'){ try{ w.postMessage(JSON.stringify({method:'unload'}),'*'); }catch(e){} _resetVideoEmbed(f); }
+        if(d.event==='ready'){ w.postMessage(JSON.stringify({method:'addEventListener',value:'ended'}),'*'); w.postMessage(JSON.stringify({method:'addEventListener',value:'finish'}),'*'); }
+        if(d.event==='ended'||d.event==='finish'){ try{ w.postMessage(JSON.stringify({method:'unload'}),'*'); }catch(e){} _resetVideoEmbed(f); }
       } else if(host==='youtube' && d.event==='infoDelivery' && d.info && d.info.playerState===0){
         try{ w.postMessage(JSON.stringify({event:'command',func:'stopVideo',args:[]}),'*'); }catch(e){} _resetVideoEmbed(f);
       }
