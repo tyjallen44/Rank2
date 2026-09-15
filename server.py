@@ -3945,11 +3945,23 @@ def _email_trend_report(entity_id: str, emails: list, brand: str = "original",
     scored = [p for p in points if p.get("ai_visibility_score") is not None]
     latest = scored[-1]["ai_visibility_score"] if scored else None
     delta = (scored[-1]["ai_visibility_score"] - scored[-2]["ai_visibility_score"]) if len(scored) >= 2 else None
+    def _d(v):
+        try:
+            from datetime import date as _date
+            return _date.fromisoformat(str(v)[:10]).strftime("%b %-d, %Y")
+        except Exception:
+            return str(v)[:10]
+    period = (_d(scored[0]["generated_at"]), _d(scored[-1]["generated_at"])) if scored else ("", "")
+    # Name a person: the user who clicked Send now, else whoever set up the tracking.
+    sender = sent_by if kind == "send_now" else (entity.get("created_by") or "")
+    if "@" in str(sender):
+        sender = str(sender).split("@")[0].replace(".", " ").title()
     delivered = []
     for addr in _clean_emails(emails):
         try:
             send_trend_report(addr, entity["entity_name"], str(pdf_path),
-                              latest_score=latest, delta=delta, snapshots=len(scored))
+                              latest_score=latest, delta=delta, snapshots=len(scored),
+                              sender=sender, period=period)
             delivered.append(addr)
         except Exception as exc:
             print(f"[trend-email] FAILED entity={entity_id} to={addr}: {type(exc).__name__}: {exc}")
@@ -4004,7 +4016,7 @@ async def track_report_send(entity_id: str, req: TrendSendRequest,
     emails = _clean_emails(req.emails)
     if not emails:
         raise HTTPException(400, "Provide at least one valid email address")
-    who = payload.get("email") or payload.get("name") or payload.get("role") or "user"
+    who = payload.get("name") or payload.get("email") or payload.get("role") or "user"
     sent = await asyncio.get_running_loop().run_in_executor(
         None, lambda: _email_trend_report(entity_id, emails, payload.get("brand", "original"),
                                           sent_by=str(who), kind="send_now"))

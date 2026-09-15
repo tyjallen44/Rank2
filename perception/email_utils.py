@@ -176,29 +176,38 @@ def notify_admin_public_request(organization: str, requester_email: str,
 
 
 def send_trend_report(email: str, entity_name: str, pdf_path: str, *, latest_score=None,
-                      delta=None, snapshots: int = 0) -> None:
-    """Email the AI Reputation Trend Report PDF for a tracked entity (attached) with a
-    short summary and a link back to the app's Trends page."""
+                      delta=None, snapshots: int = 0, sender: str = "",
+                      period: tuple = ("", "")) -> None:
+    """Email the AI Reputation Trend Report PDF (attached). Written for an OUTSIDE reader:
+    the attachment is the deliverable, the sender is named, and the app sign-in is only a
+    quiet footer line for Pulse users — no call-to-action button (recipients usually have
+    no Pulse login and would land on the login screen)."""
     import base64
+    import html as _html
     from pathlib import Path
     data = base64.b64encode(Path(pdf_path).read_bytes()).decode()
     slug = "".join(ch if ch.isalnum() else "-" for ch in entity_name).strip("-")[:60]
+    ent = _html.escape(entity_name)
+    who = _html.escape(sender or "")
+    p0, p1 = (period or ("", ""))
+    span = f" covering {_html.escape(p0)} to {_html.escape(p1)}" if (p0 and p1 and p0 != p1) else ""
     score_line = ""
     if latest_score is not None:
         d = ""
         if delta is not None and delta != 0:
-            d = f' ({"+" if delta > 0 else ""}{delta} vs. the previous snapshot)'
-        score_line = (f'<p style="margin:6px 0 14px;font-size:15px"><strong>Latest Pulse Score: '
+            d = f' <span style="color:#5A6E72;font-weight:400">({"+" if delta > 0 else ""}{delta} since the previous snapshot)</span>'
+        score_line = (f'<p style="margin:10px 0 14px;font-size:15px"><strong>Latest Pulse Score: '
                       f'{latest_score}</strong>{d}</p>')
     body = f"""
-    <h2 style="margin:0 0 12px;font-size:20px;">AI Reputation Trend Report</h2>
-    <p style="margin-bottom:6px">The latest AI Reputation Trend Report for
-    <strong>{entity_name}</strong> is attached{f" ({snapshots} snapshots)" if snapshots else ""}.</p>
+    <h2 style="margin:0 0 12px;font-size:20px;">AI Reputation Trend Report — {ent}</h2>
+    <p style="margin-bottom:6px">Attached is the AI Reputation Trend Report for <strong>{ent}</strong>{span}
+    {f"({snapshots} snapshots)" if snapshots else ""}. It shows how AI assistants currently present the
+    organization, how that has moved over time, and which pillars are driving the change.</p>
     {score_line}
-    <p style="margin:20px 0">{_btn(APP_URL, "Open Trends in Pulse")}</p>
-    <p style="font-size:12px;color:#5A6E72;margin-bottom:0">You are receiving this because this
-    organization is tracked in Pulse with report delivery turned on. Reply to this email with
-    any questions.</p>
+    <p style="margin:0 0 4px">Questions about the report? Just reply to this email{f" and it will reach {who}" if who else ""}.</p>
+    <hr style="border:0;border-top:1px solid #d7e7e2;margin:22px 0 12px">
+    <p style="font-size:11px;color:#8a9aaa;margin:0">Sent from Pulse{f" by {who}" if who else ""}.
+    Pulse users can <a href="{APP_URL}" style="color:#8a9aaa">sign in</a> to see the full trend.</p>
     """
     _send(email, f"Trend Report — {entity_name}", _wrap(body),
           attachments=[{"filename": f"{slug}_AI_Reputation_Trend_Report.pdf", "content": data}])

@@ -1955,3 +1955,31 @@ files remain on disk (rows retained). **T6 — Delete with purge**: sent rows an
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING + inbox.
+
+## TRENDS-EMAIL-COPY — Trend Report email rewritten for an outside reader (no app button)
+
+**Shipped:** 2026-09-15 · **Area:** Trends email · **Type:** UX fix
+
+### What changed
+- Removed the "Open Trends in Pulse" button (recipients rarely have a login and landed on the
+  sign-in screen). Replaced by a quiet muted footer: "Sent from Pulse by <sender>. Pulse users
+  can sign in to see the full trend." (plain-text link).
+- Body now: heading with the entity; "Attached is the AI Reputation Trend Report for <entity>
+  covering <first> to <latest> (N snapshots). It shows how AI assistants currently present the
+  organization, how that has moved over time, and which pillars are driving the change." Latest
+  Pulse Score line with "(+N since the previous snapshot)". "Questions about the report? Just
+  reply to this email and it will reach <sender>."
+- Sender: Send now → the signed-in user's name; scheduled/after-run → whoever set up the tracking
+  (email local part shown as a name). Internal phrasing ("tracked in Pulse with report delivery
+  turned on") removed.
+
+### Test Cases
+**T1**: Send now → email has no button; footer line present with a plain "sign in" link; body shows
+period, snapshot count, score + delta, and "reach <your name>"; PDF attached.
+**T2**: scheduled send → "reach <tracker's name>" / "Sent from Pulse by <tracker's name>".
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2
+
+### Notes for the testing agent
+NEEDS INBOX TESTING. Dry run (mailer stubbed) produced the expected text; no button in the HTML.
