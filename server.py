@@ -3304,7 +3304,7 @@ def _learn_grouped(articles: list[dict]) -> list[tuple[str, list[dict]]]:
     return [(c, groups[c]) for c in order]
 
 
-def _render_learn_page(articles: list[dict], *, title: str = "Learn about Pulse — AI Reputation Intelligence",
+def _render_learn_page(articles: list[dict], *, title: str = "Learn about Pulse — AI Reputation Analysis Platform",
                        heading: str = "Learn about Pulse",
                        lede: str = "What Pulse is, what its reports reveal, who they help, and how to get started.",
                        desc: str = "Learn what Pulse is, what its AI-reputation reports show, who they help, and how to get started.",
@@ -3397,7 +3397,7 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
   <header class="top">
     <a class="signin" href="/">Sign In &rarr;</a>
     <div class="wm">PULSE</div>
-    <div class="sub">AI REPUTATION INTELLIGENCE</div>
+    <div class="sub">AI REPUTATION ANALYSIS PLATFORM</div>
   </header>
   <div class="wrap">
     <nav class="toc">{{TOC}}</nav>
@@ -3407,7 +3407,7 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
       {{BODY}}
     </main>
   </div>
-  <footer>Pulse &middot; AI Reputation Intelligence &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
+  <footer>Pulse &middot; AI Reputation Analysis Platform &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
 <!-- video embeds: return to poster when a video ends -->
 <script>
 function _resetVideoEmbed(f){
@@ -3474,7 +3474,7 @@ async def methodology_public_page():
         articles = []
     return HTMLResponse(_render_learn_page(
         articles,
-        title="Methodology — Pulse AI Reputation Intelligence",
+        title="Methodology — Pulse AI Reputation Analysis Platform",
         heading="Pulse AI Reputation Methodology",
         lede="How Pulse measures AI reputation — the pillars, scoring rubric, national quartiles, data sources, and prompt battery behind every report.",
         desc="The full methodology behind Pulse AI Reputation reports: pillars, scoring, quartiles, data sources, and prompt battery.",

@@ -1423,3 +1423,34 @@ video to the end → returns to poster + play button; click play → restarts at
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING (headless-verified for the event flow; confirm visually).
+
+## PLATFORM-NAME — Tagline is now "AI Reputation Analysis Platform"
+
+**Shipped:** 2026-09-14 · **Area:** app chrome, Home, public pages, PDF product subtitle · **Type:** branding
+
+### What changed
+- "AI Reputation Intelligence" → **"AI Reputation Analysis Platform"** everywhere it was the product
+  descriptor: sidebar + login sub-line (all three brands), Home hero headline, browser tab title
+  ("Pulse · AI Reputation Analysis Platform"), public /learn & /methodology titles / header sub-line
+  / footer, Learn seed intro, PDF `PRODUCT_SUBTITLE` (cover product line), the 1.09 release-note text.
+- "Pulse" stays the short product name; "AI Reputation Report" / "AI Reputation Score" unchanged.
+- Sidebar sub-line wraps to two lines cleanly (line-height + slightly tighter tracking); Home
+  headline reduced from 48px to 44px so the longer phrase fits on one line at desktop width.
+- `scripts/rebrand_learn_articles.py` also maps the old taglines to the new one for live rows.
+
+### Test Cases
+**T1**: sidebar under PULSE reads "AI REPUTATION ANALYSIS PLATFORM" on two neat lines; login card
+sub-line the same; tab title "Pulse · AI Reputation Analysis Platform".
+**T2**: Home hero headline "AI REPUTATION ANALYSIS PLATFORM" on one line at ≥1100px wide; wraps
+gracefully narrower.
+**T3**: /learn and /methodology: page title, header sub-line and footer show the new phrase.
+**T4**: any new PDF cover: product line reads "AI Reputation Analysis Platform"; report line still
+"AI Reputation Report".
+**T5**: after deploy run `scripts/rebrand_learn_articles.py` again → live Learn intro says
+"Pulse is the AI Reputation Analysis Platform for healthcare".
+
+### Acceptance Checklist
+- [ ] T1–T5
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING.

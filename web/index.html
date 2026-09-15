@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pulse</title>
+<title>Pulse · AI Reputation Analysis Platform</title>
 <!-- Pulse browser-tab icon: teal tile + seafoam heartbeat (brand palette), inline so no static route is needed -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2714%27%20fill%3D%27%230F4146%27/%3E%3Cpath%20d%3D%27M7%2035%20H21%20L27%2020%20L36%2047%20L42%2035%20H57%27%20fill%3D%27none%27%20stroke%3D%27%2380F8E4%27%20stroke-width%3D%275%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -182,8 +182,8 @@ html, body {
 }
 .sb-logo .wordmark span { color: var(--seafoam); }
 .sb-logo .sub {
-  font-size: 10px; color: rgba(128,248,228,0.6); margin-top: 3px;
-  letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500;
+  font-size: 10px; color: rgba(128,248,228,0.6); margin-top: 3px; line-height: 1.4;
+  letter-spacing: 0.09em; text-transform: uppercase; font-weight: 500;
 }
 /* gradient accent bar under sidebar logo */
 .sb-logo .accent-line {
@@ -846,7 +846,7 @@ input[type="url"]::placeholder, textarea::placeholder {
 [data-brand="extension1"] .home-rl-logo,[data-brand="extension2"] .home-rl-logo{display:none}
 .home-kicker{font-family:'Barlow Condensed',Impact,sans-serif;font-size:15px;font-weight:700;letter-spacing:.24em;text-transform:uppercase;opacity:.85;margin-bottom:6px}
 .home-kicker span{opacity:.75}
-.home-h1{font-family:'Barlow Condensed',Impact,sans-serif;font-size:48px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;line-height:1.02;margin:0 0 14px;position:relative}
+.home-h1{font-family:'Barlow Condensed',Impact,sans-serif;font-size:44px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;line-height:1.02;margin:0 0 14px;position:relative}
 .home-lede{font-size:16px;line-height:1.55;max-width:660px;opacity:.95;margin:0 0 26px;position:relative}
 .home-cta{display:flex;gap:12px;flex-wrap:wrap;position:relative}
 .home-cta .btn-light{background:#fff;color:var(--teal);border:1px solid #fff;font-weight:700}
@@ -910,7 +910,7 @@ input[type="url"]::placeholder, textarea::placeholder {
   <div class="login-card">
     <div class="login-logo">
       <div class="wordmark">PULSE</div>
-      <div class="sub">AI Reputation Intelligence</div>
+      <div class="sub">AI Reputation Analysis Platform</div>
       <div class="accent-line"></div>
     </div>
     <div id="login-err" class="err hidden mt12"></div>
@@ -1049,7 +1049,7 @@ input[type="url"]::placeholder, textarea::placeholder {
   <nav id="sidebar">
     <div class="sb-logo">
       <div class="wordmark">PULSE</div>
-      <div class="sub">AI Reputation Intelligence</div>
+      <div class="sub">AI Reputation Analysis Platform</div>
       <div class="accent-line"></div>
     </div>
     <div class="sb-nav">
@@ -2700,7 +2700,7 @@ input[type="url"]::placeholder, textarea::placeholder {
       <div class="home-hero">
         <img class="home-rl-logo" src="/assets/logo-dark.svg" alt="RLDatix">
         <div class="home-kicker"><span class="wordmark">PULSE</span></div>
-        <h1 class="home-h1">AI Reputation Intelligence</h1>
+        <h1 class="home-h1">AI Reputation Analysis Platform</h1>
         <p class="home-lede">See how AI assistants describe, rank and recommend your hospitals and practices — scored on four pillars, benchmarked nationally, with the exact fixes that move the score.</p>
         <div class="home-cta">
           <button class="btn btn-light" onclick="navigate('network')">Run a Hospital Network report →</button>
@@ -2773,7 +2773,7 @@ input[type="url"]::placeholder, textarea::placeholder {
 
           <div class="rn-item">
             <div class="rn-title">Reports Are Now AI Reputation Reports</div>
-            <div class="rn-body">Pulse is now <strong>AI Reputation Intelligence</strong>. Every report, cover, scorecard, email and page that said "AI Visibility" now says <strong>AI Reputation</strong> &mdash; including the <strong>AI Reputation Score</strong> and <strong>Pulse Score (AI Reputation)</strong> labels. Scoring, pillars and methodology are unchanged; only the name moved. Reports generated before this release keep their original wording.</div>
+            <div class="rn-body">Pulse is now the <strong>AI Reputation Analysis Platform</strong>. Every report, cover, scorecard, email and page that said "AI Visibility" now says <strong>AI Reputation</strong> &mdash; including the <strong>AI Reputation Score</strong> and <strong>Pulse Score (AI Reputation)</strong> labels. Scoring, pillars and methodology are unchanged; only the name moved. Reports generated before this release keep their original wording.</div>
           </div>
         </div>
 
@@ -3782,9 +3782,9 @@ function _storeSession(token, displayName, role, brand) {
 }
 
 const _BRAND_WORDMARKS = {
-  original:   {wordmark: 'PULSE',                          sub: 'AI Reputation Intelligence'},
-  extension1: {wordmark: 'Montecito<span> Medical</span>', sub: 'AI Reputation Intelligence'},
-  extension2: {wordmark: 'Ashleigh<span> Jane</span>',     sub: 'AI Reputation Intelligence'},
+  original:   {wordmark: 'PULSE',                          sub: 'AI Reputation Analysis Platform'},
+  extension1: {wordmark: 'Montecito<span> Medical</span>', sub: 'AI Reputation Analysis Platform'},
+  extension2: {wordmark: 'Ashleigh<span> Jane</span>',     sub: 'AI Reputation Analysis Platform'},
 };
 
 // Ashleigh Jane wordmark SVGs as URL-encoded data URIs

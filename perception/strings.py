@@ -5,7 +5,7 @@ Do NOT import in scoring, evidence-collection, or analysis logic.
 """
 
 PRODUCT_NAME     = "Pulse"
-PRODUCT_SUBTITLE = "AI Reputation Intelligence"
+PRODUCT_SUBTITLE = "AI Reputation Analysis Platform"
 
 # ── Report-type display names (sidebar nav, page titles, completion back-buttons) ──
 REPORT_MARKET     = "Market Pulse"

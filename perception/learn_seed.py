@@ -13,7 +13,7 @@ STARTER_ARTICLES: list[dict] = [
         "category": "Overview",
         "title": "What is Pulse?",
         "body": (
-            "Pulse is an **AI Reputation Intelligence** platform for healthcare. "
+            "Pulse is the **AI Reputation Analysis Platform** for healthcare. "
             "It measures how your organization shows up when patients and consumers "
             "ask AI assistants — like ChatGPT, Gemini, and Copilot — for help choosing "
             "where to get care.\n\n"

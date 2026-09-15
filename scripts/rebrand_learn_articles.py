@@ -8,7 +8,9 @@ import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from perception.db import init_db, get_connection
 
-PAIRS = [("AI Visibility", "AI Reputation"), ("AI-Visibility", "AI-Reputation"),
+PAIRS = [("AI Visibility Intelligence", "AI Reputation Analysis Platform"),
+         ("AI Reputation Intelligence", "AI Reputation Analysis Platform"),
+         ("AI Visibility", "AI Reputation"), ("AI-Visibility", "AI-Reputation"),
          ("AI visibility", "AI reputation"), ("AI-visibility", "AI-reputation")]
 
 
