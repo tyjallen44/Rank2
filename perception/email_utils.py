@@ -19,7 +19,8 @@ _CARD_CSS = (
 )
 
 
-def _send(to: str, subject: str, html: str) -> None:
+def _send(to: str, subject: str, html: str, attachments: Optional[list] = None) -> None:
+    """attachments: [{"filename": str, "content": <base64 str>}] (Resend format)."""
     api_key = os.environ.get("RESEND_API_KEY", "")
     from_addr = f"{_FROM_NAME} <noreply@{_FROM_DOMAIN}>"
     print(f"[email] Attempting send to={to} subject={subject!r} from={from_addr}")
@@ -31,7 +32,8 @@ def _send(to: str, subject: str, html: str) -> None:
         resp = httpx.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"from": from_addr, "to": [to], "subject": f"{_BRAND} — {subject}", "html": html},
+            json={"from": from_addr, "to": [to], "subject": f"{_BRAND} — {subject}", "html": html,
+                  **({"attachments": attachments} if attachments else {})},
             timeout=15,
         )
         if resp.status_code >= 400:
@@ -171,3 +173,32 @@ def notify_admin_public_request(organization: str, requester_email: str,
     {extra}
     """
     _send(ADMIN_EMAIL, f"Public report request — {status}", _wrap(body))
+
+
+def send_trend_report(email: str, entity_name: str, pdf_path: str, *, latest_score=None,
+                      delta=None, snapshots: int = 0) -> None:
+    """Email the AI Reputation Trend Report PDF for a tracked entity (attached) with a
+    short summary and a link back to the app's Trends page."""
+    import base64
+    from pathlib import Path
+    data = base64.b64encode(Path(pdf_path).read_bytes()).decode()
+    slug = "".join(ch if ch.isalnum() else "-" for ch in entity_name).strip("-")[:60]
+    score_line = ""
+    if latest_score is not None:
+        d = ""
+        if delta is not None and delta != 0:
+            d = f' ({"+" if delta > 0 else ""}{delta} vs. the previous snapshot)'
+        score_line = (f'<p style="margin:6px 0 14px;font-size:15px"><strong>Latest Pulse Score: '
+                      f'{latest_score}</strong>{d}</p>')
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">AI Reputation Trend Report</h2>
+    <p style="margin-bottom:6px">The latest AI Reputation Trend Report for
+    <strong>{entity_name}</strong> is attached{f" ({snapshots} snapshots)" if snapshots else ""}.</p>
+    {score_line}
+    <p style="margin:20px 0">{_btn(APP_URL, "Open Trends in Pulse")}</p>
+    <p style="font-size:12px;color:#5A6E72;margin-bottom:0">You are receiving this because this
+    organization is tracked in Pulse with report delivery turned on. Reply to this email with
+    any questions.</p>
+    """
+    _send(email, f"Trend Report — {entity_name}", _wrap(body),
+          attachments=[{"filename": f"{slug}_AI_Reputation_Trend_Report.pdf", "content": data}])

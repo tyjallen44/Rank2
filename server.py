@@ -3714,6 +3714,30 @@ class TrackEntityUpdate(BaseModel):
     schedule: Optional[str] = None
     notes: Optional[str] = None
     next_run_at: Optional[str] = None      # ISO date or datetime
+    email_report: Optional[bool] = None    # email the Trend Report after each run
+    report_emails: Optional[List[str]] = None
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _clean_emails(emails) -> list:
+    out = []
+    for e in emails or []:
+        e = str(e or "").strip().lower()
+        if e and _EMAIL_RE.match(e) and e not in out:
+            out.append(e)
+    return out
+
+
+def _entity_report_emails(entity: dict) -> list:
+    v = entity.get("report_emails")
+    if isinstance(v, list):
+        return v
+    try:
+        return json.loads(v or "[]")
+    except Exception:
+        return []
 
 
 @app.get("/api/track/entities")
@@ -3725,6 +3749,7 @@ async def track_list(_: dict = Depends(get_current_user_payload)):
         for k in ("last_run_at", "next_run_at", "created_at"):
             if e.get(k):
                 e[k] = str(e[k])
+        e["report_emails"] = _entity_report_emails(e)
     return entities
 
 
@@ -3783,6 +3808,11 @@ async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends
             updates["next_run_at"] = _dt.fromisoformat(v + ("T00:00:00" if len(v) == 10 else ""))
         except Exception:
             raise HTTPException(400, "next_run_at must be an ISO date (YYYY-MM-DD)")
+    if "report_emails" in updates:
+        cleaned = _clean_emails(updates["report_emails"])
+        if updates["report_emails"] and not cleaned:
+            raise HTTPException(400, "report_emails must contain valid email addresses")
+        updates["report_emails"] = json.dumps(cleaned)
     update_tracked_entity(entity_id, **updates)
     entity = get_tracked_entity(entity_id)
     for k in ("last_run_at", "next_run_at", "created_at"):
@@ -3823,21 +3853,92 @@ async def track_report_pdf(entity_id: str, payload: dict = Depends(get_current_u
     points = get_entity_trend(entity["entity_name"])
     if not points:
         raise HTTPException(404, "No snapshots yet — run the entity at least once first.")
-    latest = points[-1].get("run_id") or "none"
-    out_dir = REPORTS_DIR / "trends"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    safe_id = "".join(ch for ch in entity_id if ch.isalnum() or ch in "-_")
-    pdf_path = out_dir / f"trend_{safe_id}_{latest}.pdf"
-    if not pdf_path.exists():
-        for k in ("last_run_at", "next_run_at", "created_at"):
-            if entity.get(k):
-                entity[k] = str(entity[k])
-        await asyncio.get_running_loop().run_in_executor(
-            None, lambda: render_trend_report_pdf(entity, points, str(pdf_path),
-                                                  brand=payload.get("brand", "original")))
+    pdf_path = await asyncio.get_running_loop().run_in_executor(
+        None, lambda: _trend_report_file(entity, points, payload.get("brand", "original")))
     slug = "".join(ch if ch.isalnum() else "-" for ch in str(entity.get("entity_name") or "entity")).strip("-")[:60]
     return FileResponse(str(pdf_path), media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{slug}_AI_Reputation_Trend_Report.pdf"'})
+
+
+def _trend_report_file(entity: dict, points: list, brand: str = "original") -> Path:
+    """Render (or reuse) the Trend Report PDF for the entity's latest snapshot. Sync."""
+    from perception.trend_pdf import render_trend_report_pdf
+    latest = points[-1].get("run_id") or "none"
+    out_dir = REPORTS_DIR / "trends"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe_id = "".join(ch for ch in str(entity.get("id", "")) if ch.isalnum() or ch in "-_")
+    pdf_path = out_dir / f"trend_{safe_id}_{latest}.pdf"
+    if not pdf_path.exists():
+        ent = dict(entity)
+        for k in ("last_run_at", "next_run_at", "created_at"):
+            if ent.get(k):
+                ent[k] = str(ent[k])
+        render_trend_report_pdf(ent, points, str(pdf_path), brand=brand)
+    return pdf_path
+
+
+def _email_trend_report(entity_id: str, emails: list, brand: str = "original") -> int:
+    """Render the current Trend Report and email it to each address. Returns sends."""
+    from perception.db import get_tracked_entity, get_entity_trend
+    from perception.email_utils import send_trend_report
+    entity = get_tracked_entity(entity_id)
+    if not entity:
+        return 0
+    points = get_entity_trend(entity["entity_name"])
+    if not points:
+        return 0
+    pdf_path = _trend_report_file(entity, points, brand)
+    scored = [p for p in points if p.get("ai_visibility_score") is not None]
+    latest = scored[-1]["ai_visibility_score"] if scored else None
+    delta = (scored[-1]["ai_visibility_score"] - scored[-2]["ai_visibility_score"]) if len(scored) >= 2 else None
+    sent = 0
+    for addr in _clean_emails(emails):
+        try:
+            send_trend_report(addr, entity["entity_name"], str(pdf_path),
+                              latest_score=latest, delta=delta, snapshots=len(scored))
+            sent += 1
+        except Exception as exc:
+            print(f"[trend-email] FAILED entity={entity_id} to={addr}: {type(exc).__name__}: {exc}")
+    return sent
+
+
+def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
+    """Run one tracked-entity snapshot, then (opt-in) email the refreshed Trend Report."""
+    _job_run_single(job_id, entity["city"], entity["state"], entity.get("specialty"),
+                    entity.get("aggregate", True), None)
+    try:
+        if _jobs.get(job_id, {}).get("status") != "done":
+            return
+        if not entity.get("email_report"):
+            return
+        emails = _entity_report_emails(entity)
+        if emails:
+            n = _email_trend_report(entity["id"], emails)
+            print(f"[trend-email] entity={entity['id']} sent={n}")
+    except Exception as exc:
+        print(f"[trend-email] hook error entity={entity.get('id')}: {type(exc).__name__}: {exc}")
+
+
+class TrendSendRequest(BaseModel):
+    emails: List[str]
+
+
+@app.post("/api/track/entities/{entity_id}/report/send")
+async def track_report_send(entity_id: str, req: TrendSendRequest,
+                            payload: dict = Depends(get_current_user_payload)):
+    """Send the current Trend Report PDF to the given addresses now."""
+    from perception.db import init_db, get_tracked_entity
+    init_db()
+    if not get_tracked_entity(entity_id):
+        raise HTTPException(404, "tracked entity not found")
+    emails = _clean_emails(req.emails)
+    if not emails:
+        raise HTTPException(400, "Provide at least one valid email address")
+    sent = await asyncio.get_running_loop().run_in_executor(
+        None, lambda: _email_trend_report(entity_id, emails, payload.get("brand", "original")))
+    if sent == 0:
+        raise HTTPException(502, "The report could not be sent — check the email service configuration.")
+    return {"sent": sent, "emails": emails}
 
 
 @app.post("/api/track/entities/{entity_id}/run")
@@ -3856,11 +3957,7 @@ async def track_run_now(entity_id: str, payload: dict = Depends(get_current_user
     _jobs[job_id]["patient_perspective"] = False
     _jobs[job_id]["teaser_report"]     = False
     _jobs[job_id]["zip_code"]          = None
-    _pool.submit(
-        _job_run_single, job_id,
-        entity["city"], entity["state"], entity.get("specialty"),
-        entity.get("aggregate", True), None,
-    )
+    _pool.submit(_run_tracked_and_notify, job_id, entity)
     mark_tracked_entity_ran(entity_id, entity.get("schedule", "monthly"))
     return {"job_id": job_id}
 
@@ -3886,11 +3983,7 @@ async def track_scheduled(request: Request):
         _jobs[job_id]["patient_perspective"] = False
         _jobs[job_id]["teaser_report"]      = False
         _jobs[job_id]["zip_code"]           = None
-        _pool.submit(
-            _job_run_single, job_id,
-            entity["city"], entity["state"], entity.get("specialty"),
-            entity.get("aggregate", True), None,
-        )
+        _pool.submit(_run_tracked_and_notify, job_id, entity)
         mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
         launched.append({"entity_id": entity["id"], "entity_name": entity["entity_name"], "job_id": job_id})
     return {"launched": launched}

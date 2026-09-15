@@ -618,6 +618,14 @@ def init_db() -> None:
             notes        VARCHAR
         )
     """)
+    _te_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='tracked_entities'"
+    ).fetchall()}
+    if "email_report" not in _te_cols:
+        # Opt-in: email the Trend Report to report_emails after each run (scheduled or Run Now)
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN email_report BOOLEAN DEFAULT FALSE")
+    if "report_emails" not in _te_cols:
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN report_emails VARCHAR DEFAULT '[]'")
 
     # ── FQHC Community Health Edition tables ─────────────────────────────────
     con.execute("""
@@ -1960,7 +1968,8 @@ def list_tracked_entities() -> list[dict]:
 
 def update_tracked_entity(entity_id: str, **kwargs) -> None:
     allowed = {"entity_name", "city", "state", "specialty", "aggregate",
-               "schedule", "active", "notes", "next_run_at"}
+               "schedule", "active", "notes", "next_run_at",
+               "email_report", "report_emails"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return

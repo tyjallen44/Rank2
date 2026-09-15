@@ -1763,3 +1763,59 @@ deltas "—"); entity with 0 → 404 with a clear message.
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Rendered locally for "Usa Health University Hospital" (33 snapshots):
 layout verified from a screenshot; PDF 230 KB in ~1 s (+ a few seconds for the paragraph).
+
+## TRENDS-REPORT-EMAIL — Email the Trend Report after each run (opt-in) and "Send report…" now
+
+**Shipped:** 2026-09-15 · **Area:** Trends, email · **Type:** feature (part 2 of 2)
+
+### What changed
+- Tracked entity gains **email_report** (bool) and **report_emails** (JSON list) — auto-migrated
+  columns; editable via `PUT /api/track/entities/{id}` (addresses validated, de-duplicated,
+  lower-cased; 400 if none valid when a non-empty list is sent).
+- **Configuration panel** (⚙ Details): "Email the Trend Report after each run" checkbox +
+  Recipients (comma-separated). Checking it prefills the creator's email when the field is empty;
+  Save refuses to enable delivery with no recipients. Recipients are visible to any user who opens
+  the panel (an admin can see who receives what).
+- **After-run hook**: Run now and the Cloud Scheduler run both go through
+  `_run_tracked_and_notify` — when the snapshot job finishes with status "done" and delivery is on,
+  the refreshed Trend Report is rendered (or reused) and emailed to each recipient with the PDF
+  **attached** (Resend attachments), a latest-score line (+ delta), and an "Open Trends in Pulse"
+  button. Failures are logged (`[trend-email] …`) and never affect the run.
+- **Send now**: trend detail header "✉ Send report…" prompts for addresses (prefilled with the
+  entity's recipients or the creator) → `POST /api/track/entities/{id}/report/send` → status
+  "Sent to …". 400 with no valid address; 502 if the email service rejects.
+- `email_utils._send` accepts attachments; new `send_trend_report`.
+
+### Files changed
+`perception/db.py`, `perception/email_utils.py`, `server.py`, `web/index.html`,
+`docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Settings**: Trends → ⚙ Details → check "Email the Trend Report after each run" → creator's
+email prefills → add a second address → Save → "Saved."; reopen → both persisted; enabling with no
+recipients is blocked with a message.
+**T2 — Run now → email**: with delivery on, click Run now (panel or detail) → when the run
+finishes, each recipient gets "Pulse — Trend Report — <Entity>" with the PDF attached, the latest
+score line, and the Open Trends button; the attachment opens and matches the download.
+**T3 — Scheduled**: an entity due for its schedule (or trigger `/api/track/scheduled` with the
+secret) → same email after the run.
+**T4 — Send now**: detail → "✉ Send report…" → default addresses shown → OK → "Sent to …"; the
+email arrives with the current report. Cancel → nothing sent. Empty/invalid → message, no send.
+**T5 — Delivery off**: uncheck → Run now → no email.
+**T6 — Validation**: `PUT` with `report_emails: ["bad"]` → 400; `["A@b.co","a@b.co"]` → stored
+once, lower-cased.
+**T7 — Failure path**: temporarily break RESEND_API_KEY → Run now still completes; server log
+shows `[trend-email] FAILED …`; Send now returns 502 with a clear message.
+
+### Regression Checks
+- **R1** Run now / scheduled runs still create snapshots and advance next_run_at.
+- **R2** Public network-request emails unchanged (no attachments).
+- **R3** Suite at baseline; dry run with the sender stubbed: 2 valid of 3 addresses sent, PDF
+  attached (~320 KB base64).
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] T6 · [ ] T7 · [ ] R1–R3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING + a real inbox. Resend must have RESEND_API_KEY configured in the
+environment; attachments count toward Resend's 40 MB message limit (reports are ~0.3 MB).

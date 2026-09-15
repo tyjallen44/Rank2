@@ -2654,6 +2654,7 @@ input[type="url"]::placeholder, textarea::placeholder {
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
             <span id="trend-run-status" style="font-size:12px;color:var(--muted)"></span>
             <button class="btn btn-secondary btn-sm" id="trend-pdf-btn" onclick="downloadTrendReport()" title="Customer-ready PDF: summary, score and pillar trends, Google reputation, snapshots">⬇ Trend Report (PDF)</button>
+            <button class="btn btn-secondary btn-sm" id="trend-send-btn" onclick="sendTrendReportNow()" title="Email the current Trend Report PDF to one or more addresses">✉ Send report…</button>
             <button class="btn btn-primary btn-sm" id="trend-run-btn" onclick="triggerTrackRun()">Run Now</button>
           </div>
         </div>
@@ -8807,6 +8808,11 @@ async function saveTrackCfg(id) {
   };
   const nr = (document.getElementById(`tc-next-${id}`)?.value || '').trim();
   if (nr) body.next_run_at = nr;
+  const emailOn = !!document.getElementById(`tc-email-${id}`)?.checked;
+  const rcpts = (document.getElementById(`tc-rcpts-${id}`)?.value || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  if (emailOn && !rcpts.length) { const m0 = document.getElementById(`tc-msg-${id}`); if (m0) m0.textContent = 'Add at least one recipient to enable email delivery.'; return; }
+  body.email_report = emailOn;
+  body.report_emails = rcpts;
   const msg = document.getElementById(`tc-msg-${id}`);
   try {
     const r = await api(`/api/track/entities/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -8864,6 +8870,15 @@ function _trackCfgPanel(e) {
       <button class="btn btn-primary btn-sm" onclick="saveTrackCfg('${e.id}')">Save</button>
       <button class="btn btn-secondary btn-sm" onclick="runTrackNowFromList('${e.id}')">Run now</button>
       <span id="tc-msg-${e.id}" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">
+      <label class="aggregate-toggle" style="margin:0 0 6px" title="After every run (scheduled or Run now) the refreshed Trend Report PDF is emailed to the recipients.">
+        <input type="checkbox" id="tc-email-${e.id}" ${e.email_report ? 'checked' : ''} onchange="if(this.checked){const r=document.getElementById('tc-rcpts-${e.id}'); if(r&&!r.value.trim()&&'${(e.created_by || '').includes('@') ? _learnEsc(e.created_by) : ''}') r.value='${(e.created_by || '').includes('@') ? _learnEsc(e.created_by) : ''}';}">
+        <span class="agg-label">Email the Trend Report after each run</span>
+      </label>
+      <div style="flex:1;min-width:260px"><div class="fl">Recipients (comma-separated)</div>
+        <input id="tc-rcpts-${e.id}" class="fi" value="${_learnEsc((e.report_emails || []).join(', '))}" placeholder="name@organization.com, another@…" style="padding:7px 10px;font-size:13px"></div>
+      <span style="font-size:11.5px;color:var(--muted);max-width:280px">Save applies these. Anything emailed can be forwarded — the report contains only this organization's data.</span>
     </div>
   </td></tr>`;
 }
@@ -9136,6 +9151,26 @@ async function loadEntityTrend(entityId) {
   } catch (e) {
     document.getElementById('trend-no-data').style.display = '';
   }
+}
+
+async function sendTrendReportNow() {
+  if (!_trackCurrentEntity) return;
+  const e = _trackCurrentEntity;
+  const dflt = (e.report_emails && e.report_emails.length) ? e.report_emails.join(', ')
+             : ((e.created_by || '').includes('@') ? e.created_by : '');
+  const raw = prompt('Send the Trend Report PDF to (comma-separated email addresses):', dflt);
+  if (raw == null) return;
+  const emails = raw.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  const st = document.getElementById('trend-run-status');
+  if (!emails.length) { if (st) st.textContent = 'No addresses entered.'; return; }
+  if (st) st.textContent = 'Sending…';
+  try {
+    const r = await api(`/api/track/entities/${encodeURIComponent(e.id)}/report/send`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emails }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Send failed'));
+    const d = await r.json();
+    if (st) st.textContent = `Sent to ${d.emails.join(', ')}.`;
+  } catch (err) { if (st) st.textContent = err.message; }
 }
 
 function downloadTrendReport() {
