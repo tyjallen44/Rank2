@@ -2774,6 +2774,20 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <div style="position:relative;height:200px"><canvas id="chart-score"></canvas></div>
           </div>
 
+          <!-- Notes: what changed and when — numbered markers on the score chart and in the Trend Report -->
+          <div class="card" id="trend-notes" style="margin-bottom:16px;padding:16px 24px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+              <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted)">Notes</div>
+              <span style="font-size:11.5px;color:var(--muted)">Record what changed and when (new website, review campaign, merger). Notes show as numbered markers on the score chart and in the Trend Report PDF.</span>
+            </div>
+            <div id="trend-notes-list" style="font-size:13px"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
+              <input type="date" id="trend-note-date" class="fi" style="width:160px">
+              <input id="trend-note-text" class="fi" placeholder="e.g. New website launched" maxlength="300" style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')addTrendNote()">
+              <button class="btn btn-primary btn-sm" onclick="addTrendNote()">Add note</button>
+            </div>
+          </div>
+
           <div class="card" style="margin-bottom:16px;padding:20px 24px">
             <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Tier Scores Over Time</div>
             <div style="position:relative;height:220px"><canvas id="chart-tiers"></canvas></div>
@@ -10074,8 +10088,10 @@ async function loadEntityTrend(entityId) {
 
   try {
     const res = await api(`/api/track/entities/${entityId}/trend`);
-    const { data_points } = await res.json();
+    const { data_points, annotations } = await res.json();
+    _trendAnnotations = annotations || [];
     renderTrendCharts(data_points);
+    renderTrendNotes();
   } catch (e) {
     document.getElementById('trend-no-data').style.display = '';
   }
@@ -10161,6 +10177,103 @@ function _pillarLabels(rubric) {
   return ['Pillar 1 (H: Outcomes & Safety · P: Practitioner Credentials)', 'Pillar 2 (H: Credentials & Recognition · P: Reviews & Reputation)', 'Pillar 3 (H: Experience & Reviews · P: Identity & Machine-Readability)', 'Pillar 4 (Access & Fit)'];
 }
 
+// ── Trend notes (annotations): numbered markers on the score chart + a list ──
+let _trendAnnotations = [];
+function _annotPixelX(labels, noteDate, xScale) {
+  const ds = labels.map(l => Date.parse(String(l).slice(0, 10)));
+  const t = Date.parse(String(noteDate).slice(0, 10));
+  if (!ds.length || isNaN(t)) return null;
+  const n = ds.length;
+  if (n === 1 || t <= ds[0]) return xScale.getPixelForValue(0);
+  if (t >= ds[n - 1]) return xScale.getPixelForValue(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    if (ds[i] <= t && t <= ds[i + 1]) {
+      const span = ds[i + 1] - ds[i]; const frac = span ? (t - ds[i]) / span : 0;
+      return xScale.getPixelForValue(i) + frac * (xScale.getPixelForValue(i + 1) - xScale.getPixelForValue(i));
+    }
+  }
+  return null;
+}
+const _annotPlugin = {
+  id: 'trendAnnotations',
+  afterDatasetsDraw(chart) {
+    const a = chart.$annots || [];
+    if (!a.length) return;
+    const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+    a.forEach((n, k) => {
+      const px = _annotPixelX(chart.data.labels, n.note_date, x);
+      if (px == null) return;
+      ctx.save();
+      ctx.strokeStyle = '#b45309'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#b45309'; ctx.beginPath(); ctx.arc(px, top + 9, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Inter, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(k + 1), px, top + 9);
+      ctx.restore();
+    });
+  },
+};
+function renderTrendNotes() {
+  const list = document.getElementById('trend-notes-list');
+  if (!list) return;
+  const dateEl = document.getElementById('trend-note-date');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  if (!_trendAnnotations.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:12.5px">No notes yet.</div>';
+  } else {
+    list.innerHTML = _trendAnnotations.map((a, k) => {
+      const mine = (a.created_by || '').toLowerCase() === (_trackMyEmail || '').toLowerCase();
+      const who = a.created_by ? String(a.created_by).split('@')[0] : '';
+      return `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--border)">
+        <span style="flex:0 0 18px;height:18px;line-height:18px;border-radius:9px;background:#b45309;color:#fff;font-size:10px;font-weight:700;text-align:center">${k + 1}</span>
+        <span style="white-space:nowrap;color:var(--muted);font-size:12px">${_learnEsc(_fmtDateShort(a.note_date))}</span>
+        <span style="flex:1;min-width:0">${_learnEsc(a.note)}</span>
+        ${who ? `<span style="font-size:11px;color:var(--muted);white-space:nowrap">${_learnEsc(who)}</span>` : ''}
+        ${(mine || _role === 'admin') ? `<button class="btn btn-ghost btn-sm" onclick="deleteTrendNote('${a.id}')" title="Remove this note">✕</button>` : ''}
+      </div>`;
+    }).join('');
+  }
+  if (_trackCharts.score) { _trackCharts.score.$annots = _trendAnnotations; _trackCharts.score.update(); }
+}
+function _fmtDateShort(d) {
+  const t = Date.parse(String(d).slice(0, 10) + 'T00:00:00');
+  return isNaN(t) ? String(d) : new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function prefillTrendNote(dateStr) {
+  const dateEl = document.getElementById('trend-note-date'); const txt = document.getElementById('trend-note-text');
+  if (dateEl) dateEl.value = String(dateStr).slice(0, 10);
+  document.getElementById('trend-notes')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (txt) txt.focus();
+}
+async function addTrendNote() {
+  if (!_trackCurrentEntity) return;
+  const dateEl = document.getElementById('trend-note-date'); const txt = document.getElementById('trend-note-text');
+  const note = (txt.value || '').trim(); const note_date = dateEl.value;
+  const st = document.getElementById('trend-run-status');
+  if (!note) { txt.focus(); return; }
+  if (!note_date) { dateEl.focus(); return; }
+  try {
+    const r = await api(`/api/track/entities/${encodeURIComponent(_trackCurrentEntity.id)}/annotations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note_date, note }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not add the note'));
+    txt.value = '';
+    const lr = await api(`/api/track/entities/${encodeURIComponent(_trackCurrentEntity.id)}/annotations`);
+    _trendAnnotations = lr.ok ? await lr.json() : _trendAnnotations;
+    renderTrendNotes();
+    _flash('Note added — it now shows on the chart and in the Trend Report.');
+  } catch (e) { if (st) st.textContent = e.message; else alert(e.message); }
+}
+async function deleteTrendNote(aid) {
+  if (!confirm('Remove this note?')) return;
+  try {
+    const r = await api(`/api/track/annotations/${encodeURIComponent(aid)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not remove the note'));
+    _trendAnnotations = _trendAnnotations.filter(a => a.id !== aid);
+    renderTrendNotes();
+  } catch (e) { alert(e.message); }
+}
+
 function renderTrendCharts(dataPoints) {
   if (!dataPoints || dataPoints.length === 0) {
     document.getElementById('trend-no-data').style.display = '';
@@ -10224,7 +10337,9 @@ function renderTrendCharts(dataPoints) {
       }],
     },
     options: { ...chartOpts, scales: { ...chartOpts.scales, y: { ...chartOpts.scales.y, min: 0, max: 100 } } },
+    plugins: [_annotPlugin],
   });
+  _trackCharts.score.$annots = _trendAnnotations;
 
   // Tier scores chart
   const tierDatasets = [
@@ -10298,6 +10413,7 @@ function renderTrendCharts(dataPoints) {
       <td>${d.google_count ?? '—'}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${_snapshotSettings(d)}</td>
       <td>${d.pdf_path ? `<a href="/api/reports/${encodeURIComponent(d.run_id)}/pdf" target="_blank" style="color:var(--teal)">PDF</a>` : '—'}</td>
+      <td><a href="#" onclick="prefillTrendNote('${d.generated_at}');return false" title="Add a note dated to this snapshot" style="color:var(--teal);font-size:11px;white-space:nowrap">+ note</a></td>
     </tr>`;
   }).join('');
   document.getElementById('trend-snapshot-table').innerHTML = `
@@ -10305,7 +10421,7 @@ function renderTrendCharts(dataPoints) {
       <thead><tr>
         <th>Date</th><th>Score</th><th>Δ</th>
         ${_PL.map(l => `<th title="${l}">${l.split(' & ')[0].split(' ')[0]}</th>`).join('')}
-        <th>Google ★</th><th>Reviews</th><th title="Settings this snapshot was run with">Settings</th><th>Report</th>
+        <th>Google ★</th><th>Reviews</th><th title="Settings this snapshot was run with">Settings</th><th>Report</th><th></th>
       </tr></thead>
       <tbody>${tableRows}</tbody>
     </table>`;

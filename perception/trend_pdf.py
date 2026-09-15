@@ -167,7 +167,29 @@ def analyst_paragraph(entity: dict, stats: dict) -> str:
 
 
 # ── SVG charts ───────────────────────────────────────────────────────────────
-def _score_chart(points: list[dict], w: int = 640, h: int = 220) -> str:
+def _annotation_x(pts: list[dict], note_date: str, x_of_index) -> Optional[float]:
+    """Horizontal position of a dated note: interpolated between the snapshots on
+    either side of it (clamped to the first/last snapshot)."""
+    from datetime import date as _d
+    try:
+        t = _d.fromisoformat(str(note_date)[:10]).toordinal()
+        ds = [_d.fromisoformat(str(p["generated_at"])[:10]).toordinal() for p in pts]
+    except Exception:
+        return None
+    n = len(ds)
+    if n == 1 or t <= ds[0]:
+        return x_of_index(0)
+    if t >= ds[-1]:
+        return x_of_index(n - 1)
+    for i in range(n - 1):
+        if ds[i] <= t <= ds[i + 1]:
+            span = ds[i + 1] - ds[i]
+            frac = (t - ds[i]) / span if span else 0
+            return x_of_index(i) + frac * (x_of_index(i + 1) - x_of_index(i))
+    return None
+
+
+def _score_chart(points: list[dict], w: int = 640, h: int = 220, annotations: Optional[list] = None) -> str:
     pts = [p for p in points if p.get("ai_visibility_score") is not None]
     if len(pts) < 1:
         return ""
@@ -189,6 +211,14 @@ def _score_chart(points: list[dict], w: int = 640, h: int = 220) -> str:
     out.append(f'<polyline points="{d}" fill="none" stroke="{_TEAL2}" stroke-width="2.2" stroke-linejoin="round"/>')
     for i, p in enumerate(pts):
         out.append(f'<circle cx="{x(i):.1f}" cy="{y(p["ai_visibility_score"]):.1f}" r="3" fill="{_TEAL}"/>')
+    # Numbered note markers (dashed vertical line + badge), matching the Notes list.
+    for k, a in enumerate(annotations or []):
+        ax = _annotation_x(pts, a.get("note_date"), x)
+        if ax is None:
+            continue
+        out.append(f'<line x1="{ax:.1f}" x2="{ax:.1f}" y1="{T}" y2="{T+ih}" stroke="#b45309" stroke-width="1.1" stroke-dasharray="4,3"/>')
+        out.append(f'<circle cx="{ax:.1f}" cy="{T+9}" r="8" fill="#b45309"/>')
+        out.append(f'<text x="{ax:.1f}" y="{T+12.5}" font-size="9" font-weight="700" fill="#fff" text-anchor="middle">{k+1}</text>')
     # x labels: first, last, and up to 3 in between
     idx = sorted(set([0, n - 1] + [round(n * k / 4) for k in (1, 2, 3)] if n > 5 else range(n)))
     for i in idx:
@@ -248,7 +278,8 @@ def _google_chart(points: list[dict], w: int = 640, h: int = 160) -> str:
 
 # ── HTML ─────────────────────────────────────────────────────────────────────
 def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str] = None,
-                     prepared_for: str = "") -> str:
+                     prepared_for: str = "", annotations: Optional[list] = None) -> str:
+    annotations = list(annotations or [])
     st = compute_stats(entity, points)
     today = date.today().strftime("%B %-d, %Y")
     sub = f"{_e(entity.get('city'))}, {_e(entity.get('state'))}" + (f" &middot; {_e(entity['specialty'])}" if entity.get("specialty") else "")
@@ -386,7 +417,8 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
 
       <section class="blk">
       <h2>Pulse Score over time</h2>
-      <div class="sec"><div class="chart">{_score_chart(points)}</div>
+      <div class="sec"><div class="chart">{_score_chart(points, annotations=annotations)}</div>
+        {_notes_list_html(annotations)}
         <div style="font-size:9px;color:{_MUTE};margin-top:6px">Shaded bands are the national quartiles (1st: 75+, 2nd: 68–74, 3rd: 58–67, 4th: below 58).</div></div>
       </section>
 
@@ -422,14 +454,28 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
     </body></html>"""
 
 
+def _notes_list_html(annotations: list) -> str:
+    """Numbered list under the score chart: what changed and when."""
+    if not annotations:
+        return ""
+    items = "".join(
+        f'<li><span style="display:inline-block;min-width:16px;height:16px;line-height:16px;border-radius:8px;'
+        f'background:#b45309;color:#fff;font-size:8.5px;font-weight:700;text-align:center;margin-right:6px">{k+1}</span>'
+        f'<b>{_e(_fmt_date(a.get("note_date")))}</b> &mdash; {_e(a.get("note", ""))}</li>'
+        for k, a in enumerate(annotations))
+    return (f'<div style="margin-top:8px;font-size:9.5px;line-height:1.6;color:#333">'
+            f'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:{_MUTE};margin-bottom:3px">Notes</div>'
+            f'<ul style="margin:0;padding-left:0;list-style:none">{items}</ul></div>')
+
+
 def render_trend_report_pdf(entity: dict, points: list[dict], pdf_path: str, *,
                             brand: str = "original", with_analyst: bool = True,
-                            prepared_for: str = "") -> None:
+                            prepared_for: str = "", annotations: Optional[list] = None) -> None:
     """Render the Trend Report PDF for one tracked entity."""
     _rebrand_for_display(entity)
     _rebrand_for_display(points)
     analyst = analyst_paragraph(entity, compute_stats(entity, points)) if with_analyst else ""
-    html_str = build_trend_html(entity, points, analyst=analyst, prepared_for=prepared_for)
+    html_str = build_trend_html(entity, points, analyst=analyst, prepared_for=prepared_for, annotations=annotations)
     from playwright.sync_api import sync_playwright
     Path(pdf_path).parent.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:

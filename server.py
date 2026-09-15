@@ -4165,8 +4165,55 @@ async def track_trend(entity_id: str, _: dict = Depends(get_current_user_payload
     entity = get_tracked_entity(entity_id)
     if not entity:
         raise HTTPException(404, "tracked entity not found")
+    from perception.db import list_annotations
     data = get_entity_trend(entity["entity_name"])
-    return {"entity": entity, "data_points": data}
+    return {"entity": entity, "data_points": data, "annotations": list_annotations(entity_id)}
+
+
+class AnnotationRequest(BaseModel):
+    note_date: str
+    note: str
+
+
+@app.get("/api/track/entities/{entity_id}/annotations")
+async def track_annotations(entity_id: str, _: dict = Depends(get_current_user_payload)):
+    from perception.db import init_db, list_annotations
+    init_db()
+    return list_annotations(entity_id)
+
+
+@app.post("/api/track/entities/{entity_id}/annotations")
+async def track_annotation_add(entity_id: str, req: AnnotationRequest, payload: dict = Depends(get_current_user_payload)):
+    """Add a dated note ("new website launched") to a tracked entity's trend."""
+    from datetime import date as _date
+    from perception.db import init_db, get_tracked_entity, add_annotation
+    init_db()
+    if not get_tracked_entity(entity_id):
+        raise HTTPException(404, "tracked entity not found")
+    note = (req.note or "").strip()
+    if not note:
+        raise HTTPException(400, "Enter a note")
+    if len(note) > 300:
+        raise HTTPException(400, "Keep the note under 300 characters")
+    try:
+        d = _date.fromisoformat(req.note_date[:10])
+    except Exception:
+        raise HTTPException(400, "Invalid date")
+    return add_annotation(entity_id, d, note, payload.get("email") or payload.get("name") or "")
+
+
+@app.delete("/api/track/annotations/{aid}")
+async def track_annotation_delete(aid: str, payload: dict = Depends(get_current_user_payload)):
+    from perception.db import init_db, get_annotation, delete_annotation
+    init_db()
+    a = get_annotation(aid)
+    if not a:
+        raise HTTPException(404, "note not found")
+    me = (payload.get("email") or "").lower()
+    if payload.get("role") != "admin" and (a.get("created_by") or "").lower() != me:
+        raise HTTPException(403, "Only the person who added the note (or an admin) can remove it")
+    delete_annotation(aid)
+    return {"deleted": aid}
 
 
 @app.get("/api/track/entities/{entity_id}/report.pdf")
@@ -4192,17 +4239,23 @@ async def track_report_pdf(entity_id: str, payload: dict = Depends(get_current_u
 def _trend_report_file(entity: dict, points: list, brand: str = "original") -> Path:
     """Render (or reuse) the Trend Report PDF for the entity's latest snapshot. Sync."""
     from perception.trend_pdf import render_trend_report_pdf
+    from perception.db import list_annotations
+    import hashlib
     latest = points[-1].get("run_id") or "none"
     out_dir = REPORTS_DIR / "trends"
     out_dir.mkdir(parents=True, exist_ok=True)
     safe_id = "".join(ch for ch in str(entity.get("id", "")) if ch.isalnum() or ch in "-_")
-    pdf_path = out_dir / f"trend_{safe_id}_{latest}_v2.pdf"   # bump suffix when the layout changes
+    annotations = list_annotations(str(entity.get("id", "")))
+    # Notes are part of the report: fingerprint them into the cache name so an added or
+    # removed note rebuilds the PDF.
+    a_fp = hashlib.sha1("|".join(f"{a['note_date']}:{a['note']}" for a in annotations).encode()).hexdigest()[:8] if annotations else "0"
+    pdf_path = out_dir / f"trend_{safe_id}_{latest}_v3_{a_fp}.pdf"   # bump suffix when the layout changes
     if not pdf_path.exists():
         ent = dict(entity)
         for k in ("last_run_at", "next_run_at", "created_at"):
             if ent.get(k):
                 ent[k] = str(ent[k])
-        render_trend_report_pdf(ent, points, str(pdf_path), brand=brand)
+        render_trend_report_pdf(ent, points, str(pdf_path), brand=brand, annotations=annotations)
         # The download cache holds only the current version; sent copies live in trends/sent/.
         for old in out_dir.glob(f"trend_{safe_id}_*.pdf"):
             if old != pdf_path:

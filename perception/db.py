@@ -682,6 +682,18 @@ def init_db() -> None:
             sent_at       TIMESTAMP NOT NULL
         )
     """)
+    # Trend annotations: "what changed and when" notes on a tracked entity, shown as
+    # markers on the score chart and listed in the Trend Report.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS trend_annotations (
+            id            VARCHAR PRIMARY KEY,
+            entity_id     VARCHAR NOT NULL,
+            note_date     DATE NOT NULL,
+            note          VARCHAR NOT NULL,
+            created_by    VARCHAR,
+            created_at    TIMESTAMP NOT NULL
+        )
+    """)
 
     # ── FQHC Community Health Edition tables ─────────────────────────────────
     con.execute("""
@@ -2745,3 +2757,38 @@ def recent_runs_matching(kind: str, name: str, name_b: str = "", role: str = Non
         except Exception:
             o["days_ago"] = None
     return out
+
+
+# ── Trend annotations ────────────────────────────────────────────────────────
+def list_annotations(entity_id: str) -> list:
+    con = get_connection()
+    rows = con.execute(
+        "SELECT id, entity_id, note_date, note, created_by, created_at FROM trend_annotations "
+        "WHERE entity_id = ? ORDER BY note_date ASC, created_at ASC", [entity_id]).fetchall()
+    con.close()
+    return [{"id": r[0], "entity_id": r[1], "note_date": str(r[2]), "note": r[3],
+             "created_by": r[4], "created_at": str(r[5])} for r in rows]
+
+
+def add_annotation(entity_id: str, note_date, note: str, created_by: str = "") -> dict:
+    import uuid
+    from datetime import datetime
+    aid = str(uuid.uuid4())
+    con = get_connection()
+    con.execute("INSERT INTO trend_annotations (id, entity_id, note_date, note, created_by, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)", [aid, entity_id, note_date, note, created_by, datetime.utcnow()])
+    con.close()
+    return {"id": aid, "entity_id": entity_id, "note_date": str(note_date), "note": note, "created_by": created_by}
+
+
+def get_annotation(aid: str):
+    con = get_connection()
+    r = con.execute("SELECT id, entity_id, note_date, note, created_by FROM trend_annotations WHERE id = ?", [aid]).fetchone()
+    con.close()
+    return {"id": r[0], "entity_id": r[1], "note_date": str(r[2]), "note": r[3], "created_by": r[4]} if r else None
+
+
+def delete_annotation(aid: str) -> None:
+    con = get_connection()
+    con.execute("DELETE FROM trend_annotations WHERE id = ?", [aid])
+    con.close()

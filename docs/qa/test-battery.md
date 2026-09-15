@@ -2513,3 +2513,29 @@ Commit: the Home hero is two columns — title/lede/buttons on the left, the wel
 **T3 — No Home content.** With no Home content published, the hero has no right column and the placeholder card ("A short welcome video is coming soon") shows as before.
 
 **T4 — Narrow window.** Below ~860px the hero stacks: text first, video below at up to 360px wide.
+
+## TRENDS-NOTES — dated notes on a tracked entity: markers on the score chart and in the Trend Report
+
+Commit: new `trend_annotations` table; GET/POST `/api/track/entities/{id}/annotations`, DELETE `/api/track/annotations/{aid}` (author or admin); Notes card under the Pulse Score chart with add/delete; numbered dashed markers on the score chart (web) and in the Trend Report PDF with a Notes list under the chart; "+ note" shortcut per snapshot row; PDF cache fingerprints the notes so adding/removing one rebuilds the report. NEEDS BROWSER TESTING.
+
+**T1 — Add a note.** Open Trends → an entity with ≥2 snapshots. In the Notes card, pick a date between two snapshots, type "New website launched", click Add note (or press Enter).
+- [ ] The note appears in the list numbered ①, with date and author; a flash confirms; the score chart shows a dashed amber vertical line at the interpolated date with a "1" badge at the top.
+- [ ] A second note gets ② and a second marker; order is by date, not by entry order.
+
+**T2 — Dates outside the snapshot range.** Add a note dated before the first snapshot and one after the last.
+- [ ] Markers clamp to the first/last snapshot positions (no marker off-canvas).
+
+**T3 — Snapshot shortcut.** In All Snapshots click "+ note" on a row → the Notes date field is set to that snapshot's date and the text box is focused.
+
+**T4 — Delete permissions.** The author sees ✕ on their notes; another non-admin user does not; admin sees ✕ on all. Deleting removes the marker immediately.
+
+**T5 — Validation.** Empty note → focus stays in the box, nothing sent. 301+ characters blocked by the input (maxlength). Bad date → 400 shown in the status area.
+
+**T6 — Trend Report PDF.** Download the Trend Report after adding notes.
+- [ ] The Pulse Score chart shows the same numbered markers; a "NOTES" list sits under the chart with "① Mar 3, 2026 — New website launched".
+- [ ] Add another note and download again → the PDF includes it (cache rebuilt). Remove it → rebuilt again without it.
+- [ ] Send report… and scheduled emails carry the notes too (same renderer).
+
+**R1 — Entities with one snapshot / none.** One snapshot: marker sits on the single point. No snapshots: the charts area (and Notes card) stays hidden as before.
+
+**R2 — Tier and Google charts unchanged** (markers only on the score chart).
