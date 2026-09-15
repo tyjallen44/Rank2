@@ -1934,8 +1934,28 @@ def list_tracked_entities() -> list[dict]:
         ORDER BY te.created_at DESC
     """).fetchall()
     cols = [d[0] for d in con.description]
+    ents = [dict(zip(cols, r)) for r in rows]
+    # Recent score history for the list view (sparkline + latest/delta), one query
+    # for all tracked names instead of one per entity.
+    keys = sorted({(e.get("entity_name") or "").lower() for e in ents if e.get("entity_name")})
+    hist: dict[str, list] = {k: [] for k in keys}
+    if keys:
+        ph = ",".join("?" * len(keys))
+        for k, gen, rid, score in con.execute(
+            f"""SELECT LOWER(a.entity_name), a.generated_at, a.run_id, p.ai_visibility_score
+                FROM analysis_runs a
+                JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
+                WHERE a.individual_report = TRUE AND LOWER(a.entity_name) IN ({ph})
+                ORDER BY a.generated_at ASC, a.run_id ASC""", keys).fetchall():
+            if score is not None:
+                hist[k].append({"date": str(gen), "run_id": rid, "score": int(score)})
     con.close()
-    return [dict(zip(cols, r)) for r in rows]
+    for e in ents:
+        h = hist.get((e.get("entity_name") or "").lower(), [])[-12:]
+        e["recent_scores"] = h
+        e["latest_score"] = h[-1]["score"] if h else None
+        e["score_delta"] = (h[-1]["score"] - h[-2]["score"]) if len(h) >= 2 else None
+    return ents
 
 
 def update_tracked_entity(entity_id: str, **kwargs) -> None:

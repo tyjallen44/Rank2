@@ -222,7 +222,7 @@ html, body {
 #main.patient-bg { background: #fff; }
 .page { display: none; padding: 36px; max-width: 920px; }
 .page.active { display: block; }
-#page-history, #page-feedback, #page-admin { max-width: none; }
+#page-history, #page-feedback, #page-admin, #page-track { max-width: none; }
 .page-title {
   font-family: 'Barlow Condensed', Impact, sans-serif;
   font-size: 26px; font-weight: 700; text-transform: uppercase;
@@ -2544,7 +2544,7 @@ input[type="url"]::placeholder, textarea::placeholder {
       <div class="page-sub">Track how a provider's AI reputation changes over time.</div>
 
       <!-- Entity list view -->
-      <div id="track-list-view" style="max-width:860px">
+      <div id="track-list-view" style="max-width:1180px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
           <div id="track-entity-count" style="font-size:13px;color:var(--muted)"></div>
           <button class="btn btn-primary btn-sm" onclick="showAddEntityFlow()">+ Track New Entity</button>
@@ -8793,11 +8793,37 @@ async function refreshTrackEntities() {
   }
 }
 
+// Inline sparkline of recent Pulse Scores (last ≤12 runs). Fixed 0–100 domain so
+// two entities' lines are comparable at a glance; last point is dotted.
+function _sparkSvg(scores) {
+  const pts = (scores || []).map(s => s.score).filter(v => v != null);
+  if (pts.length < 2) return '<span style="color:var(--muted);font-size:11px">—</span>';
+  const W = 96, H = 26, pad = 3;
+  const x = i => pad + (i * (W - 2 * pad)) / (pts.length - 1);
+  const y = v => H - pad - ((Math.max(0, Math.min(100, v))) * (H - 2 * pad)) / 100;
+  const d = pts.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const lx = x(pts.length - 1).toFixed(1), ly = y(pts[pts.length - 1]).toFixed(1);
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-label="score trend" style="display:block">
+    <polyline points="${d}" fill="none" stroke="var(--teal)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${lx}" cy="${ly}" r="2.4" fill="var(--teal)"/></svg>`;
+}
+function _shortDate(v) {
+  if (!v) return { text: '—', title: '' };
+  const d = new Date(String(v).length <= 10 ? v + 'T00:00:00' : v);
+  if (isNaN(d)) return { text: String(v).slice(0, 10), title: String(v) };
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const text = d.toLocaleDateString('en-US', sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+  const days = Math.round((d - new Date()) / 86400000);
+  const rel = days === 0 ? 'today' : days > 0 ? `in ${days} day${days === 1 ? '' : 's'}` : `${-days} day${days === -1 ? '' : 's'} ago`;
+  return { text, title: `${d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} (${rel})` };
+}
+
 function renderTrackEntityList() {
   const body  = document.getElementById('track-entities-body');
   const count = document.getElementById('track-entity-count');
   const active = _trackEntities.filter(e => e.active);
-  count.textContent = `${active.length} tracked ${active.length === 1 ? 'entity' : 'entities'}`;
+  const paused = _trackEntities.length - active.length;
+  count.textContent = `${active.length} tracked ${active.length === 1 ? 'entity' : 'entities'}${paused ? ` · ${paused} paused` : ''}`;
 
   if (!_trackEntities.length) {
     body.innerHTML = `<div class="empty"><div class="ei">↗</div><div>No entities tracked yet. Click "+ Track New Entity" to start.</div></div>`;
@@ -8805,37 +8831,54 @@ function renderTrackEntityList() {
   }
 
   const scheduleLabel = { monthly: 'Monthly', weekly: 'Weekly', manual: 'Manual' };
-  const dateOnly = v => v ? v.substring(0, 10) : '—';
-  const rows = _trackEntities.map(e => {
-    const lastRun = dateOnly(e.last_run_at);
-    const nextRun = e.schedule !== 'manual' ? dateOnly(e.next_run_at) : '—';
-    const runs    = e.run_count != null ? e.run_count : '—';
-    const status  = e.active
-      ? `<span style="color:#1a7a4a;font-weight:600">Active</span>`
-      : `<span style="color:var(--muted)">Inactive</span>`;
-    return `<tr>
-      <td><a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal)">${e.entity_name}</a>
-          ${e.notes ? `<div style="font-size:11px;color:var(--muted)">${e.notes}</div>` : ''}</td>
-      <td>${e.city}, ${e.state}${e.specialty ? ` · ${e.specialty}` : ''}</td>
-      <td>${scheduleLabel[e.schedule] || e.schedule}</td>
-      <td>${lastRun}</td>
-      <td>${nextRun}</td>
-      <td style="text-align:center">${runs}</td>
+  // Active entities first (soonest next run on top), paused ones last.
+  const ordered = _trackEntities.slice().sort((a, b) => {
+    if (!!a.active !== !!b.active) return a.active ? -1 : 1;
+    return String(a.next_run_at || '9999').localeCompare(String(b.next_run_at || '9999'));
+  });
+  const rows = ordered.map(e => {
+    const last = _shortDate(e.last_run_at);
+    const next = e.schedule !== 'manual' ? _shortDate(e.next_run_at) : { text: '—', title: 'Manual schedule' };
+    const runs = e.run_count != null ? e.run_count : '—';
+    const status = e.active
+      ? `<span class="badge bg-teal" style="font-size:10px">Active</span>`
+      : `<span class="badge bg-muted" style="font-size:10px">Paused</span>`;
+    const sched = `<span class="badge bg-muted" style="font-size:10px">${scheduleLabel[e.schedule] || e.schedule}</span>`;
+    const latest = e.latest_score != null
+      ? `<span style="font-weight:700;font-size:15px;color:var(--text)">${e.latest_score}</span>` +
+        (e.score_delta == null || e.score_delta === 0
+          ? (e.score_delta === 0 ? ` <span style="font-size:11px;color:var(--muted)">no change</span>` : '')
+          : ` <span style="font-size:11px;font-weight:700;color:${e.score_delta > 0 ? '#1a7a4a' : '#b42318'}">${e.score_delta > 0 ? '▲' : '▼'}${Math.abs(e.score_delta)}</span>`)
+      : `<span style="color:var(--muted);font-size:12px">no runs yet</span>`;
+    const sub = [`${e.city}, ${e.state}`, e.specialty || ''].filter(Boolean).join(' · ');
+    return `<tr style="${e.active ? '' : 'opacity:.7'}">
+      <td style="max-width:320px">
+        <a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal);text-decoration:none">${e.entity_name}</a>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${sub}${e.notes ? ` · ${e.notes}` : ''}</div>
+      </td>
+      <td style="white-space:nowrap">${latest}</td>
+      <td title="${(e.recent_scores || []).map(s => `${s.date.slice(0, 10)}: ${s.score}`).join('\n')}">${_sparkSvg(e.recent_scores)}</td>
+      <td>${sched}</td>
+      <td style="white-space:nowrap;color:var(--muted);font-size:13px" title="${last.title}">${last.text}</td>
+      <td style="white-space:nowrap;color:var(--muted);font-size:13px" title="${next.title}">${next.text}</td>
+      <td style="text-align:right">${runs}</td>
       <td>${status}</td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-ghost btn-sm" onclick="loadEntityTrend('${e.id}')">View</button>
-        <button class="btn btn-ghost btn-sm" style="margin-left:4px" onclick="toggleTrackActive('${e.id}',${!e.active})">${e.active ? 'Pause' : 'Resume'}</button>
+      <td style="white-space:nowrap;text-align:right">
+        <button class="btn btn-ghost btn-sm" onclick="toggleTrackActive('${e.id}',${!e.active})">${e.active ? 'Pause' : 'Resume'}</button>
       </td>
     </tr>`;
   }).join('');
 
-  body.innerHTML = `<table class="data-table">
-    <thead><tr>
-      <th>Entity</th><th>Location</th><th>Schedule</th>
-      <th>Last Run</th><th>Next Run</th><th style="text-align:center">Runs</th><th>Status</th><th>Actions</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+  body.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
+    <table class="tbl">
+      <thead><tr>
+        <th>Entity</th><th>Latest score</th><th>Trend</th><th>Schedule</th>
+        <th>Last run</th><th>Next run</th><th style="text-align:right">Runs</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>
+  <div style="font-size:11.5px;color:var(--muted);margin-top:10px">Click an entity name to open its full trend. The Trend column shows the last ${12} runs on a 0–100 scale.</div>`;
 }
 
 // ── Add-entity search flow ─────────────────────────────────────────────────

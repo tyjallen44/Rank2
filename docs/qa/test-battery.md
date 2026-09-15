@@ -1603,3 +1603,48 @@ delete the content report links are gone and no orphaned content-analysis row re
 
 ### Notes for the testing agent
 NEEDS BROWSER TESTING. Deletion is permanent — use throwaway runs only.
+
+## TRENDS-LIST — Trends list redesigned: full width, latest score + delta, sparklines, badges
+
+**Shipped:** 2026-09-15 · **Area:** Trends · **Type:** UX
+
+### What changed
+- Page uses full width (`#page-track` max-width none; list container 1180px) and the standard
+  History-style card + `.tbl` table.
+- Columns: **Entity** (name link; location · specialty · notes as a muted second line) ·
+  **Latest score** (last Pulse Score, ▲/▼ delta vs previous run, "no change", or "no runs yet") ·
+  **Trend** (inline SVG sparkline of the last ≤12 scores on a fixed 0–100 scale; hover shows
+  date: score list) · **Schedule** badge · **Last run** / **Next run** as short non-wrapping dates
+  ("Sep 11"; hover shows full date + relative) · **Runs** right-aligned · **Status** badge (Active
+  teal / Paused gray) · single **Pause/Resume** action (View removed — the name opens the trend).
+- Rows sorted active first by soonest next run, paused last (dimmed). Count line: "N tracked
+  entities · M paused".
+- Data: `list_tracked_entities()` adds `recent_scores`, `latest_score`, `score_delta` via ONE query
+  across all tracked names (no per-entity round trips).
+
+### Files changed
+`perception/db.py`, `web/index.html`, `docs/qa/test-battery.md`
+
+### Test Cases
+**T1 — Layout**: Trends fills the content width; no wrapped dates/locations; card styling matches
+History; headers left-aligned (Runs right).
+**T2 — Scores**: an entity with ≥2 runs shows the latest score with a green ▲ or red ▼ delta and
+a sparkline; hover on the sparkline lists dates and scores; an entity with 1 run shows the score
+and no delta; a new entity shows "no runs yet" and "—".
+**T3 — Sorting**: active entities on top ordered by next run date; paused entities last and dimmed;
+count line shows "· N paused" when any are paused.
+**T4 — Actions**: clicking the entity name opens the trend view; Pause/Resume toggles and the row
+moves/dims accordingly; "+ Track New Entity" flow unchanged.
+**T5 — Dates**: last/next run show "Sep 11" style (year appended when not the current year);
+tooltip shows the full date and "in N days"/"N days ago".
+
+### Regression Checks
+- **R1** Entity trend detail view unchanged.
+- **R2** `/api/track/entities` still returns all previous fields (+ the three new ones).
+- **R3** Suite at baseline.
+
+### Acceptance Checklist
+- [ ] T1 · [ ] T2 · [ ] T3 · [ ] T4 · [ ] T5 · [ ] R1–R3
+
+### Notes for the testing agent
+NEEDS BROWSER TESTING. Production has 8 tracked entities — good coverage for T2/T3.
