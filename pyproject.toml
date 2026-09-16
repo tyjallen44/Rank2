@@ -36,6 +36,17 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-playwright>=0.5",
 ]
+# Optional: the MCP endpoint (PULSE_MCP_ENABLED=1). Kept out of [project.dependencies]
+# so `pip install -e .` is unchanged. NOTE: the mcp SDK requires Python >= 3.10,
+# while this project's floor is 3.9. The container is python:3.11-slim (Dockerfile),
+# so the deployed image satisfies it; a 3.9 developer install simply cannot add this
+# extra. That is why the floor above is left alone. The 2.x bound is not cosmetic:
+# FastMCP was renamed to MCPServer in mcp 2.0 and the old import path is gone, so an
+# open-ended floor would resolve across an incompatible rename.
+mcp = [
+    "mcp>=2.2,<3",
+    "pyjwt[crypto]>=2.9",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["perception", "dashboard"]
