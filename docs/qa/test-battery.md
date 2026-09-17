@@ -2581,3 +2581,25 @@ Commit: `init_db()` now runs its ~80 DDL/migration statements once per server pr
 **T3 — General responsiveness.** History, Trends and Admin pages load noticeably faster on production (each request no longer re-runs the schema migrations).
 
 **R1 — Fresh database.** First request after boot still creates/migrates all tables (Home, History, Trends, Admin all load on an empty database).
+
+## FORM-SIMPLIFY — fewer decisions on the report pages
+
+Commit: (1) By City / By ZIP toggles removed from Deep Diagnostic and Competitors Rankings — ZIP mode is a checkbox under Advanced options; Deep Diagnostic report title shown as text with a "rename" link instead of an editable field; Competitors Rankings Report Format (Enticement / Market Summary / Full) moved under Advanced with Market Summary default. (2) Compare Two Entity B inherits Entity A's type, specialty/service line and city/state once A is confirmed, with a "Same as Entity A" hint; Teaser + Refresh moved under Advanced on Compare Two and Event Preparation. (3) Community Health intake prefilled with typical Section 330 answers (sliding fee, no one turned away, Medicaid, Medicare, uninsured, enrollment assistance, new patients, 330 grantee); HRSA prefill now sets 330 / look-alike explicitly. NEEDS BROWSER TESTING.
+
+**T1 — Deep Diagnostic location.** Main form shows Location with City + State only (no By City / By ZIP buttons). Advanced options → "Search by ZIP code instead of city" → ZIP field replaces City/State; unchecking restores them. Hospital Service Line hides the ZIP option entirely.
+- [ ] A run by ZIP still works end-to-end.
+
+**T2 — Deep Diagnostic title.** After confirming a listing, the Confirm card shows the title as teal text with a small "rename" link. Click rename → editable field, type, Enter or click away → text updates and the PDF uses the new title. Esc also closes.
+
+**T3 — Competitors Rankings.** Main form: type, specialty (practice), city/state, then Run. Advanced options contains Report Format (Market Summary selected), "Search by ZIP code & radius instead of city", Aggregate, and (admin) Refresh. Choosing Enticement in Advanced reveals the Prospect / Target field in the main form as before.
+- [ ] Runs in all three formats and in ZIP mode still work.
+
+**T4 — Compare Two inherits.** Set Entity A to Specialty Practice, Orthopedics, Memphis TN, search and confirm. Entity B appears with Specialty Practice selected, Orthopedics, Memphis, TN filled and the teal hint "Same as Entity A: Specialty Practice · Orthopedics · Memphis, TN…". The name field is focused.
+- [ ] Change B's city, then re-confirm a different A listing → B's edits are NOT overwritten. Start Over → B blank, hint hidden.
+- [ ] Hospital A → B Hospital with A's city/state. Service Line A → B Hospital Service Line with the service line and market filled.
+
+**T5 — Compare Two / Event Prep advanced.** Teaser and Refresh checkboxes now sit under an "Advanced options" disclosure on the Compare Two run card and on Event Preparation. Defaults unchanged (unchecked).
+
+**T6 — Community Health intake.** Choose Community Health, confirm a center: the attestation step opens with the eight typical boxes already checked and Look-Alike unchecked. When HRSA finds the center, 330 / look-alike reflect HRSA; policy fields reflect the web-searched values. Uncheck any box → the run's intake reflects it.
+
+**R1 — Regression.** History, Trends, Home unchanged; typeahead still attached to every form; the ⓘ help links on moved controls still open the right topics.

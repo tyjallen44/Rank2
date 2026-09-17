@@ -1331,7 +1331,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         </div>
         <div class="fg mt16" style="margin-bottom:16px">
           <label class="fl">Location of Analysis</label>
-          <div class="tg-group">
+          <div class="tg-group" id="pp-loc-mode-toggle">
             <button class="tg-opt on" id="pp-tg-bycity" onclick="setPpLocMode('city')" title="The market is the city and state you enter.">By City</button>
             <button class="tg-opt"    id="pp-tg-byzip"  onclick="setPpLocMode('zip')" title="The market is a radius (1–25 miles) around the ZIP code.">By ZIP Code &amp; Radius</button>
           </div>
@@ -1394,17 +1394,6 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           </div>
         </div>
 
-        <div class="fg mt16" style="margin-bottom:0">
-          <label class="fl">Report Format <a href="#" class="help-link" onclick="showHelp('report-format',event);return false">ⓘ Which format?</a></label>
-          <div class="tg-group">
-            <button class="tg-opt" id="pp-tg-enticement" onclick="setPpFormat('enticement')"
-              title="Compact scorecards ranked by AI reputation. Your chosen prospect is shown in full; every competitor is obscured. Built to hand to a prospect.">Enticement</button>
-            <button class="tg-opt on" id="pp-tg-summary" onclick="setPpFormat('summary')"
-              title="Compact scorecards for every provider in the market — nothing hidden, no target needed. A clean at-a-glance summary.">Market Summary</button>
-            <button class="tg-opt" id="pp-tg-full" onclick="setPpFormat('full')"
-              title="The complete report: every provider with full detail — ratings, strengths, weaknesses, and recommendations.">Full Report</button>
-          </div>
-        </div>
         <div id="pp-target-wrap" class="fg mt16 hidden" style="margin-bottom:0">
           <label class="fl">Prospect / Target Entity</label>
           <div style="display:flex;gap:10px">
@@ -1425,6 +1414,21 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         <details id="pp-advanced" style="margin-top:16px">
           <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
           <div style="margin-top:10px">
+        <div class="fg" style="margin:0 0 12px">
+          <label class="fl">Report Format <a href="#" class="help-link" onclick="showHelp('report-format',event);return false">ⓘ Which format?</a></label>
+          <div class="tg-group">
+            <button class="tg-opt" id="pp-tg-enticement" onclick="setPpFormat('enticement')"
+              title="Compact scorecards ranked by AI reputation. Your chosen prospect is shown in full; every competitor is obscured. Built to hand to a prospect.">Enticement</button>
+            <button class="tg-opt on" id="pp-tg-summary" onclick="setPpFormat('summary')"
+              title="Compact scorecards for every provider in the market — nothing hidden, no target needed. A clean at-a-glance summary.">Market Summary</button>
+            <button class="tg-opt" id="pp-tg-full" onclick="setPpFormat('full')"
+              title="The complete report: every provider with full detail — ratings, strengths, weaknesses, and recommendations.">Full Report</button>
+          </div>
+        </div>
+          <label class="aggregate-toggle" style="margin-bottom:10px" title="Search a radius around a ZIP code instead of a city.">
+            <input type="checkbox" id="pp-zip-mode" onchange="setPpLocMode(this.checked ? 'zip' : 'city')">
+            <span class="agg-label">Search by ZIP code &amp; radius instead of city</span><a href="#" class="help-link" onclick="showHelp('location-mode',event);return false">ⓘ What is this?</a>
+          </label>
           <label class="aggregate-toggle" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">
             <input type="checkbox" id="pp-agg-toggle" checked>
             <span class="agg-label" title="If hospitals or practices have multiple locations within the analysis area, those locations and their data will be aggregated into one entity and the secondary locations will be listed in the results.">Aggregate related facilities into parent systems</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
@@ -1666,7 +1670,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <div id="ir-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="margin-bottom:16px">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Report Title</div>
-          <input type="text" id="ir-custom-title" placeholder="Report title…" oninput="onIrTitleInput(this.value)"
+          <div class="title-display" id="ir-title-display"><span id="ir-title-text"></span><a href="#" class="rename" onclick="irShowTitleEdit();return false" title="Change the title printed on the report">rename</a></div>
+          <input type="text" id="ir-custom-title" class="hidden" placeholder="Report title…" oninput="onIrTitleInput(this.value)" onblur="irHideTitleEdit()" onkeydown="if(event.key==='Enter'||event.key==='Escape')this.blur()"
             style="width:100%;box-sizing:border-box;font-size:15px;font-weight:700;color:var(--teal);padding:9px 12px;border:1.5px solid var(--border);border-radius:6px;outline:none;background:#fff">
           <div id="ir-selected-display" style="font-size:12px;color:var(--text);margin-top:6px"></div>
           <!-- Practice profile (practice types only): one line, dropdown only on "change" -->
@@ -1702,6 +1707,10 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         <details id="ir-advanced" style="margin-bottom:6px">
           <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
           <div style="margin-top:10px;padding-left:2px">
+            <label class="aggregate-toggle" id="ir-zip-mode-wrap" title="Search a radius around a ZIP code instead of a city. Not available for Hospital Service Line.">
+              <input type="checkbox" id="ir-zip-mode" onchange="setIrLocMode(this.checked ? 'zip' : 'city')">
+              <span class="agg-label">Search by ZIP code instead of city</span><a href="#" class="help-link" onclick="showHelp('location-mode',event);return false">ⓘ What is this?</a>
+            </label>
             <!-- Hospital-only options -->
             <div id="ir-composite-opts">
               <label class="aggregate-toggle" title="Roll the system's related hospitals into this score (the organization is presented as a system). Uncheck to score only this hospital. Click ⓘ for details.">
@@ -1783,38 +1792,38 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <div id="ir-step-fqhc-intake" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px">Community Health — Client Attestation</div>
         <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
-          Provide your organization's attested facts. These are used to audit how AI represents your eligibility and cost policies.
+          Prefilled with the typical answers for a Section 330 health center (and with HRSA data when the center is found). Adjust anything that differs — these facts drive the audit of how AI represents eligibility and cost policies.
         </p>
 
         <!-- Access & Eligibility -->
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px">Access &amp; Eligibility</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="fqhc-sliding-fee" style="width:16px;height:16px">
+            <input type="checkbox" id="fqhc-sliding-fee" checked style="width:16px;height:16px">
             Sliding-fee scale offered
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="fqhc-no-turned-away" style="width:16px;height:16px">
+            <input type="checkbox" id="fqhc-no-turned-away" checked style="width:16px;height:16px">
             No one turned away for inability to pay
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="fqhc-medicaid" style="width:16px;height:16px">
+            <input type="checkbox" id="fqhc-medicaid" checked style="width:16px;height:16px">
             Accepts Medicaid
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="fqhc-medicare" style="width:16px;height:16px">
+            <input type="checkbox" id="fqhc-medicare" checked style="width:16px;height:16px">
             Accepts Medicare
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="fqhc-uninsured" style="width:16px;height:16px">
+            <input type="checkbox" id="fqhc-uninsured" checked style="width:16px;height:16px">
             Accepts uninsured patients
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="fqhc-enrollment-assist" style="width:16px;height:16px">
+            <input type="checkbox" id="fqhc-enrollment-assist" checked style="width:16px;height:16px">
             Enrollment assistance available
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="fqhc-new-patients" style="width:16px;height:16px">
+            <input type="checkbox" id="fqhc-new-patients" checked style="width:16px;height:16px">
             Accepting new patients
           </label>
         </div>
@@ -1823,7 +1832,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px">HRSA Status</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="fqhc-is-330" style="width:16px;height:16px">
+            <input type="checkbox" id="fqhc-is-330" checked style="width:16px;height:16px">
             Section 330 grantee (FQHC)
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
@@ -2067,6 +2076,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <button class="tg-opt"    id="cmp-b-tg-specialty"    onclick="setCmpType('b','specialty')">Specialty Practice</button>
           </div>
           <div id="cmp-b-type-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5">One department of a health system — every clinic of the service line rolled up on the practice rubric. Enter the <strong>health system</strong> and the <strong>service line</strong>.</div>
+          <div id="cmp-b-inherit-hint" class="hidden" style="font-size:12px;color:var(--teal);margin-top:8px;line-height:1.5"></div>
         </div>
         <div class="fg">
           <label class="fl" id="cmp-b-name-label">Organization Name</label>
@@ -2140,6 +2150,9 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <!-- Run -->
       <div id="cmp-run-section" class="hidden mt24">
         <div class="card" style="background:var(--bg);border-color:var(--border)">
+          <details id="cmp-advanced" style="margin-bottom:6px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
+          <div style="margin-top:10px">
           <label class="aggregate-toggle" title="A copy with everything below the headline score blurred, for sending to a prospect. Same scores. Click ⓘ for details.">
             <input type="checkbox" id="cmp-teaser">
             <span class="agg-label">Create Teaser version</span><a href="#" class="help-link" onclick="showHelp('teaser',event);return false">ⓘ What is this?</a>
@@ -2148,6 +2161,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <input type="checkbox" id="cmp-force-rerun">
             <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
           </label>
+          </div>
+          </details>
           <div id="cmp-run-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
             <button class="btn btn-primary" id="cmp-run-btn" onclick="runComparison()">Run Compare Two →</button>
@@ -2491,6 +2506,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <div style="font-size:12px;color:var(--muted);margin-top:8px">Required columns: <strong>name</strong>, <strong>city</strong>, <strong>state</strong> — one row per attendee. Optional <strong>specialty</strong> column: for a hospital service line (e.g. <em>Orthopedics</em>), fill it to analyze that department; leave blank to analyze the whole entity. <a href="#" onclick="showEvHelp();return false" style="color:var(--teal);font-weight:600">How to analyze a specialty practice within a hospital →</a></div>
           </div>
 
+          <details id="ev-advanced" style="margin-bottom:16px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none;margin-bottom:10px">Advanced options</summary>
           <div style="margin-bottom:16px">
             <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px">
               <input type="checkbox" id="ev-include-teaser">
@@ -2506,6 +2523,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             </label>
             <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Bypasses today's cache lock and the 90-day score cache. Use when you need fresh results for entities already run today.</div>
           </div>
+          </details>
 
           <div id="ev-step1-err" class="hidden" style="color:#c0392b;font-size:13px;margin-bottom:12px"></div>
           <button class="btn btn-primary" onclick="evUploadAndResolve()" id="ev-upload-btn">Upload &amp; Resolve Entities →</button>
@@ -2843,6 +2861,10 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       .dup-notice .d{flex:1;min-width:220px}
       .conf-chip{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap}
       .conf-high{background:#e3f4ea;color:#1a7a4a}.conf-medium{background:#fff3d6;color:#8a6508}.conf-low{background:#fde8e6;color:#b42318}
+      #ir-loc-mode-toggle,#pp-loc-mode-toggle{display:none !important}
+      .title-display{font-size:15px;font-weight:700;color:var(--teal);padding:2px 0}
+      .title-display .rename{margin-left:10px;font-size:12px;font-weight:500;color:var(--teal);text-decoration:none}
+      .title-display .rename:hover{text-decoration:underline}
       .sg-box{position:absolute;z-index:9000;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.14);max-height:340px;overflow:auto;text-align:left}
       .sg-head{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 12px 4px}
       .sg-item{padding:8px 12px;cursor:pointer;border-top:1px solid #f1f4f3}
@@ -5136,6 +5158,7 @@ function selectPpTarget(idx) {
 }
 
 function setPpLocMode(m) {
+  const zm = document.getElementById('pp-zip-mode'); if (zm) zm.checked = (m === 'zip');
   _ppLocMode = m;
   document.getElementById('pp-tg-bycity').classList.toggle('on', m === 'city');
   document.getElementById('pp-tg-byzip').classList.toggle('on', m === 'zip');
@@ -5217,6 +5240,7 @@ let _fqhcSiteRoster    = [];
 
 function setIrLocMode(m) {
   _irLocMode = m;
+  const zm = document.getElementById('ir-zip-mode'); if (zm) zm.checked = (m === 'zip');
   document.getElementById('ir-tg-bycity').classList.toggle('on', m === 'city');
   document.getElementById('ir-tg-byzip').classList.toggle('on',  m === 'zip');
   document.getElementById('ir-loc-city-row').style.display = m === 'city' ? 'grid' : 'none';
@@ -5242,6 +5266,8 @@ function setIrType(t) {
   const locToggle = document.getElementById('ir-loc-mode-toggle');
   const locLabel  = document.getElementById('ir-loc-label');
   const locHint   = document.getElementById('ir-loc-market-hint');
+  const zipWrap   = document.getElementById('ir-zip-mode-wrap');
+  if (zipWrap) zipWrap.style.display = t === 'service_line' ? 'none' : '';
   if (t === 'service_line') {
     setIrLocMode('city');
     if (locToggle) locToggle.style.display = 'none';
@@ -5445,6 +5471,7 @@ function selectIrCandidate(idx) {
   const titlePreview = document.getElementById('ir-title-preview');
   if (titleInput) titleInput.value = _irReportTitle;
   if (titlePreview) titlePreview.textContent = _irReportTitle;
+  _irSyncTitleDisplay();
 
   if (_irIsPractice()) {
     showIrProfileStep();
@@ -5538,6 +5565,21 @@ function onIrTitleInput(val) {
   _irReportTitle = val.trim() || _irOrgName || (_irSelected && _irSelected.name) || '';
   const preview = document.getElementById('ir-title-preview');
   if (preview) preview.textContent = _irReportTitle;
+  _irSyncTitleDisplay();
+}
+function _irSyncTitleDisplay() {
+  const t = document.getElementById('ir-title-text'); if (t) t.textContent = _irReportTitle || '';
+}
+function irShowTitleEdit() {
+  const inp = document.getElementById('ir-custom-title'); const disp = document.getElementById('ir-title-display');
+  if (!inp) return;
+  inp.value = _irReportTitle || ''; inp.classList.remove('hidden'); if (disp) disp.classList.add('hidden');
+  inp.focus(); inp.select();
+}
+function irHideTitleEdit() {
+  const inp = document.getElementById('ir-custom-title'); const disp = document.getElementById('ir-title-display');
+  if (inp) inp.classList.add('hidden'); if (disp) disp.classList.remove('hidden');
+  _irSyncTitleDisplay();
 }
 
 // (irConfirmProfile removed — the profile gate is gone; the profile dropdown now
@@ -5746,6 +5788,7 @@ function renderIrSiblings(siblings) {
   document.getElementById('ir-selected-display').innerHTML = slLine;
   const _ti = document.getElementById('ir-custom-title');
   if (_ti) _ti.value = _irReportTitle;
+  _irSyncTitleDisplay();
 
   const badgeEl = document.getElementById('ir-locations-badge');
   if (badgeEl) badgeEl.innerHTML = `<span style="font-weight:700;background:var(--teal);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px;letter-spacing:0">${totalLoc}</span>`;
@@ -5818,13 +5861,15 @@ async function showFqhcIntake() {
     if (!data?.found) return;
 
     // Prefill checkboxes — HRSA status
-    if (data.is_330) {
-      document.getElementById('fqhc-is-330').checked = true;
-      // 330 grantees are federally required to have sliding fee + no-one-turned-away
+    if (data.is_330 != null || data.is_lookalike != null) {
+      document.getElementById('fqhc-is-330').checked = !!data.is_330;
+      document.getElementById('fqhc-is-lookalike').checked = !!data.is_lookalike;
+    }
+    if (data.is_330 || data.is_lookalike) {
+      // 330 grantees and look-alikes are required to have sliding fee + no-one-turned-away
       document.getElementById('fqhc-sliding-fee').checked = true;
       document.getElementById('fqhc-no-turned-away').checked = true;
     }
-    if (data.is_lookalike) document.getElementById('fqhc-is-lookalike').checked = true;
 
     // Prefill checkboxes — web-searched policy fields
     if (data.accepts_medicaid   != null) document.getElementById('fqhc-medicaid').checked          = data.accepts_medicaid;
@@ -6077,9 +6122,36 @@ function selectCmpCandidate(side, idx) {
     cmpRenderContext(side);
   }
 
-  if (side === 'a') document.getElementById('cmp-b-section').classList.remove('hidden');
+  if (side === 'a') { document.getElementById('cmp-b-section').classList.remove('hidden'); _cmpInheritFromA(); }
   if (_cmp.a.selected && _cmp.b.selected) document.getElementById('cmp-run-section').classList.remove('hidden');
   _cmpUpdateRunState();
+}
+
+// Entity B defaults to Entity A's type, specialty / service line and market. Only while
+// B is untouched (blank, or still exactly what we copied last time) — never over user input.
+function _cmpInheritFromA() {
+  const b = _cmp.b; if (b.selected) return;
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const cur = { type: b.type, spec: val('cmp-b-specialty'), city: val('cmp-b-city'), state: val('cmp-b-state') };
+  const inh = b.inherited;
+  const untouched = inh
+    ? (cur.type === inh.type && cur.spec === inh.spec && cur.city === inh.city && cur.state === inh.state)
+    : (cur.type === 'hospital' && !cur.spec && !cur.city && !cur.state);
+  if (!untouched) return;
+  const aType = _cmp.a.type, aSpec = _cmpIsPractice('a') ? val('cmp-a-specialty') : '';
+  const aCity = _cmp.a.city || val('cmp-a-city'), aState = (_cmp.a.state || val('cmp-a-state')).toUpperCase();
+  setCmpType('b', aType);
+  document.getElementById('cmp-b-specialty').value = aSpec;
+  document.getElementById('cmp-b-city').value = aCity;
+  document.getElementById('cmp-b-state').value = aState;
+  b.inherited = { type: aType, spec: aSpec, city: aCity, state: aState };
+  const hint = document.getElementById('cmp-b-inherit-hint');
+  if (hint) {
+    const what = [aType === 'service_line' ? 'Hospital Service Line' : aType === 'specialty' ? 'Specialty Practice' : 'Hospital', aSpec, [aCity, aState].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
+    hint.textContent = `Same as Entity A: ${what}. Change anything that differs, then enter the organization name.`;
+    hint.classList.remove('hidden');
+  }
+  const nb = document.getElementById('cmp-b-name'); if (nb && !nb.value) nb.focus();
 }
 
 function cmpRenderContext(side) {
@@ -6195,6 +6267,7 @@ function resetComparison() {
     setCmpType(side, 'hospital');
   });
   document.getElementById('cmp-b-section').classList.add('hidden');
+  document.getElementById('cmp-b-inherit-hint')?.classList.add('hidden');
   document.getElementById('cmp-run-section').classList.add('hidden');
   document.getElementById('cmp-run-err').classList.add('hidden');
   _cmpUpdateRunState();
