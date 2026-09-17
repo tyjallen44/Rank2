@@ -336,6 +336,7 @@ _MAINT_TASKS = {
     "rebrand-learn": "Rename 'AI Visibility' → 'AI Reputation' in the live Learn / Methodology articles (idempotent).",
     "backfill-comparisons": "Record History rows for Compare Two PDFs on disk that pre-date persisted comparisons.",
     "retrack-practices": "Tracked entities that have a specialty but are typed Hospital → type Specialty Practice so the next snapshot uses the practice rubric.",
+    "apply-learn-content": "Sync the live Learn / Methodology articles to the reviewed seed (perception/learn_seed.py); custom articles are left alone.",
 }
 
 
@@ -401,6 +402,31 @@ async def admin_maintenance(task: str, apply: bool = False, _: dict = Depends(re
                              role or "admin", ran_by, gen, _dt.combine(gen, _dt.min.time())])
                     added += 1
                 lines.append(f"{'Added' if apply else 'Would add'} {added}, already recorded {skipped}.")
+            elif task == "apply-learn-content":
+                from perception.db import list_learn_articles, update_learn_article
+                from perception.learn_seed import STARTER_ARTICLES, METHODOLOGY_ARTICLES
+                renames = {"learn": {"Why AI visibility matters": "Why AI reputation matters"},
+                           "methodology": {"How AI assistants are queried": "How the score is produced"}}
+                changed = 0
+                for page, seed in (("learn", STARTER_ARTICLES), ("methodology", METHODOLOGY_ARTICLES)):
+                    live = list_learn_articles(include_unpublished=True, page=page)
+                    by_title = {a["title"].strip().lower(): a for a in live}
+                    for art in seed:
+                        new_title = art["title"]
+                        old_title = next((o for o, n in renames[page].items() if n == new_title), new_title)
+                        row = by_title.get(new_title.strip().lower()) or by_title.get(old_title.strip().lower())
+                        if not row:
+                            lines.append(f"[{page}] MISSING live row for '{new_title}' — use 'Load starter articles' to add it")
+                            continue
+                        same = (row["title"] == new_title and (row.get("category") or "") == art["category"]
+                                and (row.get("body") or "").strip() == art["body"].strip())
+                        if same:
+                            continue
+                        changed += 1
+                        lines.append(f"[{page}] {'UPDATED' if apply else 'would update'} '{row['title']}'" + (f" → '{new_title}'" if row["title"] != new_title else ""))
+                        if apply:
+                            update_learn_article(row["id"], title=new_title, category=art["category"], body=art["body"])
+                lines.append(f"{'Applied' if apply else 'Would update'}: {changed} article(s).")
             elif task == "retrack-practices":
                 rows = con.execute(
                     "SELECT id, entity_name, specialty, city, state FROM tracked_entities "

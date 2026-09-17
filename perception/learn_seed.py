@@ -116,15 +116,14 @@ STARTER_ARTICLES: list[dict] = [
             '\n'
             '**Three ways to define the field**\n'
             '\n'
-            '- **Enter a market** — a city and state, or a ZIP code and radius.\n'
+            '- **Enter a market** — a city and state (or, under Advanced options, a ZIP code and radius).\n'
             '- **Upload a spreadsheet** — your own list of organizations.\n'
             '- **Student Health Clinics** — on-campus university clinics by state, radius, or athletic conference, on a rubric tailored to student health.\n'
             '\n'
-            '**Three report formats**\n'
+            '**Report formats**\n'
             '\n'
-            '- **Enticement** (prospect-facing) — your prospect is shown in full at their true rank while every competitor is obscured.\n'
-            '- **Market Summary** — compact scorecards for every provider, nothing hidden.\n'
-            '- **Full report** (customer-facing) — the complete market ranking with the detail behind every score.\n'
+            '- **Market Summary** (the default) — compact scorecards for every provider, nothing hidden.\n'
+            '- Under Advanced options: **Enticement** (prospect-facing — your prospect shown in full at their true rank while every competitor is obscured) and the **Full report** (customer-facing — the complete ranking with the detail behind every score).\n'
             '\n'
             '**Best for:** business development and competitive positioning conversations.'
         ),
@@ -139,6 +138,8 @@ STARTER_ARTICLES: list[dict] = [
             "- Side-by-side Pulse Scores and quartiles\n"
             "- Pillar-by-pillar strengths and gaps\n"
             "- Where each organization wins\n\n"
+            "**Setting it up:** choose the type and confirm Entity A; Entity B then starts with the same type, specialty and market — change anything that differs and enter the name. "
+            "Any organization your team has analyzed before is suggested as you type.\n\n"
             "**Best for:** direct \"us vs. them\" conversations and quick competitive checks."
         ),
     },
@@ -153,7 +154,9 @@ STARTER_ARTICLES: list[dict] = [
             '- A report PDF for each organization, delivered together in a ZIP\n'
             "- Your list back as an **enriched CSV** with each attendee's Pulse Score, quartile, and letter grade for quick review\n"
             '- For specialty-practice attendees, the full combined report with the content analysis and drafted prescription\n'
-            '- Optionally, a Teaser version of each report\n'
+            '- Optionally (Advanced options), a Teaser version of each report\n'
+            '\n'
+            '**Setting it up:** upload the CSV (name, city, state; an optional *specialty* column). The entity type is detected from the file on the Confirm step — rows with a specialty are analyzed as practices — and can be changed there. Event name and date are optional.\n'
             '\n'
             "**Best for:** conferences and events — walk in already knowing every attendee's AI reputation and what you'd tell them to fix."
         ),
@@ -177,10 +180,14 @@ STARTER_ARTICLES: list[dict] = [
         "category": "Getting Started",
         "title": "How to run a report",
         "body": (
-            '- Sign in — you land on the **Home** page, with a short welcome video and a card for every report type.\n'
-            '- Pick a report from the Home cards or from **Report Creation** in the sidebar.\n'
-            '- Enter the organization or market details the report asks for, confirm the locations Pulse finds, and start the run — progress streams live as it works.\n'
-            '- When it finishes, review the report on screen and download the PDF (and the Teaser, where one is produced).\n'
+            '- Sign in — you land on the **Home** page: a short welcome video, **Find an organization**, and **Which report do I need?**\n'
+            '- **Not sure which report?** Answer two questions on Home (or click **Start a report** in the sidebar, or the link beside any report title) and Pulse opens the right report with the type preselected.\n'
+            '- **Find an organization** — start typing a hospital, practice or health system your team has analyzed before; pick it to open it in Deep Diagnostic, Compare Two or Trends. The same suggestions appear in every report form.\n'
+            '- Otherwise pick a report from the Home cards or **Report Creation** in the sidebar, enter the organization or market, confirm the listing and locations Pulse finds, and run. Rarely-changed settings sit under **Advanced options** on each page.\n'
+            '- If the same organization ran in the last 14 days, Pulse offers the existing report before starting a new run.\n'
+            '- Long runs keep going if you close the tab: the result lands in **History** and, unless you turn it off on Home, in your inbox with the PDF attached. **Runs in progress** on Home shows what is still running.\n'
+            '- When a run finishes, the completion screen offers the next step: download, **Track in Trends**, **Compare against…**, **Email report…**, or start another report.\n'
+            '- Every Deep Diagnostic states its **Score Evidence** (High / Medium / Low) — how much public data sits behind the score.\n'
             '\n'
             'Past reports are always available under **History**.'
         ),

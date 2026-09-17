@@ -2627,3 +2627,19 @@ Commit: (1) Hospital Network: Facility Type, Website URL, service-line scorecard
 **T6 — Trends add flow.** Step 3 reads "Collected monthly and charted over time. change"; clicking change reveals the schedule select; Notes field gone. Add an entity → schedule monthly (or the changed value); notes editable in the configuration panel. Reopen Track New Entity → line resets to monthly.
 
 **R1 — Regression.** Typeahead on np-name / cmp names / te-name unchanged; Hospital Network bulk (CSV) mode for admins unchanged; Event Prep progress and results unchanged.
+
+## HELP-CATCHUP — help topics, page modals and Learn articles updated for the simplified forms
+
+Commit: rewrote 4 stale help topics (location mode, report format, event options, tracking schedule), noted "under Advanced options" on 4 more (teaser, facility type, related hospitals, practice composite); added 4 topics — Score Evidence, Organization suggestions, Already run recently, Trend notes — linked from the evidence chip/box, the suggestions dropdown header, the duplicate notice and the Trends Notes card; fixed the Service Line and Event Prep page modals; rewrote the Learn articles "How to run a report", "Competitors Rankings", "Compare Two", "Event Preparation"; new maintenance task `apply-learn-content` publishes the seed to the live articles. NEEDS BROWSER TESTING.
+
+**T1 — Help topics.** Open each ⓘ link: Deep Diagnostic Advanced → "Search by ZIP code" ⓘ (describes the checkbox, not a toggle); Competitors Rankings Advanced → "Which format?" (Market Summary default, others under Advanced); Event Prep discrepancy ⓘ (type detected on Confirm step, no practice checkbox); Trends add flow schedule ⓘ (monthly default, change link). Teaser / Facility type / Related hospitals / Practice Composite topics end with the "under Advanced options" note.
+
+**T2 — New topics.** Click a Score Evidence chip in History or Trends, the "What is this?" beside Score Evidence on a completion screen, the ⓘ in the suggestions dropdown header, "Why this check?" in a duplicate-run notice, and ⓘ on the Trends Notes card → each opens the matching pop-over; the chip click does not navigate; the dropdown ⓘ does not close the dropdown before the pop-over opens.
+
+**T3 — Page modals.** Deep Diagnostic → "How to analyze a service line" step 7 mentions the rename link (not an editable field) and step 2 mentions suggestions. Event Prep → help modal steps: 1 name optional, 2 upload, 3 type detected on Confirm.
+
+**T4 — Learn articles (after apply-learn-content on production).** Learn → "How to run a report" describes Home (Find an organization, Which report do I need?), Advanced options, the 14-day check, completion emails, handoffs and Score Evidence. "Competitors Rankings" leads with Market Summary. "Compare Two" has the Setting it up line. "Event Preparation" mentions type detection and optional name/date.
+
+**T5 — Maintenance task.** Admin → Operations → Maintenance lists apply-learn-content; Dry run lists the 4 articles; Apply updates them; a second Dry run reports 0.
+
+**R1 — Existing topics unchanged in behaviour** (14 originals still open from their links); admin-edited custom Learn articles untouched by the task.
