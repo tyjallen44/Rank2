@@ -275,6 +275,17 @@ async def jobs_mine(payload: dict = Depends(get_current_user_payload)):
     return out[:12]
 
 
+@app.get("/api/entities/suggest")
+async def entities_suggest(q: str = "", limit: int = 8, kinds: str = "",
+                           payload: dict = Depends(get_current_user_payload)):
+    """Typeahead: organizations this team already analyzed or tracked."""
+    from perception.db import init_db, suggest_entities
+    init_db()
+    ks = [k.strip() for k in (kinds or "").split(",") if k.strip()]
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: suggest_entities(q, role=payload.get("role"), limit=max(1, min(int(limit or 8), 15)), kinds=ks))
+
+
 class RecentMatchRequest(BaseModel):
     kind: str = "analysis"          # analysis | network | comparison
     name: str

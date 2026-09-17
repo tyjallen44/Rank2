@@ -2843,6 +2843,19 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       .dup-notice .d{flex:1;min-width:220px}
       .conf-chip{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap}
       .conf-high{background:#e3f4ea;color:#1a7a4a}.conf-medium{background:#fff3d6;color:#8a6508}.conf-low{background:#fde8e6;color:#b42318}
+      .sg-box{position:absolute;z-index:9000;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.14);max-height:340px;overflow:auto;text-align:left}
+      .sg-head{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 12px 4px}
+      .sg-item{padding:8px 12px;cursor:pointer;border-top:1px solid #f1f4f3}
+      .sg-item.on,.sg-item:hover{background:var(--blue-light)}
+      .sg-name{font-weight:600;font-size:13.5px;color:var(--text)}
+      .sg-meta{font-size:11.5px;color:var(--muted);margin-top:1px}
+      .sg-new{padding:9px 12px;font-size:12.5px;color:var(--teal);font-weight:600;border-top:1px solid var(--border);cursor:pointer}
+      .sg-new:hover,.sg-new.on{background:var(--blue-light)}
+      .home-search{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:0 0 18px}
+      .home-search .hs-row{display:flex;gap:10px;align-items:center}
+      .home-search .hs-pick{margin-top:12px;padding:12px 14px;background:#EEF7F1;border-radius:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+      .home-search .hs-pick .n{font-weight:700;color:#0F4146}
+      .home-search .hs-pick .m{flex:1;min-width:200px;font-size:12.5px;color:#2f4a45}
     </style>
     <div id="page-home" class="page" style="max-width:1040px">
       <div class="home-hero">
@@ -2863,6 +2876,15 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
       <!-- Featured content: admin-editable (Learn → Manage Content → Home page). A pasted
            YouTube / Vimeo / Loom link on its own line renders as an embedded player. -->
+      <div class="home-search" id="home-search">
+        <div style="font-weight:700;font-size:15px;color:#0F4146;margin-bottom:8px">Find an organization</div>
+        <div class="hs-row">
+          <input id="home-search-input" class="fi" type="text" placeholder="Start typing a hospital, practice or health system your team has analyzed…" autocomplete="off">
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Suggestions come from your team's History and Trends. Pick one to open it in Deep Diagnostic, Compare Two or Trends — or analyze a new organization.</div>
+        <div id="home-search-pick" class="hs-pick" style="display:none"></div>
+      </div>
+
       <div class="home-chooser" id="home-chooser">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
           <div style="font-weight:700;font-size:15px;color:#0F4146">Which report do I need?</div>
@@ -6763,6 +6785,138 @@ function onSSE(ev) {
     }
     document.getElementById('prog-err').classList.remove('hidden');
   }
+}
+
+// ── Organization typeahead: suggestions from History + Trends on every form ──
+const _SG_KIND = { hospital: 'Hospital', service_line: 'Service Line', specialty: 'Specialty Practice', community_health: 'Community Health', network: 'Hospital Network' };
+function _sgMeta(it) {
+  const parts = [_SG_KIND[it.kind] || it.kind];
+  if (it.kind === 'service_line' && it.service_line) parts[0] += ' · ' + it.service_line;
+  else if (it.specialty) parts[0] += ' · ' + it.specialty;
+  if (it.city || it.state) parts.push([it.city, it.state].filter(Boolean).join(', '));
+  if (it.days_ago != null) parts.push(`last run ${it.days_ago === 0 ? 'today' : it.days_ago === 1 ? 'yesterday' : it.days_ago + ' days ago'}${it.ran_by ? ' by ' + String(it.ran_by).split('@')[0] : ''}`);
+  if (it.tracked) parts.push('tracked in Trends');
+  return parts.join(' · ');
+}
+// opts: { kinds: 'hospital,specialty', onNew: fn(query) | null }
+function _attachSuggest(inputId, onPick, opts) {
+  opts = opts || {};
+  const inp = document.getElementById(inputId);
+  if (!inp || inp.dataset.suggest) return;
+  inp.dataset.suggest = '1';
+  inp.setAttribute('autocomplete', 'off');
+  const box = document.createElement('div'); box.className = 'sg-box hidden'; document.body.appendChild(box);
+  let items = [], active = -1, timer = null, open = false;
+  const total = () => items.length + (opts.onNew ? 1 : 0);
+  const hide = () => { box.classList.add('hidden'); open = false; active = -1; };
+  const place = () => { const r = inp.getBoundingClientRect(); box.style.top = (r.bottom + window.scrollY + 4) + 'px'; box.style.left = (r.left + window.scrollX) + 'px'; box.style.width = Math.max(r.width, 320) + 'px'; };
+  const render = () => {
+    if (!total()) { hide(); return; }
+    const q = inp.value.trim();
+    box.innerHTML = (items.length ? '<div class="sg-head">Already analyzed by your team</div>' : '') +
+      items.map((it, i) => `<div class="sg-item ${i === active ? 'on' : ''}" data-i="${i}"><div class="sg-name">${_learnEsc(it.name)}</div><div class="sg-meta">${_learnEsc(_sgMeta(it))}</div></div>`).join('') +
+      (opts.onNew ? `<div class="sg-new ${active === items.length ? 'on' : ''}" data-i="${items.length}">＋ Analyze “${_learnEsc(q)}” as a new organization →</div>` : '');
+    place(); box.classList.remove('hidden'); open = true;
+  };
+  const pick = i => { const q = inp.value.trim(); hide(); if (i < items.length) onPick(items[i]); else if (opts.onNew) opts.onNew(q); };
+  box.addEventListener('mousedown', e => { const el = e.target.closest('[data-i]'); if (!el) return; e.preventDefault(); pick(+el.dataset.i); });
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim(); clearTimeout(timer);
+    if (q.length < 2) { items = []; hide(); return; }
+    timer = setTimeout(async () => {
+      try {
+        const r = await api(`/api/entities/suggest?q=${encodeURIComponent(q)}${opts.kinds ? '&kinds=' + encodeURIComponent(opts.kinds) : ''}`);
+        const d = r.ok ? await r.json() : [];
+        if (q !== inp.value.trim()) return;          // stale response
+        items = d; active = -1; render();
+      } catch (e) { /* suggestions are optional */ }
+    }, 220);
+  });
+  // Capture phase so a chosen suggestion wins over the field's own Enter handler.
+  inp.addEventListener('keydown', e => {
+    if (!open) return;
+    if (e.key === 'ArrowDown')      { active = Math.min(total() - 1, active + 1); render(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp')   { active = Math.max(0, active - 1); render(); e.preventDefault(); }
+    else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); e.stopImmediatePropagation(); pick(active); }
+    else if (e.key === 'Escape')    { hide(); }
+  }, true);
+  inp.addEventListener('blur', () => setTimeout(hide, 160));
+  window.addEventListener('resize', hide);
+}
+function _sgType(it, forCompare) {
+  // Map a suggestion kind onto a form's analysis type.
+  if (it.kind === 'network') return 'hospital';
+  if (it.kind === 'community_health') return forCompare ? 'hospital' : 'community_health';
+  return it.kind;
+}
+function _sgFill(prefix, it, type) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  set(`${prefix}-name`, type === 'service_line' ? (it.parent_system || it.name) : it.name);
+  set(`${prefix}-city`, it.city); set(`${prefix}-state`, it.state);
+  set(`${prefix}-specialty`, type === 'service_line' ? (it.service_line || it.specialty || '') : (type === 'specialty' ? (it.specialty || '') : ''));
+}
+function _irPickSuggest(it) {
+  const t = _sgType(it, false); setIrType(t);
+  if (_irLocMode !== 'city') setIrLocMode('city');
+  _sgFill('ir', it, t);
+  if (it.city && it.state && (t === 'hospital' || t === 'community_health' || it.specialty || it.service_line)) runIrSearch();
+}
+function _cmpPickSuggest(side, it) {
+  const t = _sgType(it, true); setCmpType(side, t);
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  set(`cmp-${side}-name`, t === 'service_line' ? (it.parent_system || it.name) : it.name);
+  set(`cmp-${side}-city`, it.city); set(`cmp-${side}-state`, it.state);
+  set(`cmp-${side}-specialty`, t === 'service_line' ? (it.service_line || it.specialty || '') : (t === 'specialty' ? (it.specialty || '') : ''));
+  if (it.city && it.state && (t === 'hospital' || it.specialty || it.service_line)) runCmpSearch(side);
+}
+function _tePickSuggest(it) {
+  const t = _sgType(it, true); setTeType(t);
+  _sgFill('te', it, t);
+  if (it.city && it.state && (t === 'hospital' || it.specialty || it.service_line)) runTeSearch();
+}
+function _ppPickSuggest(it) {
+  const t = it.kind === 'specialty' ? 'specialty' : 'hospital'; setPpType(t);
+  if (_ppLocMode !== 'city') setPpLocMode('city');
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  set('pp-target', it.name); set('pp-city', it.city); set('pp-state', it.state);
+  if (t === 'specialty') set('pp-specialty', it.specialty || '');
+  if (typeof clearPpTargetConfirm === 'function') clearPpTargetConfirm();
+  if (it.city && it.state) resolvePpTarget();
+}
+function _npPickSuggest(it) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  set('np-name', String(it.name || '').toUpperCase()); set('np-city', it.city); set('np-state', it.state);
+  if (typeof npFindFacilities === 'function') npFindFacilities();
+}
+function _initSuggest() {
+  _attachSuggest('ir-name',    _irPickSuggest, { kinds: 'hospital,service_line,specialty,community_health,network' });
+  _attachSuggest('cmp-a-name', it => _cmpPickSuggest('a', it), { kinds: 'hospital,service_line,specialty,network' });
+  _attachSuggest('cmp-b-name', it => _cmpPickSuggest('b', it), { kinds: 'hospital,service_line,specialty,network' });
+  _attachSuggest('te-name',    _tePickSuggest, { kinds: 'hospital,service_line,specialty' });
+  _attachSuggest('pp-target',  _ppPickSuggest, { kinds: 'hospital,specialty' });
+  _attachSuggest('np-name',    _npPickSuggest, { kinds: 'network' });
+  _attachSuggest('home-search-input', _homePickSuggest, { onNew: q => { navigate('individual'); setIrType('hospital'); const el = document.getElementById('ir-name'); if (el) { el.value = q; el.focus(); } } });
+}
+
+// ── Home: "Find an organization" ─────────────────────────────────────────────
+let _homePicked = null;
+function _homePickSuggest(it) {
+  _homePicked = it;
+  const box = document.getElementById('home-search-pick'); if (!box) return;
+  const ctx = { name: it.kind === 'service_line' ? (it.parent_system || it.name) : it.name, city: it.city, state: it.state,
+                type: _sgType(it, true), specialty: it.kind === 'service_line' ? (it.service_line || it.specialty || '') : (it.specialty || '') };
+  window._homeCtx = ctx;
+  const isNet = it.kind === 'network';
+  box.innerHTML = `<div><div class="n">${_learnEsc(it.name)}</div><div class="m">${_learnEsc(_sgMeta(it))}</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
+      ${isNet ? `<button class="btn btn-primary btn-sm" onclick="navigate('network'); _npPickSuggest(window._homePicked)">🖧 Hospital Network</button>` : ''}
+      <button class="btn ${isNet ? 'btn-ghost' : 'btn-primary'} btn-sm" onclick="navigate('individual'); _irPickSuggest(window._homePicked)">◎ Deep Diagnostic</button>
+      <button class="btn btn-ghost btn-sm" onclick="handoffCompare(window._homeCtx)">⇄ Compare against…</button>
+      ${it.kind === 'community_health' ? '' : `<button class="btn btn-ghost btn-sm" onclick="handoffTrack(window._homeCtx)">📈 Track in Trends</button>`}
+      <button class="btn btn-ghost btn-sm" onclick="navigate('history'); historySearch(${JSON.stringify(it.name)})">◷ History</button>
+    </div>`;
+  box.style.display = '';
+  window._homePicked = it;
 }
 
 // ── Home: "Which report do I need?" ──────────────────────────────────────────
@@ -11069,6 +11223,9 @@ function evReset() {
 async function loadEventHistory() {
   // future: render event list in history page
 }
+
+// Organization typeahead on every form (inputs are static markup, safe to bind now).
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _initSuggest); else _initSuggest();
 </script>
 </body>
 </html>

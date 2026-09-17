@@ -2549,3 +2549,23 @@ Commit: `GET /api/admin/maintenance` lists tasks; `POST /api/admin/maintenance/{
 **T2 — Apply confirm.** Click Apply → a confirm dialog; Cancel does nothing. OK runs it and the box shows "APPLIED — <task>" with the lines; a second Apply reports nothing to do (idempotent).
 
 **T3 — Non-admin.** Integrations Admin / user roles get 403 on both endpoints and do not see the Operations tab.
+
+## ORG-TYPEAHEAD — smart organization fields + "Find an organization" on Home
+
+Commit: `GET /api/entities/suggest?q=&kinds=` returns organizations the team already analyzed or tracked (Deep Diagnostic runs, Hospital Network runs, Trends entities; role-scoped for non-admins; deduped by kind+name+city; most recent first, prefix matches first). A shared typeahead is attached to: Deep Diagnostic name, Compare Two A and B names, Competitors Rankings prospect, Hospital Network name, Trends Track-New name, and the new Home "Find an organization" box. Picking a suggestion sets the analysis type, fills city/state/specialty (or health system + service line) and starts that form's listing search. NEEDS BROWSER TESTING.
+
+**T1 — Deep Diagnostic typeahead.** Type 3+ letters of an organization you ran before into Organization Name.
+- [ ] A dropdown "Already analyzed by your team" lists matches with kind, city/state, specialty, "last run N days ago by <user>" and "tracked in Trends" where applicable. Arrow keys move, Enter picks, Esc closes, clicking picks; blur closes.
+- [ ] Picking a Specialty Practice sets the type to Specialty Practice, fills city, state and specialty, and the listing search runs. Picking a Service Line fills Health System + Service Line. Picking a Community Health entry sets that type. Picking a Hospital Network entry opens as Hospital type.
+- [ ] Typing an unknown name shows no dropdown and the form works exactly as before.
+
+**T2 — Other forms.** Same behaviour on Compare Two side A and B (search runs for that side), Competitors Rankings prospect (type + market city/state filled, Resolve runs), Hospital Network name (uppercased, HQ city/state filled, Find Hospitals runs), Trends → Track New Entity (type + fields filled, listing search runs).
+- [ ] Enter on a highlighted suggestion picks it and does not also fire the field's own Enter action (e.g. Network's Find).
+
+**T3 — Home "Find an organization".** On Home, type a known name.
+- [ ] Same dropdown plus a last row "＋ Analyze “<typed>” as a new organization →". Picking a known one shows a green card with the name, meta and buttons: Deep Diagnostic, Compare against…, Track in Trends, History (Hospital Network entries also get a Hospital Network button; Community Health entries have no Track button).
+- [ ] Each button opens the right page prefilled and searching; History opens filtered to that name. The "new organization" row opens Deep Diagnostic with the typed name in the field.
+
+**T4 — Role scoping.** As a non-admin role, suggestions only include that role's runs (Trends entities are shared).
+
+**R1 — Regression.** All six forms still submit normally when typing without picking; the Learn editor's category picker unchanged.

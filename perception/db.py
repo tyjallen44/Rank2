@@ -2792,3 +2792,88 @@ def delete_annotation(aid: str) -> None:
     con = get_connection()
     con.execute("DELETE FROM trend_annotations WHERE id = ?", [aid])
     con.close()
+
+
+# ── Organization suggestions (typeahead) ─────────────────────────────────────
+def _split_location(loc) -> tuple:
+    parts = [p.strip() for p in str(loc or "").split(",")]
+    city = parts[0] if parts else ""
+    state = (parts[1][:2].upper() if len(parts) > 1 and parts[1] else "")
+    return city, state
+
+
+def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = None) -> list:
+    """Organizations this team has already analyzed or tracked, matching `q`, most recent
+    first. Sources: Deep Diagnostic runs, Hospital Network runs, tracked entities.
+    kinds: hospital | service_line | specialty | community_health | network."""
+    from datetime import date as _date
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    like = f"%{q}%"
+    role_sql, role_args = ("", []) if role in (None, "", "admin") else (" AND user_role = ?", [role])
+    con = get_connection()
+    found: dict = {}
+
+    def _put(key, rec):
+        cur = found.get(key)
+        if not cur:
+            found[key] = rec
+            return
+        if (rec.get("last_run") or "") > (cur.get("last_run") or ""):
+            cur["last_run"] = rec["last_run"]; cur["ran_by"] = rec.get("ran_by") or cur.get("ran_by")
+        cur["run_count"] = (cur.get("run_count") or 0) + (rec.get("run_count") or 0)
+        if rec.get("tracked"):
+            cur["tracked"] = True; cur["tracked_id"] = rec.get("tracked_id")
+
+    try:
+        rows = con.execute(
+            f"""SELECT entity_name, location, COALESCE(entity_type, 'hospital'), specialty, service_line, parent_system,
+                       MAX(generated_at), COUNT(*), MAX(ran_by)
+                FROM analysis_runs
+                WHERE individual_report = TRUE AND comparison_id IS NULL AND entity_name IS NOT NULL
+                  AND (entity_name ILIKE ? OR parent_system ILIKE ?){role_sql}
+                GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 7 DESC LIMIT 25""", [like, like] + role_args).fetchall()
+        for name, loc, et, spec, sl, ps, gen, cnt, by in rows:
+            kind = "service_line" if sl else "specialty" if et == "practice" else "community_health" if et == "community_health" else "hospital"
+            city, state = _split_location(loc)
+            _put((kind, name.lower(), city.lower(), state),
+                 {"name": name, "kind": kind, "city": city, "state": state, "specialty": spec,
+                  "service_line": sl, "parent_system": ps, "last_run": str(gen)[:10], "run_count": int(cnt), "ran_by": by})
+        rows = con.execute(
+            f"""SELECT network_name, hq_location, MAX(generated_at), COUNT(*), MAX(ran_by)
+                FROM network_runs WHERE network_name ILIKE ?{role_sql}
+                GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 15""", [like] + role_args).fetchall()
+        for name, loc, gen, cnt, by in rows:
+            city, state = _split_location(loc)
+            _put(("network", name.lower(), city.lower(), state),
+                 {"name": name, "kind": "network", "city": city, "state": state, "specialty": None,
+                  "service_line": None, "parent_system": None, "last_run": str(gen)[:10], "run_count": int(cnt), "ran_by": by})
+        rows = con.execute(
+            """SELECT id, entity_name, city, state, COALESCE(entity_type, 'hospital'), specialty, service_line, parent_system, last_run_at
+               FROM tracked_entities WHERE active = TRUE AND entity_name ILIKE ? ORDER BY last_run_at DESC NULLS LAST LIMIT 15""",
+            [like]).fetchall()
+        for tid, name, city, state, et, spec, sl, ps, last in rows:
+            kind = "service_line" if et == "service_line" or sl else "specialty" if et == "practice" else "hospital"
+            _put((kind, (name or "").lower(), (city or "").lower(), (state or "").upper()),
+                 {"name": name, "kind": kind, "city": city or "", "state": (state or "").upper(), "specialty": spec,
+                  "service_line": sl, "parent_system": ps, "last_run": str(last)[:10] if last else "", "run_count": 0,
+                  "ran_by": None, "tracked": True, "tracked_id": tid})
+    finally:
+        con.close()
+    out = list(found.values())
+    if kinds:
+        out = [o for o in out if o["kind"] in kinds]
+    ql = q.lower()
+    today = _date.today()
+    for o in out:
+        o.setdefault("tracked", False)
+        try:
+            o["days_ago"] = (today - _date.fromisoformat(o["last_run"][:10])).days if o.get("last_run") else None
+        except Exception:
+            o["days_ago"] = None
+        o["_rank"] = (0 if o["name"].lower().startswith(ql) else 1, -(0 if o["days_ago"] is None else -o["days_ago"]))
+    out.sort(key=lambda o: (o["_rank"][0], o["days_ago"] if o["days_ago"] is not None else 10**6))
+    for o in out:
+        o.pop("_rank", None)
+    return out[:limit]
