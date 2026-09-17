@@ -2603,3 +2603,27 @@ Commit: (1) By City / By ZIP toggles removed from Deep Diagnostic and Competitor
 **T6 — Community Health intake.** Choose Community Health, confirm a center: the attestation step opens with the eight typical boxes already checked and Look-Alike unchecked. When HRSA finds the center, 330 / look-alike reflect HRSA; policy fields reflect the web-searched values. Uncheck any box → the run's intake reflects it.
 
 **R1 — Regression.** History, Trends, Home unchanged; typeahead still attached to every form; the ⓘ help links on moved controls still open the right topics.
+
+## FORM-SIMPLIFY-2 — Network, Event Prep, Compare Two and Trends: fewer steps and defaults
+
+Commit: (1) Hospital Network: Facility Type, Website URL, service-line scorecard and Refresh moved under Advanced options; Headquarters City/State optional and inferred from the facilities found (teal hint, editable); Confirm Roster collapsed by default with a preview and "Review or exclude facilities" link, opens automatically when discovery reports low confidence. (2) Event Preparation: Event Name optional (defaults from the file name) and Date optional; Entity Type moved to the Confirm step and auto-detected from the file (rows with a specialty → Specialty Practice); the practice content and FQHC composite options are always on and no longer shown. (3) Compare Two: the per-side hospital options (aggregate related hospitals, Practice Composite) moved under the single Advanced options disclosure on the run card. (4) Trends → Track New Entity: monthly schedule stated as a sentence with "change"; Notes removed from the add flow (still editable in the configuration panel). NEEDS BROWSER TESTING.
+
+**T1 — Network main form.** Only Organization Name, Headquarters City (optional), State and the Find button are visible, plus the three-reports note and an Advanced options disclosure holding Facility Type (Hospital Network default), Website URL, "Also analyze individual departments" and (admin) Refresh.
+- [ ] Leave HQ blank, enter a system name, Find → after discovery City/State are filled from the facilities and a teal hint says so; the run's location in History matches.
+- [ ] Enter HQ yourself → it is kept, no hint.
+- [ ] Non-hospital facility types still work from Advanced (labels/buttons update as before).
+
+**T2 — Network roster.** After discovery the card shows "N hospitals found across M states", a preview of the first names, and "Review or exclude facilities ▾"; the checklist is hidden. Click the link → list opens; uncheck one → Run analyzes the rest. When discovery returns a confidence note, the list is open by default.
+
+**T3 — Event Prep step 1.** Fields: Event Name (optional), Event Date (optional), CSV. Choosing a file fills an empty Event Name from the file name (underscores/dashes → spaces, no extension). Upload with the name cleared → a name is derived; History shows it.
+
+**T4 — Event Prep confirm step.** A type row sits above the entity table with the three radios and a detected-type hint:
+- [ ] File with a specialty on most rows → Specialty Practice selected, hint "Detected from the file: X of N rows have a specialty…". Practice attendees get the combined report with content findings (no checkbox).
+- [ ] File without specialties → Hospital selected with the "No specialty column" hint. Switch to Community Health → runs FQHC with sites included (no checkbox).
+- [ ] Discrepancy confirmation still appears only when a CSV state differs from the resolved state.
+
+**T5 — Compare Two advanced.** Run card → Advanced options shows Entity A / Entity B sections (aggregate related hospitals, Practice Composite — hospital type only) and a Report section (Teaser, admin Refresh). Practice-type sides hide their hospital options as before; the aggregate flags reach the run.
+
+**T6 — Trends add flow.** Step 3 reads "Collected monthly and charted over time. change"; clicking change reveals the schedule select; Notes field gone. Add an entity → schedule monthly (or the changed value); notes editable in the configuration panel. Reopen Track New Entity → line resets to monthly.
+
+**R1 — Regression.** Typeahead on np-name / cmp names / te-name unchanged; Hospital Network bulk (CSV) mode for admins unchanged; Event Prep progress and results unchanged.

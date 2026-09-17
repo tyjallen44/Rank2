@@ -1914,17 +1914,6 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
       <!-- Step 1: Network identity -->
       <div id="np-step1" class="card">
-        <div class="fg" style="margin-bottom:14px">
-          <label class="fl">Facility Type <a href="#" class="help-link" onclick="showHelp('network-type',event);return false">ⓘ What is this?</a></label>
-          <select id="np-type" class="fi" onchange="npUpdateType()">
-            <option value="hospital">Hospital Network</option>
-            <option value="asc">Ambulatory Surgery Centers (ASCs)</option>
-            <option value="urgent_care">Urgent Care Centers</option>
-            <option value="imaging">Imaging / Radiology Centers</option>
-            <option value="behavioral_health">Behavioral Health</option>
-            <option value="other">Other Healthcare Network</option>
-          </select>
-        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div class="fg" style="margin:0">
             <label class="fl" id="np-name-label">Organization Name</label>
@@ -1934,7 +1923,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           </div>
           <div style="display:grid;grid-template-columns:1fr 120px;gap:14px">
             <div class="fg" style="margin:0">
-              <label class="fl">Headquarters City</label>
+              <label class="fl">Headquarters City <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
               <input id="np-city" class="fi" type="text" placeholder="Charlotte"
                 oninput="this.value=this.value.toUpperCase()"
                 onkeydown="if(event.key==='Enter')npFindFacilities()">
@@ -1947,6 +1936,22 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             </div>
           </div>
         </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:12px;padding-left:2px;line-height:1.5">Every run automatically produces all three reports: the <strong>Hospital Network report</strong>, a <strong>Teaser</strong> version, and the <strong>Full Detail</strong> report (the full content analysis with drafted remediation for every finding).</div>
+        <div id="np-hq-hint" class="hidden" style="font-size:12px;color:var(--teal);margin-top:-6px;margin-bottom:12px"></div>
+        <details id="np-advanced" style="margin:12px 0 6px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
+          <div style="margin-top:10px">
+        <div class="fg" style="margin-bottom:14px">
+          <label class="fl">Facility Type <a href="#" class="help-link" onclick="showHelp('network-type',event);return false">ⓘ What is this?</a></label>
+          <select id="np-type" class="fi" onchange="npUpdateType()">
+            <option value="hospital">Hospital Network</option>
+            <option value="asc">Ambulatory Surgery Centers (ASCs)</option>
+            <option value="urgent_care">Urgent Care Centers</option>
+            <option value="imaging">Imaging / Radiology Centers</option>
+            <option value="behavioral_health">Behavioral Health</option>
+            <option value="other">Other Healthcare Network</option>
+          </select>
+        </div>
         <div class="fg" style="margin-bottom:16px">
           <label class="fl">Website URL <span style="font-weight:400;color:var(--muted)">(optional — helps AI find recently added locations)</span></label>
           <input id="np-url" class="fi" type="url" placeholder="https://example.com/locations">
@@ -1955,11 +1960,12 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <input type="checkbox" id="np-ignore-cache">
           <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
         </label>
-        <div style="font-size:12px;color:var(--muted);margin-top:12px;padding-left:2px;line-height:1.5">Every run automatically produces all three reports: the <strong>Hospital Network report</strong>, a <strong>Teaser</strong> version, and the <strong>Full Detail</strong> report (the full content analysis with drafted remediation for every finding).</div>
         <label class="aggregate-toggle" style="margin-top:12px" title="Also analyze the system's individual departments / service lines and score each one's listings for patient attraction. Adds several minutes and appends a scorecard section to the reports.">
           <input type="checkbox" id="np-service-line">
           <span class="agg-label">Also analyze individual departments (service-line listing scorecard) <span style="font-size:11px;color:#888">(adds several minutes)</span></span><a href="#" class="help-link" onclick="showHelp('service-line-scorecard',event);return false">ⓘ What is this?</a>
         </label>
+          </div>
+        </details>
         <div id="np-step1-err" class="err hidden mt8"></div>
         <button class="btn btn-primary" id="np-find-btn" onclick="npFindFacilities()">Find Hospitals via AI →</button>
       </div>
@@ -1968,7 +1974,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <div id="np-step2" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px" id="np-step2-title">Confirm Roster</div>
         <p style="font-size:13px;color:var(--muted);margin-bottom:16px" id="np-step2-desc">
-          Review the facilities found by AI. Uncheck any that should be excluded from the analysis.
+          All facilities found are included. Run now, or review the roster to exclude any.
         </p>
         <div id="np-roster-summary" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
         <div id="np-roster-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
@@ -2051,16 +2057,6 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           </div>
           <div id="cmp-a-loc-err" class="err hidden mt8"></div>
         </div>
-        <div id="cmp-a-hosp-opts">
-          <label class="aggregate-toggle" title="Roll the system's related hospitals into this score (the organization is presented as a system). Uncheck to score only this hospital. Click ⓘ for details.">
-            <input type="checkbox" id="cmp-a-agg" checked>
-            <span class="agg-label">Composite analysis related hospitals only</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
-          </label>
-          <label class="aggregate-toggle" id="cmp-a-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
-            <input type="checkbox" id="cmp-a-practice-composite">
-            <span class="agg-label">Practice Composite</span><a href="#" class="help-link" onclick="showHelp('practice-composite',event);return false">ⓘ What is this?</a>
-          </label>
-        </div>
         <div id="cmp-a-practice-note" class="hidden" style="font-size:12px;color:var(--muted)">All checked locations are rolled into this side's score, and the per-location reputation table is included automatically.</div>
       </div>
 
@@ -2133,16 +2129,6 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           </div>
           <div id="cmp-b-loc-err" class="err hidden mt8"></div>
         </div>
-        <div id="cmp-b-hosp-opts">
-          <label class="aggregate-toggle" title="Roll the system's related hospitals into this score (the organization is presented as a system). Uncheck to score only this hospital. Click ⓘ for details.">
-            <input type="checkbox" id="cmp-b-agg" checked>
-            <span class="agg-label">Composite analysis related hospitals only</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
-          </label>
-          <label class="aggregate-toggle" id="cmp-b-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
-            <input type="checkbox" id="cmp-b-practice-composite">
-            <span class="agg-label">Practice Composite</span><a href="#" class="help-link" onclick="showHelp('practice-composite',event);return false">ⓘ What is this?</a>
-          </label>
-        </div>
         <div id="cmp-b-practice-note" class="hidden" style="font-size:12px;color:var(--muted)">All checked locations are rolled into this side's score, and the per-location reputation table is included automatically.</div>
       </div>
       </div>
@@ -2153,6 +2139,29 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <details id="cmp-advanced" style="margin-bottom:6px">
           <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
           <div style="margin-top:10px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:2px 0 6px">Entity A</div>
+        <div id="cmp-a-hosp-opts">
+          <label class="aggregate-toggle" title="Roll the system's related hospitals into this score (the organization is presented as a system). Uncheck to score only this hospital. Click ⓘ for details.">
+            <input type="checkbox" id="cmp-a-agg" checked>
+            <span class="agg-label">Composite analysis related hospitals only</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
+          </label>
+          <label class="aggregate-toggle" id="cmp-a-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
+            <input type="checkbox" id="cmp-a-practice-composite">
+            <span class="agg-label">Practice Composite</span><a href="#" class="help-link" onclick="showHelp('practice-composite',event);return false">ⓘ What is this?</a>
+          </label>
+        </div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:12px 0 6px">Entity B</div>
+        <div id="cmp-b-hosp-opts">
+          <label class="aggregate-toggle" title="Roll the system's related hospitals into this score (the organization is presented as a system). Uncheck to score only this hospital. Click ⓘ for details.">
+            <input type="checkbox" id="cmp-b-agg" checked>
+            <span class="agg-label">Composite analysis related hospitals only</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
+          </label>
+          <label class="aggregate-toggle" id="cmp-b-practice-composite-wrap" style="margin-top:10px" title="Adds a reputation table of the affiliated practices and clinics (Google, Healthgrades, Vitals, WebMD, Yelp, RateMDs) to the end of the report. Does not change the Pulse Score. Adds several minutes. Click ⓘ for details.">
+            <input type="checkbox" id="cmp-b-practice-composite">
+            <span class="agg-label">Practice Composite</span><a href="#" class="help-link" onclick="showHelp('practice-composite',event);return false">ⓘ What is this?</a>
+          </label>
+        </div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:12px 0 6px">Report</div>
           <label class="aggregate-toggle" title="A copy with everything below the headline score blurred, for sending to a prospect. Same scores. Click ⓘ for details.">
             <input type="checkbox" id="cmp-teaser">
             <span class="agg-label">Create Teaser version</span><a href="#" class="help-link" onclick="showHelp('teaser',event);return false">ⓘ What is this?</a>
@@ -2443,53 +2452,13 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
             <div>
-              <div class="field-label">Event Name</div>
+              <div class="field-label">Event Name <span style="font-weight:400;color:var(--muted)">(optional — defaults to the file name)</span></div>
               <input id="ev-name" type="text" class="input" placeholder="e.g. AAOS Annual Meeting 2026" style="width:100%">
             </div>
             <div>
-              <div class="field-label">Event Date</div>
+              <div class="field-label">Event Date <span style="font-weight:400;color:var(--muted)">(optional)</span></div>
               <input id="ev-date" type="date" class="input" style="width:100%">
             </div>
-          </div>
-
-          <div style="margin-bottom:16px">
-            <div class="field-label">Entity Type</div>
-            <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
-              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
-                <input type="radio" name="ev-type" value="hospital" id="ev-type-hospital" checked onchange="evTypeChanged()"> Hospital / Health System
-              </label>
-              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
-                <input type="radio" name="ev-type" value="practice" id="ev-type-practice" onchange="evTypeChanged()"> Specialty Practice
-              </label>
-              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
-                <input type="radio" name="ev-type" value="fqhc" id="ev-type-fqhc" onchange="evTypeChanged()"> Community Health (FQHC)
-              </label>
-            </div>
-          </div>
-
-          <!-- Practice-specific options (shown only when Specialty Practice selected) -->
-          <div id="ev-practice-options" style="display:none;margin-bottom:16px;padding:14px 16px;background:var(--pale);border-radius:8px;border:1px solid var(--border)">
-            <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:14px">
-              <input type="checkbox" id="ev-practice-content" checked style="margin-top:2px">
-              <div>
-                Include content analysis &amp; prescription (combined practice report)
-                <span class="tooltip-anchor" style="margin-left:6px;cursor:help;color:var(--teal);font-size:12px;font-weight:600" title="Same report Deep Diagnostic produces for a practice: the four-pillar score plus a findings-citing Diagnostic Assessment and an embedded Content Report with drafted remediation. Uses each row's website URL if provided, otherwise the Google listing's website. Adds several minutes per attendee.">ⓘ</span>
-                <div style="font-size:12px;color:var(--muted);margin-top:4px">Each practice attendee gets the full Deep Diagnostic practice report (content findings + drafted fixes). Uncheck for a faster, score-only run.</div>
-              </div>
-            </label>
-          </div>
-
-          <!-- FQHC-specific options (shown only when Community Health selected) -->
-          <div id="ev-fqhc-options" style="display:none;margin-bottom:16px;padding:14px 16px;background:var(--pale);border-radius:8px;border:1px solid var(--border)">
-            <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:14px">
-              <input type="checkbox" id="ev-practice-composite" style="margin-top:2px">
-              <div>
-                Include Practice Composite
-                <a href="#" onclick="compositeShowHelp(event);return false" style="margin-left:6px;font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">ⓘ What is this?</a>
-                <span class="tooltip-anchor" style="margin-left:6px;cursor:help;color:var(--teal);font-size:12px;font-weight:600" title="When enabled, the app will automatically discover all clinic sites associated with each health center — including satellite locations, school-based sites, and mobile units in the area — and incorporate their online presence and reputation data into the report. This gives a fuller picture of the organization's AI reputation across its entire footprint, not just its main address.">ⓘ</span>
-                <div style="font-size:12px;color:var(--muted);margin-top:4px">Discovers all clinic sites for each health center and includes them in the AI reputation assessment.</div>
-              </div>
-            </label>
           </div>
 
           <div style="margin-bottom:20px">
@@ -2537,7 +2506,17 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <div class="section-title" style="margin:0">Confirm Entities</div>
             <button class="btn btn-ghost btn-sm" onclick="evReset()">← Start Over</button>
           </div>
-          <div id="ev-confirm-summary" style="font-size:13px;color:var(--muted);margin-bottom:18px"></div>
+          <div id="ev-confirm-summary" style="font-size:13px;color:var(--muted);margin-bottom:12px"></div>
+          <div id="ev-type-row" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--pale);border-radius:8px;border:1px solid var(--border)">
+            <div class="field-label" style="margin:0">Entity Type</div>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="radio" name="ev-type" value="hospital" id="ev-type-hospital" checked onchange="evTypeChanged()"> Hospital / Health System</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="radio" name="ev-type" value="practice" id="ev-type-practice" onchange="evTypeChanged()"> Specialty Practice</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="radio" name="ev-type" value="fqhc" id="ev-type-fqhc" onchange="evTypeChanged()"> Community Health (FQHC)</label>
+            <span id="ev-type-hint" style="font-size:12px;color:var(--teal);flex-basis:100%"></span>
+            <!-- Practice attendees always get the combined report; FQHC attendees always include their sites. -->
+            <input type="checkbox" id="ev-practice-content" checked style="display:none">
+            <input type="checkbox" id="ev-practice-composite" checked style="display:none">
+          </div>
 
           <div id="ev-confirm-loading" style="text-align:center;padding:32px 0;color:var(--muted)">
             <div style="font-size:20px;margin-bottom:8px">⟳</div>Resolving entities via Google Places…
@@ -2732,8 +2711,9 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <div id="te-loc-err" class="err hidden mt8"></div>
           </div>
 
-          <div class="fg">
-            <label class="fl">Collection Schedule <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a></label>
+          <div id="te-schedule-line" style="font-size:13px;color:var(--text);margin-bottom:14px">Collected <strong>monthly</strong> and charted over time. <a href="#" onclick="teShowSchedule();return false" style="color:var(--teal);font-weight:600;text-decoration:none">change</a> <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a></div>
+          <div class="fg hidden" id="te-schedule-wrap">
+            <label class="fl">Collection Schedule</label>
             <select class="fi" id="te-schedule">
               <option value="monthly">Monthly (recommended)</option>
               <option value="weekly">Weekly</option>
@@ -2747,10 +2727,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
               <span class="agg-label">Aggregate related facilities into parent system</span><a href="#" class="help-link" onclick="showHelp('related-hospitals',event);return false">ⓘ What is this?</a>
             </label>
           </div>
-          <div class="fg">
-            <label class="fl">Notes <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-            <input class="fi" id="te-notes" placeholder="Internal label or client name">
-          </div>
+          <input type="hidden" id="te-notes" value="">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Notes, email delivery and other settings are on the entity's configuration panel after it is added.</div>
           <div id="te-err" class="err hidden mt16"></div>
           <div class="mt20 row-actions">
             <button class="btn btn-primary" id="te-add-btn" onclick="submitAddEntity()">Add to Trends</button>
@@ -4636,6 +4614,14 @@ async function npFindFacilities() {
     }
 
     _npRoster = facilities;
+    const hqHint = document.getElementById('np-hq-hint');
+    if (!_npHq()) {
+      const inf = _npInferHq(facilities, data);
+      if (inf) {
+        document.getElementById('np-city').value = inf.city; document.getElementById('np-state').value = inf.state;
+        if (hqHint) { hqHint.textContent = `Headquarters set to ${inf.city}, ${inf.state} from the ${cfg.plural} found — change it if that's wrong.`; hqHint.classList.remove('hidden'); }
+      }
+    } else if (hqHint) hqHint.classList.add('hidden');
     npShowRoster(facilities, canonicalName, data.confidence_note, cfg);
     document.getElementById('np-step2').classList.remove('hidden');
     document.getElementById('np-step2').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -4653,17 +4639,40 @@ async function npFindFacilities() {
 // Keep old name as alias so any other references still work
 const npFindHospitals = npFindFacilities;
 
+// Headquarters when the user left it blank: the discovery's own hq if it returned one,
+// else the most common state among the facilities and the first facility there.
+function _npInferHq(facilities, data) {
+  const hq = (data && (data.hq_location || data.headquarters)) || '';
+  if (hq && hq.includes(',')) { const [c, st] = hq.split(',').map(x => x.trim()); if (c && st) return { city: c.toUpperCase(), state: st.slice(0, 2).toUpperCase() }; }
+  const counts = {}; facilities.forEach(f => { if (f.state) counts[f.state] = (counts[f.state] || 0) + 1; });
+  const state = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  if (!state) return null;
+  const first = facilities.find(f => f.state === state && f.city);
+  return first ? { city: String(first.city).toUpperCase(), state: String(state).toUpperCase() } : null;
+}
+function npToggleRoster(show) {
+  const listEl = document.getElementById('np-roster-list'); const lnk = document.getElementById('np-roster-toggle');
+  const open = show != null ? show : listEl.style.display === 'none';
+  listEl.style.display = open ? '' : 'none';
+  if (lnk) lnk.textContent = open ? 'Hide roster ▴' : 'Review or exclude facilities ▾';
+}
 function npShowRoster(facilities, networkName, confidenceNote, cfg) {
   cfg = cfg || _npTypeCfg();
   const summaryEl = document.getElementById('np-roster-summary');
   const listEl    = document.getElementById('np-roster-list');
   const states    = [...new Set(facilities.map(f => f.state).filter(Boolean))].sort();
 
-  let summaryHtml = `<strong>${facilities.length} ${cfg.plural}</strong> found across ${states.length} state${states.length !== 1 ? 's' : ''}: ${states.join(', ')}`;
+  const preview = facilities.slice(0, 4).map(f => f.name).join(', ') + (facilities.length > 4 ? ', …' : '');
+  let summaryHtml = `<strong>${facilities.length} ${cfg.plural}</strong> found across ${states.length} state${states.length !== 1 ? 's' : ''}: ${states.join(', ')}
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;font-weight:400">${preview}</div>
+    <a href="#" id="np-roster-toggle" onclick="npToggleRoster();return false" style="display:inline-block;margin-top:6px;font-size:12px;color:var(--teal);font-weight:600;text-decoration:none">Review or exclude facilities ▾</a>`;
   if (confidenceNote) {
     summaryHtml += `<div style="font-size:11px;color:var(--muted);margin-top:4px;font-weight:400">ℹ ${confidenceNote}</div>`;
   }
   summaryEl.innerHTML = summaryHtml;
+  // Collapsed by default — all facilities are included; open when discovery flagged doubt.
+  listEl.style.display = confidenceNote ? '' : 'none';
+  setTimeout(() => npToggleRoster(!!confidenceNote), 0);
 
   // Update step 2 labels
   const s2title = document.getElementById('np-step2-title');
@@ -10148,6 +10157,8 @@ function showAddEntityFlow() {
     if (el) el.value = '';
   });
   document.getElementById('te-schedule').value = 'monthly';
+  document.getElementById('te-schedule-wrap')?.classList.add('hidden');
+  document.getElementById('te-schedule-line')?.classList.remove('hidden');
   document.getElementById('te-aggregate').checked = true;
   setTeType('hospital');
   document.getElementById('te-step2').classList.add('hidden');
@@ -10162,6 +10173,10 @@ function showAddEntityFlow() {
   document.getElementById('te-name').focus();
 }
 
+function teShowSchedule() {
+  document.getElementById('te-schedule-wrap')?.classList.remove('hidden');
+  document.getElementById('te-schedule-line')?.classList.add('hidden');
+}
 function setTeType(type) {
   _teType = type;
   ['hospital', 'service_line', 'specialty'].forEach(t => {
@@ -10776,8 +10791,24 @@ async function submitAddEntity() {
 
 function evTypeChanged() {
   const type = document.querySelector('input[name="ev-type"]:checked')?.value;
-  document.getElementById('ev-fqhc-options').style.display = type === 'fqhc' ? '' : 'none';
-  document.getElementById('ev-practice-options').style.display = type === 'practice' ? '' : 'none';
+  const hint = document.getElementById('ev-type-hint');
+  if (hint && hint.dataset.detected && hint.dataset.detected !== type) hint.textContent = '';
+}
+// Detect the attendee type from the file: rows with a specialty are practices.
+function evDetectType() {
+  const n = _evRows.length; const withSpec = _evRows.filter(r => (r.input_specialty || '').trim()).length;
+  const type = (n && withSpec >= Math.ceil(n / 2)) ? 'practice' : 'hospital';
+  const radio = document.getElementById('ev-type-' + type); if (radio) radio.checked = true;
+  const hint = document.getElementById('ev-type-hint');
+  if (hint) {
+    hint.dataset.detected = type;
+    hint.textContent = type === 'practice'
+      ? `Detected from the file: ${withSpec} of ${n} rows have a specialty, so these are analyzed as practices (combined report with content findings). Change if wrong.`
+      : (withSpec ? `Detected from the file: only ${withSpec} of ${n} rows have a specialty, so these are analyzed as hospitals. Change if wrong.` : 'No specialty column in the file — analyzed as hospitals. Change if these are practices or health centers.');
+  }
+}
+function _evNameFromFile(fn) {
+  return String(fn || '').replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 let _evRows        = [];       // raw resolved rows from /api/event/upload
@@ -10793,6 +10824,8 @@ function evFileChosen(input) {
   const f = input.files[0];
   document.getElementById('ev-filename').textContent = f ? f.name : 'No file chosen';
   _evCsvFilename = f ? f.name : null;
+  const nameEl = document.getElementById('ev-name');
+  if (f && nameEl && !nameEl.value.trim()) nameEl.value = _evNameFromFile(f.name);
 }
 
 function evDownloadEventsDisplay() {
@@ -10814,8 +10847,8 @@ async function evUploadAndResolve() {
   const errEl = document.getElementById('ev-step1-err');
   errEl.classList.add('hidden');
 
-  if (!name)  { showErr(errEl, 'Please enter an event name.'); return; }
   if (!file)  { showErr(errEl, 'Please choose a CSV file.'); return; }
+  if (!name) { const dn = _evNameFromFile(file.name) || `Attendee list ${new Date().toISOString().slice(0, 10)}`; document.getElementById('ev-name').value = dn; }
 
   document.getElementById('ev-upload-btn').disabled = true;
   document.getElementById('ev-upload-btn').textContent = 'Uploading…';
@@ -10828,6 +10861,7 @@ async function evUploadAndResolve() {
     const data = await r.json();
     _evRows = data.rows || [];
     if (!_evRows.length) throw new Error('No valid rows found in the CSV.');
+    evDetectType();
     evShowConfirmation();
   } catch(e) {
     showErr(errEl, e.message);
