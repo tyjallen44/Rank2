@@ -2569,3 +2569,15 @@ Commit: `GET /api/entities/suggest?q=&kinds=` returns organizations the team alr
 **T4 — Role scoping.** As a non-admin role, suggestions only include that role's runs (Trends entities are shared).
 
 **R1 — Regression.** All six forms still submit normally when typing without picking; the Learn editor's category picker unchanged.
+
+## PERF-INIT-ONCE — schema check once per process; suggestion index cached
+
+Commit: `init_db()` now runs its ~80 DDL/migration statements once per server process (it was re-run on every request by ~100 handlers, costing seconds against the remote Postgres); `init_db(force=True)` re-runs it. The typeahead index (analyzed + tracked organizations) is loaded once per role and cached for 2 minutes; each keystroke filters in memory. NEEDS BROWSER TESTING.
+
+**T1 — Typeahead speed.** On any organization field type 3 letters: the first dropdown after a deploy may take ~1 s; subsequent keystrokes and other forms respond in well under a second.
+
+**T2 — Freshness.** Run a new Deep Diagnostic for a never-before-analyzed organization; within 2 minutes it appears in the suggestions (or immediately after a server restart).
+
+**T3 — General responsiveness.** History, Trends and Admin pages load noticeably faster on production (each request no longer re-runs the schema migrations).
+
+**R1 — Fresh database.** First request after boot still creates/migrates all tables (Home, History, Trends, Admin all load on an empty database).

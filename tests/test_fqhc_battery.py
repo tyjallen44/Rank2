@@ -274,7 +274,7 @@ def test_server_battery_job_signature():
 def test_db_has_battery_runs_table_definition():
     import inspect
     from perception import db
-    src = inspect.getsource(db.init_db)
+    src = inspect.getsource(getattr(db, '_init_db_impl', db.init_db))
     assert "fqhc_battery_runs" in src, \
         "init_db() does not define fqhc_battery_runs table"
 
@@ -282,7 +282,7 @@ def test_db_has_battery_runs_table_definition():
 def test_db_has_mqcr_column_migration():
     import inspect
     from perception import db
-    src = inspect.getsource(db.init_db)
+    src = inspect.getsource(getattr(db, '_init_db_impl', db.init_db))
     assert "mqcr" in src, \
         "init_db() does not migrate mqcr column onto analysis_runs"
 

@@ -129,7 +129,22 @@ def get_connection() -> _PgConnection:
     return _PgConnection()
 
 
-def init_db() -> None:
+_INIT_DONE = False
+
+
+def init_db(force: bool = False) -> None:
+    """Create tables / apply column migrations. Idempotent, and after the first
+    successful pass it is a no-op for the rest of the process: every request handler
+    calls it, and re-running ~80 DDL statements per request costs seconds against a
+    remote Postgres."""
+    global _INIT_DONE
+    if _INIT_DONE and not force:
+        return
+    _init_db_impl()
+    _INIT_DONE = True
+
+
+def _init_db_impl() -> None:
     con = get_connection()
     con.execute("""
         CREATE TABLE IF NOT EXISTS entities (
@@ -2802,16 +2817,23 @@ def _split_location(loc) -> tuple:
     return city, state
 
 
-def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = None) -> list:
-    """Organizations this team has already analyzed or tracked, matching `q`, most recent
-    first. Sources: Deep Diagnostic runs, Hospital Network runs, tracked entities.
-    kinds: hospital | service_line | specialty | community_health | network."""
-    from datetime import date as _date
-    q = (q or "").strip()
-    if len(q) < 2:
-        return []
-    like = f"%{q}%"
-    role_sql, role_args = ("", []) if role in (None, "", "admin") else (" AND user_role = ?", [role])
+_SUGGEST_CACHE: dict = {}          # role -> (built_at, rows)
+_SUGGEST_TTL = 120.0
+
+
+def invalidate_suggest_cache() -> None:
+    _SUGGEST_CACHE.clear()
+
+
+def _suggest_index(role: str = None) -> list:
+    """All analyzed / tracked organizations for a role (deduped), cached for 2 minutes.
+    Three cheap queries once, then every keystroke filters in memory."""
+    import time as _time
+    key = role if role not in (None, "") else "admin"
+    hit = _SUGGEST_CACHE.get(key)
+    if hit and _time.time() - hit[0] < _SUGGEST_TTL:
+        return hit[1]
+    role_sql, role_args = ("", []) if key == "admin" else (" AND user_role = ?", [role])
     con = get_connection()
     found: dict = {}
 
@@ -2831,9 +2853,8 @@ def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = Non
             f"""SELECT entity_name, location, COALESCE(entity_type, 'hospital'), specialty, service_line, parent_system,
                        MAX(generated_at), COUNT(*), MAX(ran_by)
                 FROM analysis_runs
-                WHERE individual_report = TRUE AND comparison_id IS NULL AND entity_name IS NOT NULL
-                  AND (entity_name ILIKE ? OR parent_system ILIKE ?){role_sql}
-                GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 7 DESC LIMIT 25""", [like, like] + role_args).fetchall()
+                WHERE individual_report = TRUE AND comparison_id IS NULL AND entity_name IS NOT NULL{role_sql}
+                GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 7 DESC LIMIT 3000""", role_args).fetchall()
         for name, loc, et, spec, sl, ps, gen, cnt, by in rows:
             kind = "service_line" if sl else "specialty" if et == "practice" else "community_health" if et == "community_health" else "hospital"
             city, state = _split_location(loc)
@@ -2842,8 +2863,8 @@ def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = Non
                   "service_line": sl, "parent_system": ps, "last_run": str(gen)[:10], "run_count": int(cnt), "ran_by": by})
         rows = con.execute(
             f"""SELECT network_name, hq_location, MAX(generated_at), COUNT(*), MAX(ran_by)
-                FROM network_runs WHERE network_name ILIKE ?{role_sql}
-                GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 15""", [like] + role_args).fetchall()
+                FROM network_runs WHERE network_name IS NOT NULL{role_sql}
+                GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 1000""", role_args).fetchall()
         for name, loc, gen, cnt, by in rows:
             city, state = _split_location(loc)
             _put(("network", name.lower(), city.lower(), state),
@@ -2851,8 +2872,7 @@ def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = Non
                   "service_line": None, "parent_system": None, "last_run": str(gen)[:10], "run_count": int(cnt), "ran_by": by})
         rows = con.execute(
             """SELECT id, entity_name, city, state, COALESCE(entity_type, 'hospital'), specialty, service_line, parent_system, last_run_at
-               FROM tracked_entities WHERE active = TRUE AND entity_name ILIKE ? ORDER BY last_run_at DESC NULLS LAST LIMIT 15""",
-            [like]).fetchall()
+               FROM tracked_entities WHERE active = TRUE ORDER BY last_run_at DESC NULLS LAST LIMIT 1000""").fetchall()
         for tid, name, city, state, et, spec, sl, ps, last in rows:
             kind = "service_line" if et == "service_line" or sl else "specialty" if et == "practice" else "hospital"
             _put((kind, (name or "").lower(), (city or "").lower(), (state or "").upper()),
@@ -2861,19 +2881,39 @@ def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = Non
                   "ran_by": None, "tracked": True, "tracked_id": tid})
     finally:
         con.close()
-    out = list(found.values())
-    if kinds:
-        out = [o for o in out if o["kind"] in kinds]
+    rows = list(found.values())
+    for o in rows:
+        o.setdefault("tracked", False)
+        o["_hay"] = " ".join(x for x in (o.get("name"), o.get("parent_system"), o.get("city")) if x).lower()
+    _SUGGEST_CACHE[key] = (_time.time(), rows)
+    return rows
+
+
+def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = None) -> list:
+    """Organizations this team has already analyzed or tracked, matching `q`, most recent
+    first (prefix matches first). Sources: Deep Diagnostic runs, Hospital Network runs,
+    tracked entities. kinds: hospital | service_line | specialty | community_health | network."""
+    from datetime import date as _date
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
     ql = q.lower()
     today = _date.today()
-    for o in out:
-        o.setdefault("tracked", False)
+    out = []
+    for o in _suggest_index(role):
+        if ql not in o["_hay"]:
+            continue
+        if kinds and o["kind"] not in kinds:
+            continue
+        rec = {k: v for k, v in o.items() if k != "_hay"}
         try:
-            o["days_ago"] = (today - _date.fromisoformat(o["last_run"][:10])).days if o.get("last_run") else None
+            rec["days_ago"] = (today - _date.fromisoformat(rec["last_run"][:10])).days if rec.get("last_run") else None
         except Exception:
-            o["days_ago"] = None
-        o["_rank"] = (0 if o["name"].lower().startswith(ql) else 1, -(0 if o["days_ago"] is None else -o["days_ago"]))
-    out.sort(key=lambda o: (o["_rank"][0], o["days_ago"] if o["days_ago"] is not None else 10**6))
-    for o in out:
-        o.pop("_rank", None)
+            rec["days_ago"] = None
+        rec["_rank"] = (0 if rec["name"].lower().startswith(ql) else 1,
+                        rec["days_ago"] if rec["days_ago"] is not None else 10**6)
+        out.append(rec)
+    out.sort(key=lambda r: r["_rank"])
+    for r in out:
+        r.pop("_rank", None)
     return out[:limit]
