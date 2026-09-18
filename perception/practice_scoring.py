@@ -116,9 +116,14 @@ def reviews_band(
         return None
     count = google_count or 0
 
-    # Base from rating
-    if google_rating >= 4.5:
-        base = 88
+    # Base from rating. Above 4.5★ the rating keeps differentiating so a large,
+    # near-perfect practice can reach 100 (same top bands as the hospital rubric).
+    if google_rating >= 4.9:
+        base = 94
+    elif google_rating >= 4.7:
+        base = 90
+    elif google_rating >= 4.5:
+        base = 86
     elif google_rating >= 4.0:
         base = 75
     elif google_rating >= 3.5:

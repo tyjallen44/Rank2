@@ -197,7 +197,8 @@ def experience_band(
     """Derive the Experience & Reviews tier (0–100) from a Google read.
 
     Anchor rubric (INTL-SALES-119): rating × volume × recency.
-      4.5★+ / high volume / active → 85+
+      4.9★+ / high volume / active → 94–100
+      4.7–4.8 → 90–94 · 4.5–4.6 → 86–90
       4.0–4.4 → 70–84
       3.5–3.9 → 55–69
       3.0–3.4 → 40–54
@@ -207,8 +208,14 @@ def experience_band(
         return None
     count = review_count or 0
 
-    if rating >= 4.5:
-        base = 88
+    # Above 4.5★ the rating keeps differentiating: a 4.9★ front door with deep
+    # volume can reach 100; 4.5★ alone lands where the anchor rubric puts it.
+    if rating >= 4.9:
+        base = 94
+    elif rating >= 4.7:
+        base = 90
+    elif rating >= 4.5:
+        base = 86
     elif rating >= 4.0:
         base = 77
     elif rating >= 3.5:

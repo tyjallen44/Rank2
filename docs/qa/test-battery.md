@@ -2643,3 +2643,18 @@ Commit: rewrote 4 stale help topics (location mode, report format, event options
 **T5 — Maintenance task.** Admin → Operations → Maintenance lists apply-learn-content; Dry run lists the 4 articles; Apply updates them; a second Dry run reports 0.
 
 **R1 — Existing topics unchanged in behaviour** (14 originals still open from their links); admin-edited custom Learn articles untouched by the task.
+
+## REVIEWS-BAND-TOP — reviews pillars can reach 100 (was capped at 92)
+
+Commit: both deterministic review bands (hospital Experience & Reviews in scoring.experience_band; practice Reviews & Reputation in practice_scoring.reviews_band) now split the top band — 4.5–4.6★ → 86, 4.7–4.8★ → 90, 4.9★+ → 94 — with the existing volume nudges (hospital +4 at 1,000+, practice +4 at 400+) and penalties unchanged. Maximum is now 98 with volume (100 reachable only via the inactive physician-panel blend). Lower bands, Community Health (reuses the hospital band) and Student Health are otherwise unchanged. Prompts untouched. NEEDS BROWSER TESTING.
+
+**T1 — Unit tests.** tests/test_reviews_band_top.py passes (4 tests); the suite stays at baseline apart from the 4 new passes.
+
+**T2 — Practice run.** Run a Deep Diagnostic for a practice whose confirmed roster averages ≥4.7★ with 400+ reviews (e.g. a large orthopedic group). Reviews & Reputation shows 94 (4.7–4.8) or 98 (4.9+) in the PDF pillar bars and the per-location table still agrees with the rating/volume used.
+- [ ] A practice at 4.5★ / 50 reviews still lands at 82 (thin-volume penalty intact).
+
+**T3 — Hospital run.** A hospital with a 4.9★ front door and 1,000+ reviews shows Experience & Reviews 98; one at 4.5★ / 200 reviews shows 86. Composite moves ≤1 point for hospitals (10% weight) and ≤3 points for relationship-profile practices (23%).
+
+**T4 — Cached scores.** Organizations scored before this deploy keep their canonical score for the 30-day window (or until Refresh from scratch / Run anyway); Trends shows the step at the next snapshot, not retroactively.
+
+**R1 — Ratings below 4.5** produce exactly the same pillar values as before (77/62/47/33 hospital bases; 75/60/45/30 practice bases).
