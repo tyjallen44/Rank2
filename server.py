@@ -5446,6 +5446,16 @@ async def download_events_display(_: str = Depends(require_auth)):
     return RedirectResponse(url=_EVENTS_DISPLAY_URL)
 
 
+# ── MCP (optional) ────────────────────────────────────────────────────────────
+# Off unless PULSE_MCP_ENABLED=1, so a deploy that has not been deliberately
+# flipped is unchanged. Registered here because the mount and the two
+# .well-known routes must precede the SPA catch-all, like /assets below.
+if os.environ.get("PULSE_MCP_ENABLED", "0").strip() == "1":
+    import sys as _sys
+    from perception.mcp_server import mount_mcp
+    mount_mcp(app, _sys.modules[__name__])
+
+
 _ASSETS_DIR = Path(__file__).parent / "web" / "assets"
 
 @app.get("/assets/{name}")
