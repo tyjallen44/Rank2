@@ -2658,3 +2658,11 @@ Commit: both deterministic review bands (hospital Experience & Reviews in scorin
 **T4 — Cached scores.** Organizations scored before this deploy keep their canonical score for the 30-day window (or until Refresh from scratch / Run anyway); Trends shows the step at the next snapshot, not retroactively.
 
 **R1 — Ratings below 4.5** produce exactly the same pillar values as before (77/62/47/33 hospital bases; 75/60/45/30 practice bases).
+
+## DUP-CHECK-REFRESH — duplicate-run check skipped when Refresh from scratch is checked
+
+Commit: the 14-day duplicate notice no longer appears on Deep Diagnostic, Hospital Network or Compare Two when the admin "Refresh from scratch — ignore cached results" box is checked (an explicit fresh-run request). Notice wording no longer says "by someone on your team" when the earlier run has no recorded user, and it points at Run anyway / Refresh from scratch. NEEDS BROWSER TESTING.
+
+**T1.** As admin, re-run an organization run today with Refresh from scratch checked → no amber notice; the run starts immediately.
+**T2.** Same with the box unchecked → notice appears; Run anyway starts the run.
+**T3.** Notice for a run with a recorded user reads "…was already run today by <name>"; for one without, "…was already run today." with no attribution.

@@ -4730,7 +4730,8 @@ async function npRunAnalysis() {
     return;
   }
 
-  if (await _dupGate('network', { name }, 'np-step2-err', npRunAnalysis)) return;
+  if (!document.getElementById('np-ignore-cache')?.checked
+      && await _dupGate('network', { name }, 'np-step2-err', npRunAnalysis)) return;
   const ignoreCache = document.getElementById('np-ignore-cache')?.checked || false;
   const serviceLine = document.getElementById('np-service-line')?.checked || false;
   // All three reports (standard + teaser + full detail) are always generated.
@@ -6306,7 +6307,8 @@ function _cmpSideBody(side, suffix) {
 
 async function runComparison() {
   if (!_cmp.a.selected || !_cmp.b.selected) return;
-  if (await _dupGate('comparison', { name: _cmp.a.selected.name, name_b: _cmp.b.selected.name }, 'cmp-run-err', runComparison)) return;
+  if (!document.getElementById('cmp-force-rerun')?.checked
+      && await _dupGate('comparison', { name: _cmp.a.selected.name, name_b: _cmp.b.selected.name }, 'cmp-run-err', runComparison)) return;
   const errEl = document.getElementById('cmp-run-err');
   errEl.classList.add('hidden');
   for (const side of ['a', 'b']) {
@@ -6336,7 +6338,8 @@ async function runComparison() {
 
 async function runIndividual() {
   if (!_irSelected) return;
-  if (await _dupGate('analysis', { name: _irSelected.name, city: _irResolvedCity || '' }, 'ir-run-err', runIndividual)) return;
+  if (!document.getElementById('ir-force-rerun')?.checked
+      && await _dupGate('analysis', { name: _irSelected.name, city: _irResolvedCity || '' }, 'ir-run-err', runIndividual)) return;
   const errEl = document.getElementById('ir-run-err');
   errEl.classList.add('hidden');
 
@@ -7072,10 +7075,10 @@ async function _dupGate(kind, params, errElId, retryFn) {
   if (!errEl) return false;
   const m = matches[0];
   const when = m.days_ago === 0 ? 'today' : m.days_ago === 1 ? 'yesterday' : `${m.days_ago} days ago`;
-  const who = m.ran_by ? String(m.ran_by).split('@')[0] : 'someone on your team';
+  const who = m.ran_by ? ` by ${_learnEsc(String(m.ran_by).split('@')[0])}` : '';
   const box = document.createElement('div');
   box.id = errElId + '-dup'; box.className = 'dup-notice';
-  box.innerHTML = `<span style="font-size:16px">⚠</span><div class="d"><strong>${_learnEsc(m.title)}</strong> was already run ${when} by ${_learnEsc(who)}${matches.length > 1 ? ` (${matches.length} runs in the last 14 days)` : ''}. Scores rarely move within two weeks. ${_helpLinkHtml('duplicate-run', 'Why this check?')}</div>
+  box.innerHTML = `<span style="font-size:16px">⚠</span><div class="d"><strong>${_learnEsc(m.title)}</strong> was already run ${when}${who}${matches.length > 1 ? ` (${matches.length} runs in the last 14 days)` : ''}. Scores rarely move within two weeks — to force a fresh run, use Run anyway (or Refresh from scratch under Advanced options). ${_helpLinkHtml('duplicate-run', 'Why this check?')}</div>
     ${m.has_pdf ? `<a class="btn btn-secondary btn-sm" href="${m.url}?token=${encodeURIComponent(_token)}">⬇ Open that report</a>` : ''}
     <button class="btn btn-ghost btn-sm" onclick="navigate('history')">History</button>
     <button class="btn btn-primary btn-sm" id="${errElId}-dup-go">Run anyway →</button>`;
