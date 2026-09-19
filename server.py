@@ -4378,7 +4378,7 @@ def _trend_report_file(entity: dict, points: list, brand: str = "original") -> P
     # Notes are part of the report: fingerprint them into the cache name so an added or
     # removed note rebuilds the PDF.
     a_fp = hashlib.sha1("|".join(f"{a['note_date']}:{a['note']}" for a in annotations).encode()).hexdigest()[:8] if annotations else "0"
-    pdf_path = out_dir / f"trend_{safe_id}_{latest}_v3_{a_fp}.pdf"   # bump suffix when the layout changes
+    pdf_path = out_dir / f"trend_{safe_id}_{latest}_v4_{a_fp}.pdf"   # bump suffix when the layout changes
     if not pdf_path.exists():
         ent = dict(entity)
         for k in ("last_run_at", "next_run_at", "created_at"):

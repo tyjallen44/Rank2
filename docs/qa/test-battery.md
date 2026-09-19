@@ -2666,3 +2666,22 @@ Commit: the 14-day duplicate notice no longer appears on Deep Diagnostic, Hospit
 **T1.** As admin, re-run an organization run today with Refresh from scratch checked → no amber notice; the run starts immediately.
 **T2.** Same with the box unchecked → notice appears; Run anyway starts the run.
 **T3.** Notice for a run with a recorded user reads "…was already run today by <name>"; for one without, "…was already run today." with no attribution.
+
+## TREND-PDF-V4 — Trend Report redesigned to be read at a glance
+
+Commit: perception/trend_pdf.py rewritten. Header with the organization as the largest text and a one-line meta strip; a headline sentence ("Up 5 points since July, now Upper Middle at 70. Experience & Reviews moved most (+14) and is still the weakest pillar."); three big tiles (latest score + quartile badge, change since tracking began, pillar that moved most); analyst paragraph at 12.5pt; score chart zoomed to the data range (never narrower than 30 points) with named quartile bands, first/last values, thicker line, 10pt axis labels; "What changed" right under the chart (quartile crossings that stick, moves ≥5, notes, setting drift; otherwise a stability sentence); one pillar chart with four coloured labelled lines + a bar table with a plain-English line per pillar (the weakest ends "This is the lever."); Google reputation as two facts with sparklines; snapshots collapsed one-per-day (re-run ×N tag) on their own page; body 11.5pt, tables 11pt, headings 15pt title case. Cache suffix bumped to _v4_. NEEDS BROWSER TESTING.
+
+**T1 — Download.** Trends → an entity with ≥3 snapshots → Trend Report (PDF). Page 1: header, headline, three tiles, analyst paragraph, zoomed score chart with quartile bands, What changed. Page 2: four-pillar chart with right-hand labels (value, name, change), bar table with meaning lines, Google rating and reviews cards. Page 3: Every snapshot table + About the Pulse Score.
+- [ ] No heading stranded at a page bottom; the snapshot table starts on its own page; fonts readable without zooming.
+
+**T2 — Same-day re-runs.** An entity run twice on one day shows one row for that day tagged "re-run ×2", one chart point, and no duplicate date labels; the header reads "N snapshots (M runs)".
+
+**T3 — Noise filter.** A 2-point wobble across a quartile boundary that returns next snapshot does not appear in What changed; a crossing that holds does. With no large moves the section reads "No large moves. The score has stayed within N points (lo–hi)…".
+
+**T4 — Notes.** Add a Trends note → numbered marker on the score chart and a numbered line in What changed; removing it rebuilds the PDF (new cache key).
+
+**T5 — Practice entity.** Pillar labels are the practice rubric's; the reviews line cites the Google rating/review count; "Scored on the practice rubric." caption present.
+
+**T6 — Edge cases.** One snapshot: tiles say "First snapshot — no change to report yet", chart shows a single labelled point, pillar chart says not enough snapshots. No Google data: Google section shows the "No Google reputation snapshots yet" line.
+
+**R1 — Emailed and scheduled reports** use the same renderer; Sent reports artifacts are unchanged.
