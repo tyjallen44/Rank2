@@ -220,7 +220,6 @@ def _init_db_impl() -> None:
         ("ai_visibility_verdict", "VARCHAR"),
         ("coverage_note", "VARCHAR"),
         ("entity_type", "VARCHAR DEFAULT 'hospital'"),
-        ("display_name", "VARCHAR"),       # editable name shown in Trends and used as the Trend Report title
         ("rubric_version", "VARCHAR"),
         ("practice_profile", "VARCHAR"),
         ("service_line", "VARCHAR"),      # hospital service-line runs (Deep Diagnostic type)
@@ -659,6 +658,9 @@ def _init_db_impl() -> None:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN confirmed_roster VARCHAR")
     if "anchor_listing" not in _te_cols:
         con.execute("ALTER TABLE tracked_entities ADD COLUMN anchor_listing VARCHAR")
+    if "display_name" not in _te_cols:
+        # Editable name shown in Trends and used as the Trend Report title; entity_name stays the locked identity.
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN display_name VARCHAR")
 
     # Compare Two (head-to-head) reports — one row per comparison so History can list
     # and download the combined PDF (previously only the in-memory job knew the path).
