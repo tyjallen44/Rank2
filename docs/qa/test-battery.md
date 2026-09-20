@@ -2720,3 +2720,11 @@ Commit: (1) practice/service-line entities with no confirmed roster show an ambe
 **T5 — Change alerts.** Tick the alert box on an entity with recipients, Save (status echoes). Force a snapshot that moves ≥5 points or crosses a quartile (Run now with Refresh from scratch on a Deep Diagnostic of the same entity, or wait for a scheduled run) → email "▲ N — <name> AI Reputation score now S" with the Trend Report attached; a 2-point move sends nothing; a same-day re-run never alerts. Without recipients the alert goes to the creator's address if it is an email.
 **T6 — Compare.** Tick two rows → bar "2 selected"; tick a fifth → flash "Up to 4". Compare on one chart → chart with a line per entity in distinct colours, x axis = union of snapshot days, gaps spanned; table lists first/latest/change/quartile/evidence with links back to each entity; ← All Entities returns with the selection kept; Clear empties it.
 **R1.** Existing Details fields (display name, cadence, next run, notes, email delivery) save as before; Trend PDF unchanged (evidence column not added to the PDF).
+
+## TRENDS-ATTENTION-EXPLAIN — Needs attention / mixed explained with actions in Details
+
+Commit: "Needs attention" and "mixed" badges are clickable and open the Details panel at a "Needs attention — N items" box that lists each reason for this entity with a plain explanation and the action that clears it: score fell (View trend / Open that snapshot's report), run overdue (Run now), latest snapshot on the wrong rubric (Run now / Open in History), mixed rubric history (dates of the off-rubric snapshots; Open in History / Track as new entity), locations not confirmed (Find locations). NEEDS BROWSER TESTING.
+
+**T1.** Campbell Clinic (score ▼5 + mixed): click "Needs attention" → Details opens scrolled to the box with two items: the fall (with the two scores and date, View trend + report buttons) and Mixed rubric history (listing the hospital-rubric snapshot dates, Open in History + Track as new entity).
+**T2.** An entity with no flags shows no box. The badge hover text still lists the reasons.
+**T3.** Each button does what it says: View trend opens the entity; Open in History lands on History filtered to the name; Run now starts a run and reports in the status line; Find locations scrolls to the roster box.

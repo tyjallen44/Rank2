@@ -10169,11 +10169,65 @@ async function deleteTracking(id) {
     await refreshTrackEntities();
   } catch (err) { alert(err.message); }
 }
+// What each "Needs attention" / "mixed" flag means for THIS entity, with the action that clears it.
+function _trackAttentionItems(e) {
+  const items = [];
+  const typeLbl = _trackTypeLabel(e.entity_type);
+  const expected = _trackExpectedRubric(e);
+  const hist = e.recent_scores || [];
+  const latestPt = hist[hist.length - 1], prevPt = hist[hist.length - 2];
+  if (e.score_delta != null && e.score_delta < 0) {
+    items.push({
+      title: `Score fell ${Math.abs(e.score_delta)} on the latest snapshot`,
+      detail: `${prevPt ? prevPt.score : '—'} → ${latestPt ? latestPt.score : '—'}${latestPt ? ` on ${latestPt.date.slice(0, 10)}` : ''}. Open the trend to see which pillar moved; if it is the reviews pillar, the Google rating and review count on that row usually explain it. A fall of under 5 points is often run-to-run variation — compare it with the next snapshot before acting.`,
+      actions: [['View trend', `loadEntityTrend('${e.id}')`]].concat(latestPt && latestPt.run_id ? [['Open that snapshot\'s report', `window.location.href='/api/reports/${latestPt.run_id}/pdf?token='+encodeURIComponent(_token)`]] : []),
+    });
+  }
+  if (!!e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) < new Date(Date.now() - 24 * 3600 * 1000)) {
+    items.push({ title: 'Scheduled run is overdue', detail: `The next snapshot was due ${_shortDate(e.next_run_at).text}. The scheduler may have been paused, or a run failed. Start one now, or move the next-run date below.`,
+      actions: [['Run now', `runTrackNowFromList('${e.id}')`]] });
+  }
+  const offRubric = hist.filter(x => x.rubric && x.rubric !== expected);
+  if (!!e.latest_rubric && e.latest_rubric !== expected) {
+    items.push({
+      title: `Latest snapshot was scored on the ${e.latest_rubric} rubric, but this is a ${typeLbl}`,
+      detail: `Trends match snapshots by organization name, so a Deep Diagnostic run with a different type (or before the entity's type was set) lands here. Its four pillars mean different things, so it is not comparable. Run now scores on the correct rubric; admins can delete the mismatched runs from History.`,
+      actions: [['Run now (correct rubric)', `runTrackNowFromList('${e.id}')`], ['Open in History', `navigate('history'); historySearch(${JSON.stringify(e.entity_name)})`]],
+    });
+  } else if ((e.rubrics || []).length > 1) {
+    items.push({
+      title: 'Mixed rubric history',
+      detail: `${offRubric.length ? `${offRubric.length} of the last ${hist.length} snapshots (${offRubric.map(x => x.date.slice(0, 10)).join(', ')}) were scored on the ${offRubric[0].rubric} rubric` : 'Some earlier snapshots were scored on the other rubric'}; the rest on the ${expected} rubric this ${typeLbl} should use. Scores are comparable only within a rubric — the chart marks them H / P. Nothing is broken: keep going and the mixed snapshots age out of the 12-run window, or (admin) delete them from History for a clean line, or track a new entity from this one.`,
+      actions: [['Open in History', `navigate('history'); historySearch(${JSON.stringify(e.entity_name)})`], ['Track as new entity', `trackAsNewEntity('${e.id}')`]],
+    });
+  }
+  if ((e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null) {
+    items.push({ title: 'Locations not confirmed', detail: 'Each run rediscovers this practice\'s locations, so snapshots may not measure the same set. Confirm the roster once (box below) and every future snapshot uses exactly those locations.',
+      actions: [['Find locations', `document.getElementById('tc-roster-fix-${e.id}')?.scrollIntoView({behavior:'smooth',block:'center'})`]] });
+  }
+  return items;
+}
+function _trackAttentionBox(e) {
+  const items = _trackAttentionItems(e);
+  if (!items.length) return '';
+  return `<div id="tc-attn-${e.id}" style="margin-bottom:14px;padding:12px 14px;background:#fff8e6;border:1px solid #f0d9a8;border-radius:8px">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#856404;margin-bottom:8px">Needs attention — ${items.length} item${items.length === 1 ? '' : 's'}</div>
+    ${items.map(it => `<div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid #f0d9a8">
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#5a4a1a">${it.title}</div><div style="font-size:12px;color:#5a4a1a;margin-top:3px;line-height:1.45">${it.detail}</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${it.actions.map(([l, fn]) => `<button class="btn btn-secondary btn-sm" onclick="${fn.replace(/"/g, '&quot;')}">${l}</button>`).join('')}</div>
+    </div>`).join('')}
+  </div>`;
+}
+function openTrackAttention(id) {
+  _trackCfgOpen.add(id); renderTrackEntityList();
+  setTimeout(() => (document.getElementById(`tc-attn-${id}`) || document.getElementById(`track-cfg-${id}`))?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+}
 function _trackCfgPanel(e) {
   const created = (e.created_at || '').slice(0, 10);
   const nextVal = e.next_run_at ? String(e.next_run_at).slice(0, 10) : '';
   const lock = (label, value) => `<div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">${label} <span title="Locked — changing this would make earlier scores non-comparable" style="cursor:help">🔒</span></div><div style="font-size:13px;color:var(--text);margin-top:2px">${value || '—'}</div></div>`;
   return `<tr id="track-cfg-${e.id}"><td colspan="9" style="background:#f6fafa;padding:16px 20px;border-top:1px solid var(--pale)">
+    ${_trackAttentionBox(e)}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 22px;margin-bottom:14px">
       <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Display name <span style="font-weight:400;text-transform:none;letter-spacing:0">(report title)</span></div>
         <input id="tc-title-${e.id}" class="fi" value="${_learnEsc(e.display_name || e.entity_name || '')}" placeholder="${_learnEsc(e.entity_name || '')}" autocapitalize="off" autocorrect="off" spellcheck="false" style="padding:7px 10px;font-size:13px;margin-top:2px" title="Shown exactly as typed (any capitalization) in Trends and on the Trend Report. The tracked identity stays locked.">
@@ -10300,7 +10354,7 @@ function renderTrackEntityList() {
     const rubricBadge = e.latest_rubric
       ? `<span class="badge bg-muted" style="font-size:10px" title="Pillar rubric of the latest snapshot">${e.latest_rubric === 'practice' ? 'Practice rubric' : 'Hospital rubric'}</span>`
         + (e.latest_rubric !== expected ? ` <span title="Snapshots were scored on a different rubric than this entity's type — track a new entity to start a correctly scored series" style="color:#b45309;font-weight:700;cursor:help">⚠</span>` : '')
-        + ((e.rubrics || []).length > 1 ? ` <span title="This entity's history mixes both rubrics; compare only within a rubric" style="color:#b45309;cursor:help">mixed</span>` : '')
+        + ((e.rubrics || []).length > 1 ? ` <a href="#" onclick="openTrackAttention('${e.id}');return false" title="This entity's history mixes both rubrics — click for what to do" style="color:#b45309;cursor:pointer;text-decoration:none">mixed</a>` : '')
       : '';
     const needsRoster = (e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null;
     const rosterLbl = (e.entity_type === 'practice' || e.entity_type === 'service_line')
@@ -10308,7 +10362,7 @@ function renderTrackEntityList() {
          : `<a href="#" onclick="openRosterFix('${e.id}');return false" class="badge" style="background:#fff3cd;color:#856404;font-size:10px;text-decoration:none;cursor:pointer" title="Locations are rediscovered on every run, so snapshots may not measure the same set. Confirm the roster once to fix it.">⚠ Confirm locations</a>`) : '';
     const sub = [`${e.city}, ${e.state}`, e.specialty || '', typeLbl, rosterLbl].filter(Boolean).join(' · ');
     const attn = _trackAttentionReasons(e);
-    const attnBadge = attn.length ? ` <span class="badge" style="background:#fff3cd;color:#856404;font-size:10px" title="${_learnEsc(attn.join(', '))}">Needs attention</span>` : '';
+    const attnBadge = attn.length ? ` <a href="#" onclick="openTrackAttention('${e.id}');return false" class="badge" style="background:#fff3cd;color:#856404;font-size:10px;text-decoration:none;cursor:pointer" title="${_learnEsc(attn.join(', '))} — click for what to do">Needs attention</a>` : '';
     const nextRel = (e.schedule !== 'manual' && e.next_run_at) ? _relDays(e.next_run_at) : '';
     return `<tr style="${e.active ? '' : 'opacity:.7'}">
       <td style="max-width:320px">
