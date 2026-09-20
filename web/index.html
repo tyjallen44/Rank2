@@ -2619,9 +2619,19 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
       <!-- Entity list view -->
       <div id="track-list-view" style="max-width:1180px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div id="track-entity-count" style="font-size:13px;color:var(--muted)"></div>
           <button class="btn btn-primary btn-sm" onclick="showAddEntityFlow()">+ Track New Entity</button>
+        </div>
+        <!-- How entries get here: from a finished report or from Track New Entity -->
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px 16px;margin-bottom:18px;background:#EEF7F1;border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.5;color:var(--text)">
+          <span style="font-size:18px;line-height:1;color:var(--teal)">📈</span>
+          <div>
+            <strong>Two ways to start tracking.</strong>
+            When a <strong>Deep Diagnostic</strong> finishes, click <strong>Track in Trends</strong> on its completion screen (also in any History row's Downloads menu) — the organization, market and type carry over and you only confirm the listing and schedule.
+            Or use <strong>+ Track New Entity</strong> above to set one up from scratch. Every entry here re-runs on its schedule and charts the score over time.
+            <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a>
+          </div>
         </div>
         <div id="track-entities-body">
           <div class="empty"><div class="ei"><svg width="34" height="26" viewBox="0 0 18 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,11 5,6 8,9 12,3 15,6"/><polyline points="12,3 15.5,2.5 15,6"/></svg></div><div>Loading…</div></div>

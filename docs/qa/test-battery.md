@@ -2702,3 +2702,9 @@ Commit: after Save in a Trends Details panel the status reads "Saved — shown a
 
 **T1.** Change the display name to "USA Health University Hospital" (capital USA) and Save → status shows exactly that string; list row and detail header show it; the Trend Report title matches after download.
 **T2.** Clear the field and Save → status says the tracked name is shown and the display name is blank.
+
+## TRENDS-INTRO-NOTE — how entries get into Trends
+
+Commit: a pale note under the Trends list header explains the two ways to start tracking — "Track in Trends" on a Deep Diagnostic completion screen or in a History row's Downloads menu (fields carry over), or "+ Track New Entity" — and links the schedule help topic. NEEDS BROWSER TESTING.
+
+**T1.** Open Trends: the note sits between the count / Track New Entity row and the filter bar; the ⓘ link opens "Tracking schedule and scope". The note is not shown inside the Track New Entity flow or the entity detail view.
