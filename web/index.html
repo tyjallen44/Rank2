@@ -2873,6 +2873,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       .dup-notice{margin:12px 0;padding:12px 14px;border:1px solid #f0d9a8;background:#fff8e6;border-radius:8px;font-size:13px;color:#5a4a1a;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
       .dup-notice .d{flex:1;min-width:220px}
       .conf-chip{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap}
+      @keyframes rowflash{0%{background:#dff3e6}70%{background:#dff3e6}100%{background:transparent}}
+      tr.row-flash>td{animation:rowflash 2.4s ease-out}
       .conf-high{background:#e3f4ea;color:#1a7a4a}.conf-medium{background:#fff3d6;color:#8a6508}.conf-low{background:#fde8e6;color:#b42318}
       #ir-loc-mode-toggle,#pp-loc-mode-toggle{display:none !important}
       .title-display{font-size:15px;font-weight:700;color:var(--teal);padding:2px 0}
@@ -9995,8 +9997,7 @@ async function saveTrackCfg(id) {
       _trackCurrentEntity.display_name = saved.display_name;
       const h = document.getElementById('trend-entity-name'); if (h) h.textContent = shown;
     }
-    await refreshTrackEntities();
-    const m2 = document.getElementById(`tc-msg-${id}`); if (m2) m2.textContent = `Saved — shown as “${shown}”.`;
+    await _trackTaskDone(id, `Saved — shown as “${shown}”.`);
   } catch (e) { if (msg) msg.textContent = e.message; }
 }
 // ── Roster fix for entities tracked before fixed rosters existed ─────────────
@@ -10046,10 +10047,21 @@ async function tcSaveRoster(id, btn) {
   try {
     const r = await api(`/api/track/entities/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!r.ok) throw new Error(await errDetail(r, 'Save failed'));
-    _flash(`Roster saved — ${1 + roster.length} locations will be measured on every snapshot from now on.`);
     delete _tcRosterDraft[id];
-    await refreshTrackEntities();
+    await _trackTaskDone(id, `Roster confirmed — ${1 + roster.length} location${roster.length ? 's' : ''} will be measured on every snapshot from now on. The "Confirm locations" flag is cleared.`);
   } catch (err) { if (msg) msg.textContent = err.message; btn.disabled = false; }
+}
+
+// After a task in a Details panel completes: reload the list, keep the panel open, scroll the
+// row into view, flash it green, and say in the panel what changed (so a cleared badge is
+// visibly the result of what the user just did).
+async function _trackTaskDone(id, message) {
+  _trackCfgOpen.add(id);
+  await refreshTrackEntities();
+  const row = document.getElementById(`track-row-${id}`);
+  if (row) { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); row.classList.add('row-flash'); setTimeout(() => row.classList.remove('row-flash'), 2600); }
+  const msg = document.getElementById(`tc-msg-${id}`); if (msg) { msg.textContent = message; msg.style.color = '#1a7a4a'; msg.style.fontWeight = '600'; }
+  _flash(message);
 }
 
 // ── Admin: run every due entity now ──────────────────────────────────────────
@@ -10364,7 +10376,7 @@ function renderTrackEntityList() {
     const attn = _trackAttentionReasons(e);
     const attnBadge = attn.length ? ` <a href="#" onclick="openTrackAttention('${e.id}');return false" class="badge" style="background:#fff3cd;color:#856404;font-size:10px;text-decoration:none;cursor:pointer" title="${_learnEsc(attn.join(', '))} — click for what to do">Needs attention</a>` : '';
     const nextRel = (e.schedule !== 'manual' && e.next_run_at) ? _relDays(e.next_run_at) : '';
-    return `<tr style="${e.active ? '' : 'opacity:.7'}">
+    return `<tr id="track-row-${e.id}" style="${e.active ? '' : 'opacity:.7'}">
       <td style="max-width:320px">
         <label style="float:left;margin:3px 8px 0 0" title="Select to compare on one chart"><input type="checkbox" class="track-cmp-cb" ${_trackCmpSel.has(e.id) ? 'checked' : ''} onchange="trackCmpToggle('${e.id}', this.checked)"></label>
         <a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal);text-decoration:none" title="${_learnEsc(e.entity_name)}">${_learnEsc(e.display_name || e.entity_name)}</a>

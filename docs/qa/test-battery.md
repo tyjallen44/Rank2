@@ -2728,3 +2728,10 @@ Commit: "Needs attention" and "mixed" badges are clickable and open the Details 
 **T1.** Campbell Clinic (score ▼5 + mixed): click "Needs attention" → Details opens scrolled to the box with two items: the fall (with the two scores and date, View trend + report buttons) and Mixed rubric history (listing the hospital-rubric snapshot dates, Open in History + Track as new entity).
 **T2.** An entity with no flags shows no box. The badge hover text still lists the reasons.
 **T3.** Each button does what it says: View trend opens the entity; Open in History lands on History filtered to the name; Run now starts a run and reports in the status line; Find locations scrolls to the roster box.
+
+## TRENDS-TASK-FEEDBACK — visible refresh after a Details task
+
+Commit: after Save roster or Save in a Trends Details panel, the list re-fetches, the panel stays open, the row scrolls into view and flashes green for ~2.5 s, and the panel status line reads (in green) what changed — e.g. "Roster confirmed — 11 locations will be measured on every snapshot from now on. The "Confirm locations" flag is cleared." NEEDS BROWSER TESTING.
+
+**T1.** Confirm a roster on an unconfirmed practice → the row flashes green, its "⚠ Confirm locations" badge and the "locations not confirmed" attention reason are gone, Locations reads "N fixed locations", the panel shows the green confirmation, and a flash appears at the bottom.
+**T2.** Save a display name / cadence change → same behaviour with "Saved — shown as “…”".
