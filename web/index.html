@@ -2621,7 +2621,16 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <div id="track-list-view" style="max-width:1180px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div id="track-entity-count" style="font-size:13px;color:var(--muted)"></div>
-          <button class="btn btn-primary btn-sm" onclick="showAddEntityFlow()">+ Track New Entity</button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-ghost btn-sm" id="track-run-due-btn" onclick="runAllDueTracked(this)" style="display:none" title="Admin: start a snapshot now for every active entity whose next run is due or overdue">▶ Run all due</button>
+            <button class="btn btn-primary btn-sm" onclick="showAddEntityFlow()">+ Track New Entity</button>
+          </div>
+        </div>
+        <div id="track-cmp-bar" class="hidden" style="display:flex;gap:12px;align-items:center;padding:10px 14px;margin-bottom:12px;background:#fff;border:1.5px solid var(--teal);border-radius:10px;font-size:13px">
+          <span id="track-cmp-count" style="font-weight:600"></span>
+          <span style="color:var(--muted)">Tick up to 4 entities to see their scores on one chart.</span>
+          <button class="btn btn-primary btn-sm" id="track-cmp-go" onclick="showTrackCompare()" style="margin-left:auto">Compare on one chart →</button>
+          <button class="btn btn-ghost btn-sm" onclick="trackCmpClear()">Clear</button>
         </div>
         <!-- How entries get here: from a finished report or from Track New Entity -->
         <div style="display:flex;gap:12px;align-items:flex-start;padding:12px 16px;margin-bottom:18px;background:#EEF7F1;border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.5;color:var(--text)">
@@ -2747,6 +2756,20 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         </div>
       </div>
 
+      <!-- Compare tracked entities on one chart -->
+      <div id="track-compare-view" style="display:none;max-width:960px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="showTrackList()">← All Entities</button>
+          <div><div style="font-size:20px;font-weight:700">Compare tracked entities</div><div id="track-compare-meta" style="font-size:13px;color:var(--muted);margin-top:2px"></div></div>
+        </div>
+        <div class="card" style="padding:20px 24px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Pulse Score (AI Reputation) — all selected</div>
+          <div style="position:relative;height:320px"><canvas id="chart-compare"></canvas></div>
+          <div id="track-compare-legend" style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:12.5px"></div>
+        </div>
+        <div class="card" style="padding:16px 24px"><div id="track-compare-table" style="overflow-x:auto"></div></div>
+      </div>
+
       <!-- Trend view (shown when an entity row is clicked) -->
       <div id="track-trend-view" style="display:none;max-width:860px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
@@ -2757,6 +2780,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           </div>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
             <span id="trend-run-status" style="font-size:12px;color:var(--muted)"></span>
+            <button class="btn btn-ghost btn-sm" id="trend-latest-btn" onclick="openLatestTrendRun()" style="display:none" title="Download the Deep Diagnostic PDF behind the newest snapshot">⬇ Latest Deep Diagnostic</button>
+            <button class="btn btn-ghost btn-sm" id="trend-compare-btn" onclick="trendCompareAgainst()" title="Put this organization on side A of a Compare Two report">⇄ Compare against…</button>
             <button class="btn btn-secondary btn-sm" id="trend-pdf-btn" onclick="downloadTrendReport()" title="Customer-ready PDF: summary, score and pillar trends, Google reputation, snapshots">⬇ Trend Report (PDF)</button>
             <button class="btn btn-secondary btn-sm" id="trend-send-btn" onclick="sendTrendReportNow()" title="Email the current Trend Report PDF to one or more addresses">✉ Send report…</button>
             <button class="btn btn-primary btn-sm" id="trend-run-btn" onclick="triggerTrackRun()">Run Now</button>
@@ -9868,6 +9893,7 @@ function _trackNeedsAttention(e) {
 }
 function _trackAttentionReasons(e) {
   const r = [];
+  if ((e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null) r.push('locations not confirmed');
   if (e.score_delta != null && e.score_delta < 0) r.push(`score fell ${Math.abs(e.score_delta)}`);
   if (!!e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) < new Date(Date.now() - 24 * 3600 * 1000)) r.push('run overdue');
   if (!!e.latest_rubric && e.latest_rubric !== _trackExpectedRubric(e)) r.push('rubric mismatch');
@@ -9948,6 +9974,7 @@ async function saveTrackCfg(id) {
     schedule: document.getElementById(`tc-sched-${id}`)?.value,
     notes:    (document.getElementById(`tc-notes-${id}`)?.value || '').trim(),
     display_name: (document.getElementById(`tc-title-${id}`)?.value || '').trim(),
+    alert_on_change: !!document.getElementById(`tc-alert-${id}`)?.checked,
   };
   const nr = (document.getElementById(`tc-next-${id}`)?.value || '').trim();
   if (nr) body.next_run_at = nr;
@@ -9972,6 +9999,134 @@ async function saveTrackCfg(id) {
     const m2 = document.getElementById(`tc-msg-${id}`); if (m2) m2.textContent = `Saved — shown as “${shown}”.`;
   } catch (e) { if (msg) msg.textContent = e.message; }
 }
+// ── Roster fix for entities tracked before fixed rosters existed ─────────────
+const _tcRosterDraft = {};
+function openRosterFix(id) {
+  _trackCfgOpen.add(id); renderTrackEntityList();
+  setTimeout(() => document.getElementById(`tc-roster-fix-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+}
+async function tcFindRoster(id, btn) {
+  const e = _trackEntities.find(x => x.id === id); if (!e) return;
+  const msg = document.getElementById(`tc-roster-fix-msg-${id}`); const list = document.getElementById(`tc-roster-fix-list-${id}`);
+  btn.disabled = true; const orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> Finding…';
+  if (msg) msg.textContent = 'Matching the Google listing, then discovering locations (10–20 s)…';
+  try {
+    const sysName = e.entity_type === 'service_line' ? (e.parent_system || e.entity_name) : e.entity_name;
+    const searchName = e.entity_type === 'service_line' && e.service_line ? `${sysName} ${e.service_line}` : e.entity_name;
+    const sr = await api('/api/search/entity', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: searchName, city: e.city, state: e.state, specialty: e.specialty || null }) });
+    if (!sr.ok) throw new Error(await errDetail(sr, 'Listing search failed'));
+    const sd = await sr.json(); const cands = sd.candidates || sd.results || [];
+    if (!cands.length) throw new Error('No Google listing found for this organization.');
+    const anchor = cands.find(c => String(c.name || '').toLowerCase() === String(e.entity_name).toLowerCase()) || cands[0];
+    const dr = await api('/api/practice/siblings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_name: anchor.name, city: e.city, state: e.state,
+        service_line: e.entity_type === 'service_line' ? e.service_line : undefined,
+        parent_system: e.entity_type === 'service_line' ? sysName : undefined }) });
+    if (!dr.ok) throw new Error(await errDetail(dr, 'Location discovery failed'));
+    const dd = await dr.json();
+    const discovered = _seedFromCandidates(anchor, cands, e.city, e.state, dd.siblings || []);
+    _tcRosterDraft[id] = { anchor, discovered };
+    list.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border:1.5px solid var(--teal);border-radius:6px;margin-bottom:6px">
+        <input type="checkbox" checked disabled style="accent-color:var(--teal);width:15px;height:15px"><div><span style="font-size:13px;font-weight:700;color:var(--teal)">${_learnEsc(anchor.name)}</span> <span style="font-size:11px;color:var(--muted)">${_learnEsc(anchor.address || '')}</span> ${anchor.rating != null ? `<span style="font-size:12px;font-weight:700;margin-left:6px">${anchor.rating}★ (${(anchor.review_count || 0).toLocaleString()})</span>` : ''} <span style="font-size:11px;color:var(--muted)">flagship</span></div></div>` +
+      discovered.map((x, i) => `<label style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;cursor:pointer">
+        <input type="checkbox" id="tc-rf-${id}-${i}" checked style="accent-color:var(--teal);width:15px;height:15px"><div><span style="font-size:13px;font-weight:600">${_learnEsc(x.name)}</span> <span style="font-size:11px;color:var(--muted)">${_learnEsc(x.address || [x.city, x.state].filter(Boolean).join(', '))}</span>${x.rating != null ? ` <span style="font-size:12px;font-weight:700;margin-left:6px">${x.rating}★ (${(x.review_count || 0).toLocaleString()})</span>` : ''}</div></label>`).join('') +
+      `<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="tcSaveRoster('${id}', this)">Save roster (${1 + discovered.length})</button><span style="font-size:11.5px;color:var(--muted)">Uncheck anything that isn't part of this organization. The flagship is always included.</span></div>`;
+    if (msg) msg.textContent = `${1 + discovered.length} location${discovered.length ? 's' : ''} found.`;
+  } catch (err) { if (msg) msg.textContent = err.message || 'Failed'; }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
+}
+async function tcSaveRoster(id, btn) {
+  const d = _tcRosterDraft[id]; if (!d) return;
+  const msg = document.getElementById(`tc-roster-fix-msg-${id}`);
+  const roster = d.discovered.filter((_, i) => document.getElementById(`tc-rf-${id}-${i}`)?.checked);
+  const a = d.anchor;
+  const body = { confirmed_roster: roster, anchor_listing: { place_id: a.place_id || null, address: a.address || '', rating: a.rating ?? null, review_count: a.review_count ?? null, maps_url: a.maps_url || null, name: a.name, original_name: a.name } };
+  btn.disabled = true;
+  try {
+    const r = await api(`/api/track/entities/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Save failed'));
+    _flash(`Roster saved — ${1 + roster.length} locations will be measured on every snapshot from now on.`);
+    delete _tcRosterDraft[id];
+    await refreshTrackEntities();
+  } catch (err) { if (msg) msg.textContent = err.message; btn.disabled = false; }
+}
+
+// ── Admin: run every due entity now ──────────────────────────────────────────
+async function runAllDueTracked(btn) {
+  const due = _trackEntities.filter(e => e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) <= new Date());
+  if (!due.length) { _flash('No tracked entities are due right now.'); return; }
+  if (!confirm(`Start a snapshot now for ${due.length} due entit${due.length === 1 ? 'y' : 'ies'}?\n\n${due.slice(0, 8).map(e => '• ' + (e.display_name || e.entity_name)).join('\n')}${due.length > 8 ? '\n…' : ''}`)) return;
+  btn.disabled = true;
+  try {
+    const r = await api('/api/track/run-due', { method: 'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not start the runs'));
+    const d = await r.json();
+    _flash(`${(d.launched || []).length} run${(d.launched || []).length === 1 ? '' : 's'} started — snapshots appear as they finish.`);
+    await refreshTrackEntities();
+  } catch (e) { alert(e.message || e); } finally { btn.disabled = false; }
+}
+
+// ── Compare tracked entities on one chart ────────────────────────────────────
+const _trackCmpSel = new Set();
+const _CMP_COLORS = ['#0F4146', '#2E9BB3', '#3CB37A', '#B08D57'];
+function trackCmpToggle(id, on) {
+  if (on) { if (_trackCmpSel.size >= 4) { _flash('Up to 4 entities at a time.'); const cb = event && event.target; if (cb) cb.checked = false; return; } _trackCmpSel.add(id); } else _trackCmpSel.delete(id);
+  _trackCmpBar();
+}
+function trackCmpClear() { _trackCmpSel.clear(); renderTrackEntityList(); _trackCmpBar(); }
+function _trackCmpBar() {
+  const bar = document.getElementById('track-cmp-bar'); if (!bar) return;
+  const n = _trackCmpSel.size;
+  bar.classList.toggle('hidden', n === 0);
+  const c = document.getElementById('track-cmp-count'); if (c) c.textContent = `${n} selected`;
+  const go = document.getElementById('track-cmp-go'); if (go) go.disabled = n < 2;
+}
+let _trackCmpChart = null;
+async function showTrackCompare() {
+  const ids = [..._trackCmpSel].slice(0, 4); if (ids.length < 2) return;
+  document.getElementById('track-list-view').style.display = 'none';
+  document.getElementById('track-add-flow').style.display = 'none';
+  document.getElementById('track-trend-view').style.display = 'none';
+  document.getElementById('track-compare-view').style.display = '';
+  const meta = document.getElementById('track-compare-meta'); if (meta) meta.textContent = 'Loading…';
+  const series = [];
+  for (const id of ids) {
+    const e = _trackEntities.find(x => x.id === id); if (!e) continue;
+    try { const r = await api(`/api/track/entities/${id}/trend`); const d = await r.json(); series.push({ e, pts: (d.data_points || []).filter(p => p.ai_visibility_score != null) }); }
+    catch (_) { series.push({ e, pts: [] }); }
+  }
+  // One point per day per entity (last run of the day), union of dates as the x axis.
+  series.forEach(s => { const m = {}; s.pts.forEach(p => { m[String(p.generated_at).slice(0, 10)] = p.ai_visibility_score; }); s.byDay = m; });
+  const labels = [...new Set(series.flatMap(s => Object.keys(s.byDay)))].sort();
+  if (_trackCmpChart) { _trackCmpChart.destroy(); _trackCmpChart = null; }
+  _trackCmpChart = new Chart(document.getElementById('chart-compare'), {
+    type: 'line',
+    data: { labels, datasets: series.map((s, i) => ({ label: s.e.display_name || s.e.entity_name, data: labels.map(l => s.byDay[l] ?? null), borderColor: _CMP_COLORS[i], backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 3.5, pointBackgroundColor: _CMP_COLORS[i], spanGaps: true, tension: 0.25 })) },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      scales: { x: { ticks: { font: { size: 11 } }, grid: { color: '#f0f0f0' } }, y: { min: 0, max: 100, ticks: { font: { size: 11 } }, grid: { color: '#f0f0f0' } } } },
+  });
+  document.getElementById('track-compare-legend').innerHTML = series.map((s, i) => `<span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:4px;background:${_CMP_COLORS[i]};display:inline-block;border-radius:2px"></span>${_learnEsc(s.e.display_name || s.e.entity_name)}</span>`).join('');
+  const rows = series.map((s, i) => { const v = Object.keys(s.byDay).sort().map(k => s.byDay[k]); const first = v[0], last = v[v.length - 1]; const d = (first != null && last != null) ? last - first : null;
+    return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${_CMP_COLORS[i]};margin-right:8px"></span><a href="#" onclick="loadEntityTrend('${s.e.id}');return false" style="color:var(--teal);font-weight:600;text-decoration:none">${_learnEsc(s.e.display_name || s.e.entity_name)}</a><div style="font-size:11.5px;color:var(--muted)">${_learnEsc([s.e.city + ', ' + s.e.state, s.e.specialty || '', _trackTypeLabel(s.e.entity_type)].filter(Boolean).join(' · '))}</div></td>
+      <td style="text-align:center">${v.length}</td><td style="text-align:center">${first ?? '—'}</td><td style="text-align:center;font-weight:700">${last ?? '—'}</td><td style="text-align:center">${d == null ? '—' : _deltaChip(d)}</td><td style="text-align:center">${last != null ? _scoreLabel(last) : '—'}</td><td>${_confChip(s.e.latest_confidence) || ''}</td></tr>`; }).join('');
+  document.getElementById('track-compare-table').innerHTML = `<table class="tbl" style="font-size:13px"><thead><tr><th>Entity</th><th style="text-align:center">Snapshots</th><th style="text-align:center">First</th><th style="text-align:center">Latest</th><th style="text-align:center">Change</th><th style="text-align:center">Quartile</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table>`;
+  if (meta) meta.textContent = `${series.length} entities · one point per day per entity · 0–100 scale`;
+}
+
+// ── Detail-view handoffs ──────────────────────────────────────────────────────
+let _trendLatestRun = null;
+function openLatestTrendRun() {
+  if (!_trendLatestRun || !_trendLatestRun.run_id) return;
+  window.location.href = `/api/reports/${encodeURIComponent(_trendLatestRun.run_id)}/pdf?token=${encodeURIComponent(_token)}`;
+}
+function trendCompareAgainst() {
+  const e = _trackCurrentEntity; if (!e) return;
+  const type = e.entity_type === 'practice' ? 'specialty' : e.entity_type === 'service_line' ? 'service_line' : 'hospital';
+  handoffCompare({ name: type === 'service_line' ? (e.parent_system || e.entity_name) : e.entity_name, city: e.city, state: e.state, type,
+                   specialty: type === 'service_line' ? (e.service_line || e.specialty || '') : (e.specialty || '') });
+}
+
 async function runTrackNowFromList(id) {
   const msg = document.getElementById(`tc-msg-${id}`);
   if (msg) msg.textContent = 'Starting a run…';
@@ -10028,6 +10183,13 @@ function _trackCfgPanel(e) {
       ${lock('Market', `${e.city}, ${e.state}`)}
       ${lock('Specialty', e.specialty || 'None (hospital rubric)')}
       ${lock('Scope', e.aggregate ? 'All locations rolled up' : 'Single location')}
+      ${(e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null ? `<div id="tc-roster-fix-${e.id}" style="grid-column:1 / -1;padding:12px 14px;background:#fff8e6;border:1px solid #f0d9a8;border-radius:8px">
+        <div style="font-size:13px;font-weight:700;color:#5a4a1a">⚠ Locations not confirmed</div>
+        <div style="font-size:12px;color:#5a4a1a;margin:4px 0 8px">This entity was tracked before fixed rosters existed, so each run rediscovers its locations and snapshots may not measure the same set. Confirm the roster once; future snapshots use exactly these locations.</div>
+        <button class="btn btn-primary btn-sm" onclick="tcFindRoster('${e.id}', this)">Find locations</button>
+        <span id="tc-roster-fix-msg-${e.id}" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+        <div id="tc-roster-fix-list-${e.id}" style="margin-top:10px"></div>
+      </div>` : ''}
       ${(e.entity_type === 'practice' || e.entity_type === 'service_line') ? lock('Locations', e.roster_count != null
           ? `${e.roster_count} fixed location${e.roster_count === 1 ? '' : 's'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`
           : 'Discovered each run (older entity) — track as a new entity to fix the roster') : ''}
@@ -10052,6 +10214,10 @@ function _trackCfgPanel(e) {
       <span id="tc-msg-${e.id}" style="font-size:12px;color:var(--muted)"></span>
     </div>
     <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">
+      <label class="aggregate-toggle" style="margin:0 0 6px" title="Same-day email when a snapshot moves 5 or more points or changes quartile (to the recipients below, or to whoever set up tracking).">
+        <input type="checkbox" id="tc-alert-${e.id}" ${e.alert_on_change ? 'checked' : ''}>
+        <span class="agg-label">Email when the score moves 5+ points or changes quartile</span>
+      </label>
       <label class="aggregate-toggle" style="margin:0 0 6px" title="After every run (scheduled or Run now) the refreshed Trend Report PDF is emailed to the recipients.">
         <input type="checkbox" id="tc-email-${e.id}" ${e.email_report ? 'checked' : ''} onchange="if(this.checked){const r=document.getElementById('tc-rcpts-${e.id}'); if(r&&!r.value.trim()&&'${(e.created_by || '').includes('@') ? _learnEsc(e.created_by) : ''}') r.value='${(e.created_by || '').includes('@') ? _learnEsc(e.created_by) : ''}';}">
         <span class="agg-label">Email the Trend Report after each run</span>
@@ -10080,6 +10246,14 @@ function _sparkSvg(scores) {
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-label="score trend" style="display:block">
     <polyline points="${d}" fill="none" stroke="var(--teal)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
     <circle cx="${lx}" cy="${ly}" r="2.4" fill="var(--teal)"/></svg>`;
+}
+function _relDays(v) {
+  const d = new Date(String(v).length <= 10 ? v + 'T00:00:00' : v);
+  if (isNaN(d)) return null;
+  const days = Math.round((d - new Date()) / 86400000);
+  if (days === 0) return { text: 'today', overdue: false };
+  if (days > 0) return { text: `in ${days} day${days === 1 ? '' : 's'}`, overdue: false };
+  return { text: `${-days} day${days === -1 ? '' : 's'} overdue`, overdue: true };
 }
 function _shortDate(v) {
   if (!v) return { text: '—', title: '' };
@@ -10128,13 +10302,17 @@ function renderTrackEntityList() {
         + (e.latest_rubric !== expected ? ` <span title="Snapshots were scored on a different rubric than this entity's type — track a new entity to start a correctly scored series" style="color:#b45309;font-weight:700;cursor:help">⚠</span>` : '')
         + ((e.rubrics || []).length > 1 ? ` <span title="This entity's history mixes both rubrics; compare only within a rubric" style="color:#b45309;cursor:help">mixed</span>` : '')
       : '';
+    const needsRoster = (e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null;
     const rosterLbl = (e.entity_type === 'practice' || e.entity_type === 'service_line')
-      ? (e.roster_count != null ? `${e.roster_count} location${e.roster_count === 1 ? '' : 's'}` : 'locations discovered each run') : '';
+      ? (e.roster_count != null ? `${e.roster_count} location${e.roster_count === 1 ? '' : 's'}`
+         : `<a href="#" onclick="openRosterFix('${e.id}');return false" class="badge" style="background:#fff3cd;color:#856404;font-size:10px;text-decoration:none;cursor:pointer" title="Locations are rediscovered on every run, so snapshots may not measure the same set. Confirm the roster once to fix it.">⚠ Confirm locations</a>`) : '';
     const sub = [`${e.city}, ${e.state}`, e.specialty || '', typeLbl, rosterLbl].filter(Boolean).join(' · ');
     const attn = _trackAttentionReasons(e);
     const attnBadge = attn.length ? ` <span class="badge" style="background:#fff3cd;color:#856404;font-size:10px" title="${_learnEsc(attn.join(', '))}">Needs attention</span>` : '';
+    const nextRel = (e.schedule !== 'manual' && e.next_run_at) ? _relDays(e.next_run_at) : '';
     return `<tr style="${e.active ? '' : 'opacity:.7'}">
       <td style="max-width:320px">
+        <label style="float:left;margin:3px 8px 0 0" title="Select to compare on one chart"><input type="checkbox" class="track-cmp-cb" ${_trackCmpSel.has(e.id) ? 'checked' : ''} onchange="trackCmpToggle('${e.id}', this.checked)"></label>
         <a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal);text-decoration:none" title="${_learnEsc(e.entity_name)}">${_learnEsc(e.display_name || e.entity_name)}</a>
         <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${sub}${e.notes ? ` · ${e.notes}` : ''} ${rubricBadge}${attnBadge}</div>
       </td>
@@ -10142,7 +10320,7 @@ function renderTrackEntityList() {
       <td title="${(e.recent_scores || []).map(s => `${s.date.slice(0, 10)}: ${s.score}`).join('\n')}">${_sparkSvg(e.recent_scores)}</td>
       <td>${sched}</td>
       <td style="white-space:nowrap;color:var(--muted);font-size:13px" title="${last.title}">${last.text}</td>
-      <td style="white-space:nowrap;color:var(--muted);font-size:13px" title="${next.title}">${next.text}</td>
+      <td style="white-space:nowrap;color:var(--muted);font-size:13px" title="${next.title}">${next.text}${nextRel ? `<div style="font-size:11px;color:${nextRel.overdue ? '#b45309' : 'var(--muted)'}">${nextRel.text}</div>` : ''}</td>
       <td style="text-align:right">${runs}</td>
       <td>${status}</td>
       <td style="white-space:nowrap;text-align:right">
@@ -10175,6 +10353,7 @@ function renderTrackEntityList() {
 function showAddEntityFlow() {
   document.getElementById('track-list-view').style.display   = 'none';
   document.getElementById('track-trend-view').style.display  = 'none';
+  document.getElementById('track-compare-view').style.display = 'none';
   document.getElementById('track-add-flow').style.display    = '';
   // Reset to step 1
   ['te-name','te-city','te-state','te-specialty','te-notes'].forEach(id => {
@@ -10372,7 +10551,9 @@ async function loadEntityTrend(entityId) {
 
   document.getElementById('track-list-view').style.display  = 'none';
   document.getElementById('track-add-flow').style.display   = 'none';
+  document.getElementById('track-compare-view').style.display = 'none';
   document.getElementById('track-trend-view').style.display = '';
+  _trendLatestRun = null; const _lb = document.getElementById('trend-latest-btn'); if (_lb) _lb.style.display = 'none';
   document.getElementById('trend-entity-name').textContent  = _trackCurrentEntity.display_name || _trackCurrentEntity.entity_name;
   document.getElementById('trend-entity-meta').textContent  =
     `${_trackCurrentEntity.city}, ${_trackCurrentEntity.state}` +
@@ -10389,6 +10570,9 @@ async function loadEntityTrend(entityId) {
     const res = await api(`/api/track/entities/${entityId}/trend`);
     const { data_points, annotations } = await res.json();
     _trendAnnotations = annotations || [];
+    const scoredPts = (data_points || []).filter(p => p.ai_visibility_score != null);
+    _trendLatestRun = scoredPts.length ? scoredPts[scoredPts.length - 1] : null;
+    const lb = document.getElementById('trend-latest-btn'); if (lb) lb.style.display = (_trendLatestRun && _trendLatestRun.pdf_path) ? '' : 'none';
     renderTrendCharts(data_points);
     renderTrendNotes();
   } catch (e) {
@@ -10450,6 +10634,9 @@ function showTrackList() {
   document.getElementById('track-list-view').style.display  = '';
   document.getElementById('track-add-flow').style.display   = 'none';
   document.getElementById('track-trend-view').style.display = 'none';
+  document.getElementById('track-compare-view').style.display = 'none';
+  const rd = document.getElementById('track-run-due-btn'); if (rd) rd.style.display = _role === 'admin' ? '' : 'none';
+  _trackCmpBar();
   _trackCurrentEntity = null;
 }
 
@@ -10710,6 +10897,7 @@ function renderTrendCharts(dataPoints) {
       <td>${d.tier_access ?? '—'}</td>
       <td>${d.google_rating != null ? d.google_rating + '★' : '—'}</td>
       <td>${d.google_count ?? '—'}</td>
+      <td>${_confChip(d.confidence) || '<span style="color:var(--muted)">—</span>'}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${_snapshotSettings(d)}</td>
       <td>${d.pdf_path ? `<a href="/api/reports/${encodeURIComponent(d.run_id)}/pdf" target="_blank" style="color:var(--teal)">PDF</a>` : '—'}</td>
       <td><a href="#" onclick="prefillTrendNote('${d.generated_at}');return false" title="Add a note dated to this snapshot" style="color:var(--teal);font-size:11px;white-space:nowrap">+ note</a></td>
@@ -10720,7 +10908,7 @@ function renderTrendCharts(dataPoints) {
       <thead><tr>
         <th>Date</th><th>Score</th><th>Δ</th>
         ${_PL.map(l => `<th title="${l}">${l.split(' & ')[0].split(' ')[0]}</th>`).join('')}
-        <th>Google ★</th><th>Reviews</th><th title="Settings this snapshot was run with">Settings</th><th>Report</th><th></th>
+        <th>Google ★</th><th>Reviews</th><th title="How much public data sat behind this snapshot's score">Evidence</th><th title="Settings this snapshot was run with">Settings</th><th>Report</th><th></th>
       </tr></thead>
       <tbody>${tableRows}</tbody>
     </table>`;

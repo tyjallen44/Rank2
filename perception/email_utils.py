@@ -264,3 +264,27 @@ def send_report_copy(email: str, kind: str, title: str, files: list, sender: str
     <p style="font-size:11px;color:#8a9aaa;margin:0">Sent from Pulse{f" by {who}" if who else ""}.</p>
     """
     _send(email, f"{kind} — {title}", _wrap(body), attachments=atts)
+
+
+def send_trend_alert(email: str, entity_name: str, *, latest: int, previous: int, delta: int,
+                     quartile_prev: str = "", quartile_now: str = "", snapshot_date: str = "",
+                     pdf_path: Optional[str] = None) -> None:
+    """Same-day alert when a tracked entity's score moved 5+ points or changed quartile."""
+    import html as _html
+    ent = _html.escape(entity_name)
+    up = delta > 0
+    col = "#2e9e5b" if up else "#d94f4f"
+    q = ""
+    if quartile_prev and quartile_now and quartile_prev != quartile_now:
+        q = f'<p style="margin:0 0 12px">It {"moved up into" if up else "dropped into"} the <strong>{_html.escape(quartile_now)}</strong> quartile (was {_html.escape(quartile_prev)}).</p>'
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">{ent}: score {"up" if up else "down"} {abs(delta)} points</h2>
+    <p style="margin:0 0 10px;font-size:15px"><strong style="color:{col}">{"▲" if up else "▼"} {abs(delta)}</strong> &nbsp; {previous} → <strong>{latest}</strong>
+      <span style="color:#5A6E72">on {_html.escape(snapshot_date)}</span></p>
+    {q}
+    <p style="margin:0 0 6px">This is the latest AI Reputation snapshot for <strong>{ent}</strong>. {"The Trend Report is attached." if pdf_path else "The Trend Report with the full history is available in Pulse."}</p>
+    <hr style="border:0;border-top:1px solid #d7e7e2;margin:22px 0 12px">
+    <p style="font-size:11px;color:#8a9aaa;margin:0">You receive this because change alerts are on for this entity in Pulse → Trends. Turn them off in the entity's configuration panel.</p>
+    """
+    atts = _attach([pdf_path]) if pdf_path else None
+    _send(email, f"{'▲' if up else '▼'} {abs(delta)} — {entity_name} AI Reputation score now {latest}", _wrap(body), attachments=atts)

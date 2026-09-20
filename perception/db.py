@@ -661,6 +661,9 @@ def _init_db_impl() -> None:
     if "display_name" not in _te_cols:
         # Editable name shown in Trends and used as the Trend Report title; entity_name stays the locked identity.
         con.execute("ALTER TABLE tracked_entities ADD COLUMN display_name VARCHAR")
+    if "alert_on_change" not in _te_cols:
+        # Opt-in: email when a snapshot moves 5+ points or changes quartile
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN alert_on_change BOOLEAN DEFAULT FALSE")
 
     # Compare Two (head-to-head) reports — one row per comparison so History can list
     # and download the combined PDF (previously only the in-memory job knew the path).
@@ -2232,7 +2235,8 @@ def expected_rubric(entity_type) -> str:
 def update_tracked_entity(entity_id: str, **kwargs) -> None:
     allowed = {"entity_name", "city", "state", "specialty", "aggregate",
                "schedule", "active", "notes", "next_run_at",
-               "email_report", "report_emails", "display_name"}
+               "email_report", "report_emails", "display_name", "alert_on_change",
+               "confirmed_roster", "anchor_listing"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -2294,7 +2298,8 @@ def get_entity_trend(entity_name: str) -> list[dict]:
                a.aggregate,
                a.specialty,
                a.location,
-               a.weighting_profile
+               a.weighting_profile,
+               a.confidence
            FROM analysis_runs a
            JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
            WHERE LOWER(a.entity_name) = LOWER(?)
@@ -2305,7 +2310,7 @@ def get_entity_trend(entity_name: str) -> list[dict]:
     cols = ["run_id", "generated_at", "pdf_path", "ai_visibility_score",
             "tier_scores", "google_footprint", "leapfrog_grade",
             "cms_star_rating", "accreditations",
-            "run_aggregate", "run_specialty", "run_location", "run_profile"]
+            "run_aggregate", "run_specialty", "run_location", "run_profile", "confidence"]
     con.close()
 
     results = []

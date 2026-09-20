@@ -4158,6 +4158,9 @@ class TrackEntityUpdate(BaseModel):
     email_report: Optional[bool] = None    # email the Trend Report after each run
     report_emails: Optional[List[str]] = None
     display_name: Optional[str] = None     # shown in Trends + Trend Report title; identity (entity_name) stays locked
+    alert_on_change: Optional[bool] = None # email when a snapshot moves 5+ points or changes quartile
+    confirmed_roster: Optional[List[dict]] = None   # allowed once, to fix an entity tracked before rosters existed
+    anchor_listing: Optional[dict] = None
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -4259,6 +4262,16 @@ async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends
     if "display_name" in updates:
         dn = " ".join(str(updates["display_name"]).split())[:120]
         updates["display_name"] = dn or None          # blank → fall back to the tracked name
+    if "confirmed_roster" in updates or "anchor_listing" in updates:
+        # A roster fixes WHAT is measured, so it is settable only while the entity has none
+        # (entities tracked before rosters existed). After that it is locked like the identity.
+        cur = get_tracked_entity(entity_id)
+        if _entity_roster(cur)[0] is not None:
+            raise HTTPException(400, "This entity already has a confirmed roster. Track a new entity to change what is measured.")
+        if "confirmed_roster" in updates:
+            updates["confirmed_roster"] = json.dumps(list(updates["confirmed_roster"] or []))
+        if "anchor_listing" in updates:
+            updates["anchor_listing"] = json.dumps(updates["anchor_listing"] or {})
     update_tracked_entity(entity_id, **updates)
     entity = get_tracked_entity(entity_id)
     for k in ("last_run_at", "next_run_at", "created_at"):
@@ -4463,6 +4476,7 @@ def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
     try:
         if _jobs.get(job_id, {}).get("status") != "done":
             return
+        _maybe_send_change_alert(entity)
         if not entity.get("email_report"):
             return
         emails = _entity_report_emails(entity)
@@ -4471,6 +4485,60 @@ def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
             print(f"[trend-email] entity={entity['id']} sent={n}")
     except Exception as exc:
         print(f"[trend-email] hook error entity={entity.get('id')}: {type(exc).__name__}: {exc}")
+
+
+_ALERT_MIN_MOVE = 5
+
+
+def _maybe_send_change_alert(entity: dict) -> int:
+    """After a snapshot: if change alerts are on and the score moved 5+ points or changed
+    quartile versus the previous day's snapshot, email the report recipients (or the person
+    who set up tracking). Returns the number of alerts sent. Fail-soft."""
+    try:
+        from perception.db import get_tracked_entity, get_entity_trend
+        from perception.email_utils import send_trend_alert
+        from perception import scoring
+        ent = get_tracked_entity(entity["id"]) or entity
+        if not ent.get("alert_on_change"):
+            return 0
+        pts = [p for p in get_entity_trend(ent["entity_name"]) if p.get("ai_visibility_score") is not None]
+        # one point per day (last run of the day), so a same-day re-run never triggers an alert
+        by_day = {}
+        for p in pts:
+            by_day[str(p.get("generated_at"))[:10]] = p
+        days = sorted(by_day)
+        if len(days) < 2:
+            return 0
+        latest, prev = by_day[days[-1]], by_day[days[-2]]
+        delta = int(latest["ai_visibility_score"]) - int(prev["ai_visibility_score"])
+        q_prev, l_prev = scoring.grade_from_score(prev["ai_visibility_score"])
+        q_now, l_now = scoring.grade_from_score(latest["ai_visibility_score"])
+        if abs(delta) < _ALERT_MIN_MOVE and q_prev == q_now:
+            return 0
+        emails = _entity_report_emails(ent) or ([ent["created_by"]] if "@" in str(ent.get("created_by") or "") else [])
+        emails = _clean_emails(emails)
+        if not emails:
+            return 0
+        pdf = None
+        try:
+            pdf = str(_trend_report_file(ent, get_entity_trend(ent["entity_name"]), "original"))
+        except Exception:
+            pdf = None
+        name = ent.get("display_name") or ent["entity_name"]
+        sent = 0
+        for addr in emails:
+            try:
+                send_trend_alert(addr, name, latest=int(latest["ai_visibility_score"]), previous=int(prev["ai_visibility_score"]),
+                                 delta=delta, quartile_prev=l_prev, quartile_now=l_now,
+                                 snapshot_date=str(latest.get("generated_at"))[:10], pdf_path=pdf)
+                sent += 1
+            except Exception as exc:
+                print(f"[trend-alert] FAILED to={addr}: {type(exc).__name__}: {exc}")
+        print(f"[trend-alert] entity={ent.get('id')} delta={delta} sent={sent}")
+        return sent
+    except Exception as exc:
+        print(f"[trend-alert] hook error: {type(exc).__name__}: {exc}")
+        return 0
 
 
 class TrendSendRequest(BaseModel):
@@ -4533,6 +4601,20 @@ async def track_run_now(entity_id: str, payload: dict = Depends(get_current_user
     job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
     mark_tracked_entity_ran(entity_id, entity.get("schedule", "monthly"))
     return {"job_id": job_id}
+
+
+@app.post("/api/track/run-due")
+async def track_run_due(payload: dict = Depends(require_admin)):
+    """Admin: launch every active entity whose next run is due (same as the scheduler)."""
+    from perception.db import init_db, get_due_tracked_entities, mark_tracked_entity_ran
+    init_db()
+    due = get_due_tracked_entities()
+    launched = []
+    for entity in due:
+        job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
+        mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
+        launched.append({"entity_id": entity["id"], "entity_name": entity["entity_name"], "job_id": job_id})
+    return {"launched": launched}
 
 
 @app.post("/api/track/scheduled")
