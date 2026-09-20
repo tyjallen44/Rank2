@@ -2695,3 +2695,10 @@ Commit: tracked_entities.display_name (new column). Trends → row → Details: 
 **T3.** Clear the field and Save → list, header and PDF revert to the tracked name; no "tracked as" note.
 **T4.** Search in the Trends filter bar matches the display name and the tracked name.
 **R1.** Notes, schedule, email settings save as before; the "Tracked as" value is read-only.
+
+## TRENDS-DISPLAY-NAME-ECHO — Save echoes the stored display name
+
+Commit: after Save in a Trends Details panel the status reads "Saved — shown as “<exact stored value>”", the detail header updates immediately, and the Display name field has autocapitalize/autocorrect off. NEEDS BROWSER TESTING.
+
+**T1.** Change the display name to "USA Health University Hospital" (capital USA) and Save → status shows exactly that string; list row and detail header show it; the Trend Report title matches after download.
+**T2.** Clear the field and Save → status says the tracked name is shown and the display name is blank.

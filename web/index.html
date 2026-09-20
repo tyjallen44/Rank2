@@ -9950,8 +9950,16 @@ async function saveTrackCfg(id) {
   try {
     const r = await api(`/api/track/entities/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!r.ok) throw new Error(await errDetail(r, 'Save failed'));
-    if (msg) msg.textContent = 'Saved.';
+    const saved = await r.json();
+    // Echo exactly what the server stored so a case or spelling change is verifiable at a glance.
+    const shown = saved.display_name || saved.entity_name || '';
+    if (msg) msg.textContent = `Saved — shown as “${shown}”${saved.display_name ? '' : ' (tracked name; display name is blank)'}.`;
+    if (_trackCurrentEntity && _trackCurrentEntity.id === id) {
+      _trackCurrentEntity.display_name = saved.display_name;
+      const h = document.getElementById('trend-entity-name'); if (h) h.textContent = shown;
+    }
     await refreshTrackEntities();
+    const m2 = document.getElementById(`tc-msg-${id}`); if (m2) m2.textContent = `Saved — shown as “${shown}”.`;
   } catch (e) { if (msg) msg.textContent = e.message; }
 }
 async function runTrackNowFromList(id) {
@@ -10003,7 +10011,7 @@ function _trackCfgPanel(e) {
   return `<tr id="track-cfg-${e.id}"><td colspan="9" style="background:#f6fafa;padding:16px 20px;border-top:1px solid var(--pale)">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 22px;margin-bottom:14px">
       <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Display name <span style="font-weight:400;text-transform:none;letter-spacing:0">(report title)</span></div>
-        <input id="tc-title-${e.id}" class="fi" value="${_learnEsc(e.display_name || e.entity_name || '')}" placeholder="${_learnEsc(e.entity_name || '')}" style="padding:7px 10px;font-size:13px;margin-top:2px" title="Shown in Trends and printed on the Trend Report. The tracked identity below stays locked.">
+        <input id="tc-title-${e.id}" class="fi" value="${_learnEsc(e.display_name || e.entity_name || '')}" placeholder="${_learnEsc(e.entity_name || '')}" autocapitalize="off" autocorrect="off" spellcheck="false" style="padding:7px 10px;font-size:13px;margin-top:2px" title="Shown exactly as typed (any capitalization) in Trends and on the Trend Report. The tracked identity stays locked.">
       </div>
       ${lock('Tracked as', e.entity_name)}
       ${lock('Type', _trackTypeLabel(e.entity_type) + (e.entity_type === 'service_line' && e.parent_system ? ` — ${e.service_line} of ${e.parent_system}` : ''))}
