@@ -2685,3 +2685,13 @@ Commit: perception/trend_pdf.py rewritten. Header with the organization as the l
 **T6 — Edge cases.** One snapshot: tiles say "First snapshot — no change to report yet", chart shows a single labelled point, pillar chart says not enough snapshots. No Google data: Google section shows the "No Google reputation snapshots yet" line.
 
 **R1 — Emailed and scheduled reports** use the same renderer; Sent reports artifacts are unchanged.
+
+## TRENDS-DISPLAY-NAME — editable entity name in Trends (report title)
+
+Commit: tracked_entities.display_name (new column). Trends → row → Details: "Display name (report title)" field beside the locked "Tracked as" identity; saved with the configuration. Used in the Trends list, the detail header, the Trend Report title (with "tracked as <original>" in the meta line when it differs), the analyst paragraph, the PDF filename and the email subject. Blank → falls back to the tracked name. The identity (entity_name) stays locked; the PDF cache key includes the display name so a rename rebuilds the report. NEEDS BROWSER TESTING.
+
+**T1.** Open Details on an entity, change Display name to "USA Health — University Hospital", Save. The list row and the detail header show the new name (hover shows the tracked name). Download the Trend Report → the header title is the new name and the meta line ends "tracked as Usa Health University Hospital"; the file name uses the new name.
+**T2.** Send report… → subject uses the new name. Run now → the snapshot still attaches to the trend (identity unchanged).
+**T3.** Clear the field and Save → list, header and PDF revert to the tracked name; no "tracked as" note.
+**T4.** Search in the Trends filter bar matches the display name and the tracked name.
+**R1.** Notes, schedule, email settings save as before; the "Tracked as" value is read-only.

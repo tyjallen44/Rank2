@@ -241,7 +241,7 @@ def analyst_paragraph(entity: dict, stats: dict) -> str:
         import anthropic
         client = anthropic.Anthropic()
         facts = {
-            "entity": entity.get("entity_name"), "market": f"{entity.get('city')}, {entity.get('state')}",
+            "entity": entity.get("display_name") or entity.get("entity_name"), "market": f"{entity.get('city')}, {entity.get('state')}",
             "specialty": entity.get("specialty"), "snapshots": stats["n"],
             "period": stats["period"], "latest_score": stats["latest_score"],
             "quartile": stats["quartile_label"], "change_since_previous": stats["delta_prev"],
@@ -606,8 +606,8 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
       <div class="band">
         <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI REPUTATION TREND REPORT<br><span style="letter-spacing:0;color:#CFEAE6">Prepared {_e(today)}{(" for " + _e(prepared_for)) if prepared_for else ""}</span></div></div>
         <div class="kick">{_e(PRODUCT_SUBTITLE)}</div>
-        <h1>{_e(entity.get("entity_name"))}</h1>
-        <div class="sub">{sub}</div>
+        <h1>{_e(entity.get("display_name") or entity.get("entity_name"))}</h1>
+        <div class="sub">{sub}{(" &nbsp;·&nbsp; tracked as " + _e(entity.get("entity_name"))) if entity.get("display_name") and str(entity.get("display_name")).strip().lower() != str(entity.get("entity_name") or "").strip().lower() else ""}</div>
       </div>
 
       <div class="headline">{_e(headline(st))}</div>

@@ -4157,6 +4157,7 @@ class TrackEntityUpdate(BaseModel):
     next_run_at: Optional[str] = None      # ISO date or datetime
     email_report: Optional[bool] = None    # email the Trend Report after each run
     report_emails: Optional[List[str]] = None
+    display_name: Optional[str] = None     # shown in Trends + Trend Report title; identity (entity_name) stays locked
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -4255,6 +4256,9 @@ async def track_update(entity_id: str, req: TrackEntityUpdate, _: dict = Depends
         if updates["report_emails"] and not cleaned:
             raise HTTPException(400, "report_emails must contain valid email addresses")
         updates["report_emails"] = json.dumps(cleaned)
+    if "display_name" in updates:
+        dn = " ".join(str(updates["display_name"]).split())[:120]
+        updates["display_name"] = dn or None          # blank → fall back to the tracked name
     update_tracked_entity(entity_id, **updates)
     entity = get_tracked_entity(entity_id)
     for k in ("last_run_at", "next_run_at", "created_at"):
@@ -4360,7 +4364,7 @@ async def track_report_pdf(entity_id: str, payload: dict = Depends(get_current_u
         raise HTTPException(404, "No snapshots yet — run the entity at least once first.")
     pdf_path = await asyncio.get_running_loop().run_in_executor(
         None, lambda: _trend_report_file(entity, points, payload.get("brand", "original")))
-    slug = "".join(ch if ch.isalnum() else "-" for ch in str(entity.get("entity_name") or "entity")).strip("-")[:60]
+    slug = "".join(ch if ch.isalnum() else "-" for ch in str(entity.get("display_name") or entity.get("entity_name") or "entity")).strip("-")[:60]
     return FileResponse(str(pdf_path), media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{slug}_AI_Reputation_Trend_Report.pdf"'})
 
@@ -4377,7 +4381,7 @@ def _trend_report_file(entity: dict, points: list, brand: str = "original") -> P
     annotations = list_annotations(str(entity.get("id", "")))
     # Notes are part of the report: fingerprint them into the cache name so an added or
     # removed note rebuilds the PDF.
-    a_fp = hashlib.sha1("|".join(f"{a['note_date']}:{a['note']}" for a in annotations).encode()).hexdigest()[:8] if annotations else "0"
+    a_fp = hashlib.sha1(("|".join(f"{a['note_date']}:{a['note']}" for a in annotations) + "#" + str(entity.get("display_name") or "")).encode()).hexdigest()[:8]
     pdf_path = out_dir / f"trend_{safe_id}_{latest}_v4_{a_fp}.pdf"   # bump suffix when the layout changes
     if not pdf_path.exists():
         ent = dict(entity)
@@ -4427,7 +4431,7 @@ def _email_trend_report(entity_id: str, emails: list, brand: str = "original",
     delivered = []
     for addr in _clean_emails(emails):
         try:
-            send_trend_report(addr, entity["entity_name"], str(pdf_path),
+            send_trend_report(addr, entity.get("display_name") or entity["entity_name"], str(pdf_path),
                               latest_score=latest, delta=delta, snapshots=len(scored),
                               sender=sender, period=period)
             delivered.append(addr)

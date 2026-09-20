@@ -9879,7 +9879,7 @@ function _trackApplyFilters(list) {
     if (f.by === '__mine__' && !_trackIsMine(e)) return false;
     if (f.attention && !_trackNeedsAttention(e)) return false;
     if (!q) return true;
-    const hay = [e.entity_name, e.city, e.state, `${e.city}, ${e.state}`, e.specialty, e.service_line, e.parent_system, e.notes]
+    const hay = [e.display_name, e.entity_name, e.city, e.state, `${e.city}, ${e.state}`, e.specialty, e.service_line, e.parent_system, e.notes]
       .filter(Boolean).join(' · ').toLowerCase();
     return hay.includes(q);
   });
@@ -9937,6 +9937,7 @@ async function saveTrackCfg(id) {
   const body = {
     schedule: document.getElementById(`tc-sched-${id}`)?.value,
     notes:    (document.getElementById(`tc-notes-${id}`)?.value || '').trim(),
+    display_name: (document.getElementById(`tc-title-${id}`)?.value || '').trim(),
   };
   const nr = (document.getElementById(`tc-next-${id}`)?.value || '').trim();
   if (nr) body.next_run_at = nr;
@@ -10001,7 +10002,10 @@ function _trackCfgPanel(e) {
   const lock = (label, value) => `<div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">${label} <span title="Locked — changing this would make earlier scores non-comparable" style="cursor:help">🔒</span></div><div style="font-size:13px;color:var(--text);margin-top:2px">${value || '—'}</div></div>`;
   return `<tr id="track-cfg-${e.id}"><td colspan="9" style="background:#f6fafa;padding:16px 20px;border-top:1px solid var(--pale)">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 22px;margin-bottom:14px">
-      ${lock('Entity', e.entity_name)}
+      <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Display name <span style="font-weight:400;text-transform:none;letter-spacing:0">(report title)</span></div>
+        <input id="tc-title-${e.id}" class="fi" value="${_learnEsc(e.display_name || e.entity_name || '')}" placeholder="${_learnEsc(e.entity_name || '')}" style="padding:7px 10px;font-size:13px;margin-top:2px" title="Shown in Trends and printed on the Trend Report. The tracked identity below stays locked.">
+      </div>
+      ${lock('Tracked as', e.entity_name)}
       ${lock('Type', _trackTypeLabel(e.entity_type) + (e.entity_type === 'service_line' && e.parent_system ? ` — ${e.service_line} of ${e.parent_system}` : ''))}
       ${lock('Market', `${e.city}, ${e.state}`)}
       ${lock('Specialty', e.specialty || 'None (hospital rubric)')}
@@ -10113,7 +10117,7 @@ function renderTrackEntityList() {
     const attnBadge = attn.length ? ` <span class="badge" style="background:#fff3cd;color:#856404;font-size:10px" title="${_learnEsc(attn.join(', '))}">Needs attention</span>` : '';
     return `<tr style="${e.active ? '' : 'opacity:.7'}">
       <td style="max-width:320px">
-        <a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal);text-decoration:none">${e.entity_name}</a>
+        <a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal);text-decoration:none" title="${_learnEsc(e.entity_name)}">${_learnEsc(e.display_name || e.entity_name)}</a>
         <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${sub}${e.notes ? ` · ${e.notes}` : ''} ${rubricBadge}${attnBadge}</div>
       </td>
       <td style="white-space:nowrap">${latest}</td>
@@ -10351,7 +10355,7 @@ async function loadEntityTrend(entityId) {
   document.getElementById('track-list-view').style.display  = 'none';
   document.getElementById('track-add-flow').style.display   = 'none';
   document.getElementById('track-trend-view').style.display = '';
-  document.getElementById('trend-entity-name').textContent  = _trackCurrentEntity.entity_name;
+  document.getElementById('trend-entity-name').textContent  = _trackCurrentEntity.display_name || _trackCurrentEntity.entity_name;
   document.getElementById('trend-entity-meta').textContent  =
     `${_trackCurrentEntity.city}, ${_trackCurrentEntity.state}` +
     (_trackCurrentEntity.specialty ? ` · ${_trackCurrentEntity.specialty}` : '') +

@@ -220,6 +220,7 @@ def _init_db_impl() -> None:
         ("ai_visibility_verdict", "VARCHAR"),
         ("coverage_note", "VARCHAR"),
         ("entity_type", "VARCHAR DEFAULT 'hospital'"),
+        ("display_name", "VARCHAR"),       # editable name shown in Trends and used as the Trend Report title
         ("rubric_version", "VARCHAR"),
         ("practice_profile", "VARCHAR"),
         ("service_line", "VARCHAR"),      # hospital service-line runs (Deep Diagnostic type)
@@ -2229,7 +2230,7 @@ def expected_rubric(entity_type) -> str:
 def update_tracked_entity(entity_id: str, **kwargs) -> None:
     allowed = {"entity_name", "city", "state", "specialty", "aggregate",
                "schedule", "active", "notes", "next_run_at",
-               "email_report", "report_emails"}
+               "email_report", "report_emails", "display_name"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
