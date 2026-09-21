@@ -2829,3 +2829,11 @@ Commit: perception/data/quality.py fetches, for a hospital Deep Diagnostic, the 
 **T2.** A hospital not on Care Compare (e.g. a specialty hospital without an overall rating): the evidence says "no matching record"/"not rated"; the model's pillar value stands; Score Evidence notes "CMS: not rated (verified)" only when the record exists without a rating.
 **T3.** Cost/time: adds ~5–25 s (Leapfrog scrape) and no API cost.
 **R1.** Hospital Network per-facility CMS/Leapfrog unchanged; practice reports show no CMS/Leapfrog lines.
+
+## HISTORY-ADMIN-VISIBLE — every role sees admin-created reports
+
+Commit: History (analysis, network and Compare Two rows), the report download/authorization lookups, the 14-day duplicate check and the organization typeahead now show a non-admin role its own runs AND runs created by admins (`COALESCE(user_role,'admin') IN (role,'admin')`). Other roles' runs stay hidden from each other; admins still see everything. NEEDS BROWSER TESTING.
+
+**T1.** Sign in as a non-admin role (e.g. Sales Team). History lists reports the admin ran (Run by shows the admin) alongside the role's own; Downloads work for them; the "Run by" filter offers the admin's name.
+**T2.** Typeahead on any form suggests admin-run organizations; starting a Deep Diagnostic for one shows the 14-day notice naming the admin's run.
+**T3.** A Partner-role user does not see Sales Team runs (and vice versa); admins see all.

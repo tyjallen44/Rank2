@@ -1791,7 +1791,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 a.cost_usd
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
-            WHERE a.user_role = ? AND NOT (a.comparison_id IS NOT NULL AND a.pdf_path IS NULL)
+            WHERE COALESCE(a.user_role, 'admin') IN (?, 'admin') AND NOT (a.comparison_id IS NOT NULL AND a.pdf_path IS NULL)
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
                      a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at,
@@ -1803,12 +1803,12 @@ def query_history(role: str) -> list[dict[str, Any]]:
                    generated_at, pdf_path, total_hospitals, created_at,
                    teaser_pdf_path, full_detail_pdf_path, ran_by, cost_usd
             FROM network_runs
-            WHERE COALESCE(user_role, 'admin') = ?
+            WHERE COALESCE(user_role, 'admin') IN (?, 'admin')
             ORDER BY generated_at DESC, run_id DESC
         """, [role]).fetchall()
 
     cmp_sql = (f"SELECT {', '.join(_CMP_COLS)} FROM comparison_runs"
-               + ("" if role == "admin" else " WHERE COALESCE(user_role, 'admin') = ?")
+               + ("" if role == "admin" else " WHERE COALESCE(user_role, 'admin') IN (?, 'admin')")
                + " ORDER BY created_at DESC")
     try:
         cmp_rows = con.execute(cmp_sql, [] if role == "admin" else [role]).fetchall()
@@ -2794,7 +2794,7 @@ def recent_runs_matching(kind: str, name: str, name_b: str = "", role: str = Non
     if not name:
         return []
     since = date.today() - timedelta(days=days)
-    role_sql, role_args = ("", []) if role in (None, "", "admin") else (" AND user_role = ?", [role])
+    role_sql, role_args = ("", []) if role in (None, "", "admin") else (" AND COALESCE(user_role, 'admin') IN (?, 'admin')", [role])
     con = get_connection()
     out = []
     if kind == "network":
@@ -2895,7 +2895,7 @@ def _suggest_index(role: str = None) -> list:
     hit = _SUGGEST_CACHE.get(key)
     if hit and _time.time() - hit[0] < _SUGGEST_TTL:
         return hit[1]
-    role_sql, role_args = ("", []) if key == "admin" else (" AND user_role = ?", [role])
+    role_sql, role_args = ("", []) if key == "admin" else (" AND COALESCE(user_role, 'admin') IN (?, 'admin')", [role])
     con = get_connection()
     found: dict = {}
 
