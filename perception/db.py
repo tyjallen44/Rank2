@@ -231,6 +231,7 @@ def _init_db_impl() -> None:
         ("created_at", "TIMESTAMP"),
         ("confidence", "VARCHAR"),       # evidence behind the score: high | medium | low
         ("confidence_note", "VARCHAR"),  # e.g. "312 reviews across 4 locations"
+        ("spotcheck_json", "VARCHAR"),   # observed assistant check panel (JSON)
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -3093,3 +3094,10 @@ def cost_summary(days: int = 30) -> dict:
                     "seconds": r[5], "created_at": str(r[6]), **{k: _d(r[7]).get(k) for k in ("calls", "web_searches", "places_calls", "gemini_calls", "input_tokens", "output_tokens")}}
                    for r in recent],
     }
+
+
+def set_run_spotcheck(run_id: str, sc: dict) -> None:
+    import json as _json
+    con = get_connection()
+    con.execute("UPDATE analysis_runs SET spotcheck_json = ? WHERE run_id = ?", [_json.dumps(sc, default=str), run_id])
+    con.close()

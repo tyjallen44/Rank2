@@ -622,6 +622,60 @@ def _aivs_block(p: RankedProvider, methodology_note: bool = True, confidence: di
     </div>"""
 
 
+_GREEN_OK = "#1a7a4a"
+
+
+_AMBER_WARN = "#b8860b"
+
+
+_RED_BAD = "#b42318"
+
+
+def _spotcheck_section(result: AnalysisResult) -> str:
+    """'What AI assistants actually said' — observed check panel (never affects the score)."""
+    sc = getattr(result, "spotcheck", None)
+    if not sc or not sc.get("asked"):
+        return ""
+    rows = "".join(
+        f'<tr><td style="font-weight:600">{_e(a["assistant"])}</td>'
+        f'<td style="text-align:center">{a["mentioned"]} of {a["asked"]}</td>'
+        f'<td style="text-align:center">{("#" + str(a["avg_rank"])) if a.get("avg_rank") else "—"}</td>'
+        f'<td style="text-align:center">{"yes" if a.get("direct_ok") else "no"}</td></tr>'
+        for a in sc.get("per_assistant") or [])
+    comps = ", ".join(f'{_e(c["name"])} ({c["count"]})' for c in (sc.get("top_competitors") or [])[:5]) or "—"
+    doms = ", ".join((f'<strong>{_e(d["domain"])}</strong>' if d.get("ours") else _e(d["domain"])) + f' ({d["count"]})'
+                     for d in (sc.get("cited_domains") or [])[:8]) or "—"
+    n, m = sc.get("unprompted_asked") or 0, sc.get("unprompted_mentioned") or 0
+    pct = round(100 * m / n) if n else 0
+    col = _GREEN_OK if pct >= 50 else (_AMBER_WARN if pct >= 25 else _RED_BAD)
+    site = ""
+    if sc.get("our_domain"):
+        cited = bool(sc.get("our_domain_cited"))
+        verdict = '<span style="color:%s;font-weight:700">%s</span>' % (_GREEN_OK if cited else _RED_BAD, "cited" if cited else "not cited")
+        site = ('<div style="font-size:8.5pt;margin-top:4px">Your website <strong>%s</strong> was %s by any assistant.</div>'
+                % (_e(sc["our_domain"]), verdict))
+    return f"""
+  <div style="margin-top:22px;padding:14px 18px;border:1px solid #d0e4e8;border-radius:8px;page-break-inside:avoid">
+    <div class="section-title" style="margin-bottom:6px">What AI Assistants Actually Said</div>
+    <div style="font-size:8.5pt;color:#5a7075;margin-bottom:10px">{sc.get("queries")} patient-style questions asked of {_e(", ".join(sc.get("assistants") or []))} on {_e(sc.get("date"))}
+      — an observational check. It does not change the score above.</div>
+    <div style="display:flex;gap:18px;align-items:flex-start">
+      <div style="flex:0 0 auto;text-align:center;padding:10px 16px;background:#f4f9f8;border-radius:8px">
+        <div style="font-size:26pt;font-weight:800;color:{col};line-height:1">{pct}%</div>
+        <div style="font-size:7.5pt;color:#5a7075;margin-top:4px">named in {m} of {n}<br>unprompted questions</div>
+      </div>
+      <div style="flex:1">
+        <table style="width:100%;border-collapse:collapse;font-size:8.5pt">
+          <thead><tr style="background:#0F4146;color:#fff"><th style="text-align:left;padding:4px 6px">Assistant</th><th style="padding:4px 6px">Named</th><th style="padding:4px 6px">Avg position</th><th style="padding:4px 6px">Answered a direct question</th></tr></thead>
+          <tbody>{rows}</tbody></table>
+        <div style="font-size:8.5pt;margin-top:8px"><strong>Named instead:</strong> {comps}</div>
+        <div style="font-size:8.5pt;margin-top:4px"><strong>Pages the assistants cited:</strong> {doms}</div>
+        {site}
+      </div>
+    </div>
+  </div>"""
+
+
 def _confidence_line(conf: dict = None) -> str:
     """'Evidence: High · 312 reviews across 4 locations' under the score — how much
     public data sits behind the number."""
@@ -1263,7 +1317,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
         rankings_html = _individual_teaser_section(all_ranked)
     elif result.individual_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
-        rankings_html = _individual_rankings_section(all_ranked)
+        rankings_html = _individual_rankings_section(all_ranked) + _spotcheck_section(result)
     elif result.teaser_report:
         # Teaser: summary-only cards, flat rank order
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)

@@ -26,6 +26,9 @@ PRICES: dict = {
     },
     "web_search_per_call": 0.01,          # Anthropic web search: $10 per 1,000 searches
     "gemini": {"gemini-2.5-flash": (0.30, 2.50), "_default": (0.30, 2.50)},
+    "gemini_grounding_per_query": 0.035,   # Google Search grounding (2.5 models $35/1k; 3.x $14/1k)
+    "openai": {"gpt-5-mini": (0.25, 2.00), "gpt-5": (1.25, 10.0), "_default": (0.25, 2.00)},
+    "openai_web_search_per_call": 0.01,
     "places": {"text_search": 0.032, "nearby": 0.032, "details": 0.017, "other": 0.017},
 }
 try:
@@ -118,6 +121,27 @@ def record_gemini(model: str, prompt_tokens: int = 0, output_tokens: int = 0) ->
     cost = (prompt_tokens * p[0] + output_tokens * p[1]) / 1e6
     with _lock:
         acc["gemini_calls"] += 1; acc["gemini_tokens"] += prompt_tokens + output_tokens; acc["cost_usd"] += cost
+
+
+def record_openai(model: str, input_tokens: int = 0, output_tokens: int = 0, web_searches: int = 0) -> None:
+    acc = _acc()
+    if acc is None:
+        return
+    p = PRICES["openai"].get(model) or PRICES["openai"]["_default"]
+    cost = (input_tokens * p[0] + output_tokens * p[1]) / 1e6 + web_searches * PRICES["openai_web_search_per_call"]
+    with _lock:
+        acc["calls"] += 1; acc["input_tokens"] += input_tokens; acc["output_tokens"] += output_tokens
+        acc["web_searches"] += web_searches; acc["cost_usd"] += cost
+        m = acc["by_model"].setdefault(model, {"calls": 0, "input_tokens": 0, "output_tokens": 0, "web_searches": 0, "cost_usd": 0.0})
+        m["calls"] += 1; m["input_tokens"] += input_tokens; m["output_tokens"] += output_tokens; m["web_searches"] += web_searches; m["cost_usd"] = round(m["cost_usd"] + cost, 4)
+
+
+def record_gemini_grounding(model: str) -> None:
+    acc = _acc()
+    if acc is None:
+        return
+    with _lock:
+        acc["cost_usd"] += PRICES["gemini_grounding_per_query"]
 
 
 def record_places(kind: str = "other") -> None:

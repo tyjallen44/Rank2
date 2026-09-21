@@ -2790,3 +2790,14 @@ Commit: perception/cost_tracker.py hooks the Anthropic SDK (create + stream, inc
 **T4.** Trends: a scheduled/Run now snapshot is metered under its kind (Deep Diagnostic / Hospital Network).
 **T5.** History rows for runs since the Score Evidence deploy now show the evidence chip (previously missing).
 **R1.** Reports and their content are unchanged; a failure in metering never fails a run (log line "[cost] … failed").
+
+## SPOTCHECK — "What AI assistants actually said" (observed check on every Deep Diagnostic)
+
+Commit: perception/spotcheck.py asks 8 fixed patient-style questions (best in market, condition/procedure, near me, insurance, urgency, direct, compare, Spanish) of real assistants — Claude (Haiku + web search, always), ChatGPT (Responses API + web_search, when OPENAI_API_KEY is set), Gemini (Google Search grounding, when GEMINI_API_KEY is set) — parses each answer with Haiku into the organizations named, and records: named or not, position, who was named instead, cited domains (yours flagged). Runs after the analysis and before the combined render for hospital and practice/service-line Deep Diagnostics (not market runs, FQHC, skip-PDF snapshots); stored in analysis_runs.spotcheck_json; PDF gets a "What AI Assistants Actually Said" panel after the entity card; completion screen shows the summary line and per-assistant counts with a ⓘ help topic; fully metered by the cost tracker (Claude-only ≈ $0.15–0.25 and ~15–30 s). Off with SPOTCHECK_ENABLED=0. It never changes the score. NEEDS BROWSER TESTING.
+
+**T1 — Practice.** Run a Deep Diagnostic for a specialty practice. Progress shows "Observed check: asking 8 patient questions of Claude…" then "Observed check: Named in N of 7 unprompted patient questions; named instead: …; your website was cited/not cited." The completion screen shows the panel line with per-assistant counts; the PDF has the panel after the entity card with the big percentage, the per-assistant table, Named instead, Pages cited (your domain bold) and the website line.
+**T2 — Hospital.** Same for a hospital Deep Diagnostic (hospital question set).
+**T3 — Cost.** The completion cost line includes the extra Haiku calls and web searches (≈ +$0.20 Claude-only).
+**T4 — Keys.** With OPENAI_API_KEY / GEMINI_API_KEY set on the service, the panel gains ChatGPT / Gemini rows and the progress line lists them; without keys, Claude only.
+**T5 — Not run for**: Competitors Rankings, Community Health, Trends snapshots (skip-PDF), Compare Two sides.
+**R1.** A spot-check failure never fails the report (log "[spotcheck] failed:"); Pulse Score unchanged with the panel present.

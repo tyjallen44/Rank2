@@ -312,6 +312,7 @@ class AnalysisResult(BaseModel):
     fqhc_fact_audit: list[dict] = Field(default_factory=list)  # Pillar 2 audit rows
     fqhc_missed_queries: list[dict] = Field(default_factory=list)  # Missed Queries exhibit
     fqhc_mqcr: Optional[float] = None               # MQCR (0.0–1.0); None until battery run
+    spotcheck: Optional[dict] = None                # observed assistant check (perception/spotcheck.py); never affects the score
 
 
 # ── Network Pulse — multi-state hospital network models ──────────────────────

@@ -646,6 +646,7 @@ def _job_run_single(
         # reports, FQHC and skip-pdf data pulls are unchanged. Fail-soft.
         if (job.get("individual_report") and entity_type in (None, "hospital")
                 and job.get("entity_name") and not job.get("skip_pdf")):
+            _run_spotcheck(result, job["entity_name"], city, state, None, "hospital", emit)
             try:
                 _finalize_hospital_combined(result, job["entity_name"], city, state,
                                             job.get("brand", "original"), job, emit)
@@ -667,6 +668,7 @@ def _job_run_single(
             "city": city, "state": state,
             "individual_report": bool(job.get("individual_report")),
             "confidence": _run_confidence(result) if job.get("individual_report") else None,
+            "spotcheck": _spotcheck_brief(result),
         }
         if not job.get("skip_pdf"):
             _title = job.get("entity_name") or result.report_title or result.location
@@ -958,6 +960,7 @@ def _job_run_practice(
         # teaser (blurred content) is produced too when the toggle is set.
         # Fail-soft — a content/render failure leaves the base four-pillar report.
         if not job.get("skip_pdf"):
+            _run_spotcheck(result, entity_name, city, state, specialty, "service_line" if job.get("service_line") else "practice", emit)
             try:
                 _finalize_practice_combined(result, entity_name, city, state,
                                             job.get("brand", "original"), job, emit)
@@ -979,6 +982,7 @@ def _job_run_practice(
             "service_line": job.get("service_line"), "parent_system": job.get("parent_system"),
             "city": city, "state": state, "individual_report": True,
             "confidence": _run_confidence(result),
+            "spotcheck": _spotcheck_brief(result),
         }
         if not job.get("skip_pdf"):
             _notify_run_complete(job, "Deep Diagnostic", result.report_title or entity_name,
@@ -1198,6 +1202,38 @@ def _run_confidence(result) -> Optional[dict]:
     except Exception as exc:
         print(f"[confidence] failed: {type(exc).__name__}: {exc}")
         return None
+
+
+def _run_spotcheck(result, entity_name: str, city: str, state: str, specialty, entity_type: str, emit) -> None:
+    """Observed assistant check for an individual report (fail-soft, ~30–60 s, ~$0.30–0.60).
+    Off with SPOTCHECK_ENABLED=0."""
+    if os.environ.get("SPOTCHECK_ENABLED", "1") in ("0", "false", "no"):
+        return
+    try:
+        from perception.spotcheck import run_spotcheck, summary_sentence
+        from perception.db import set_run_spotcheck
+        aliases = [r.get("name") for r in (result.practice_composite_rows or []) if r.get("name")]
+        aliases += [getattr(result, "report_title", None) or ""]
+        website = result.rankings[0].website_url if result.rankings else None
+        sc = run_spotcheck(entity_name, city, state, specialty, entity_type, aliases=aliases, website=website, emit=emit)
+        result.spotcheck = sc
+        set_run_spotcheck(result.run_id, sc)
+        line = summary_sentence(sc)
+        if emit and line:
+            emit({"type": "text", "text": f"\nObserved check: {line}"})
+    except Exception as exc:
+        print(f"[spotcheck] failed: {type(exc).__name__}: {exc}")
+
+
+def _spotcheck_brief(result) -> Optional[dict]:
+    sc = getattr(result, "spotcheck", None)
+    if not sc:
+        return None
+    from perception.spotcheck import summary_sentence
+    return {"asked": sc.get("asked"), "mentioned": sc.get("mentioned"), "unprompted_asked": sc.get("unprompted_asked"),
+            "unprompted_mentioned": sc.get("unprompted_mentioned"), "assistants": sc.get("assistants"),
+            "per_assistant": sc.get("per_assistant"), "top_competitors": sc.get("top_competitors"),
+            "our_domain_cited": sc.get("our_domain_cited"), "summary": summary_sentence(sc)}
 
 
 def _notify_run_complete(job: dict, kind: str, title: str, files: list) -> None:
