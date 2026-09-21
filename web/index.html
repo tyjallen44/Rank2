@@ -7414,9 +7414,9 @@ function showSingleDone(r) {
   const nextHtml = `
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <span style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-right:4px">Next</span>
-      ${canHand ? `<button class="btn btn-ghost btn-sm" onclick="handoffTrackRun('${r.run_id}')" title="Track this organization on a schedule and see the score move over time">📈 Track in Trends</button>` : ''}
-      ${canHand ? `<button class="btn btn-ghost btn-sm" onclick="handoffCompareRun('${r.run_id}')" title="Put this organization on side A of a head-to-head report">⇄ Compare against…</button>` : ''}
-      ${isNetwork ? `<button class="btn btn-ghost btn-sm" onclick="handoffTrackNetwork({ name: ${JSON.stringify(r.network_canonical_name || r.network_name || '')}, city: ${JSON.stringify((_lastNetworkRun && _lastNetworkRun.city) || '')}, state: ${JSON.stringify((_lastNetworkRun && _lastNetworkRun.state) || '')} })" title="Track this system's network score over time — the roster carries over">📈 Track network in Trends</button>` : ''}
+      ${canHand ? `<button class="btn btn-secondary btn-sm" onclick="handoffTrackRun('${r.run_id}')" title="Track this organization on a schedule and see the score move over time">📈 Track in Trends</button>` : ''}
+      ${canHand ? `<button class="btn btn-secondary btn-sm" onclick="handoffCompareRun('${r.run_id}')" title="Put this organization on side A of a head-to-head report">⇄ Compare against…</button>` : ''}
+      ${isNetwork ? `<button class="btn btn-secondary btn-sm" onclick="handoffTrackNetwork({ name: ${JSON.stringify(r.network_canonical_name || r.network_name || '')}, city: ${JSON.stringify((_lastNetworkRun && _lastNetworkRun.city) || '')}, state: ${JSON.stringify((_lastNetworkRun && _lastNetworkRun.state) || '')} })" title="Track this system's network score over time — the roster carries over">📈 Track network in Trends</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="emailReport('${r.run_id}', this)" title="Send the PDF to a customer or colleague">✉ Email report…</button>
       <button class="btn btn-ghost btn-sm" onclick="openChooser(null, event)" title="Not sure which report comes next? Answer two questions.">✦ Start another report…</button>
       ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}
@@ -9860,10 +9860,25 @@ let _teDiscovered       = [];     // Locations list (seeded from Google + discov
 let _teDiscovering      = false;
 
 function _teIsPractice() { return _teType === 'specialty' || _teType === 'service_line'; }
+let _teGen = 0;
+let _teBusyWatchdog = null;
 function _teSetBusy(busy) {
   const btn = document.getElementById('te-add-btn'); if (!btn) return;
   btn.disabled = !!busy;
   btn.innerHTML = busy ? '<span class="spinner"></span> Discovering locations…' : 'Add to Trends';
+  clearTimeout(_teBusyWatchdog);
+  if (busy) {
+    // Never leave the button dead: after 75 s let the user proceed with what was found.
+    _teBusyWatchdog = setTimeout(() => {
+      if (_teDiscovering) {
+        _teDiscovering = false; _teSetBusy(false);
+        const err = document.getElementById('te-loc-err');
+        if (err) { err.textContent = 'Location discovery is taking too long — you can add the entity with the locations found so far, or use Find more locations later from the configuration panel.'; err.classList.remove('hidden'); }
+        document.getElementById('te-loc-loading')?.classList.add('hidden');
+        document.getElementById('te-loc-content')?.classList.remove('hidden');
+      }
+    }, 75000);
+  }
 }
 function _teConfirmedRoster() {
   return (_teDiscovered || []).filter((_, i) => { const cb = document.getElementById(`te-sib-${i}`); return cb ? cb.checked : true; });
@@ -9875,6 +9890,7 @@ async function teStartDiscovery() {
   document.getElementById('te-loc-content').classList.add('hidden');
   document.getElementById('te-loc-err').classList.add('hidden');
   _teDiscovering = true; _teSetBusy(true);
+  const gen = _teGen;
   try {
     const r = await api('/api/practice/siblings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -9884,12 +9900,14 @@ async function teStartDiscovery() {
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Location discovery failed'));
     const data = await r.json();
+    if (gen !== _teGen) return;                 // the user moved on to another entity meanwhile
     _teDiscovered = _seedFromCandidates(_teSelected, _teCandidates, _teResolvedCity, _teResolvedState, data.siblings || []);
     teRenderLocations();
   } catch (e) {
+    if (gen !== _teGen) return;
     document.getElementById('te-loc-loading').classList.add('hidden');
     showErr(document.getElementById('te-loc-err'), e.message);
-  } finally { _teDiscovering = false; _teSetBusy(false); }
+  } finally { if (gen === _teGen) { _teDiscovering = false; _teSetBusy(false); } }
 }
 function teRenderLocations() {
   document.getElementById('te-loc-loading').classList.add('hidden');
@@ -10685,6 +10703,9 @@ function showAddEntityFlow() {
   _teResolvedCity = null;
   _teResolvedState = null;
   _teNetFacilities = []; _teNetMeta = null;
+  _teGen++;                                   // any discovery still in flight belongs to a previous flow
+  _teDiscovering = false; _teSetBusy(false);
+  _teDiscovered = [];
   document.getElementById('te-net-roster')?.classList.add('hidden');
   document.getElementById('te-name').focus();
 }

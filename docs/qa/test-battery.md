@@ -2859,3 +2859,11 @@ Commit: the Trends entity view gains "▶ Create full report". It starts the rig
 **T4 — Network.** A tracked network → launches a Hospital Network run on its roster; completion offers the three files.
 **T5 — Cached window.** If the entity ran in the last 30 days the report returns from cache quickly; Refresh from scratch is not applied here (use the form for that).
 **R1.** Run Now (data-only snapshot), Trend Report and Send report unchanged.
+
+## FIX-TRACK-BUTTON-DISABLED — "Add to Trends" could stay greyed out; handoff buttons restyled
+
+Commit: (1) Opening Track New Entity (including via "Track in Trends" from a completion screen or History) now always resets the flow: any location discovery still running from a previous entity is abandoned (generation-stamped, its late response ignored) and "Add to Trends" is re-enabled — previously a discovery left in flight (user navigated away, slow/hung request) kept the button disabled with the spinner label for the next entity. A 75-second watchdog also re-enables the button with a note if discovery hangs. (2) On completion screens "Track in Trends", "Compare against…" and "Track network in Trends" are now teal-outlined secondary buttons instead of muted ghost buttons that could read as disabled. NEEDS BROWSER TESTING.
+
+**T1.** Start tracking a practice, and while "Discovering locations…" is showing, go to Deep Diagnostic, run a report, and click Track in Trends on completion → the add flow opens with "Add to Trends" enabled (no spinner label); the old discovery's locations never appear in the new flow.
+**T2.** Simulate a hung discovery (throttle network) → after ~75 s the button re-enables with the explanatory note and the entity can be added; Find more locations later works.
+**T3.** Completion screen: the three handoff buttons are teal-outlined; Email report… and Start another report… remain ghost.
