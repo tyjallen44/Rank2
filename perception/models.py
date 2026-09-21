@@ -315,6 +315,7 @@ class AnalysisResult(BaseModel):
     spotcheck: Optional[dict] = None                # observed assistant check (perception/spotcheck.py); never affects the score
     sources_consulted: list[dict] = Field(default_factory=list)  # pages Claude's web search read while writing the report [{url,title,domain,cited}]
     web_search_used: Optional[bool] = None          # False when the narrative was written without live search (fallback path)
+    verified_quality: Optional[dict] = None         # CMS star / Leapfrog grade fetched in code (perception/data/quality.py)
 
 
 # ── Network Pulse — multi-state hospital network models ──────────────────────

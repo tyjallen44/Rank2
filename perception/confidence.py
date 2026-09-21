@@ -48,8 +48,11 @@ def score_confidence(result) -> Optional[dict]:
         reasons.append("no verified Google listing"); penalties += 2
     elif reviews < 50:
         reasons.append(f"only {reviews} review{'s' if reviews != 1 else ''}"); penalties += 1
+    vq = getattr(result, "verified_quality", None) or {}
     if not is_practice and et == "hospital" and getattr(p, "cms_star_rating", None) is None:
-        reasons.append("no CMS star rating on record"); penalties += 1
+        reasons.append("CMS: not rated (verified)" if vq.get("cms_facility_id") else "no CMS star rating on record"); penalties += 1
+    if vq.get("cms_star") or vq.get("leapfrog_grade"):
+        reasons.append("CMS/Leapfrog verified from source")
     if unscored:
         reasons.append(f"{len(unscored)} pillar{'s' if len(unscored) != 1 else ''} unscored"); penalties += 1
     if getattr(result, "web_search_used", None) is False:

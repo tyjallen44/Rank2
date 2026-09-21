@@ -2820,3 +2820,12 @@ Commit: the Deep Diagnostic form always sends teaser_report=true (the teaser is 
 **T2 — Community Health.** Same for an FQHC: main PDF is the full Community Health report; Teaser is separate. File names: "…-Community-Health-<runid>.pdf" and "…_Teaser-….pdf".
 **T3 — Existing runs.** Reports produced before this fix keep their teaser main file; re-run with Refresh from scratch to get the full version.
 **R1.** Practice Deep Diagnostic and Competitors Rankings Enticement/Market Summary outputs unchanged.
+
+## VERIFIED-QUALITY — CMS star rating and Leapfrog grade fetched in code for hospital Deep Diagnostics
+
+Commit: perception/data/quality.py fetches, for a hospital Deep Diagnostic, the CMS Care Compare overall star rating (public datastore API, matched by name + city, state-wide fallback) and the Leapfrog Hospital Safety Grade (existing scraper), in parallel, fail-soft. The values go into the prompt's evidence block ("Verified quality signals — USE VERBATIM"), override the model's recalled values on the entity (Leapfrog only when found), and anchor Outcomes & Safety deterministically via scoring.outcomes_band (Leapfrog A 94 / B 82 / C 64 / D 47 / F 34 ± CMS star adjustment; CMS-only 5★ 88 / 4★ 76 / 3★ 62 / 2★ 48 / 1★ 38). The progress log prints the verified values; the report stores verified_quality; Sources Consulted lists the CMS Care Compare page (and Leapfrog when found); Score Evidence says "CMS/Leapfrog verified from source" or "CMS: not rated (verified)". Practices, service lines and FQHCs unchanged (not CMS-rated). NEEDS BROWSER TESTING.
+
+**T1.** Run a hospital Deep Diagnostic (e.g. Methodist University Hospital, Memphis TN). Progress shows "Verified quality signals — CMS overall stars: 3★ · Leapfrog grade: …". The PDF's CMS Star Rating matches Care Compare; Outcomes & Safety equals the band (3★ with no Leapfrog → 62; with a grade → the Leapfrog band ± star adjustment); Sources Consulted includes "CMS Care Compare — … (overall rating 3)".
+**T2.** A hospital not on Care Compare (e.g. a specialty hospital without an overall rating): the evidence says "no matching record"/"not rated"; the model's pillar value stands; Score Evidence notes "CMS: not rated (verified)" only when the record exists without a rating.
+**T3.** Cost/time: adds ~5–25 s (Leapfrog scrape) and no API cost.
+**R1.** Hospital Network per-facility CMS/Leapfrog unchanged; practice reports show no CMS/Leapfrog lines.

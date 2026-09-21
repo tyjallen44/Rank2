@@ -432,10 +432,11 @@ def _resolve_metro_counties(client: anthropic.Anthropic, city: str, state: str) 
         return None
 
 
-def _gather_individual_evidence(entity_name: str, city: str, state: str):
-    """Targeted Google Places evidence block for a single named entity.
+def _gather_individual_evidence(entity_name: str, city: str, state: str, entity_type: str | None = None):
+    """Targeted evidence block for a single named entity: verified Google read plus, for
+    hospitals, the CMS overall star rating and Leapfrog grade fetched in code.
 
-    Returns (evidence_text, google_read) — callers can inspect the read for
+    Returns (evidence_text, google_read, quality) — callers can inspect the read for
     city canonicalization without a second Places API call.
     """
     read, footprint = places.fetch_provider(entity_name, city, state)
@@ -445,7 +446,16 @@ def _gather_individual_evidence(entity_name: str, city: str, state: str):
         f"Front-door rating: {read.as_line()}\n"
         f"Footprint sample:  {footprint.as_line()}\n"
     )
-    return text, read
+    quality = None
+    if (entity_type or "hospital") == "hospital":
+        try:
+            from .data import quality as _quality
+            quality = _quality.fetch_hospital_quality(entity_name, city, state)
+            text += _quality.evidence_lines(quality)
+        except Exception as exc:
+            console.print(f"[yellow]⚠[/yellow] Quality signals fetch failed ({exc}); proceeding without.")
+            quality = None
+    return text, read, quality
 
 
 def _gather_evidence(
@@ -845,10 +855,14 @@ def analyze_location(
 
     # --- Phase 0: gather verified evidence ---
     emit({"type": "phase", "name": "evidence", "text": "Gathering verified evidence"})
+    _indiv_quality = None
     if individual_report and entity_name:
         with console.status("[bold dark_sea_green4]Fetching entity Google data…[/bold dark_sea_green4]"):
             try:
-                evidence_text, _indiv_read = _gather_individual_evidence(entity_name, city, state)
+                evidence_text, _indiv_read, _indiv_quality = _gather_individual_evidence(entity_name, city, state, entity_type)
+                if _indiv_quality:
+                    _q = _indiv_quality
+                    emit({"type": "text", "text": f"\nVerified quality signals — CMS overall stars: {(str(_q['cms_star']) + '★') if _q.get('cms_star') else ('not rated' if _q.get('cms_facility_id') else 'no record')} · Leapfrog grade: {_q.get('leapfrog_grade') or 'not rated / not found'}\n"})
                 if _indiv_read.formatted_address:
                     _ratio = places.city_match_ratio(city, _indiv_read.formatted_address)
                     if _ratio < 0.85:
@@ -1051,6 +1065,18 @@ def analyze_location(
     # --- Phase 3: inject verified Google + system reputation + composite ---
     emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})
     systems_done = 0
+    # Verified quality signals override the model's recall on the entity itself and
+    # anchor Outcomes & Safety deterministically (the composite is recomputed below).
+    if individual_report and _indiv_quality and rankings:
+        _q = _indiv_quality
+        _p0 = rankings[0]
+        if _q.get("cms_facility_id"):
+            _p0.cms_star_rating = _q.get("cms_star")
+        if _q.get("leapfrog_grade"):
+            _p0.leapfrog_grade = _q["leapfrog_grade"]          # a miss keeps the model's own finding
+        _ob = scoring.outcomes_band(_q.get("leapfrog_grade") or _p0.leapfrog_grade, _q.get("cms_star"))
+        if _ob is not None:
+            _p0.tier_scores.clinical_outcomes_safety = _ob
     for prov in rankings:
         if individual_report:
             do_system = aggregate and settings.enable_system_reputation
@@ -1282,6 +1308,15 @@ def analyze_location(
     report_path = output_dir / f"{_stem}.md"
     report_path.write_text(report_markdown, encoding="utf-8")
     console.print(f"[green]✓[/green] Report saved → [dim]{report_path}[/dim]")
+
+    if individual_report and _indiv_quality:
+        result.verified_quality = _indiv_quality
+        try:
+            from .data import quality as _quality
+            result.sources_consulted = pop_last_sources() + _quality.sources(_indiv_quality)
+            result.web_search_used = last_web_search_used()
+        except Exception:
+            pass
 
     # Block PDF when individual report has insufficient pillar coverage.
     if individual_report and rankings and all(p.ai_visibility_score is None for p in rankings):

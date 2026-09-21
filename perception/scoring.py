@@ -240,3 +240,18 @@ def experience_band(
         base -= 5
 
     return max(0, min(100, base))
+
+
+def outcomes_band(leapfrog_grade: Optional[str], cms_star: Optional[int]) -> Optional[int]:
+    """Deterministic Outcomes & Safety tier from verified signals, per the anchor rubric:
+    Leapfrog A → 90–100 · B → 75–89 · C → 55–74 · D → 40–54 · F → <40, with the CMS overall
+    star placing the value inside the band (5★ top, 3★ middle, 1–2★ lower). CMS alone
+    maps to a middle-of-band value. None when neither signal is verified."""
+    g = (leapfrog_grade or "").strip().upper()[:1]
+    base = {"A": 94, "B": 82, "C": 64, "D": 47, "F": 34}.get(g)
+    if base is not None:
+        adj = {5: 5, 4: 2, 3: 0, 2: -5, 1: -8}.get(int(cms_star), 0) if cms_star else 0
+        return max(0, min(100, base + adj))
+    if cms_star:
+        return {5: 88, 4: 76, 3: 62, 2: 48, 1: 38}.get(int(cms_star))
+    return None
