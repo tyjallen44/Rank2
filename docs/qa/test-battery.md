@@ -2763,3 +2763,11 @@ Commit: the "✓ Reviewed" button (Trends Details attention box) and the History
 
 **T1.** Trends → an entity with Needs attention → Details → ✓ Reviewed → the row flashes, the badge clears (if that was the only reason), the item shows "Reviewed by … on …" with Undo; Undo restores it.
 **T2.** Home → Find an organization → pick one → History → History opens filtered to that name.
+
+## DOWNLOADS-NO-NAVIGATE — downloads never leave the app page
+
+Commit: every report/CSV/ZIP download (completion buttons, History Downloads menu, Trend Report, sent reports, event ZIP, student-health files, snapshot report links, duplicate-notice "Open that report") now fetches the file in the background and saves it via a blob link instead of navigating the tab to the API URL. A failed download (e.g. a deleted run → "Report not found") shows a flash message inside the app; the browser's Back/Forward history is never polluted with API URLs. NEEDS BROWSER TESTING.
+
+**T1.** Download a report from a completion screen, from History, and the Trend Report from Trends. Each saves with its proper filename; the address bar never changes; the browser Forward button after using the app does not lead to an API/JSON page.
+**T2.** Trigger a missing file (admin: delete a run, then use an old completion tab's Download) → flash "Could not download: Report not found"; the app stays on its page.
+**T3.** Event ZIP and enriched CSV, Student Health PDF/CSV, Sent reports PDF, "Open that snapshot's report", "Latest Deep Diagnostic / Network report" — all save correctly.

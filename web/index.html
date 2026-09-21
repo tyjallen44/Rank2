@@ -4964,8 +4964,8 @@ function shRenderResults(result, runId) {
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)">
       <div style="font-weight:700;font-size:16px">${_shEsc(result.group_label||'Student Health Clinics')} — Ranked</div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-gold btn-sm" onclick="window.location.href='/api/student-health/${runId}/pdf?token=${encodeURIComponent(_token)}'">⬇ PDF</button>
-        <button class="btn btn-secondary btn-sm" onclick="window.location.href='/api/student-health/${runId}/csv?token=${encodeURIComponent(_token)}'">⬇ CSV</button>
+        <button class="btn btn-gold btn-sm" onclick="_download('/api/student-health/${runId}/pdf?token=${encodeURIComponent(_token)}')">⬇ PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="_download('/api/student-health/${runId}/csv?token=${encodeURIComponent(_token)}')">⬇ CSV</button>
       </div>
     </div>
     <div style="overflow-x:auto"><table class="tbl">
@@ -7148,6 +7148,36 @@ function _confBox(c) {
   return `<div class="stat-box" title="${_learnEsc(c.note || '')}"><div class="stat-val" style="color:${color};font-size:22px">${c.label || c.level}</div><div class="stat-lbl">Score Evidence ${_helpLinkHtml('score-evidence', 'What is this?')}</div><div style="font-size:11px;color:var(--muted);margin-top:4px;max-width:220px">${_learnEsc(c.note || '')}</div></div>`;
 }
 
+// ── Downloads: fetch in the background and save, so the tab never navigates to an API
+//    URL (a 404 like "Report not found" used to become a page in the browser history).
+async function _download(url, label) {
+  try {
+    const u = new URL(url, location.origin);
+    const r = await fetch(u.pathname + u.search, { headers: u.searchParams.has('token') ? {} : { 'Authorization': `Bearer ${_token}` } });
+    if (!r.ok) {
+      let d = `HTTP ${r.status}`; try { d = (await r.json()).detail || d; } catch (_) {}
+      _flash(`Could not download: ${d}`); return false;
+    }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+    const name = m ? decodeURIComponent(m[1].trim()) : (label || u.pathname.split('/').filter(Boolean).slice(-2).join('-'));
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    return true;
+  } catch (e) { _flash('Could not download: ' + (e.message || e)); return false; }
+}
+// Any plain <a href="/api/…/pdf|csv|zip"> in the app goes through _download too.
+document.addEventListener('click', ev => {
+  const a = ev.target.closest && ev.target.closest('a[href^="/api/"]');
+  if (!a || a.target === '_blank' && false) return;
+  const href = a.getAttribute('href') || '';
+  if (/\/(pdf|teaser-pdf|briefing-pdf|full-detail-pdf|report1|report2|csv|zip|events-display|report\.pdf)(\?|$)/.test(href)) {
+    ev.preventDefault(); ev.stopPropagation(); _download(href, a.textContent.trim());
+  }
+}, true);
+
 // ── Flash message (bottom-center, auto-hides) ────────────────────────────────
 function _flash(msg, ms) {
   let el = document.getElementById('pulse-flash');
@@ -7338,17 +7368,17 @@ function showSingleDone(r) {
       : `/api/reports/${r.run_id}/pdf?token=${encodeURIComponent(_token)}`;
 
   const briefingBtn = (!isComparison && !isNetwork && r.briefing_pdf_path)
-    ? `<button class="btn btn-ghost" onclick="window.location.href='/api/reports/${r.run_id}/briefing-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Briefing</button>`
+    ? `<button class="btn btn-ghost" onclick="_download('/api/reports/${r.run_id}/briefing-pdf?token=${encodeURIComponent(_token)}')">⬇ Download Briefing</button>`
     : (!isComparison && !isNetwork && r.briefing_skipped_reason)
       ? `<div style="font-size:12px;color:#c07a30;margin-top:4px">Briefing skipped: ${r.briefing_skipped_reason}</div>`
       : '';
 
   const teaserBtn = r.teaser_pdf_path
-    ? `<button class="btn btn-ghost" onclick="window.location.href='/api/${isNetwork ? 'network' : 'reports'}/${r.run_id}/teaser-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Teaser</button>`
+    ? `<button class="btn btn-ghost" onclick="_download('/api/${isNetwork ? ')network' : 'reports'}/${r.run_id}/teaser-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Teaser</button>`
     : '';
 
   const fullDetailBtn = (isNetwork && r.full_detail_pdf_path)
-    ? `<button class="btn btn-secondary" onclick="window.location.href='/api/network/${r.run_id}/full-detail-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Full Detail</button>`
+    ? `<button class="btn btn-secondary" onclick="_download('/api/network/${r.run_id}/full-detail-pdf?token=${encodeURIComponent(_token)}')">⬇ Download Full Detail</button>`
     : '';
   // Handoffs: what a user typically does next with this report.
   _histRunIndex[r.run_id] = r;
@@ -7364,7 +7394,7 @@ function showSingleDone(r) {
       ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}
     </div>`;
   document.getElementById('done-actions').innerHTML = `
-    <button class="btn btn-gold" onclick="window.location.href='${dlUrl}'">⬇ Download Report</button>
+    <button class="btn btn-gold" onclick="_download('${dlUrl}')">⬇ Download Report</button>
     ${teaserBtn}
     ${briefingBtn}
     ${fullDetailBtn}
@@ -7615,14 +7645,14 @@ function caRenderResults(rec, caId, prefix) {
           <div style="font-weight:700;font-size:13px;color:var(--teal)">📊 Deep Dive <span style="font-size:11px;font-weight:600;color:var(--muted)">· Report 1</span></div>
           <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Full Pulse diagnostic — score, pillars &amp; executive summary</div>
         </div>
-        <button class="btn btn-gold btn-sm" title="Full Pulse deep-dive report: AI reputation score, four-pillar breakdown, and executive summary" onclick="window.location.href='/api/content-analysis/${caId}/report1?token=${encodeURIComponent(_token)}'">⬇ Deep Dive</button>
+        <button class="btn btn-gold btn-sm" title="Full Pulse deep-dive report: AI reputation score, four-pillar breakdown, and executive summary" onclick="_download('/api/content-analysis/${caId}/report1?token=${encodeURIComponent(_token)}')">⬇ Deep Dive</button>
       </div>
       <div style="flex:1;min-width:240px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--pale)">
         <div>
           <div style="font-weight:700;font-size:13px;color:var(--teal)">📝 Content Report <span style="font-size:11px;font-weight:600;color:var(--muted)">· Report 2</span></div>
           <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Detailed findings &amp; improvement prescriptions</div>
         </div>
-        <button class="btn btn-secondary btn-sm" title="Detailed content findings and improvement prescriptions (CIK items)" onclick="window.location.href='/api/content-analysis/${caId}/report2?token=${encodeURIComponent(_token)}'">⬇ Content Report</button>
+        <button class="btn btn-secondary btn-sm" title="Detailed content findings and improvement prescriptions (CIK items)" onclick="_download('/api/content-analysis/${caId}/report2?token=${encodeURIComponent(_token)}')">⬇ Content Report</button>
       </div>
     </div>
     ${findings.length ? `<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>ID</th><th>Platform</th><th>Finding</th><th>Severity</th></tr></thead><tbody>${rows}</tbody></table></div>`
@@ -10218,7 +10248,7 @@ function _trackAttentionItems(e) {
     add('score_fell', `score fell ${Math.abs(e.score_delta)}`, latestPt ? latestPt.date.slice(0, 10) : 'na',
       `Score fell ${Math.abs(e.score_delta)} on the latest snapshot`,
       `${prevPt ? prevPt.score : '—'} → ${latestPt ? latestPt.score : '—'}${latestPt ? ` on ${latestPt.date.slice(0, 10)}` : ''}. Open the trend to see which pillar moved; if it is the reviews pillar, the Google rating and review count on that row usually explain it. A fall of under 5 points is often run-to-run variation — compare it with the next snapshot before acting.`,
-      [['View trend', `loadEntityTrend('${e.id}')`]].concat(latestPt && latestPt.run_id ? [['Open that snapshot\'s report', `window.location.href='/api/reports/${latestPt.run_id}/pdf?token='+encodeURIComponent(_token)`]] : []));
+      [['View trend', `loadEntityTrend('${e.id}')`]].concat(latestPt && latestPt.run_id ? [['Open that snapshot\'s report', `_download('/api/reports/${latestPt.run_id}/pdf?token=')+encodeURIComponent(_token)`]] : []));
   }
   if (!!e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) < new Date(Date.now() - 24 * 3600 * 1000)) {
     add('overdue', 'run overdue', String(e.next_run_at).slice(0, 10), 'Scheduled run is overdue',
@@ -10801,7 +10831,7 @@ function downloadTrendReport() {
   if (!_trackCurrentEntity) return;
   const st = document.getElementById('trend-run-status');
   if (st) st.textContent = 'Building the report… (a few seconds)';
-  window.location.href = `/api/track/entities/${encodeURIComponent(_trackCurrentEntity.id)}/report.pdf?token=${encodeURIComponent(_token)}`;
+  _download(`/api/track/entities/${encodeURIComponent(_trackCurrentEntity.id)}/report.pdf?token=${encodeURIComponent(_token)}`);
   setTimeout(() => { if (st && st.textContent.startsWith('Building')) st.textContent = ''; }, 8000);
 }
 
@@ -11230,7 +11260,7 @@ function evFileChosen(input) {
 }
 
 function evDownloadEventsDisplay() {
-  window.location.href = `/api/downloads/events-display?token=${encodeURIComponent(_token)}`;
+  _download(`/api/downloads/events-display?token=${encodeURIComponent(_token)}`);
 }
 
 function evDownloadTemplate() {
@@ -11623,7 +11653,7 @@ async function evDlCsvById(eventId) {
 }
 
 function evDlZipById(eventId) {
-  window.location.href = `/api/event/${eventId}/zip?token=${encodeURIComponent(_token)}`;
+  _download(`/api/event/${eventId}/zip?token=${encodeURIComponent(_token)}`);
 }
 
 async function evUploadFile(eventId, type, input) {
