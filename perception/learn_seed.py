@@ -60,7 +60,7 @@ STARTER_ARTICLES: list[dict] = [
             '- A **content analysis and drafted prescription** — the exact website, listing, Wikidata, and structured-data fixes, written out\n'
             "- For practices and service lines, a **per-location reputation table**: every location's Google and third-party ratings and review volume\n"
             '\n'
-            'Every run also produces a **Teaser** version (details blurred) for sending to a prospect.\n'
+            'Every analysis run also produces a **Teaser** version (details blurred) for sending to a prospect.\n'
             '\n'
             '**Best for:** understanding one organization in detail, preparing for a meeting, or establishing a baseline before making changes.'
         ),
@@ -78,7 +78,7 @@ STARTER_ARTICLES: list[dict] = [
             "- The **content analysis and drafted prescription** for the system's digital footprint\n"
             "- Optionally, a **service-line scorecard** grading each department's listings\n"
             '\n'
-            'Every run produces three files: the **standard report**, a **Teaser** for prospects, and a **Full Detail** report with the complete content analysis and a publication-ready remediation draft for every finding.\n'
+            'Every analysis run produces three files: the **standard report**, a **Teaser** for prospects, and a **Full Detail** report with the complete content analysis and a publication-ready remediation draft for every finding.\n'
             '\n'
             '**Best for:** health systems that need to see their AI reputation across every facility at once and spot which locations need attention.'
         ),
@@ -103,7 +103,7 @@ STARTER_ARTICLES: list[dict] = [
             '**Good to know**\n'
             '\n'
             '- Uses the same four-pillar engine as the Hospital Network and Competitors Rankings reports, so a system reads the same score across every report.\n'
-            '- Fast and repeatable — recent scores are reused, and long lists can be resumed if a run is interrupted.\n'
+            '- Fast and repeatable — recent scores are reused, and long lists can be resumed if an analysis run is interrupted.\n'
             '\n'
             '**Best for:** sizing up a whole market, region, or target list quickly — and spotting which systems most need attention.'
         ),
@@ -184,9 +184,9 @@ STARTER_ARTICLES: list[dict] = [
             '- **Not sure which report?** Answer two questions on Home (or click **Start a report** in the sidebar, or the link beside any report title) and Pulse opens the right report with the type preselected.\n'
             '- **Find an organization** — start typing a hospital, practice or health system your team has analyzed before; pick it to open it in Deep Diagnostic, Compare Two or Trends. The same suggestions appear in every report form.\n'
             '- Otherwise pick a report from the Home cards or **Report Creation** in the sidebar, enter the organization or market, confirm the listing and locations Pulse finds, and run. Rarely-changed settings sit under **Advanced options** on each page.\n'
-            '- If the same organization ran in the last 14 days, Pulse offers the existing report before starting a new run.\n'
-            '- Long runs keep going if you close the tab: the result lands in **History** and, unless you turn it off on Home, in your inbox with the PDF attached. **Runs in progress** on Home shows what is still running.\n'
-            '- When a run finishes, the completion screen offers the next step: download, **Track in Trends**, **Compare against…**, **Email report…**, or start another report.\n'
+            '- If the same organization ran in the last 14 days, Pulse offers the existing report before starting a new analysis run.\n'
+            '- Long analysis runs keep going if you close the tab: the result lands in **History** and, unless you turn it off on Home, in your inbox with the PDF attached. **Runs in progress** on Home shows what is still running.\n'
+            '- When an analysis run finishes, the completion screen offers the next step: download, **Track in Trends**, **Compare against…**, **Email report…**, or start another report.\n'
             '- Every Deep Diagnostic states its **Score Evidence** (High / Medium / Low) — how much public data sits behind the score.\n'
             '\n'
             'Past reports are always available under **History**.'

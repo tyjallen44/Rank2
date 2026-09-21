@@ -471,7 +471,7 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
     if not is_network:
         sub_bits.append("All locations rolled up" if entity.get("aggregate") else "Single location")
     if st["period"][0]:
-        sub_bits.append(f"Tracking since {_e(st['period'][0])} · {_plural(st['n'], 'snapshot')}" + (f" ({st['runs']} runs)" if st["runs"] > st["n"] else ""))
+        sub_bits.append(f"Tracking since {_e(st['period'][0])} · {_plural(st['n'], 'snapshot')}" + (f" ({st['runs']} analysis runs)" if st["runs"] > st["n"] else ""))
     sub = " &nbsp;·&nbsp; ".join(sub_bits)
 
     latest = st["latest_score"]
@@ -521,7 +521,7 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
         g_count = f"{int(p['google_count']):,}" if p.get("google_count") is not None else "—"
         extra = ""
         if p.get("_reruns"):
-            extra += f' <span class="tag">re-run ×{p["_reruns"] + 1}</span>'
+            extra += f' <span class="tag">re-analyzed ×{p["_reruns"] + 1}</span>'
         if flagged:
             extra += f' <span style="color:{_NOTE};font-weight:700" title="Settings differed">⚠</span>'
         if mixed:
@@ -544,7 +544,7 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
     for k, a in enumerate(annotations):
         changes.append(f'<li><span class="nbadge">{k+1}</span><b>{_e(_fmt_date(a.get("note_date")))}</b> — {_e(a.get("note", ""))}</li>')
     for dr in st["drift"]:
-        changes.append(f'<li><b>{_e(_fmt_date(dr["date"]))}</b> — run settings differed from the current configuration ({_e(", ".join(dr["flags"]))}); treat that point with care.</li>')
+        changes.append(f'<li><b>{_e(_fmt_date(dr["date"]))}</b> — analysis settings differed from the current configuration ({_e(", ".join(dr["flags"]))}); treat that point with care.</li>')
     if mixed:
         first_p = next((p for p in points if (p.get("rubric") or "hospital") == "practice"), None)
         changes.append('<li><b>Rubric change</b> — earlier snapshots were scored on the hospital rubric and later ones on the practice rubric'
@@ -658,9 +658,9 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
       <h2 class="pb" style="margin-top:0;padding-top:26px">Every snapshot</h2>
       <div class="sec">
         <table class="t snap"><thead><tr><th>Date</th><th class="num">Score</th><th class="num">Change</th>{pillar_ths}
-          <th class="num">Google</th><th class="num">Reviews</th><th>Run settings</th></tr></thead>
+          <th class="num">Google</th><th class="num">Reviews</th><th>Analysis settings</th></tr></thead>
         <tbody>{"".join(snap_rows)}</tbody></table>
-        <div class="cap">Same-day re-runs are collapsed to the last run of the day.</div>
+        <div class="cap">Same-day re-analyses are collapsed to the last analysis run of the day.</div>
       </div>
 
       <div class="note"><b>About the Pulse Score.</b> {_e(AIVS_DISCLAIMER)}<br><br>{limitations_html}</div>

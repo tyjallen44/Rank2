@@ -2722,7 +2722,7 @@ def _practice_reputation_table_html(rows: list[dict], run_date: str = "") -> str
     if run_date:
         footer = (
             f'<p style="font-size:8pt;color:{M};margin-top:10px">'
-            f'Run date: {_e(run_date)} &ensp;&middot;&ensp; '
+            f'Analysis date: {_e(run_date)} &ensp;&middot;&ensp; '
             f'Platform data sourced from publicly available listings, current as of collection date. '
             f'Ratings may become stale after 90 days.</p>'
         )

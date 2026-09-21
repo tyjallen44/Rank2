@@ -1936,7 +1936,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             </div>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:12px;padding-left:2px;line-height:1.5">Every run automatically produces all three reports: the <strong>Hospital Network report</strong>, a <strong>Teaser</strong> version, and the <strong>Full Detail</strong> report (the full content analysis with drafted remediation for every finding).</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:12px;padding-left:2px;line-height:1.5">Every analysis run automatically produces all three reports: the <strong>Hospital Network report</strong>, a <strong>Teaser</strong> version, and the <strong>Full Detail</strong> report (the full content analysis with drafted remediation for every finding).</div>
         <div id="np-hq-hint" class="hidden" style="font-size:12px;color:var(--teal);margin-top:-6px;margin-bottom:12px"></div>
         <details id="np-advanced" style="margin:12px 0 6px">
           <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
@@ -2259,7 +2259,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <button class="admin-tab" id="atab-ops" onclick="switchAdminTab('ops')">Operations</button>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="btn" id="admin-clear-sl-btn" onclick="adminClearServiceLineCache()" title="Clear all cached service-line audits so the next network run recomputes fresh." style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#128465; Clear Service-Line Cache</button>
+          <button class="btn" id="admin-clear-sl-btn" onclick="adminClearServiceLineCache()" title="Clear all cached service-line audits so the next network analysis run recomputes fresh." style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#128465; Clear Service-Line Cache</button>
           <button class="btn" id="admin-test-email-btn" onclick="adminTestEmail()" style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#9993; Test Email</button>
         </div>
       </div>
@@ -2269,14 +2269,14 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <div id="admin-ops-panel" style="display:none">
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">
-            <div style="font-weight:600;font-size:15px">Runs on this server</div>
+            <div style="font-weight:600;font-size:15px">Analysis runs on this server</div>
             <div style="display:flex;gap:8px;align-items:center">
               <span id="admin-ops-meta" style="font-size:12px;color:var(--muted)"></span>
               <button class="btn btn-ghost btn-sm" onclick="loadAdminOps()">↻ Refresh</button>
             </div>
           </div>
           <div id="admin-ops-table"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:10px">In-memory job registry for this server process: running jobs plus everything finished since the last restart. Users see only their own runs on Home.</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">In-memory job registry for this server process: running jobs plus everything finished since the last restart. Users see only their own analysis runs on Home.</div>
         </div>
         <div class="card" style="margin-top:16px">
           <div style="font-weight:600;font-size:15px;margin-bottom:4px">Maintenance</div>
@@ -2638,7 +2638,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div>
             <strong>Two ways to start tracking.</strong>
             When a <strong>Deep Diagnostic</strong> finishes, click <strong>Track in Trends</strong> on its completion screen (also in any History row's Downloads menu) — the organization, market and type carry over and you only confirm the listing and schedule.
-            Or use <strong>+ Track New Entity</strong> above to set one up from scratch. Every entry here re-runs on its schedule and charts the score over time.
+            Or use <strong>+ Track New Entity</strong> above to set one up from scratch. Every entry here is re-analyzed on its schedule and charts the score over time.
             <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a>
           </div>
         </div>
@@ -2685,7 +2685,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
               <button class="tg-opt"    id="te-tg-network" onclick="setTeType('network')">Hospital Network</button>
             </div>
           </div>
-          <div id="te-net-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">Tracks the <strong>system-level</strong> Hospital Network score across a fixed roster of facilities. Each snapshot is a full network run (10–20 minutes, all facilities) — monthly is recommended. Headquarters city/state are optional. The service-line scorecard is off for tracked snapshots.</div>
+          <div id="te-net-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">Tracks the <strong>system-level</strong> Hospital Network score across a fixed roster of facilities. Each snapshot is a full network analysis run (10–20 minutes, all facilities) — monthly is recommended. Headquarters city/state are optional. The service-line scorecard is off for tracked snapshots.</div>
           <div id="te-type-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">Scores one department of a health system on the practice rubric — enter the <strong>health system</strong> above and the <strong>service line</strong> below.</div>
           <div id="te-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
             <label class="fl" id="te-specialty-label">Specialty</label>
@@ -3800,8 +3800,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
     <div class="npa-h">Good to know</div>
     <div class="npa-li"><strong>Consistent scoring.</strong> Bulk uses the same four-pillar engine as the Hospital Market report — a system gets the same Pulse Score either way.</div>
     <div class="npa-li"><strong>Fast and repeatable.</strong> Recent scores are reused from cache, so re-running a list is nearly instant and won't redo work already done.</div>
-    <div class="npa-li"><strong>Resilient.</strong> Long lists survive interruptions — a run can be resumed and picks up where it left off.</div>
-    <div class="npa-li"><strong>Everything's saved.</strong> Each run is stored under <strong>National Entity Runs</strong> on the History page, where you can re-download the enriched CSV any time.</div>
+    <div class="npa-li"><strong>Resilient.</strong> Long lists survive interruptions — an analysis run can be resumed and picks up where it left off.</div>
+    <div class="npa-li"><strong>Everything's saved.</strong> Each analysis run is stored under <strong>National Entity Runs</strong> on the History page, where you can re-download the enriched CSV any time.</div>
 
     <div class="modal-footer">
       <button class="btn btn-primary btn-sm" onclick="npCloseAbout()">Got it</button>
@@ -3852,7 +3852,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
     <div class="npa-step"><b class="n">5.</b> The best Google match becomes the <strong>flagship listing</strong>, shown on one line. Click <strong>change</strong> only if it picked the wrong clinic.</div>
     <div class="npa-step"><b class="n">6.</b> The <strong>Locations</strong> list fills in over 10–20 seconds (Run stays disabled until it does). It combines the other Google listings for the same brand — each with its address and star rating — with AI discovery of remaining clinics. Uncheck anything that isn't part of this service line. Everything checked is rolled into the score and appears in the per-location reputation table.</div>
     <div class="npa-step"><b class="n">7.</b> The <strong>Report Title</strong> is set for you (e.g. <em>Houston Methodist Orthopedics</em>) — click <em>rename</em> beside it to change what prints on the report. The practice profile is auto-classified from the service line — click <em>change</em> to override.</div>
-    <div class="npa-step"><b class="n">8.</b> Click <strong>Run Diagnostic</strong>. Every run produces the report and a teaser, plus the per-location reputation table. Physician sub-rows, a Pulse Briefing, or a website override are under <strong>Advanced options</strong> if you need them.</div>
+    <div class="npa-step"><b class="n">8.</b> Click <strong>Run Diagnostic</strong>. Every analysis run produces the report and a teaser, plus the per-location reputation table. Physician sub-rows, a Pulse Briefing, or a website override are under <strong>Advanced options</strong> if you need them.</div>
 
     <div class="npa-h">How the reviews pillar is scored</div>
     <div class="npa-p">Reviews &amp; Reputation is computed from the checked locations — a review-count-weighted average of their Google ratings and their combined review volume — so it always agrees with the reputation table in the report. It is never taken from the parent hospital's main listing.</div>
@@ -3885,7 +3885,7 @@ Hospital for Special Surgery,New York,NY,,Orthopedics</div>
     <div class="npa-step"><b class="n">3.</b> On the Confirm step the entity type is <strong>detected from the file</strong>: rows with a specialty are treated as <strong>Specialty Practice</strong>, which turns on per-row service-line detection for the whole upload. Change it there if the detection is wrong.</div>
     <div class="npa-step"><b class="n">4.</b> Review the resolved matches on the <strong>Confirm Entities</strong> step, then run.</div>
     <div class="npa-step"><b class="n">5.</b> Each department is scored headlessly on the practice rubric — auto-detecting and rolling up the service line (anchored by your <strong>specialty</strong> value when provided).</div>
-    <div class="npa-step"><b class="n">6.</b> Download the enriched <strong>CSV</strong> and the <strong>ZIP</strong> of all report PDFs. The run is saved under <em>Event Runs</em> on the History page, where it can also be resumed if interrupted.</div>
+    <div class="npa-step"><b class="n">6.</b> Download the enriched <strong>CSV</strong> and the <strong>ZIP</strong> of all report PDFs. The analysis run is saved under <em>Event Runs</em> on the History page, where it can also be resumed if interrupted.</div>
 
     <div class="npa-h">Tips</div>
     <div class="npa-li">• Name each row as <em>"[System] [Specialty]"</em> (e.g. <em>Houston Methodist Orthopedics</em>) for the most reliable detection.</div>
@@ -6927,7 +6927,7 @@ function _sgMeta(it) {
   if (it.kind === 'service_line' && it.service_line) parts[0] += ' · ' + it.service_line;
   else if (it.specialty) parts[0] += ' · ' + it.specialty;
   if (it.city || it.state) parts.push([it.city, it.state].filter(Boolean).join(', '));
-  if (it.days_ago != null) parts.push(`last run ${it.days_ago === 0 ? 'today' : it.days_ago === 1 ? 'yesterday' : it.days_ago + ' days ago'}${it.ran_by ? ' by ' + String(it.ran_by).split('@')[0] : ''}`);
+  if (it.days_ago != null) parts.push(`last analysis run ${it.days_ago === 0 ? 'today' : it.days_ago === 1 ? 'yesterday' : it.days_ago + ' days ago'}${it.ran_by ? ' by ' + String(it.ran_by).split('@')[0] : ''}`);
   if (it.tracked) parts.push('tracked in Trends');
   return parts.join(' · ');
 }
@@ -7073,7 +7073,7 @@ function _chooserRec() {
     return { page: 'individual', type: what, title: 'Deep Diagnostic', why: 'Rankings, Compare Two and Trends are not available for community health centers yet — the Deep Diagnostic covers the center itself with the Mission Query battery.' };
   if (goal === 'rank')    return { page: 'patient', type: what === 'hospital' ? 'hospital' : 'specialty', title: 'Competitors Rankings', why: `Ranks every ${what === 'hospital' ? 'hospital' : 'practice'} in the market, prospect-facing or full format.` };
   if (goal === 'compare') return { page: 'compare', type: what, title: 'Compare Two', why: `Two organizations head-to-head in one report — set both sides to ${label}.` };
-  if (goal === 'track')   return { page: 'track', type: what, title: 'Trends', why: `Re-runs the ${label} Deep Diagnostic on a schedule and charts the score over time.` };
+  if (goal === 'track')   return { page: 'track', type: what, title: 'Trends', why: `Repeats the ${label} Deep Diagnostic on a schedule and charts the score over time.` };
   return { page: 'individual', type: what, title: 'Deep Diagnostic', why: `The full four-pillar diagnosis of one ${label.toLowerCase()} with the fixes that move the score.` };
 }
 function openChooser(presetWhat, ev) {
@@ -7281,7 +7281,7 @@ async function loadHomeRuns() {
   if (!running.length && !done.length) {
     // Nothing to show but still let the user manage the preference.
     if (!pref) { el.classList.add('hidden'); return; }
-    el.innerHTML = `<div class="hr-h"><div class="hr-title">Your runs</div>${prefHtml}</div><div class="hr-meta">No runs in progress. Long reports keep running if you close this tab — the result lands in History${pref.notify_complete ? ' and in your inbox' : ''}.</div>`;
+    el.innerHTML = `<div class="hr-h"><div class="hr-title">Your analysis runs</div>${prefHtml}</div><div class="hr-meta">No analysis runs in progress. Long reports keep running if you close this tab — the result lands in History${pref.notify_complete ? ' and in your inbox' : ''}.</div>`;
     el.classList.remove('hidden');
     return;
   }
@@ -7291,7 +7291,7 @@ async function loadHomeRuns() {
     if (j.status === 'error')   return `<div class="hr-row"><span style="color:#c0392b">✕</span><span class="hr-lbl">${esc}</span><span class="hr-meta">failed</span></div>`;
     return `<div class="hr-row"><span style="color:var(--teal)">✓</span><span class="hr-lbl">${esc}</span><span class="hr-meta">done</span><button class="btn btn-ghost btn-sm" onclick="navigate('history')">Open in History</button></div>`;
   };
-  el.innerHTML = `<div class="hr-h"><div class="hr-title">${running.length ? `${running.length} run${running.length !== 1 ? 's' : ''} in progress` : 'Recently finished'}</div>${prefHtml}</div>${running.map(row).join('')}${done.slice(0, 4).map(row).join('')}`;
+  el.innerHTML = `<div class="hr-h"><div class="hr-title">${running.length ? `${running.length} analysis run${running.length !== 1 ? 's' : ''} in progress` : 'Recently finished'}</div>${prefHtml}</div>${running.map(row).join('')}${done.slice(0, 4).map(row).join('')}`;
   el.classList.remove('hidden');
   if (running.length && document.getElementById('page-home').classList.contains('active')) _homeRunsTimer = setTimeout(loadHomeRuns, 20000);
 }
@@ -7299,7 +7299,7 @@ async function setNotifyPref(on) {
   try {
     const r = await api('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notify_complete: !!on }) });
     if (!r.ok) throw new Error(await errDetail(r, 'Could not save'));
-    _flash(on ? 'You will get an email when a long run finishes.' : 'Completion emails turned off.');
+    _flash(on ? 'You will get an email when a long analysis run finishes.' : 'Completion emails turned off.');
   } catch (e) { alert(e.message || e); }
 }
 
@@ -7420,7 +7420,7 @@ function npSetMode(mode) {
 function npShowAbout()  { document.getElementById('np-about-modal').classList.add('open'); }
 function npCloseAbout() { document.getElementById('np-about-modal').classList.remove('open'); }
 function showIrHelp()  { document.getElementById('ir-help-modal').classList.add('open'); }
-const _HELP_TOPICS = {"analysis-type": {"title": "Which analysis type should I pick?", "html": "<div class=\"npa-p\">The type decides <strong>which rubric scores the organization</strong> and which pillars appear in the report. Pick it first — the fields below adapt to it.</div>\n<div class=\"npa-h\">Deep Diagnostic · Compare Two · Trends</div>\n<div class=\"npa-li\">&bull; <strong>Hospital</strong> — one hospital on the hospital rubric (Outcomes &amp; Safety, Credentials &amp; Recognition, Experience &amp; Reviews, Access &amp; Fit). Optionally roll in the system's related hospitals.</div>\n<div class=\"npa-li\">&bull; <strong>Hospital Service Line</strong> — one department of a health system (e.g. Houston Methodist Orthopedics). Every clinic of that line is rolled up and scored on the <em>practice</em> rubric, with a per-location reputation table.</div>\n<div class=\"npa-li\">&bull; <strong>Specialty Practice</strong> — an independent practice or group, all locations included, on the practice rubric (Practitioner Credentials &amp; Clinical Quality, Reviews &amp; Reputation, Identity &amp; Machine-Readability, Access &amp; Fit).</div>\n<div class=\"npa-li\">&bull; <strong>Community Health (FQHC)</strong> — the Community Health Edition: five pillars calibrated to safety-net centers, with a short intake form.</div>\n<div class=\"npa-h\">Competitors Rankings</div>\n<div class=\"npa-li\">&bull; <strong>Hospital Market</strong> ranks the hospitals in a market; <strong>Specialty Practice</strong> ranks the practices in a market for one specialty. Each uses its own rubric.</div>\n<div class=\"npa-h\">Two common mistakes</div>\n<div class=\"npa-li\">&bull; A hospital <em>department</em> entered as a Specialty Practice — use <strong>Hospital Service Line</strong> so it's scored as one rolled-up entity of the system.</div>\n<div class=\"npa-li\">&bull; A whole <em>health system</em> entered as a Hospital — use the <strong>Hospital Network</strong> report instead; it scores every facility.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">Scores from different rubrics are not comparable, so an organization's type should stay the same across the reports you compare.</div>"}, "related-hospitals": {"title": "Composite analysis of related hospitals", "html": "<div class=\"npa-p\">When checked, Pulse discovers the <strong>other hospitals and campuses in the same system</strong> and combines their public signals with the selected hospital into one score — the organization is presented as a system. When unchecked, only the selected hospital's own listing and data are scored.</div>\n<div class=\"npa-h\">Use it when</div>\n<div class=\"npa-li\">&bull; The audience thinks of the organization as one brand (a multi-campus system).</div>\n<div class=\"npa-li\">&bull; You want the report to reflect the whole footprint patients and AI assistants see.</div>\n<div class=\"npa-h\">Uncheck it when</div>\n<div class=\"npa-li\">&bull; The conversation is about a single campus, or the related hospitals would dilute what you want to show.</div>\n<div class=\"npa-h\">On the market pages and in Trends</div>\n<div class=\"npa-p\">The equivalent option combines a provider's multiple locations inside the market area into one ranked entity (or one tracked entity), rather than ranking each address separately. Changing it changes what is being measured — keep it consistent between runs you intend to compare.</div><div class=\"npa-p\">The checkbox lives under <strong>Advanced options</strong> (on Compare Two, in the Advanced disclosure on the run card, one per side).</div>"}, "cache": {"title": "Cached results and refreshing from scratch", "html": "<div class=\"npa-p\">Pulse reuses recent results so an organization reads the same across reports and runs stay fast:</div>\n<div class=\"npa-li\">&bull; <strong>30-day canonical score</strong> — once an organization is scored, that four-pillar score is reused by other reports for 30 days (same rubric and same set of locations).</div>\n<div class=\"npa-li\">&bull; <strong>Same-day lock</strong> — running the same entity or market again on the same day returns today's result instead of recomputing.</div>\n<div class=\"npa-h\">Refresh from scratch (admin only)</div>\n<div class=\"npa-p\">Ignores both caches and recomputes everything from live sources. Use it when a source has changed (a listing was fixed, a rating moved) or a bad run needs replacing. It costs a full run, and the fresh score becomes the canonical one other reports will reuse for the next 30 days.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">The option is labelled the same way on every page: <strong>Refresh from scratch — ignore cached results</strong>.</div>"}, "practice-composite": {"title": "What is Practice Composite?", "html": "<div class=\"npa-p\">Practice Composite adds a <strong>reputation table of the affiliated practices and clinics</strong> to the end of a hospital report. It is an appendix for context &mdash; it does <strong>not</strong> change the Pulse Score or the four pillars.</div>\n<div class=\"npa-h\">What you get</div>\n<div class=\"npa-li\">&bull; A row for every affiliated practice or clinic found for the organization (the analyzed hospital is pinned first).</div>\n<div class=\"npa-li\">&bull; For each: Google rating and review count, plus Healthgrades, Vitals, WebMD, Yelp and RateMDs where found, each linked to the public profile.</div>\n<div class=\"npa-li\">&bull; A review-weighted average rating and total review volume per practice, so weak or unclaimed listings stand out.</div>\n<div class=\"npa-li\">&bull; Optionally, <strong>Include Physicians in Composite</strong> adds physician-level rows under each practice (slower).</div>\n<div class=\"npa-h\">Where the list comes from</div>\n<div class=\"npa-p\">Pulse discovers the practices associated with the hospital or system and verifies each against its Google listing. On Deep Diagnostic you can review and uncheck entries before running; on Compare Two the discovery runs automatically for each side.</div>\n<div class=\"npa-h\">When to use it</div>\n<div class=\"npa-li\">&bull; The audience cares about the system's clinics and practices, not just the flagship hospital.</div>\n<div class=\"npa-li\">&bull; You want to show fragmented or unclaimed listings across a system in one table.</div>\n<div class=\"npa-li\">&bull; Skip it for a quick single-hospital read &mdash; it adds several minutes to the run.</div>\n<div class=\"npa-h\">Good to know</div>\n<div class=\"npa-li\">&bull; Specialty Practice and Hospital Service Line runs include the table automatically &mdash; their confirmed locations are the roster.</div>\n<div class=\"npa-li\">&bull; In Event Preparation for community health centers, &ldquo;Include Practice Composite&rdquo; means discovering every clinic site and rolling them into the assessment.</div><div class=\"npa-p\">For hospitals the checkbox is under <strong>Advanced options</strong>; practice types include the table automatically.</div>"}, "physicians": {"title": "Include Physicians in Composite", "html": "<div class=\"npa-p\">Adds <strong>physician-level rows</strong> under each practice in the Practice Composite table.</div>\n<div class=\"npa-li\">&bull; Pulse looks up the organization's physician roster in the national provider registry (NPPES), then collects each physician's Healthgrades, Vitals and Google ratings.</div>\n<div class=\"npa-li\">&bull; Useful for procedural specialties where patients and AI assistants search physician-first; unreviewed doctors are invisible in that discovery regardless of the practice's rating.</div>\n<div class=\"npa-li\">&bull; Adds meaningful time (one lookup per physician). You can uncheck individual physicians before running.</div>\n<div class=\"npa-li\">&bull; Does not change the Pulse Score.</div>"}, "report-format": {"title": "Which report format?", "html": "<div class=\"npa-p\"><strong>Market Summary</strong> is the default and what most runs use. The other two formats are under <strong>Advanced options</strong>. All three use the same scores; they differ in what is shown and who they're for.</div><ul class=\"npa-ul\"><li><strong>Market Summary</strong> — compact scorecards for every provider, nothing hidden, no target needed. A clean at-a-glance view of the market.</li><li><strong>Enticement</strong> (prospect-facing) — your prospect is shown in full at its true rank; every competitor's name and detail are obscured. Choosing it reveals the Prospect / Target field.</li><li><strong>Full Report</strong> (customer-facing) — the complete ranking with the detail behind every score, for an existing customer.</li></ul>"}, "briefing": {"title": "Pulse Briefing", "html": "<div class=\"npa-p\">A <strong>one-page companion</strong> with talking points for a meeting, generated alongside the report.</div>\n<div class=\"npa-li\">&bull; <strong>Sales edition</strong> — for a prospect meeting: where they stand, what's costing them, the opening conversation.</div>\n<div class=\"npa-li\">&bull; <strong>Customer Success edition</strong> — for an existing customer: progress, what to fix next, how to talk about the score.</div>\n<div class=\"npa-li\">&bull; Requires full data collection — all locations, physician listings and battery metrics — so it forces Practice Composite and physician rows on and makes the run noticeably longer.</div>"}, "service-line-scorecard": {"title": "Service-line listing scorecard", "html": "<div class=\"npa-p\">Adds a section to the Hospital Network report that grades <strong>each department's online listings</strong> (Orthopedics, Cardiology, Oncology, …) for patient attraction: findability, completeness, reputation and content.</div>\n<div class=\"npa-li\">&bull; Pulse crawls the system's website to find its service lines, then checks a flagship listing plus a small sample per line.</div>\n<div class=\"npa-li\">&bull; It's the slow step — adds several minutes — and can come back <strong>empty</strong> when the website blocks crawlers. The rest of the report is unaffected.</div>\n<div class=\"npa-li\">&bull; For a deep read of <em>one</em> department across all its clinics, run a Deep Diagnostic as a Hospital Service Line instead.</div>"}, "network-type": {"title": "Facility type", "html": "<div class=\"npa-p\">Tells Pulse what kind of facilities make up the network so discovery builds the right roster and the cover is labelled correctly.</div>\n<div class=\"npa-li\">&bull; <strong>Hospitals</strong> — acute-care hospitals and campuses (the default).</div>\n<div class=\"npa-li\">&bull; <strong>ASC</strong>, <strong>Urgent care</strong>, <strong>Imaging</strong>, <strong>Behavioral health</strong> — networks of that facility type; the roster is limited to it.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">The scoring rubric is the same four-pillar market rubric for every type; only the roster and labels change.</div><div class=\"npa-p\">The selector is under <strong>Advanced options</strong> on the Hospital Network page; leave it on Hospitals unless the list is a different kind of facility.</div>"}, "teaser": {"title": "Teaser version", "html": "<div class=\"npa-p\">A copy of the report with <strong>everything below the headline score blurred</strong> and a call to action left readable — built for sending to a prospect who hasn't bought the full report.</div>\n<div class=\"npa-li\">&bull; Deep Diagnostic and Hospital Network produce the teaser automatically with every run.</div>\n<div class=\"npa-li\">&bull; Compare Two and Event Preparation make it an option because it adds a file per entity.</div>\n<div class=\"npa-li\">&bull; The teaser uses exactly the same scores; nothing is recomputed.</div><div class=\"npa-p\">On Compare Two and Event Preparation the option sits under <strong>Advanced options</strong>.</div>"}, "event-options": {"title": "Event Preparation options", "html": "<ul class=\"npa-ul\"><li><strong>Event name and date</strong> are optional — the name defaults to the file name.</li><li><strong>Entity type</strong> is chosen on the Confirm step and detected from the file: when most rows have a <em>specialty</em>, they are analyzed as practices; otherwise as hospitals. Pick Community Health yourself. The type applies to the whole upload — keep hospitals, practices and health centers in separate files.</li><li><strong>Practice attendees</strong> always get the combined report (content analysis and drafted prescription, using the row's website URL if given). <strong>Community health attendees</strong> always include their clinic sites.</li><li><strong>Advanced options</strong> — a Teaser per entity (one extra file each) and, for admins, Refresh from scratch.</li><li><strong>State discrepancies</strong> — rows whose state doesn't match the Google listing are flagged; ticking the confirmation says you've checked them and want to proceed as entered.</li></ul>"}, "trend-schedule": {"title": "Tracking schedule and scope", "html": "<ul class=\"npa-ul\"><li>Tracked entities are collected <strong>monthly</strong> by default — a new snapshot each month, plus <em>Run now</em> any time. Click <em>change</em> on the add form for weekly or manual-only.</li><li><strong>Aggregate related facilities</strong> (hospitals) — roll the system's related hospitals into the tracked score. Practice types always roll up their confirmed locations.</li><li>Cadence, next run, notes, email delivery and the Locations roster are managed from the entity's <strong>configuration panel</strong> after it is added.</li><li>The entity's identity (name, market, specialty, scope, type) is locked once tracking starts, because changing it would make earlier snapshots non-comparable — track a new entity instead.</li></ul>"}, "compare-service-line": {"title": "Analyze as a service line", "html": "<div class=\"npa-p\">This side resolved to a <strong>department of a larger health system</strong>. Leave the box checked to analyze it as that service line — every clinic of the department rolled up and scored on the practice rubric. Uncheck it to compare just the single listing you selected.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">For a like-for-like comparison, both sides should be the same kind of entity (two service lines, two practices, or two hospitals).</div>"}, "location-mode": {"title": "Searching by ZIP code instead of city", "html": "<div class=\"npa-p\">By default the market is the <strong>city and state</strong> you enter. Under <strong>Advanced options</strong>, <em>Search by ZIP code</em> switches the market to a radius (1–25 miles) around a ZIP — useful for dense metros or when the organization sits between cities.</div><ul class=\"npa-ul\"><li>On Competitors Rankings this decides which competitors are in the field.</li><li>On Deep Diagnostic it decides which Google listing is matched.</li><li>Hospital Service Line always uses a city, since the city picks the metro whose clinics are discovered, so the option is hidden for that type.</li></ul>"}, "score-evidence": {"title": "Score Evidence (High / Medium / Low)", "html": "<div class=\"npa-p\">How much public data sits behind a score. A number built from a dozen Google reviews and no CMS record is not the same as one built from hundreds of reviews across confirmed locations, so every Deep Diagnostic states which it is.</div><ul class=\"npa-ul\"><li><strong>High</strong> — 200+ reviews behind the score and every expected public signal present.</li><li><strong>Medium</strong> — thinner evidence, or one signal missing (for example no CMS star rating on record for a hospital).</li><li><strong>Low</strong> — under 50 reviews, no verified Google listing, or several gaps.</li></ul><div class=\"npa-h\">Where it appears</div><div class=\"npa-p\">On the completion screen, as a chip on History rows and in the Trends list, and under the score in the PDF with the reason (e.g. <em>312 reviews across 4 locations</em>). It never changes the score — it tells you how hard to lean on it. For practices, reviews are counted across the confirmed locations, so confirming more locations raises the evidence.</div>"}, "suggestions": {"title": "Organization suggestions", "html": "<div class=\"npa-p\">As you type an organization name, Pulse suggests organizations your team has already analyzed or is tracking — from History and Trends. Each shows its type, market, when it last ran and by whom.</div><ul class=\"npa-ul\"><li>Pick one and the form fills in (type, city, state, specialty or service line) and the listing search starts.</li><li>Typing a name nobody has run shows no suggestions; the form works as before.</li><li>On Home, <em>Find an organization</em> uses the same suggestions and offers Deep Diagnostic, Compare, Trends and History for the pick — or analyzes a new organization.</li><li>Suggestions refresh within two minutes of a new run.</li></ul>"}, "duplicate-run": {"title": "Already run recently", "html": "<div class=\"npa-p\">Before a Deep Diagnostic, Hospital Network or Compare Two starts, Pulse checks the last <strong>14 days</strong> for the same organization (for Compare Two, the same pair in either order). Scores rarely move within two weeks, so a repeat run usually costs time without changing the result.</div><ul class=\"npa-ul\"><li><strong>Open that report</strong> downloads the earlier PDF.</li><li><strong>History</strong> shows every earlier run.</li><li><strong>Run anyway</strong> proceeds — for example after a listing was fixed or a rating moved. Admins can also use Refresh from scratch under Advanced options.</li></ul>"}, "trend-notes": {"title": "Trend notes", "html": "<div class=\"npa-p\">Dated notes record what changed and when — a new website, a review campaign, a merger — so a move in the score has an explanation next to it.</div><ul class=\"npa-ul\"><li>Notes appear as numbered markers on the Pulse Score chart and in a Notes list under the chart in the Trend Report PDF (and in emailed reports).</li><li>Use <em>+ note</em> on a snapshot row to date a note to that snapshot.</li><li>The person who added a note (or an admin) can remove it.</li></ul>"}};
+const _HELP_TOPICS = {"analysis-type": {"title": "Which analysis type should I pick?", "html": "<div class=\"npa-p\">The type decides <strong>which rubric scores the organization</strong> and which pillars appear in the report. Pick it first — the fields below adapt to it.</div>\n<div class=\"npa-h\">Deep Diagnostic · Compare Two · Trends</div>\n<div class=\"npa-li\">&bull; <strong>Hospital</strong> — one hospital on the hospital rubric (Outcomes &amp; Safety, Credentials &amp; Recognition, Experience &amp; Reviews, Access &amp; Fit). Optionally roll in the system's related hospitals.</div>\n<div class=\"npa-li\">&bull; <strong>Hospital Service Line</strong> — one department of a health system (e.g. Houston Methodist Orthopedics). Every clinic of that line is rolled up and scored on the <em>practice</em> rubric, with a per-location reputation table.</div>\n<div class=\"npa-li\">&bull; <strong>Specialty Practice</strong> — an independent practice or group, all locations included, on the practice rubric (Practitioner Credentials &amp; Clinical Quality, Reviews &amp; Reputation, Identity &amp; Machine-Readability, Access &amp; Fit).</div>\n<div class=\"npa-li\">&bull; <strong>Community Health (FQHC)</strong> — the Community Health Edition: five pillars calibrated to safety-net centers, with a short intake form.</div>\n<div class=\"npa-h\">Competitors Rankings</div>\n<div class=\"npa-li\">&bull; <strong>Hospital Market</strong> ranks the hospitals in a market; <strong>Specialty Practice</strong> ranks the practices in a market for one specialty. Each uses its own rubric.</div>\n<div class=\"npa-h\">Two common mistakes</div>\n<div class=\"npa-li\">&bull; A hospital <em>department</em> entered as a Specialty Practice — use <strong>Hospital Service Line</strong> so it's scored as one rolled-up entity of the system.</div>\n<div class=\"npa-li\">&bull; A whole <em>health system</em> entered as a Hospital — use the <strong>Hospital Network</strong> report instead; it scores every facility.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">Scores from different rubrics are not comparable, so an organization's type should stay the same across the reports you compare.</div>"}, "related-hospitals": {"title": "Composite analysis of related hospitals", "html": "<div class=\"npa-p\">When checked, Pulse discovers the <strong>other hospitals and campuses in the same system</strong> and combines their public signals with the selected hospital into one score — the organization is presented as a system. When unchecked, only the selected hospital's own listing and data are scored.</div>\n<div class=\"npa-h\">Use it when</div>\n<div class=\"npa-li\">&bull; The audience thinks of the organization as one brand (a multi-campus system).</div>\n<div class=\"npa-li\">&bull; You want the report to reflect the whole footprint patients and AI assistants see.</div>\n<div class=\"npa-h\">Uncheck it when</div>\n<div class=\"npa-li\">&bull; The conversation is about a single campus, or the related hospitals would dilute what you want to show.</div>\n<div class=\"npa-h\">On the market pages and in Trends</div>\n<div class=\"npa-p\">The equivalent option combines a provider's multiple locations inside the market area into one ranked entity (or one tracked entity), rather than ranking each address separately. Changing it changes what is being measured — keep it consistent between runs you intend to compare.</div><div class=\"npa-p\">The checkbox lives under <strong>Advanced options</strong> (on Compare Two, in the Advanced disclosure on the Run card, one per side).</div>"}, "cache": {"title": "Cached results and refreshing from scratch", "html": "<div class=\"npa-p\">Pulse reuses recent results so an organization reads the same across reports and runs stay fast:</div>\n<div class=\"npa-li\">&bull; <strong>30-day canonical score</strong> — once an organization is scored, that four-pillar score is reused by other reports for 30 days (same rubric and same set of locations).</div>\n<div class=\"npa-li\">&bull; <strong>Same-day lock</strong> — running the same entity or market again on the same day returns today's result instead of recomputing.</div>\n<div class=\"npa-h\">Refresh from scratch (admin only)</div>\n<div class=\"npa-p\">Ignores both caches and recomputes everything from live sources. Use it when a source has changed (a listing was fixed, a rating moved) or a bad analysis run needs replacing. It costs a full analysis run, and the fresh score becomes the canonical one other reports will reuse for the next 30 days.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">The option is labelled the same way on every page: <strong>Refresh from scratch — ignore cached results</strong>.</div>"}, "practice-composite": {"title": "What is Practice Composite?", "html": "<div class=\"npa-p\">Practice Composite adds a <strong>reputation table of the affiliated practices and clinics</strong> to the end of a hospital report. It is an appendix for context &mdash; it does <strong>not</strong> change the Pulse Score or the four pillars.</div>\n<div class=\"npa-h\">What you get</div>\n<div class=\"npa-li\">&bull; A row for every affiliated practice or clinic found for the organization (the analyzed hospital is pinned first).</div>\n<div class=\"npa-li\">&bull; For each: Google rating and review count, plus Healthgrades, Vitals, WebMD, Yelp and RateMDs where found, each linked to the public profile.</div>\n<div class=\"npa-li\">&bull; A review-weighted average rating and total review volume per practice, so weak or unclaimed listings stand out.</div>\n<div class=\"npa-li\">&bull; Optionally, <strong>Include Physicians in Composite</strong> adds physician-level rows under each practice (slower).</div>\n<div class=\"npa-h\">Where the list comes from</div>\n<div class=\"npa-p\">Pulse discovers the practices associated with the hospital or system and verifies each against its Google listing. On Deep Diagnostic you can review and uncheck entries before running; on Compare Two the discovery runs automatically for each side.</div>\n<div class=\"npa-h\">When to use it</div>\n<div class=\"npa-li\">&bull; The audience cares about the system's clinics and practices, not just the flagship hospital.</div>\n<div class=\"npa-li\">&bull; You want to show fragmented or unclaimed listings across a system in one table.</div>\n<div class=\"npa-li\">&bull; Skip it for a quick single-hospital read &mdash; it adds several minutes to the analysis run.</div>\n<div class=\"npa-h\">Good to know</div>\n<div class=\"npa-li\">&bull; Specialty Practice and Hospital Service Line runs include the table automatically &mdash; their confirmed locations are the roster.</div>\n<div class=\"npa-li\">&bull; In Event Preparation for community health centers, &ldquo;Include Practice Composite&rdquo; means discovering every clinic site and rolling them into the assessment.</div><div class=\"npa-p\">For hospitals the checkbox is under <strong>Advanced options</strong>; practice types include the table automatically.</div>"}, "physicians": {"title": "Include Physicians in Composite", "html": "<div class=\"npa-p\">Adds <strong>physician-level rows</strong> under each practice in the Practice Composite table.</div>\n<div class=\"npa-li\">&bull; Pulse looks up the organization's physician roster in the national provider registry (NPPES), then collects each physician's Healthgrades, Vitals and Google ratings.</div>\n<div class=\"npa-li\">&bull; Useful for procedural specialties where patients and AI assistants search physician-first; unreviewed doctors are invisible in that discovery regardless of the practice's rating.</div>\n<div class=\"npa-li\">&bull; Adds meaningful time (one lookup per physician). You can uncheck individual physicians before running.</div>\n<div class=\"npa-li\">&bull; Does not change the Pulse Score.</div>"}, "report-format": {"title": "Which report format?", "html": "<div class=\"npa-p\"><strong>Market Summary</strong> is the default and what most runs use. The other two formats are under <strong>Advanced options</strong>. All three use the same scores; they differ in what is shown and who they're for.</div><ul class=\"npa-ul\"><li><strong>Market Summary</strong> — compact scorecards for every provider, nothing hidden, no target needed. A clean at-a-glance view of the market.</li><li><strong>Enticement</strong> (prospect-facing) — your prospect is shown in full at its true rank; every competitor's name and detail are obscured. Choosing it reveals the Prospect / Target field.</li><li><strong>Full Report</strong> (customer-facing) — the complete ranking with the detail behind every score, for an existing customer.</li></ul>"}, "briefing": {"title": "Pulse Briefing", "html": "<div class=\"npa-p\">A <strong>one-page companion</strong> with talking points for a meeting, generated alongside the report.</div>\n<div class=\"npa-li\">&bull; <strong>Sales edition</strong> — for a prospect meeting: where they stand, what's costing them, the opening conversation.</div>\n<div class=\"npa-li\">&bull; <strong>Customer Success edition</strong> — for an existing customer: progress, what to fix next, how to talk about the score.</div>\n<div class=\"npa-li\">&bull; Requires full data collection — all locations, physician listings and battery metrics — so it forces Practice Composite and physician rows on and makes the analysis run noticeably longer.</div>"}, "service-line-scorecard": {"title": "Service-line listing scorecard", "html": "<div class=\"npa-p\">Adds a section to the Hospital Network report that grades <strong>each department's online listings</strong> (Orthopedics, Cardiology, Oncology, …) for patient attraction: findability, completeness, reputation and content.</div>\n<div class=\"npa-li\">&bull; Pulse crawls the system's website to find its service lines, then checks a flagship listing plus a small sample per line.</div>\n<div class=\"npa-li\">&bull; It's the slow step — adds several minutes — and can come back <strong>empty</strong> when the website blocks crawlers. The rest of the report is unaffected.</div>\n<div class=\"npa-li\">&bull; For a deep read of <em>one</em> department across all its clinics, run a Deep Diagnostic as a Hospital Service Line instead.</div>"}, "network-type": {"title": "Facility type", "html": "<div class=\"npa-p\">Tells Pulse what kind of facilities make up the network so discovery builds the right roster and the cover is labelled correctly.</div>\n<div class=\"npa-li\">&bull; <strong>Hospitals</strong> — acute-care hospitals and campuses (the default).</div>\n<div class=\"npa-li\">&bull; <strong>ASC</strong>, <strong>Urgent care</strong>, <strong>Imaging</strong>, <strong>Behavioral health</strong> — networks of that facility type; the roster is limited to it.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">The scoring rubric is the same four-pillar market rubric for every type; only the roster and labels change.</div><div class=\"npa-p\">The selector is under <strong>Advanced options</strong> on the Hospital Network page; leave it on Hospitals unless the list is a different kind of facility.</div>"}, "teaser": {"title": "Teaser version", "html": "<div class=\"npa-p\">A copy of the report with <strong>everything below the headline score blurred</strong> and a call to action left readable — built for sending to a prospect who hasn't bought the full report.</div>\n<div class=\"npa-li\">&bull; Deep Diagnostic and Hospital Network produce the teaser automatically with every analysis run.</div>\n<div class=\"npa-li\">&bull; Compare Two and Event Preparation make it an option because it adds a file per entity.</div>\n<div class=\"npa-li\">&bull; The teaser uses exactly the same scores; nothing is recomputed.</div><div class=\"npa-p\">On Compare Two and Event Preparation the option sits under <strong>Advanced options</strong>.</div>"}, "event-options": {"title": "Event Preparation options", "html": "<ul class=\"npa-ul\"><li><strong>Event name and date</strong> are optional — the name defaults to the file name.</li><li><strong>Entity type</strong> is chosen on the Confirm step and detected from the file: when most rows have a <em>specialty</em>, they are analyzed as practices; otherwise as hospitals. Pick Community Health yourself. The type applies to the whole upload — keep hospitals, practices and health centers in separate files.</li><li><strong>Practice attendees</strong> always get the combined report (content analysis and drafted prescription, using the row's website URL if given). <strong>Community health attendees</strong> always include their clinic sites.</li><li><strong>Advanced options</strong> — a Teaser per entity (one extra file each) and, for admins, Refresh from scratch.</li><li><strong>State discrepancies</strong> — rows whose state doesn't match the Google listing are flagged; ticking the confirmation says you've checked them and want to proceed as entered.</li></ul>"}, "trend-schedule": {"title": "Tracking schedule and scope", "html": "<ul class=\"npa-ul\"><li>Tracked entities are collected <strong>monthly</strong> by default — a new snapshot each month, plus <em>Run now</em> any time. Click <em>change</em> on the add form for weekly or manual-only.</li><li><strong>Aggregate related facilities</strong> (hospitals) — roll the system's related hospitals into the tracked score. Practice types always roll up their confirmed locations.</li><li>Cadence, next run, notes, email delivery and the Locations roster are managed from the entity's <strong>configuration panel</strong> after it is added.</li><li>The entity's identity (name, market, specialty, scope, type) is locked once tracking starts, because changing it would make earlier snapshots non-comparable — track a new entity instead.</li></ul>"}, "compare-service-line": {"title": "Analyze as a service line", "html": "<div class=\"npa-p\">This side resolved to a <strong>department of a larger health system</strong>. Leave the box checked to analyze it as that service line — every clinic of the department rolled up and scored on the practice rubric. Uncheck it to compare just the single listing you selected.</div>\n<div class=\"npa-p\" style=\"margin-top:8px\">For a like-for-like comparison, both sides should be the same kind of entity (two service lines, two practices, or two hospitals).</div>"}, "location-mode": {"title": "Searching by ZIP code instead of city", "html": "<div class=\"npa-p\">By default the market is the <strong>city and state</strong> you enter. Under <strong>Advanced options</strong>, <em>Search by ZIP code</em> switches the market to a radius (1–25 miles) around a ZIP — useful for dense metros or when the organization sits between cities.</div><ul class=\"npa-ul\"><li>On Competitors Rankings this decides which competitors are in the field.</li><li>On Deep Diagnostic it decides which Google listing is matched.</li><li>Hospital Service Line always uses a city, since the city picks the metro whose clinics are discovered, so the option is hidden for that type.</li></ul>"}, "score-evidence": {"title": "Score Evidence (High / Medium / Low)", "html": "<div class=\"npa-p\">How much public data sits behind a score. A number built from a dozen Google reviews and no CMS record is not the same as one built from hundreds of reviews across confirmed locations, so every Deep Diagnostic states which it is.</div><ul class=\"npa-ul\"><li><strong>High</strong> — 200+ reviews behind the score and every expected public signal present.</li><li><strong>Medium</strong> — thinner evidence, or one signal missing (for example no CMS star rating on record for a hospital).</li><li><strong>Low</strong> — under 50 reviews, no verified Google listing, or several gaps.</li></ul><div class=\"npa-h\">Where it appears</div><div class=\"npa-p\">On the completion screen, as a chip on History rows and in the Trends list, and under the score in the PDF with the reason (e.g. <em>312 reviews across 4 locations</em>). It never changes the score — it tells you how hard to lean on it. For practices, reviews are counted across the confirmed locations, so confirming more locations raises the evidence.</div>"}, "suggestions": {"title": "Organization suggestions", "html": "<div class=\"npa-p\">As you type an organization name, Pulse suggests organizations your team has already analyzed or is tracking — from History and Trends. Each shows its type, market, when it last ran and by whom.</div><ul class=\"npa-ul\"><li>Pick one and the form fills in (type, city, state, specialty or service line) and the listing search starts.</li><li>Typing a name nobody has run shows no suggestions; the form works as before.</li><li>On Home, <em>Find an organization</em> uses the same suggestions and offers Deep Diagnostic, Compare, Trends and History for the pick — or analyzes a new organization.</li><li>Suggestions refresh within two minutes of a new analysis run.</li></ul>"}, "duplicate-run": {"title": "Already run recently", "html": "<div class=\"npa-p\">Before a Deep Diagnostic, Hospital Network or Compare Two starts, Pulse checks the last <strong>14 days</strong> for the same organization (for Compare Two, the same pair in either order). Scores rarely move within two weeks, so a repeat analysis run usually costs time without changing the result.</div><ul class=\"npa-ul\"><li><strong>Open that report</strong> downloads the earlier PDF.</li><li><strong>History</strong> shows every earlier analysis run.</li><li><strong>Run anyway</strong> proceeds — for example after a listing was fixed or a rating moved. Admins can also use Refresh from scratch under Advanced options.</li></ul>"}, "trend-notes": {"title": "Trend notes", "html": "<div class=\"npa-p\">Dated notes record what changed and when — a new website, a review campaign, a merger — so a move in the score has an explanation next to it.</div><ul class=\"npa-ul\"><li>Notes appear as numbered markers on the Pulse Score chart and in a Notes list under the chart in the Trend Report PDF (and in emailed reports).</li><li>Use <em>+ note</em> on a snapshot row to date a note to that snapshot.</li><li>The person who added a note (or an admin) can remove it.</li></ul>"}};
 // Shared help pop-over. showHelp('topic', event) from any "ⓘ What is this?" link; the
 // event is stopped so a link inside a <label> never toggles its checkbox.
 function showHelp(topic, ev) {
@@ -7606,7 +7606,7 @@ async function caRerender(caId, btn) {
 }
 
 async function caDraftFromHistory(caId, btn) {
-  if (!confirm('Generate the full content plan (drafts) for this run? This adds publication-ready content to the Content Report.')) return;
+  if (!confirm('Generate the full content plan (drafts) for this analysis run? This adds publication-ready content to the Content Report.')) return;
   if (btn) { btn.disabled = true; btn.textContent = 'Drafting…'; }
   try {
     const r = await api('/api/content-analysis/' + caId + '/draft', { method: 'POST' });
@@ -7712,7 +7712,7 @@ function showBulkDone(ev) {
   const dl = `/api/network/bulk/${ev.bulk_id}/csv?token=${encodeURIComponent(_token)}`;
   document.getElementById('done-actions').innerHTML = `
     <button class="btn btn-gold" onclick="window.location.href='${dl}'">⬇ Download Enriched CSV</button>
-    <button class="btn btn-secondary" onclick="navigate('network')">New Bulk Run</button>`;
+    <button class="btn btn-secondary" onclick="navigate('network')">New Bulk Analysis</button>`;
   document.getElementById('prog-done').classList.remove('hidden');
 }
 
@@ -8315,7 +8315,7 @@ function _dlCell(run, caRuns) {
   if (run.report_type === 'comparison') {
     if (run.has_pdf) { files.push([`Comparison${run.comparison && run.comparison.teaser ? ' — Teaser' : ''} (PDF)`, `/api/compare/${run.run_id}/pdf?token=${tok}`]); acts.push(emailAct); }
     else files.push(['Comparison PDF not on disk', null]);
-    if (_role === 'admin') acts.push(['🗑 Delete run', `histDeleteRun('${run.run_id}', this)`]);
+    if (_role === 'admin') acts.push(['🗑 Delete analysis run', `histDeleteRun('${run.run_id}', this)`]);
     return _dlMenu(run.run_id, files, acts);
   }
 
@@ -8355,7 +8355,7 @@ function _dlCell(run, caRuns) {
     acts.push(['⇄ Compare against…', `handoffCompareRun('${run.run_id}')`]);
   }
   if (run.has_pdf) acts.push(emailAct);
-  if (_role === 'admin') acts.push(['🗑 Delete run', `histDeleteRun('${run.run_id}', this)`]);
+  if (_role === 'admin') acts.push(['🗑 Delete analysis run', `histDeleteRun('${run.run_id}', this)`]);
   return _dlMenu(run.run_id, files, acts);
 }
 
@@ -8449,14 +8449,14 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
 
     evHtml = `
       <div style="margin-bottom:24px">
-        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Event Runs</div>
+        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Event Analysis Runs</div>
 
         <!-- Collapsed count banner -->
         <div id="ev-hist-collapsed" onclick="evToggleHistory()" style="cursor:pointer;padding:14px 18px;border-radius:8px;border:1.5px solid var(--border);background:var(--pale);transition:background 0.15s" onmouseenter="this.style.background='#e8f0ee'" onmouseleave="this.style.background='var(--pale)'">
           <div style="display:flex;align-items:center;gap:14px">
             <span style="font-size:22px;color:var(--teal-mid);line-height:1">≡</span>
             <div style="flex:1">
-              <div style="font-size:15px;font-weight:700;color:var(--body)">${_evCount} Event Run${_evCount === 1 ? '' : 's'}</div>
+              <div style="font-size:15px;font-weight:700;color:var(--body)">${_evCount} Event Analysis Run${_evCount === 1 ? '' : 's'}</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px">${_evDateRange}</div>
             </div>
             <button class="btn btn-primary btn-sm" style="pointer-events:none;flex-shrink:0">View All ▼</button>
@@ -8466,8 +8466,8 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
         <!-- Expanded table -->
         <div id="ev-hist-body">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-size:12px;color:var(--muted)">${_evCount} run${_evCount === 1 ? '' : 's'}</span>
-            <button class="btn btn-ghost btn-sm" onclick="evToggleHistory()">Hide Event Runs ▲</button>
+            <span style="font-size:12px;color:var(--muted)">${_evCount} analysis run${_evCount === 1 ? '' : 's'}</span>
+            <button class="btn btn-ghost btn-sm" onclick="evToggleHistory()">Hide Event Analysis Runs ▲</button>
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
@@ -8510,14 +8510,14 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
         <div id="nb-hist-collapsed" onclick="nbToggleHistory()" style="cursor:pointer;padding:14px 18px;border-radius:8px;border:1.5px solid var(--border);background:var(--pale);transition:background 0.15s" onmouseenter="this.style.background='#e8f0ee'" onmouseleave="this.style.background='var(--pale)'">
           <div style="display:flex;align-items:center;gap:14px">
             <span style="font-size:22px;color:var(--teal-mid);line-height:1">≡</span>
-            <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--body)">${nbCount} National Entity Run${nbCount === 1 ? '' : 's'}</div></div>
+            <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--body)">${nbCount} National Entity Analysis Run${nbCount === 1 ? '' : 's'}</div></div>
             <button class="btn btn-primary btn-sm" style="pointer-events:none;flex-shrink:0">View All ▼</button>
           </div>
         </div>
         <div id="nb-hist-body">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-size:12px;color:var(--muted)">${nbCount} run${nbCount === 1 ? '' : 's'}</span>
-            <button class="btn btn-ghost btn-sm" onclick="nbToggleHistory()">Hide National Entity Runs ▲</button>
+            <span style="font-size:12px;color:var(--muted)">${nbCount} analysis run${nbCount === 1 ? '' : 's'}</span>
+            <button class="btn btn-ghost btn-sm" onclick="nbToggleHistory()">Hide National Entity Analysis Runs ▲</button>
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
@@ -8558,14 +8558,14 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
         <div id="sh-hist-collapsed" onclick="shToggleHistory()" style="cursor:pointer;padding:14px 18px;border-radius:8px;border:1.5px solid var(--border);background:var(--pale);transition:background 0.15s" onmouseenter="this.style.background='#e8f0ee'" onmouseleave="this.style.background='var(--pale)'">
           <div style="display:flex;align-items:center;gap:14px">
             <span style="font-size:22px;color:var(--teal-mid);line-height:1">≡</span>
-            <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--body)">${shCount} Student Health Run${shCount === 1 ? '' : 's'}</div></div>
+            <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--body)">${shCount} Student Health Analysis Run${shCount === 1 ? '' : 's'}</div></div>
             <button class="btn btn-primary btn-sm" style="pointer-events:none;flex-shrink:0">View All ▼</button>
           </div>
         </div>
         <div id="sh-hist-body">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-size:12px;color:var(--muted)">${shCount} run${shCount === 1 ? '' : 's'}</span>
-            <button class="btn btn-ghost btn-sm" onclick="shToggleHistory()">Hide Student Health Runs ▲</button>
+            <span style="font-size:12px;color:var(--muted)">${shCount} analysis run${shCount === 1 ? '' : 's'}</span>
+            <button class="btn btn-ghost btn-sm" onclick="shToggleHistory()">Hide Student Health Analysis Runs ▲</button>
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <table class="tbl">
@@ -8748,13 +8748,13 @@ function _applyEvHistState() {
 }
 
 async function nbDelete(id) {
-  if (!confirm('Delete this National Entity run? This removes the run record and its CSV.')) return;
+  if (!confirm('Delete this National Entity analysis run? This removes the record and its CSV.')) return;
   const r = await api('/api/network/bulk/' + id, { method: 'DELETE' });
   if (r.ok) loadHistory();
 }
 
 async function nbResume(id) {
-  if (!confirm('Resume this National Entity run? Systems already scored return instantly from cache; only the remainder is re-computed.')) return;
+  if (!confirm('Resume this National Entity analysis run? Systems already scored return instantly from cache; only the remainder is re-computed.')) return;
   try {
     const r = await api('/api/network/bulk/' + id + '/resume', { method: 'POST' });
     if (!r.ok) { const e = await r.json().catch(()=>({})); alert(e.detail || 'Could not resume this run.'); return; }
@@ -8763,7 +8763,7 @@ async function nbResume(id) {
 }
 
 async function evResume(id) {
-  if (!confirm('Resume this event run? Any entities that never finished are re-scored; completed ones are kept.')) return;
+  if (!confirm('Resume this event analysis run? Any entities that never finished are re-scored; completed ones are kept.')) return;
   try {
     const r = await api('/api/event/' + id + '/resume', { method: 'POST' });
     if (!r.ok) { const e = await r.json().catch(()=>({})); alert(e.detail || 'Could not resume this run.'); return; }
@@ -8874,10 +8874,10 @@ async function histLoadOlder(all) {
       _histHasMore = !!data.has_more; _histSince = data.since;
     }
     renderHistory();
-  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Show older runs'; } }
+  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Show older analysis runs'; } }
 }
 async function histDeleteRun(runId, btn) {
-  if (!confirm('Delete this run, its data and its report files? This cannot be undone.')) return;
+  if (!confirm('Delete this analysis run, its data and its report files? This cannot be undone.')) return;
   if (btn) btn.disabled = true;
   try {
     const r = await api('/api/reports/' + encodeURIComponent(runId), { method: 'DELETE' });
@@ -8893,13 +8893,13 @@ async function histDeleteRun(runId, btn) {
 function _histFooter(shownCount) {
   if (_histFiltersActive()) {
     const scope = (_historySearch || '').trim() ? 'across all history' : (_histFilters.range === 'all' ? 'across all history' : `in the ${(_HIST_RANGES[_histFilters.range] || '').toLowerCase()}`);
-    return `<div style="font-size:12px;color:var(--muted);padding:12px 4px">${shownCount} run${shownCount === 1 ? '' : 's'} match ${scope}. <a href="#" onclick="histClearFilters();return false" style="color:var(--teal);font-weight:600">Clear filters</a></div>`;
+    return `<div style="font-size:12px;color:var(--muted);padding:12px 4px">${shownCount} analysis run${shownCount === 1 ? '' : 's'} match ${scope}. <a href="#" onclick="histClearFilters();return false" style="color:var(--teal);font-weight:600">Clear filters</a></div>`;
   }
   const sinceLbl = _histSince ? new Date(_histSince).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '';
-  const scope = _histShowingAll ? 'Showing all runs' : (sinceLbl ? `Showing runs since ${sinceLbl}` : 'Showing recent runs');
+  const scope = _histShowingAll ? 'Showing all analysis runs' : (sinceLbl ? `Showing analysis runs since ${sinceLbl}` : 'Showing recent analysis runs');
   return `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 4px 4px">
-    <span style="font-size:12px;color:var(--muted)">${scope} · ${shownCount} run${shownCount === 1 ? '' : 's'}. Older runs are kept for Trends and can be loaded here.</span>
-    ${_histHasMore ? `<button id="hist-older-btn" class="btn btn-secondary btn-sm" onclick="histLoadOlder(false)">Show older runs (${_HIST_OLDER_DAYS} days)</button>
+    <span style="font-size:12px;color:var(--muted)">${scope} · ${shownCount} analysis run${shownCount === 1 ? '' : 's'}. Older analysis runs are kept for Trends and can be loaded here.</span>
+    ${_histHasMore ? `<button id="hist-older-btn" class="btn btn-secondary btn-sm" onclick="histLoadOlder(false)">Show older analysis runs (${_HIST_OLDER_DAYS} days)</button>
     <button class="btn btn-ghost btn-sm" onclick="histLoadOlder(true)">Show all</button>` : ''}
   </div>`;
 }
@@ -8932,12 +8932,12 @@ function _histBatchWrap(inner) {
     ? ` <span style="font-weight:500;color:var(--muted)">· ${ev.length} event${ev.length === 1 ? '' : 's'} · ${nb.length} bulk list${nb.length === 1 ? '' : 's'} · ${sh.length} student health</span>`
     : '';
   const body = _histBatchLoaded
-    ? (inner || '<div style="font-size:13px;color:var(--muted);padding:6px 0 14px">No batch runs yet.</div>')
-    : '<div style="font-size:13px;color:var(--muted);padding:6px 0 14px">Loading batch runs…</div>';
+    ? (inner || '<div style="font-size:13px;color:var(--muted);padding:6px 0 14px">No batch analysis runs yet.</div>')
+    : '<div style="font-size:13px;color:var(--muted);padding:6px 0 14px">Loading batch analysis runs…</div>';
   return `<details id="hist-batch" ${_histBatchOpen ? 'open' : ''} ontoggle="onHistBatchToggle(this)" style="margin-bottom:22px">
     <summary style="cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:12px;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;background:#fff">
       <span style="font-size:18px;color:var(--teal-mid);line-height:1">≡</span>
-      <span style="flex:1;font-size:14px;font-weight:700;color:var(--body)">Batch runs${counts}${running ? ' <span class="badge bg-muted" style="font-size:10px;margin-left:6px">Running</span>' : ''}</span>
+      <span style="flex:1;font-size:14px;font-weight:700;color:var(--body)">Batch analysis runs${counts}${running ? ' <span class="badge bg-muted" style="font-size:10px;margin-left:6px">Running</span>' : ''}</span>
       <span style="font-size:12px;color:var(--muted)">Event Prep · Bulk lists · Student Health</span>
       <span class="hist-batch-toggle-lbl" style="font-size:12px;color:var(--teal);font-weight:600">${_histBatchOpen ? 'Hide ▲' : 'Show ▼'}</span>
     </summary>
@@ -9365,12 +9365,12 @@ async function loadAdminOps() {
     const d = await r.json();
     const st = d.stats || {};
     if (meta) meta.textContent = `${st.running || 0} running · ${st.done || 0} done · ${st.error || 0} failed · v${d.version} · up ${d.uptime_minutes >= 60 ? Math.floor(d.uptime_minutes / 60) + ' h ' + (d.uptime_minutes % 60) + ' m' : (d.uptime_minutes || 0) + ' m'}${d.workers ? ' · ' + d.workers + ' workers' : ''}`;
-    if (!(d.jobs || []).length) { host.innerHTML = '<div class="empty" style="padding:24px 0"><div>No runs since this server started.</div></div>'; return; }
+    if (!(d.jobs || []).length) { host.innerHTML = '<div class="empty" style="padding:24px 0"><div>No analysis runs since this server started.</div></div>'; return; }
     const badge = j => j.status === 'running' ? '<span class="badge bg-muted" style="font-size:10px"><span class="spinner" style="width:9px;height:9px;border-width:2px;margin-right:4px"></span>Running</span>'
       : j.status === 'done' ? '<span class="badge bg-teal" style="font-size:10px">Done</span>'
       : `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px" title="${_learnEsc(j.error || '')}">Failed</span>`;
     host.innerHTML = `<div style="overflow-x:auto"><table class="tbl" style="width:100%"><thead><tr>
-        <th style="text-align:left">Started</th><th style="text-align:left">Kind</th><th style="text-align:left">Run</th><th style="text-align:left">User</th><th style="text-align:left">Status</th><th style="text-align:right">Elapsed</th><th></th>
+        <th style="text-align:left">Started</th><th style="text-align:left">Kind</th><th style="text-align:left">Analysis</th><th style="text-align:left">User</th><th style="text-align:left">Status</th><th style="text-align:right">Elapsed</th><th></th>
       </tr></thead><tbody>${d.jobs.map(j => `<tr>
         <td style="white-space:nowrap;color:var(--muted);font-size:12px">${new Date(j.started_at * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}</td>
         <td style="white-space:nowrap">${_learnEsc(j.kind)}</td>
@@ -10009,9 +10009,9 @@ function _trackFilterBar() {
       ${sel('status', [['active', 'Active'], ['paused', 'Paused'], ['all', 'All']], 'Status')}
       ${sel('cadence', [['', 'Any cadence'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['manual', 'Manual']], 'Cadence')}
       ${sel('by', byOpts, 'Tracked by')}
-      <label class="aggregate-toggle" style="margin:0" title="Score fell since the previous snapshot, a scheduled run is overdue, or the history is on a different rubric than the entity's type">
+      <label class="aggregate-toggle" style="margin:0" title="Score fell since the previous snapshot, a scheduled analysis run is overdue, or the history is on a different rubric than the entity's type">
         <input type="checkbox" ${f.attention ? 'checked' : ''} onchange="trackSetFilter('attention', this.checked)"><span class="agg-label">Needs attention</span></label>
-      ${sel('sort', [['default', 'Sort: active first'], ['score', 'Sort: latest score'], ['change', 'Sort: biggest change'], ['next', 'Sort: next run'], ['name', 'Sort: name']], 'Sort')}
+      ${sel('sort', [['default', 'Sort: active first'], ['score', 'Sort: latest score'], ['change', 'Sort: biggest change'], ['next', 'Sort: next analysis run'], ['name', 'Sort: name']], 'Sort')}
     </div>${chipHtml}`;
 }
 
@@ -10121,9 +10121,9 @@ async function runAllDueTracked(btn) {
   btn.disabled = true;
   try {
     const r = await api('/api/track/run-due', { method: 'POST' });
-    if (!r.ok) throw new Error(await errDetail(r, 'Could not start the runs'));
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not start the analysis runs'));
     const d = await r.json();
-    _flash(`${(d.launched || []).length} run${(d.launched || []).length === 1 ? '' : 's'} started — snapshots appear as they finish.`);
+    _flash(`${(d.launched || []).length} analysis run${(d.launched || []).length === 1 ? '' : 's'} started — snapshots appear as they finish.`);
     await refreshTrackEntities();
   } catch (e) { alert(e.message || e); } finally { btn.disabled = false; }
 }
@@ -10191,11 +10191,11 @@ function trendCompareAgainst() {
 
 async function runTrackNowFromList(id) {
   const msg = document.getElementById(`tc-msg-${id}`);
-  if (msg) msg.textContent = 'Starting a run…';
+  if (msg) msg.textContent = 'Starting an analysis run…';
   try {
     const r = await api(`/api/track/entities/${id}/run`, { method: 'POST' });
-    if (!r.ok) throw new Error(await errDetail(r, 'Run failed to start'));
-    if (msg) msg.textContent = 'Run started — a new snapshot will appear when it finishes.';
+    if (!r.ok) throw new Error(await errDetail(r, 'Analysis run failed to start'));
+    if (msg) msg.textContent = 'Analysis run started — a new snapshot will appear when it finishes.';
   } catch (e) { if (msg) msg.textContent = e.message; }
 }
 // Start a NEW tracked entity prefilled from this one (the safe way to change identity
@@ -10222,8 +10222,8 @@ async function deleteTracking(id) {
   const e = _trackEntities.find(x => x.id === id);
   if (!e) return;
   const runs = e.run_count != null ? e.run_count : 0;
-  if (!confirm(`Delete tracking for "${e.entity_name}"?\n\nThe schedule and configuration are removed. Its ${runs} snapshot run${runs === 1 ? '' : 's'} stay in History unless you choose to purge them next.`)) return;
-  const purge = runs > 0 && confirm(`Also permanently delete its ${runs} snapshot run${runs === 1 ? '' : 's'} (data and report files)?\n\nOK = delete runs too · Cancel = keep runs in History`);
+  if (!confirm(`Delete tracking for "${e.entity_name}"?\n\nThe schedule and configuration are removed. Its ${runs} snapshot analysis run${runs === 1 ? '' : 's'} stay in History unless you choose to purge them next.`)) return;
+  const purge = runs > 0 && confirm(`Also permanently delete its ${runs} snapshot analysis run${runs === 1 ? '' : 's'} (data and report files)?\n\nOK = delete runs too · Cancel = keep runs in History`);
   try {
     const r = await api(`/api/track/entities/${encodeURIComponent(id)}?purge_runs=${purge ? 1 : 0}`, { method: 'DELETE' });
     if (!r.ok) throw new Error(await errDetail(r, 'Delete failed'));
@@ -10241,7 +10241,7 @@ function _trackAttentionItems(e) {
   const add = (key, short, fp, title, detail, actions) => items.push({ key, short, fp, title, detail, actions, acked: _trackAck(e, key, fp) });
   if ((e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null) {
     add('roster', 'locations not confirmed', 'roster', 'Locations not confirmed',
-      'Each run rediscovers this practice\'s locations, so snapshots may not measure the same set. Confirm the roster once (box below) and every future snapshot uses exactly those locations.',
+      'Each analysis run rediscovers this practice\'s locations, so snapshots may not measure the same set. Confirm the roster once (box below) and every future snapshot uses exactly those locations.',
       [['Find locations', `document.getElementById('tc-roster-fix-${e.id}')?.scrollIntoView({behavior:'smooth',block:'center'})`]]);
   }
   if (e.score_delta != null && e.score_delta < 0) {
@@ -10251,15 +10251,15 @@ function _trackAttentionItems(e) {
       [['View trend', `loadEntityTrend('${e.id}')`]].concat(latestPt && latestPt.run_id ? [['Open that snapshot\'s report', `_download('/api/reports/${latestPt.run_id}/pdf?token=')+encodeURIComponent(_token)`]] : []));
   }
   if (!!e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) < new Date(Date.now() - 24 * 3600 * 1000)) {
-    add('overdue', 'run overdue', String(e.next_run_at).slice(0, 10), 'Scheduled run is overdue',
-      `The next snapshot was due ${_shortDate(e.next_run_at).text}. The scheduler may have been paused, or a run failed. Start one now, or move the next-run date below.`,
+    add('overdue', 'analysis run overdue', String(e.next_run_at).slice(0, 10), 'Scheduled analysis run is overdue',
+      `The next snapshot was due ${_shortDate(e.next_run_at).text}. The scheduler may have been paused, or an analysis run failed. Start one now, or move the next-run date below.`,
       [['Run now', `runTrackNowFromList('${e.id}')`]]);
   }
   const offRubric = hist.filter(x => x.rubric && x.rubric !== expected);
   if (!!e.latest_rubric && e.latest_rubric !== expected) {
     add('rubric', 'rubric mismatch', latestPt ? latestPt.date.slice(0, 10) : 'na',
       `Latest snapshot was scored on the ${e.latest_rubric} rubric, but this is a ${typeLbl}`,
-      `Trends match snapshots by organization name, so a Deep Diagnostic run with a different type (or before the entity's type was set) lands here. Its four pillars mean different things, so it is not comparable. Run now scores on the correct rubric; admins can delete the mismatched runs from History.`,
+      `Trends match snapshots by organization name, so a Deep Diagnostic analysis run with a different type (or before the entity's type was set) lands here. Its four pillars mean different things, so it is not comparable. Run now scores on the correct rubric; admins can delete the mismatched runs from History.`,
       [['Run now (correct rubric)', `runTrackNowFromList('${e.id}')`], ['Open in History', `navigate('history'); historySearch(${_jsq(e.entity_name)})`]]);
   } else if ((e.rubrics || []).length > 1) {
     add('mixed', 'mixed rubric history', offRubric.map(x => x.date.slice(0, 10)).join(','), 'Mixed rubric history',
@@ -10320,7 +10320,7 @@ function _trackCfgPanel(e) {
       ${lock('Scope', e.aggregate ? 'All locations rolled up' : 'Single location')}
       ${(e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null ? `<div id="tc-roster-fix-${e.id}" style="grid-column:1 / -1;padding:12px 14px;background:#fff8e6;border:1px solid #f0d9a8;border-radius:8px">
         <div style="font-size:13px;font-weight:700;color:#5a4a1a">⚠ Locations not confirmed</div>
-        <div style="font-size:12px;color:#5a4a1a;margin:4px 0 8px">This entity was tracked before fixed rosters existed, so each run rediscovers its locations and snapshots may not measure the same set. Confirm the roster once; future snapshots use exactly these locations.</div>
+        <div style="font-size:12px;color:#5a4a1a;margin:4px 0 8px">This entity was tracked before fixed rosters existed, so each analysis run rediscovers its locations and snapshots may not measure the same set. Confirm the roster once; future snapshots use exactly these locations.</div>
         <button class="btn btn-primary btn-sm" onclick="tcFindRoster('${e.id}', this)">Find locations</button>
         <span id="tc-roster-fix-msg-${e.id}" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
         <div id="tc-roster-fix-list-${e.id}" style="margin-top:10px"></div>
@@ -10328,7 +10328,7 @@ function _trackCfgPanel(e) {
       ${e.entity_type === 'hospital_network' ? lock('Facilities', `${(e.confirmed_roster || []).length} fixed facilit${(e.confirmed_roster || []).length === 1 ? 'y' : 'ies'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`) : ''}
       ${(e.entity_type === 'practice' || e.entity_type === 'service_line') ? lock('Locations', e.roster_count != null
           ? `${e.roster_count} fixed location${e.roster_count === 1 ? '' : 's'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`
-          : 'Discovered each run (older entity) — track as a new entity to fix the roster') : ''}
+          : 'Discovered on each analysis run (older entity) — track as a new entity to fix the roster') : ''}
       <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Tracking since</div><div style="font-size:13px;margin-top:2px">${created || '—'}${e.created_by ? ` · ${String(e.created_by).split('@')[0]}` : ''}</div></div>
     </div>
     <div id="tc-roster-${e.id}" class="hidden" style="margin:-4px 0 14px;padding:10px 12px;background:#fff;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.6">
@@ -10343,7 +10343,7 @@ function _trackCfgPanel(e) {
           <option value="monthly" ${e.schedule === 'monthly' ? 'selected' : ''}>Monthly</option>
           <option value="manual" ${e.schedule === 'manual' ? 'selected' : ''}>Manual</option>
         </select></div>
-      <div><div class="fl">Next run</div><input id="tc-next-${e.id}" class="fi" type="date" value="${nextVal}" style="width:170px;padding:7px 10px;font-size:13px"></div>
+      <div><div class="fl">Next analysis run</div><input id="tc-next-${e.id}" class="fi" type="date" value="${nextVal}" style="width:170px;padding:7px 10px;font-size:13px"></div>
       <div style="flex:1;min-width:220px"><div class="fl">Notes</div><input id="tc-notes-${e.id}" class="fi" value="${(e.notes || '').replace(/"/g, '&quot;')}" placeholder="Internal label or client name" style="padding:7px 10px;font-size:13px"></div>
       <button class="btn btn-primary btn-sm" onclick="saveTrackCfg('${e.id}')">Save</button>
       <button class="btn btn-secondary btn-sm" onclick="runTrackNowFromList('${e.id}')">Run now</button>
@@ -10354,9 +10354,9 @@ function _trackCfgPanel(e) {
         <input type="checkbox" id="tc-alert-${e.id}" ${e.alert_on_change ? 'checked' : ''}>
         <span class="agg-label">Email when the score moves 5+ points or changes quartile</span>
       </label>
-      <label class="aggregate-toggle" style="margin:0 0 6px" title="After every run (scheduled or Run now) the refreshed Trend Report PDF is emailed to the recipients.">
+      <label class="aggregate-toggle" style="margin:0 0 6px" title="After every analysis run (scheduled or Run now) the refreshed Trend Report PDF is emailed to the recipients.">
         <input type="checkbox" id="tc-email-${e.id}" ${e.email_report ? 'checked' : ''} onchange="if(this.checked){const r=document.getElementById('tc-rcpts-${e.id}'); if(r&&!r.value.trim()&&'${(e.created_by || '').includes('@') ? _learnEsc(e.created_by) : ''}') r.value='${(e.created_by || '').includes('@') ? _learnEsc(e.created_by) : ''}';}">
-        <span class="agg-label">Email the Trend Report after each run</span>
+        <span class="agg-label">Email the Trend Report after each analysis run</span>
       </label>
       <div style="flex:1;min-width:260px"><div class="fl">Recipients (comma-separated)</div>
         <input id="tc-rcpts-${e.id}" class="fi" value="${_learnEsc((e.report_emails || []).join(', '))}" placeholder="name@organization.com, another@…" style="padding:7px 10px;font-size:13px"></div>
@@ -10364,7 +10364,7 @@ function _trackCfgPanel(e) {
     </div>
     ${_role === 'admin' ? `<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);display:flex;gap:12px;align-items:center">
       <button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="deleteTracking('${e.id}')">🗑 Delete tracking…</button>
-      <span style="font-size:11.5px;color:var(--muted)">Admin. Removes this tracking instance; you'll be asked whether to also delete its snapshot runs.</span>
+      <span style="font-size:11.5px;color:var(--muted)">Admin. Removes this tracking instance; you'll be asked whether to also delete its snapshot analysis runs.</span>
     </div>` : ''}
   </td></tr>`;
 }
@@ -10430,7 +10430,7 @@ function renderTrackEntityList() {
         (e.score_delta == null || e.score_delta === 0
           ? (e.score_delta === 0 ? ` <span style="font-size:11px;color:var(--muted)">no change</span>` : '')
           : ` <span style="font-size:11px;font-weight:700;color:${e.score_delta > 0 ? '#1a7a4a' : '#b42318'}">${e.score_delta > 0 ? '▲' : '▼'}${Math.abs(e.score_delta)}</span>`) + _confChip(e.latest_confidence)
-      : `<span style="color:var(--muted);font-size:12px">no runs yet</span>`;
+      : `<span style="color:var(--muted);font-size:12px">no analysis runs yet</span>`;
     const typeLbl = _trackTypeLabel(e.entity_type);
     const expected = (e.entity_type === 'practice' || e.entity_type === 'service_line') ? 'practice' : 'hospital';
     const rubricBadge = e.latest_rubric
@@ -10477,12 +10477,12 @@ function renderTrackEntityList() {
     <table class="tbl">
       <thead><tr>
         <th>Entity</th><th>Latest score</th><th>Trend</th><th>Schedule</th>
-        <th>Last run</th><th>Next run</th><th style="text-align:right">Runs</th><th>Status</th><th></th>
+        <th>Last analysis</th><th>Next analysis</th><th style="text-align:right">Analysis runs</th><th>Status</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>
-  <div style="font-size:11.5px;color:var(--muted);margin-top:10px">View (or the entity name) opens the full trend. The Trend column shows the last ${12} runs on a 0–100 scale.</div>` : '');
+  <div style="font-size:11.5px;color:var(--muted);margin-top:10px">View (or the entity name) opens the full trend. The Trend column shows the last ${12} analysis runs on a 0–100 scale.</div>` : '');
   if (searchWasFocused) { const inp = document.getElementById('track-search'); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
 }
 
@@ -10797,7 +10797,7 @@ async function loadTrendSentReports(entityId) {
       rows.map(x => `<tr>
         <td style="white-space:nowrap;color:var(--muted)">${_shortDate(x.sent_at).text}</td>
         <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_learnEsc((x.sent_to || []).join(', '))}">${_learnEsc((x.sent_to || []).join(', '))}</td>
-        <td style="color:var(--muted)">${_learnEsc(x.kind === 'scheduled' ? 'Scheduled run' : (x.sent_by || '').split('@')[0])}</td>
+        <td style="color:var(--muted)">${_learnEsc(x.kind === 'scheduled' ? 'Scheduled analysis run' : (x.sent_by || '').split('@')[0])}</td>
         <td style="color:var(--muted)">${x.snapshots != null ? `${x.snapshots} snapshots` : '—'}</td>
         <td style="font-weight:600">${x.latest_score != null ? x.latest_score : '—'}</td>
         <td style="text-align:right">${x.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/track/reports/${x.id}/pdf?token=${tok}">⬇ PDF</a>` : '<span style="font-size:11px;color:var(--muted)">file missing</span>'}</td>
@@ -11137,7 +11137,7 @@ async function triggerTrackRun() {
         if (jd.status === 'done' || jd.status === 'error') {
           clearInterval(poll);
           btn.disabled = false;
-          status.textContent = jd.status === 'done' ? 'Collection complete ✓' : 'Run failed';
+          status.textContent = jd.status === 'done' ? 'Collection complete ✓' : 'Analysis run failed';
           if (jd.status === 'done') {
             await loadEntityTrend(_trackCurrentEntity.id);
           }
@@ -11175,7 +11175,7 @@ async function submitAddEntity() {
     const roster = _teNetRoster();
     if (!roster.length) { errEl.textContent = 'Keep at least one facility in the roster.'; errEl.classList.remove('hidden'); return; }
     const sched = document.getElementById('te-schedule').value;
-    if (sched === 'weekly' && !confirm('A network snapshot is a full network run (10–20 minutes, every facility). Weekly is expensive — continue with weekly?')) return;
+    if (sched === 'weekly' && !confirm('A network snapshot is a full network analysis run (10–20 minutes, every facility). Weekly is expensive — continue with weekly?')) return;
   }
   const body = {
     entity_name: _teSelected.name,
@@ -11470,7 +11470,7 @@ async function evSubmitRun() {
         entities,
       }),
     });
-    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start event run'));
+    if (!r.ok) throw new Error(await errDetail(r, 'Failed to start event analysis run'));
     const data = await r.json();
     _evEventId = data.event_id;
     _evTotal   = entities.length;
@@ -11726,7 +11726,7 @@ async function evSaveEditMeta(eventId) {
 }
 
 async function evDeleteById(eventId, eventName) {
-  if (!confirm(`Delete event run "${eventName || eventId}" and all its reports?\nThis cannot be undone.`)) return;
+  if (!confirm(`Delete event analysis run "${eventName || eventId}" and all its reports?\nThis cannot be undone.`)) return;
   try {
     const r = await api(`/api/event/${eventId}`, { method: 'DELETE' });
     if (!r.ok) throw new Error(await r.text());
