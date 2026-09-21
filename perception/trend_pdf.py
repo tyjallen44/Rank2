@@ -512,7 +512,8 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
         prev = s if s is not None else prev
         settings = " · ".join(x for x in [
             (None if p.get("run_aggregate") is None else ("All locations" if p.get("run_aggregate") else "Single location")),
-            p.get("run_specialty"), p.get("run_location")] if x)
+            p.get("run_specialty"), p.get("run_location"),
+            (f"{p['total_hospitals']} facilities" if p.get("total_hospitals") else None)] if x)
         flagged = any(dr["date"] == p.get("generated_at") for dr in st["drift"])
         delta_cell = _delta_html(d) if d is not None else f'<span style="color:{_MUTE}">—</span>'
         pillar_cells = "".join('<td class="num">%s</td>' % (p.get(r["key"]) if p.get(r["key"]) is not None else "—")

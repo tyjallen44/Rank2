@@ -2875,3 +2875,13 @@ Commit: all native accounts share the 'user' role while reports made with the le
 **T1.** Sign in as a native user (role 'user'): History row count equals the admin's; searching finds reports created under the admin password and under legacy roles; downloads work.
 **T2.** A Partner login still sees only Partner + admin runs.
 **T3.** Typeahead and duplicate notices reflect the same visibility.
+
+## TRENDS-NETWORK-ROSTER-ADD — add a missed hospital to an existing tracked network
+
+Commit: Trends → a Hospital Network entity's Details shows the "＋ Add a hospital the AI missed" widget under Facilities. Verified via Google + CMS, then POST /api/track/entities/{id}/roster/add appends it to the fixed roster, records a dated trend note ("Roster changed: added X — now N facilities. Snapshots before this date measured N−1."), and remembers the addition for future discoveries. The note shows as a numbered marker on the score chart and under What changed in the Trend Report; snapshot rows (web and PDF) show "N facilities" per run so the boundary is visible. Adding more than about a third to the roster prompts a suggestion to track a new entity instead. Practices keep their locked rosters. NEEDS BROWSER TESTING.
+
+**T1.** Trends → tracked network → Details → Add a hospital → Find it → Add to roster → panel status "Roster changed — … (now N facilities)…", Facilities count +1, row flashes; the Notes list under the score chart has the new dated note and the chart a marker.
+**T2.** Run now → the new snapshot's Settings shows "N facilities" (previous rows N−1); the Trend Report What changed lists the roster note and the snapshot table shows the counts.
+**T3.** Adding a duplicate name → "already on the roster" error. Adding to a 3-facility network prompts the "consider tracking a new entity" confirmation.
+**T4.** A later Hospital Network discovery for that system includes the hospital tagged "added earlier".
+**R1.** Practice/service-line entities show no widget; the Network page widget unchanged.

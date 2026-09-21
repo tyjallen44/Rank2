@@ -2006,6 +2006,39 @@ async def network_resolve_facility(req: FacilityResolveRequest, _: dict = Depend
     return await asyncio.get_running_loop().run_in_executor(None, _go)
 
 
+@app.post("/api/track/entities/{entity_id}/roster/add")
+async def track_roster_add(entity_id: str, req: "RosterAdditionRequest", payload: dict = Depends(get_current_user_payload)):
+    """Add a hospital the AI missed to a tracked Hospital Network's fixed roster. The change is
+    recorded as a dated trend note ("Roster changed: …") so the step is visible on the chart and
+    in the Trend Report, and the addition is remembered for future discoveries of the system."""
+    from datetime import date as _date
+    from perception.db import init_db, get_tracked_entity, update_tracked_entity, add_annotation, add_roster_addition
+    init_db()
+    ent = get_tracked_entity(entity_id)
+    if not ent:
+        raise HTTPException(404, "tracked entity not found")
+    if (ent.get("entity_type") or "hospital") != "hospital_network":
+        raise HTTPException(400, "Only Hospital Network entities have a facility roster to add to")
+    roster, _ = _entity_roster(ent)
+    roster = list(roster or [])
+    name, city, state = req.name.strip(), req.city.strip(), req.state.strip().upper()
+    if not name:
+        raise HTTPException(400, "Enter the hospital name")
+    if any(str(f.get("name", "")).lower() == name.lower() and str(f.get("city", "")).lower() == city.lower() for f in roster):
+        raise HTTPException(400, f"{name} is already on the roster")
+    roster.append({"name": name, "city": city, "state": state, "beds": req.beds, "place_id": req.place_id, "added_by_user": True,
+                   "added_on": _date.today().isoformat()})
+    update_tracked_entity(entity_id, confirmed_roster=json.dumps(roster))
+    who = payload.get("email") or payload.get("name") or ""
+    note = f"Roster changed: added {name}{(' (' + city + ')') if city else ''} — now {len(roster)} facilities. Snapshots before this date measured {len(roster) - 1}."
+    add_annotation(entity_id, _date.today(), note, who)
+    try:
+        add_roster_addition(ent["entity_name"], name, city, state, req.beds, req.place_id, added_by=who)
+    except Exception:
+        pass
+    return {"ok": True, "facilities": len(roster), "note": note}
+
+
 class RosterAdditionRequest(BaseModel):
     network_name: str
     name: str

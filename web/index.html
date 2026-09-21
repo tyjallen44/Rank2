@@ -10237,15 +10237,17 @@ async function _facilityAddResolve(containerId) {
 async function _facilityAddAccept(containerId) {
   const host = document.getElementById(containerId); const fac = (window._facilityPending || {})[containerId]; if (!host || !fac) return;
   const opts = host._opts || {};
-  try {
+  if (opts.remember !== false) try {
     const r = await api('/api/network/additions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ network_name: opts.networkName || host.dataset.network || '', name: fac.name, city: fac.city, state: fac.state, beds: fac.beds, place_id: fac.place_id }) });
     if (r.ok) { const d = await r.json(); fac.addition_id = d.id; }
   } catch (_) { /* remembering is best-effort */ }
   host.dataset.open = '0';
   if (opts.onAdd) opts.onAdd(fac);
-  _flash(`${fac.name} added to the roster and remembered for future runs of this system.`);
-  setTimeout(() => { const h = document.getElementById(containerId); if (h && h._opts) { _facilityAddOpen(containerId); const m = document.getElementById(`${containerId}-msg`); if (m) m.textContent = 'Added. Add another, or close.'; } }, 50);
+  if (opts.remember !== false) {
+    _flash(`${fac.name} added to the roster and remembered for future runs of this system.`);
+    setTimeout(() => { const h = document.getElementById(containerId); if (h && h._opts) { _facilityAddOpen(containerId); const m = document.getElementById(`${containerId}-msg`); if (m) m.textContent = 'Added. Add another, or close.'; } }, 50);
+  }
 }
 
 // ── Admin: run every due entity now ──────────────────────────────────────────
@@ -10515,7 +10517,7 @@ function _trackCfgPanel(e) {
         <span id="tc-roster-fix-msg-${e.id}" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
         <div id="tc-roster-fix-list-${e.id}" style="margin-top:10px"></div>
       </div>` : ''}
-      ${e.entity_type === 'hospital_network' ? lock('Facilities', `${(e.confirmed_roster || []).length} fixed facilit${(e.confirmed_roster || []).length === 1 ? 'y' : 'ies'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`) : ''}
+      ${e.entity_type === 'hospital_network' ? lock('Facilities', `${(e.confirmed_roster || []).length} fixed facilit${(e.confirmed_roster || []).length === 1 ? 'y' : 'ies'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`) + `<div id="tc-net-add-${e.id}" style="margin-top:8px"></div>` : ''}
       ${(e.entity_type === 'practice' || e.entity_type === 'service_line') ? lock('Locations', e.roster_count != null
           ? `${e.roster_count} fixed location${e.roster_count === 1 ? '' : 's'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`
           : 'Discovered on each analysis run (older entity) — track as a new entity to fix the roster') : ''}
@@ -10674,6 +10676,23 @@ function renderTrackEntityList() {
   </div>
   <div style="font-size:11.5px;color:var(--muted);margin-top:10px">View (or the entity name) opens the full trend. The Trend column shows the last ${12} analysis runs on a 0–100 scale.</div>` : '');
   if (searchWasFocused) { const inp = document.getElementById('track-search'); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
+  // Add-a-hospital widget on open network panels (the roster change is recorded as a trend note).
+  _trackEntities.filter(e => e.entity_type === 'hospital_network' && _trackCfgOpen.has(e.id)).forEach(e => {
+    _mountFacilityAdd(`tc-net-add-${e.id}`, { networkName: e.entity_name, defaultState: e.state || '', remember: false,
+      onAdd: fac => tcNetRosterAdd(e.id, fac) });
+  });
+}
+async function tcNetRosterAdd(id, fac) {
+  const e = _trackEntities.find(x => x.id === id); if (!e) return;
+  const n = (e.confirmed_roster || []).length;
+  if (n && (n + 1) / n > 1.34 && !confirm(`This roster has ${n} facilit${n === 1 ? 'y' : 'ies'}; adding more than about a third changes what is measured a lot. Consider tracking a new entity from this one for a clean line.\n\nAdd anyway and mark the change on the trend?`)) return;
+  try {
+    const r = await api(`/api/track/entities/${id}/roster/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ network_name: e.entity_name, name: fac.name, city: fac.city, state: fac.state, beds: fac.beds, place_id: fac.place_id }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not add'));
+    const d = await r.json();
+    await _trackTaskDone(id, `Roster changed — ${fac.name} added (now ${d.facilities} facilities). A dated note marks the change on the chart and in the Trend Report; the next snapshot measures the new roster.`);
+  } catch (err) { alert(err.message || err); }
 }
 
 // ── Add-entity search flow ─────────────────────────────────────────────────
@@ -10940,6 +10959,7 @@ function _snapshotSettings(d) {
     d.run_specialty || null,
     d.run_location || null,
     d.run_profile || null,
+    d.total_hospitals ? `${d.total_hospitals} facilities` : null,
   ].filter(Boolean);
   const drift = (d.run_aggregate != null && e.aggregate != null && !!d.run_aggregate !== !!e.aggregate)
     || (d.run_specialty && e.specialty && d.run_specialty.toLowerCase() !== e.specialty.toLowerCase())
