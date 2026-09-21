@@ -703,6 +703,18 @@ def _init_db_impl() -> None:
             sent_at       TIMESTAMP NOT NULL
         )
     """)
+    # Reviewed "needs attention" flags: keyed by entity + reason + a fingerprint of the
+    # data that raised it, so the flag comes back when the condition recurs with new data.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS trend_acks (
+            entity_id     VARCHAR NOT NULL,
+            reason        VARCHAR NOT NULL,
+            fingerprint   VARCHAR NOT NULL,
+            acked_by      VARCHAR,
+            acked_at      TIMESTAMP NOT NULL,
+            PRIMARY KEY (entity_id, reason)
+        )
+    """)
     # Trend annotations: "what changed and when" notes on a tracked entity, shown as
     # markers on the score chart and listed in the Trend Report.
     con.execute("""
@@ -2925,3 +2937,33 @@ def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = Non
     for r in out:
         r.pop("_rank", None)
     return out[:limit]
+
+
+# ── Reviewed attention flags ─────────────────────────────────────────────────
+def list_trend_acks(entity_id: str = None) -> dict:
+    """{entity_id: [{reason, fingerprint, acked_by, acked_at}]}"""
+    con = get_connection()
+    if entity_id:
+        rows = con.execute("SELECT entity_id, reason, fingerprint, acked_by, acked_at FROM trend_acks WHERE entity_id = ?", [entity_id]).fetchall()
+    else:
+        rows = con.execute("SELECT entity_id, reason, fingerprint, acked_by, acked_at FROM trend_acks").fetchall()
+    con.close()
+    out: dict = {}
+    for eid, reason, fp, by, at in rows:
+        out.setdefault(eid, []).append({"reason": reason, "fingerprint": fp, "acked_by": by, "acked_at": str(at)[:10]})
+    return out
+
+
+def set_trend_ack(entity_id: str, reason: str, fingerprint: str, acked_by: str = "") -> None:
+    from datetime import datetime
+    con = get_connection()
+    con.execute("DELETE FROM trend_acks WHERE entity_id = ? AND reason = ?", [entity_id, reason])
+    con.execute("INSERT INTO trend_acks (entity_id, reason, fingerprint, acked_by, acked_at) VALUES (?, ?, ?, ?, ?)",
+                [entity_id, reason, fingerprint, acked_by, datetime.utcnow()])
+    con.close()
+
+
+def clear_trend_ack(entity_id: str, reason: str) -> None:
+    con = get_connection()
+    con.execute("DELETE FROM trend_acks WHERE entity_id = ? AND reason = ?", [entity_id, reason])
+    con.close()

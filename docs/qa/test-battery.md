@@ -2735,3 +2735,12 @@ Commit: after Save roster or Save in a Trends Details panel, the list re-fetches
 
 **T1.** Confirm a roster on an unconfirmed practice → the row flashes green, its "⚠ Confirm locations" badge and the "locations not confirmed" attention reason are gone, Locations reads "N fixed locations", the panel shows the green confirmation, and a flash appears at the bottom.
 **T2.** Save a display name / cadence change → same behaviour with "Saved — shown as “…”".
+
+## TRENDS-ATTENTION-REVIEWED — mark a Needs-attention reason as reviewed
+
+Commit: new `trend_acks` table (entity + reason + fingerprint + who/when); POST/DELETE `/api/track/entities/{id}/ack[/{reason}]`; the entities list returns `acks`. In Details each attention item has "✓ Reviewed"; reviewed items show grey with "Reviewed by <name> on <date>" and Undo. Reviewed reasons no longer count toward the badge, the "mixed" marker, or the Needs-attention filter. The acknowledgement is tied to the data that raised the flag (snapshot date for a fall / wrong rubric, due date for overdue, the off-rubric snapshot dates for mixed, "roster" for locations), so it reappears when the condition recurs with new data. NEEDS BROWSER TESTING.
+
+**T1.** Campbell Clinic: click Needs attention → in the box click ✓ Reviewed on "Score fell 5" → row flashes, the badge stays only if other reasons remain; the item shows grey "Reviewed by … on …" with Undo. Filter "Needs attention" no longer matches it for that reason.
+**T2.** ✓ Reviewed on "Mixed rubric history" → the amber "mixed" marker disappears from the row; Undo brings both back.
+**T3.** Recurrence: after the next snapshot, if the score falls again the flag returns (new date); if it does not, nothing shows. Running a Deep Diagnostic of that name as the wrong type adds a new off-rubric date → the mixed flag returns.
+**T4.** Reviewing is available to any signed-in user; the recorded name is the reviewer's.

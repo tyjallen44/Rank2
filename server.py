@@ -4187,14 +4187,16 @@ def _entity_report_emails(entity: dict) -> list:
 
 @app.get("/api/track/entities")
 async def track_list(_: dict = Depends(get_current_user_payload)):
-    from perception.db import init_db, list_tracked_entities
+    from perception.db import init_db, list_tracked_entities, list_trend_acks
     init_db()
     entities = list_tracked_entities()
+    acks = list_trend_acks()
     for e in entities:
         for k in ("last_run_at", "next_run_at", "created_at"):
             if e.get(k):
                 e[k] = str(e[k])
         e["report_emails"] = _entity_report_emails(e)
+        e["acks"] = acks.get(e["id"], [])
         roster, anchor = _entity_roster(e)
         e["confirmed_roster"] = roster
         e["anchor_listing"] = anchor
@@ -4601,6 +4603,33 @@ async def track_run_now(entity_id: str, payload: dict = Depends(get_current_user
     job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
     mark_tracked_entity_ran(entity_id, entity.get("schedule", "monthly"))
     return {"job_id": job_id}
+
+
+class AckRequest(BaseModel):
+    reason: str
+    fingerprint: str = ""
+
+
+@app.post("/api/track/entities/{entity_id}/ack")
+async def track_ack(entity_id: str, req: AckRequest, payload: dict = Depends(get_current_user_payload)):
+    """Mark a 'needs attention' reason as reviewed for the data that raised it."""
+    from perception.db import init_db, get_tracked_entity, set_trend_ack
+    init_db()
+    if not get_tracked_entity(entity_id):
+        raise HTTPException(404, "tracked entity not found")
+    reason = (req.reason or "").strip()[:40]
+    if not reason:
+        raise HTTPException(400, "reason required")
+    set_trend_ack(entity_id, reason, (req.fingerprint or "")[:300], payload.get("email") or payload.get("name") or "")
+    return {"ok": True}
+
+
+@app.delete("/api/track/entities/{entity_id}/ack/{reason}")
+async def track_unack(entity_id: str, reason: str, _: dict = Depends(get_current_user_payload)):
+    from perception.db import init_db, clear_trend_ack
+    init_db()
+    clear_trend_ack(entity_id, reason[:40])
+    return {"ok": True}
 
 
 @app.post("/api/track/run-due")

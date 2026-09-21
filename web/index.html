@@ -9894,12 +9894,12 @@ function _trackNeedsAttention(e) {
   return dropped || overdue || rubricOff;
 }
 function _trackAttentionReasons(e) {
-  const r = [];
-  if ((e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null) r.push('locations not confirmed');
-  if (e.score_delta != null && e.score_delta < 0) r.push(`score fell ${Math.abs(e.score_delta)}`);
-  if (!!e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) < new Date(Date.now() - 24 * 3600 * 1000)) r.push('run overdue');
-  if (!!e.latest_rubric && e.latest_rubric !== _trackExpectedRubric(e)) r.push('rubric mismatch');
-  return r;
+  // Active (not reviewed) reasons drive the badge and the "Needs attention" filter.
+  return _trackAttentionItems(e).filter(it => !it.acked).map(it => it.short);
+}
+function _trackAck(e, key, fp) {
+  const a = (e.acks || []).find(x => x.reason === key);
+  return (a && a.fingerprint === fp) ? a : null;
 }
 function _trackFiltersActive() {
   const f = _trackFilters, d = _TRACK_FILTER_DEFAULTS;
@@ -10188,47 +10188,66 @@ function _trackAttentionItems(e) {
   const expected = _trackExpectedRubric(e);
   const hist = e.recent_scores || [];
   const latestPt = hist[hist.length - 1], prevPt = hist[hist.length - 2];
+  const add = (key, short, fp, title, detail, actions) => items.push({ key, short, fp, title, detail, actions, acked: _trackAck(e, key, fp) });
+  if ((e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null) {
+    add('roster', 'locations not confirmed', 'roster', 'Locations not confirmed',
+      'Each run rediscovers this practice\'s locations, so snapshots may not measure the same set. Confirm the roster once (box below) and every future snapshot uses exactly those locations.',
+      [['Find locations', `document.getElementById('tc-roster-fix-${e.id}')?.scrollIntoView({behavior:'smooth',block:'center'})`]]);
+  }
   if (e.score_delta != null && e.score_delta < 0) {
-    items.push({
-      title: `Score fell ${Math.abs(e.score_delta)} on the latest snapshot`,
-      detail: `${prevPt ? prevPt.score : '—'} → ${latestPt ? latestPt.score : '—'}${latestPt ? ` on ${latestPt.date.slice(0, 10)}` : ''}. Open the trend to see which pillar moved; if it is the reviews pillar, the Google rating and review count on that row usually explain it. A fall of under 5 points is often run-to-run variation — compare it with the next snapshot before acting.`,
-      actions: [['View trend', `loadEntityTrend('${e.id}')`]].concat(latestPt && latestPt.run_id ? [['Open that snapshot\'s report', `window.location.href='/api/reports/${latestPt.run_id}/pdf?token='+encodeURIComponent(_token)`]] : []),
-    });
+    add('score_fell', `score fell ${Math.abs(e.score_delta)}`, latestPt ? latestPt.date.slice(0, 10) : 'na',
+      `Score fell ${Math.abs(e.score_delta)} on the latest snapshot`,
+      `${prevPt ? prevPt.score : '—'} → ${latestPt ? latestPt.score : '—'}${latestPt ? ` on ${latestPt.date.slice(0, 10)}` : ''}. Open the trend to see which pillar moved; if it is the reviews pillar, the Google rating and review count on that row usually explain it. A fall of under 5 points is often run-to-run variation — compare it with the next snapshot before acting.`,
+      [['View trend', `loadEntityTrend('${e.id}')`]].concat(latestPt && latestPt.run_id ? [['Open that snapshot\'s report', `window.location.href='/api/reports/${latestPt.run_id}/pdf?token='+encodeURIComponent(_token)`]] : []));
   }
   if (!!e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) < new Date(Date.now() - 24 * 3600 * 1000)) {
-    items.push({ title: 'Scheduled run is overdue', detail: `The next snapshot was due ${_shortDate(e.next_run_at).text}. The scheduler may have been paused, or a run failed. Start one now, or move the next-run date below.`,
-      actions: [['Run now', `runTrackNowFromList('${e.id}')`]] });
+    add('overdue', 'run overdue', String(e.next_run_at).slice(0, 10), 'Scheduled run is overdue',
+      `The next snapshot was due ${_shortDate(e.next_run_at).text}. The scheduler may have been paused, or a run failed. Start one now, or move the next-run date below.`,
+      [['Run now', `runTrackNowFromList('${e.id}')`]]);
   }
   const offRubric = hist.filter(x => x.rubric && x.rubric !== expected);
   if (!!e.latest_rubric && e.latest_rubric !== expected) {
-    items.push({
-      title: `Latest snapshot was scored on the ${e.latest_rubric} rubric, but this is a ${typeLbl}`,
-      detail: `Trends match snapshots by organization name, so a Deep Diagnostic run with a different type (or before the entity's type was set) lands here. Its four pillars mean different things, so it is not comparable. Run now scores on the correct rubric; admins can delete the mismatched runs from History.`,
-      actions: [['Run now (correct rubric)', `runTrackNowFromList('${e.id}')`], ['Open in History', `navigate('history'); historySearch(${JSON.stringify(e.entity_name)})`]],
-    });
+    add('rubric', 'rubric mismatch', latestPt ? latestPt.date.slice(0, 10) : 'na',
+      `Latest snapshot was scored on the ${e.latest_rubric} rubric, but this is a ${typeLbl}`,
+      `Trends match snapshots by organization name, so a Deep Diagnostic run with a different type (or before the entity's type was set) lands here. Its four pillars mean different things, so it is not comparable. Run now scores on the correct rubric; admins can delete the mismatched runs from History.`,
+      [['Run now (correct rubric)', `runTrackNowFromList('${e.id}')`], ['Open in History', `navigate('history'); historySearch(${JSON.stringify(e.entity_name)})`]]);
   } else if ((e.rubrics || []).length > 1) {
-    items.push({
-      title: 'Mixed rubric history',
-      detail: `${offRubric.length ? `${offRubric.length} of the last ${hist.length} snapshots (${offRubric.map(x => x.date.slice(0, 10)).join(', ')}) were scored on the ${offRubric[0].rubric} rubric` : 'Some earlier snapshots were scored on the other rubric'}; the rest on the ${expected} rubric this ${typeLbl} should use. Scores are comparable only within a rubric — the chart marks them H / P. Nothing is broken: keep going and the mixed snapshots age out of the 12-run window, or (admin) delete them from History for a clean line, or track a new entity from this one.`,
-      actions: [['Open in History', `navigate('history'); historySearch(${JSON.stringify(e.entity_name)})`], ['Track as new entity', `trackAsNewEntity('${e.id}')`]],
-    });
-  }
-  if ((e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null) {
-    items.push({ title: 'Locations not confirmed', detail: 'Each run rediscovers this practice\'s locations, so snapshots may not measure the same set. Confirm the roster once (box below) and every future snapshot uses exactly those locations.',
-      actions: [['Find locations', `document.getElementById('tc-roster-fix-${e.id}')?.scrollIntoView({behavior:'smooth',block:'center'})`]] });
+    add('mixed', 'mixed rubric history', offRubric.map(x => x.date.slice(0, 10)).join(','), 'Mixed rubric history',
+      `${offRubric.length ? `${offRubric.length} of the last ${hist.length} snapshots (${offRubric.map(x => x.date.slice(0, 10)).join(', ')}) were scored on the ${offRubric[0].rubric} rubric` : 'Some earlier snapshots were scored on the other rubric'}; the rest on the ${expected} rubric this ${typeLbl} should use. Scores are comparable only within a rubric — the chart marks them H / P. Nothing is broken: keep going and the mixed snapshots age out of the 12-run window, or (admin) delete them from History for a clean line, or track a new entity from this one.`,
+      [['Open in History', `navigate('history'); historySearch(${JSON.stringify(e.entity_name)})`], ['Track as new entity', `trackAsNewEntity('${e.id}')`]]);
   }
   return items;
 }
 function _trackAttentionBox(e) {
   const items = _trackAttentionItems(e);
   if (!items.length) return '';
-  return `<div id="tc-attn-${e.id}" style="margin-bottom:14px;padding:12px 14px;background:#fff8e6;border:1px solid #f0d9a8;border-radius:8px">
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#856404;margin-bottom:8px">Needs attention — ${items.length} item${items.length === 1 ? '' : 's'}</div>
-    ${items.map(it => `<div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid #f0d9a8">
-      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#5a4a1a">${it.title}</div><div style="font-size:12px;color:#5a4a1a;margin-top:3px;line-height:1.45">${it.detail}</div></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${it.actions.map(([l, fn]) => `<button class="btn btn-secondary btn-sm" onclick="${fn.replace(/"/g, '&quot;')}">${l}</button>`).join('')}</div>
-    </div>`).join('')}
+  const active = items.filter(it => !it.acked).length;
+  return `<div id="tc-attn-${e.id}" style="margin-bottom:14px;padding:12px 14px;background:${active ? '#fff8e6' : '#f6fafa'};border:1px solid ${active ? '#f0d9a8' : 'var(--border)'};border-radius:8px">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${active ? '#856404' : 'var(--muted)'};margin-bottom:8px">${active ? `Needs attention — ${active} item${active === 1 ? '' : 's'}` : 'Reviewed — nothing outstanding'}</div>
+    ${items.map(it => it.acked
+      ? `<div style="display:flex;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--border);color:var(--muted)">
+          <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">✓ ${it.title}</div><div style="font-size:12px;margin-top:2px">Reviewed by ${_learnEsc(String(it.acked.acked_by || '').split('@')[0] || 'a teammate')} on ${it.acked.acked_at}. Comes back if this happens again with new data.</div></div>
+          <a href="#" onclick="unackTrackReason('${e.id}','${it.key}');return false" style="font-size:12px;color:var(--teal);font-weight:600">Undo</a>
+        </div>`
+      : `<div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid #f0d9a8">
+          <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#5a4a1a">${it.title}</div><div style="font-size:12px;color:#5a4a1a;margin-top:3px;line-height:1.45">${it.detail}</div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${it.actions.map(([l, fn]) => `<button class="btn btn-secondary btn-sm" onclick="${fn.replace(/"/g, '&quot;')}">${l}</button>`).join('')}<button class="btn btn-ghost btn-sm" onclick="ackTrackReason('${e.id}','${it.key}',${JSON.stringify(it.fp)})" title="I've looked at this; hide the flag until it recurs with new data">✓ Reviewed</button></div>
+        </div>`).join('')}
   </div>`;
+}
+async function ackTrackReason(id, reason, fp) {
+  try {
+    const r = await api(`/api/track/entities/${id}/ack`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason, fingerprint: fp }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not save'));
+    await _trackTaskDone(id, 'Marked reviewed — the flag is hidden until this happens again with new data.');
+  } catch (e) { alert(e.message || e); }
+}
+async function unackTrackReason(id, reason) {
+  try {
+    const r = await api(`/api/track/entities/${id}/ack/${encodeURIComponent(reason)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not undo'));
+    await _trackTaskDone(id, 'Review undone — the flag is showing again.');
+  } catch (e) { alert(e.message || e); }
 }
 function openTrackAttention(id) {
   _trackCfgOpen.add(id); renderTrackEntityList();
@@ -10366,7 +10385,7 @@ function renderTrackEntityList() {
     const rubricBadge = e.latest_rubric
       ? `<span class="badge bg-muted" style="font-size:10px" title="Pillar rubric of the latest snapshot">${e.latest_rubric === 'practice' ? 'Practice rubric' : 'Hospital rubric'}</span>`
         + (e.latest_rubric !== expected ? ` <span title="Snapshots were scored on a different rubric than this entity's type — track a new entity to start a correctly scored series" style="color:#b45309;font-weight:700;cursor:help">⚠</span>` : '')
-        + ((e.rubrics || []).length > 1 ? ` <a href="#" onclick="openTrackAttention('${e.id}');return false" title="This entity's history mixes both rubrics — click for what to do" style="color:#b45309;cursor:pointer;text-decoration:none">mixed</a>` : '')
+        + ((e.rubrics || []).length > 1 && !_trackAttentionItems(e).some(it => it.key === 'mixed' && it.acked) ? ` <a href="#" onclick="openTrackAttention('${e.id}');return false" title="This entity's history mixes both rubrics — click for what to do" style="color:#b45309;cursor:pointer;text-decoration:none">mixed</a>` : '')
       : '';
     const needsRoster = (e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null;
     const rosterLbl = (e.entity_type === 'practice' || e.entity_type === 'service_line')
