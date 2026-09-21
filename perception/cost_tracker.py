@@ -152,31 +152,32 @@ def install() -> None:
                 pass
             return resp
         _m.Messages.create = _create
-        # streaming: record from the final snapshot when the context closes
+        # streaming: record from the final snapshot when the context closes. Dunder
+        # methods are looked up on the type, so wrap the manager in a proxy class.
         _orig_stream = _m.Messages.stream
 
-        def _stream(self, *a, **kw):
-            mgr = _orig_stream(self, *a, **kw)
-            model = kw.get("model", "")
-            _orig_exit = mgr.__exit__
-            state = {"stream": None}
-            _orig_enter = mgr.__enter__
+        class _StreamProxy:
+            def __init__(self, mgr, model):
+                self._mgr, self._model, self._st = mgr, model, None
 
-            def _enter():
-                st = _orig_enter(); state["stream"] = st; return st
+            def __enter__(self):
+                self._st = self._mgr.__enter__()
+                return self._st
 
-            def _exit(*ea):
+            def __exit__(self, *ea):
                 try:
-                    st = state["stream"]
-                    snap = getattr(st, "current_message_snapshot", None) if st is not None else None
+                    snap = getattr(self._st, "current_message_snapshot", None) if self._st is not None else None
                     if snap is not None:
-                        record_claude(getattr(snap, "model", model), getattr(snap, "usage", None))
+                        record_claude(getattr(snap, "model", self._model), getattr(snap, "usage", None))
                 except Exception:
                     pass
-                return _orig_exit(*ea)
-            mgr.__enter__ = _enter
-            mgr.__exit__ = _exit
-            return mgr
+                return self._mgr.__exit__(*ea)
+
+            def __getattr__(self, name):
+                return getattr(self._mgr, name)
+
+        def _stream(self, *a, **kw):
+            return _StreamProxy(_orig_stream(self, *a, **kw), kw.get("model", ""))
         _m.Messages.stream = _stream
     except Exception as exc:
         print(f"[cost] anthropic hook failed: {exc}")
