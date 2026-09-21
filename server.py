@@ -556,6 +556,38 @@ def _job_error(exc: Exception) -> str:
     return s
 
 
+def _ensure_individual_teaser(result, job: dict) -> None:
+    """Individual reports (hospital, community health): the main PDF is always the full
+    report. When a teaser was requested, render it as a SEPARATE file into
+    result.teaser_pdf_path (never over the main PDF). Fail-soft."""
+    if not job.get("teaser_report") or job.get("skip_pdf"):
+        return
+    if result.teaser_pdf_path and Path(result.teaser_pdf_path).exists():
+        return
+    try:
+        import re as _re
+        from datetime import datetime as _dt
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        _ts = _dt.utcnow().strftime("%y%m%d-%H%M")
+        _safe = _re.sub(r"\W+", "_", result.entity_name or "entity")[:40]
+        t_pdf = REPORTS_DIR / f"{_safe}_Teaser-{_ts}.pdf"
+        copy = result.model_copy()
+        copy.teaser_report = True
+        copy.patient_perspective = True
+        if (result.entity_type or "") == "community_health":
+            from perception.fqhc_pdf import render_fqhc_pdf
+            render_fqhc_pdf(copy, str(t_pdf), brand=job.get("brand", "original"))
+        else:
+            from perception.pdf import render_pdf
+            render_pdf(copy, t_pdf, brand=job.get("brand", "original"))
+        result.teaser_pdf_path = str(t_pdf)
+        from perception.db import get_connection
+        with get_connection() as _con:
+            _con.execute("UPDATE analysis_runs SET teaser_pdf_path = ? WHERE run_id = ?", [str(t_pdf), result.run_id])
+    except Exception as exc:
+        print(f"[teaser] separate teaser render failed: {type(exc).__name__}: {exc}")
+
+
 def _backfill_teaser_pdf(result, job: dict) -> None:
     """Re-render result as teaser PDF when cache returned a stale or missing PDF.
 
@@ -617,7 +649,9 @@ def _job_run_single(
             city=city, state=state, specialty=specialty, aggregate=aggregate,
             radius_miles=radius_miles, zip_code=job.get("zip_code"),
             patient_perspective=job.get("patient_perspective", False),
-            teaser_report=job.get("teaser_report", False),
+            # Individual reports: the main PDF is always the full report; the teaser is a
+            # separate file (see _ensure_individual_teaser). Market runs keep the flag.
+            teaser_report=bool(job.get("teaser_report", False)) and not job.get("individual_report"),
             simplified=job.get("simplified_patient", False),
             obscure_competitors=job.get("obscure_competitors", True),
             target_entity=job.get("target_entity"),
@@ -638,7 +672,10 @@ def _job_run_single(
             service_line=job.get("service_line"),
             parent_system=job.get("parent_system"),
         )
-        _backfill_teaser_pdf(result, job)
+        if job.get("individual_report"):
+            _ensure_individual_teaser(result, job)
+        else:
+            _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"], job.get("email"))
 
         # Single-hospital Deep Diagnostic: fold the content analysis + prescription
@@ -1020,7 +1057,7 @@ def _job_run_fqhc(
             fqhc_intake=job.get("fqhc_intake"),
             aggregate=aggregate,
             site_roster=job.get("site_roster") or [],
-            teaser_report=job.get("teaser_report", False),
+            teaser_report=False,               # main PDF is the full report; teaser is a separate file
             output_dir=REPORTS_DIR,
             on_event=emit,
             brand=job.get("brand", "original"),
@@ -1030,7 +1067,7 @@ def _job_run_fqhc(
             briefing_variant=job.get("briefing_variant"),
             report_title=job.get("report_title"),
         )
-        _backfill_teaser_pdf(result, job)
+        _ensure_individual_teaser(result, job)
         set_run_role(result.run_id, job["role"], job.get("email"))
         job["status"] = "done"
         job["result"] = {

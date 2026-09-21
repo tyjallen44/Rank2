@@ -2811,3 +2811,12 @@ Commit: (1) FIX — the narrative model's domain-restricted web search tool incl
 **T3 — Fallback visibility.** (Admin, optional) Set PULSE env SPOTCHECK… n/a; to simulate, temporarily add an inaccessible domain locally → progress shows the "retrying with unrestricted search" line and the report still has sources.
 **T4 — Zero rows gone.** Operations recent-runs table no longer lists $0.00 / 0-call rows for a report's helper job.
 **R1.** Community Health battery unchanged (its own unrestricted tool); Compare Two and Rankings pick up the same fix since they share the narrative function.
+
+## FIX-TEASER-MAIN-PDF — Deep Diagnostic (hospital) and Community Health main reports were teasers
+
+Commit: the Deep Diagnostic form always sends teaser_report=true (the teaser is meant to be an extra file). The hospital and Community Health job paths passed that flag into the analyzer, which rendered the MAIN PDF as the blurred teaser (Community Health files were even named "…-Community-Health-Teaser-…"); a "backfill" step could also overwrite the main PDF with a teaser. Now: individual reports always render the full report as the main PDF; when a teaser was requested it is rendered as a separate file into teaser_pdf_path (hospital via the standard renderer, Community Health via the FQHC renderer). Practice/service-line reports (already separate) and market runs (teaser is a format there) unchanged. NEEDS BROWSER TESTING.
+
+**T1 — Hospital.** Run a hospital Deep Diagnostic. Download Report → full report (organization overview, pillars, assessment, roadmap/CIK, Sources Consulted); Download Teaser → blurred version. History row shows both files with distinct names (no "Teaser" in the main file name).
+**T2 — Community Health.** Same for an FQHC: main PDF is the full Community Health report; Teaser is separate. File names: "…-Community-Health-<runid>.pdf" and "…_Teaser-….pdf".
+**T3 — Existing runs.** Reports produced before this fix keep their teaser main file; re-run with Refresh from scratch to get the full version.
+**R1.** Practice Deep Diagnostic and Competitors Rankings Enticement/Market Summary outputs unchanged.
