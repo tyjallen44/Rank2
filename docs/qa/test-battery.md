@@ -2756,3 +2756,10 @@ Commit: new tracked entity type `hospital_network` (tracked_entities.facility_ty
 **T5 — Alerts + compare.** Change alert checkbox works for a network; compare-on-one-chart can mix a network with hospitals/practices.
 **T6 — Suggestions.** Typing a tracked network's name in Track New Entity name field offers it as a Hospital Network suggestion; picking it selects the type and starts discovery.
 **R1.** Hospital/practice/service-line tracking unchanged; a network entity never gets the "Confirm locations" flag; Run all due launches network snapshots too.
+
+## FIX-REVIEWED-CLICK — Reviewed button and Home History button handlers
+
+Commit: the "✓ Reviewed" button (Trends Details attention box) and the History button on the Home "Find an organization" card embedded a double-quoted string inside a double-quoted onclick attribute, which truncated the handler so the click did nothing. Both now use a single-quoted, escaped literal. NEEDS BROWSER TESTING.
+
+**T1.** Trends → an entity with Needs attention → Details → ✓ Reviewed → the row flashes, the badge clears (if that was the only reason), the item shows "Reviewed by … on …" with Undo; Undo restores it.
+**T2.** Home → Find an organization → pick one → History → History opens filtered to that name.

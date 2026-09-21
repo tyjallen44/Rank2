@@ -7046,7 +7046,7 @@ function _homePickSuggest(it) {
       <button class="btn ${isNet ? 'btn-ghost' : 'btn-primary'} btn-sm" onclick="navigate('individual'); _irPickSuggest(window._homePicked)">◎ Deep Diagnostic</button>
       <button class="btn btn-ghost btn-sm" onclick="handoffCompare(window._homeCtx)">⇄ Compare against…</button>
       ${it.kind === 'community_health' ? '' : `<button class="btn btn-ghost btn-sm" onclick="handoffTrack(window._homeCtx)">📈 Track in Trends</button>`}
-      <button class="btn btn-ghost btn-sm" onclick="navigate('history'); historySearch(${JSON.stringify(it.name)})">◷ History</button>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('history'); historySearch(${_jsq(it.name)})">◷ History</button>
     </div>`;
   box.style.display = '';
   window._homePicked = it;
@@ -9915,6 +9915,7 @@ function _trackAttentionReasons(e) {
   // Active (not reviewed) reasons drive the badge and the "Needs attention" filter.
   return _trackAttentionItems(e).filter(it => !it.acked).map(it => it.short);
 }
+function _jsq(v) { return "'" + String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;') + "'"; }
 function _trackAck(e, key, fp) {
   const a = (e.acks || []).find(x => x.reason === key);
   return (a && a.fingerprint === fp) ? a : null;
@@ -10229,11 +10230,11 @@ function _trackAttentionItems(e) {
     add('rubric', 'rubric mismatch', latestPt ? latestPt.date.slice(0, 10) : 'na',
       `Latest snapshot was scored on the ${e.latest_rubric} rubric, but this is a ${typeLbl}`,
       `Trends match snapshots by organization name, so a Deep Diagnostic run with a different type (or before the entity's type was set) lands here. Its four pillars mean different things, so it is not comparable. Run now scores on the correct rubric; admins can delete the mismatched runs from History.`,
-      [['Run now (correct rubric)', `runTrackNowFromList('${e.id}')`], ['Open in History', `navigate('history'); historySearch(${JSON.stringify(e.entity_name)})`]]);
+      [['Run now (correct rubric)', `runTrackNowFromList('${e.id}')`], ['Open in History', `navigate('history'); historySearch(${_jsq(e.entity_name)})`]]);
   } else if ((e.rubrics || []).length > 1) {
     add('mixed', 'mixed rubric history', offRubric.map(x => x.date.slice(0, 10)).join(','), 'Mixed rubric history',
       `${offRubric.length ? `${offRubric.length} of the last ${hist.length} snapshots (${offRubric.map(x => x.date.slice(0, 10)).join(', ')}) were scored on the ${offRubric[0].rubric} rubric` : 'Some earlier snapshots were scored on the other rubric'}; the rest on the ${expected} rubric this ${typeLbl} should use. Scores are comparable only within a rubric — the chart marks them H / P. Nothing is broken: keep going and the mixed snapshots age out of the 12-run window, or (admin) delete them from History for a clean line, or track a new entity from this one.`,
-      [['Open in History', `navigate('history'); historySearch(${JSON.stringify(e.entity_name)})`], ['Track as new entity', `trackAsNewEntity('${e.id}')`]]);
+      [['Open in History', `navigate('history'); historySearch(${_jsq(e.entity_name)})`], ['Track as new entity', `trackAsNewEntity('${e.id}')`]]);
   }
   return items;
 }
@@ -10250,7 +10251,7 @@ function _trackAttentionBox(e) {
         </div>`
       : `<div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid #f0d9a8">
           <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#5a4a1a">${it.title}</div><div style="font-size:12px;color:#5a4a1a;margin-top:3px;line-height:1.45">${it.detail}</div></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${it.actions.map(([l, fn]) => `<button class="btn btn-secondary btn-sm" onclick="${fn.replace(/"/g, '&quot;')}">${l}</button>`).join('')}<button class="btn btn-ghost btn-sm" onclick="ackTrackReason('${e.id}','${it.key}',${JSON.stringify(it.fp)})" title="I've looked at this; hide the flag until it recurs with new data">✓ Reviewed</button></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${it.actions.map(([l, fn]) => `<button class="btn btn-secondary btn-sm" onclick="${fn.replace(/"/g, '&quot;')}">${l}</button>`).join('')}<button class="btn btn-ghost btn-sm" onclick="ackTrackReason('${e.id}','${it.key}',${_jsq(it.fp)})" title="I've looked at this; hide the flag until it recurs with new data">✓ Reviewed</button></div>
         </div>`).join('')}
   </div>`;
 }
