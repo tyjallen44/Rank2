@@ -2682,8 +2682,10 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
               <button class="tg-opt on" id="te-tg-hospital"  onclick="setTeType('hospital')">Hospital</button>
               <button class="tg-opt"    id="te-tg-service_line" onclick="setTeType('service_line')">Hospital Service Line</button>
               <button class="tg-opt"    id="te-tg-specialty" onclick="setTeType('specialty')">Specialty Practice</button>
+              <button class="tg-opt"    id="te-tg-network" onclick="setTeType('network')">Hospital Network</button>
             </div>
           </div>
+          <div id="te-net-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">Tracks the <strong>system-level</strong> Hospital Network score across a fixed roster of facilities. Each snapshot is a full network run (10–20 minutes, all facilities) — monthly is recommended. Headquarters city/state are optional. The service-line scorecard is off for tracked snapshots.</div>
           <div id="te-type-note" class="hidden" style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">Scores one department of a health system on the practice rubric — enter the <strong>health system</strong> above and the <strong>service line</strong> below.</div>
           <div id="te-specialty-wrap" class="fg mt16 hidden" style="margin-bottom:0">
             <label class="fl" id="te-specialty-label">Specialty</label>
@@ -2710,6 +2712,14 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         <div id="te-step3" class="card hidden mt16" style="background:var(--bg);border-color:var(--border)">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:10px">Selected Organization</div>
           <div id="te-selected-display" style="background:#fff;border:1.5px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:20px"></div>
+
+          <!-- Facilities (Hospital Network): the fixed roster every snapshot will measure -->
+          <div id="te-net-roster" class="hidden" style="margin-bottom:20px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:8px">Facilities to track <span id="te-net-badge"></span></div>
+            <div id="te-net-summary" style="font-size:12.5px;color:var(--muted);margin-bottom:8px"></div>
+            <div id="te-net-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:#fff"></div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Uncheck any facility that should not count. This roster is fixed once tracking starts.</div>
+          </div>
 
           <!-- Locations (practice types): the fixed roster every snapshot will use -->
           <div id="te-locations" class="hidden" style="margin-bottom:20px">
@@ -4777,6 +4787,7 @@ async function npRunAnalysis() {
   btn.textContent = 'Starting…';
 
   try {
+    _lastNetworkRun = { name, hq, city: (document.getElementById('np-city')?.value || '').trim(), state: (document.getElementById('np-state')?.value || '').trim(), facilities: checked };
     const res = await fetch('/api/network/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
@@ -7014,7 +7025,7 @@ function _initSuggest() {
   _attachSuggest('ir-name',    _irPickSuggest, { kinds: 'hospital,service_line,specialty,community_health,network' });
   _attachSuggest('cmp-a-name', it => _cmpPickSuggest('a', it), { kinds: 'hospital,service_line,specialty,network' });
   _attachSuggest('cmp-b-name', it => _cmpPickSuggest('b', it), { kinds: 'hospital,service_line,specialty,network' });
-  _attachSuggest('te-name',    _tePickSuggest, { kinds: 'hospital,service_line,specialty' });
+  _attachSuggest('te-name',    it => { if (it.kind === 'network') { setTeType('network'); document.getElementById('te-name').value = it.name; document.getElementById('te-city').value = it.city || ''; document.getElementById('te-state').value = it.state || ''; teDiscoverNetwork(it.name, it.city || '', it.state || ''); } else _tePickSuggest(it); }, { kinds: 'hospital,service_line,specialty,network' });
   _attachSuggest('pp-target',  _ppPickSuggest, { kinds: 'hospital,specialty' });
   _attachSuggest('np-name',    _npPickSuggest, { kinds: 'network' });
   _attachSuggest('home-search-input', _homePickSuggest, { onNew: q => { navigate('individual'); setIrType('hospital'); const el = document.getElementById('ir-name'); if (el) { el.value = q; el.focus(); } } });
@@ -7190,6 +7201,11 @@ function handoffCompare(ctx) {
   if (ctx.name && ctx.city && ctx.state && (ctx.type === 'hospital' || ctx.specialty)) runCmpSearch('a');
 }
 function handoffTrackRun(runId)   { const r = _histRunIndex[runId]; if (r) handoffTrack(_handoffCtx(r)); }
+function handoffTrackNetworkRun(runId) {
+  const r = _histRunIndex[runId]; if (!r) return;
+  const parts = String(r.location || '').split(',');
+  handoffTrackNetwork({ name: r.entity_name || r.network_name || '', city: (parts[0] || '').trim(), state: (parts[1] || '').trim().slice(0, 2).toUpperCase() });
+}
 function handoffCompareRun(runId) { const r = _histRunIndex[runId]; if (r) handoffCompare(_handoffCtx(r)); }
 async function emailReport(runId, btn) {
   const raw = prompt('Email this report to (separate multiple addresses with commas):');
@@ -7342,6 +7358,7 @@ function showSingleDone(r) {
       <span style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-right:4px">Next</span>
       ${canHand ? `<button class="btn btn-ghost btn-sm" onclick="handoffTrackRun('${r.run_id}')" title="Track this organization on a schedule and see the score move over time">📈 Track in Trends</button>` : ''}
       ${canHand ? `<button class="btn btn-ghost btn-sm" onclick="handoffCompareRun('${r.run_id}')" title="Put this organization on side A of a head-to-head report">⇄ Compare against…</button>` : ''}
+      ${isNetwork ? `<button class="btn btn-ghost btn-sm" onclick="handoffTrackNetwork({ name: ${JSON.stringify(r.network_canonical_name || r.network_name || '')}, city: ${JSON.stringify((_lastNetworkRun && _lastNetworkRun.city) || '')}, state: ${JSON.stringify((_lastNetworkRun && _lastNetworkRun.state) || '')} })" title="Track this system's network score over time — the roster carries over">📈 Track network in Trends</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="emailReport('${r.run_id}', this)" title="Send the PDF to a customer or colleague">✉ Email report…</button>
       <button class="btn btn-ghost btn-sm" onclick="openChooser(null, event)" title="Not sure which report comes next? Answer two questions.">✦ Start another report…</button>
       ${(isComparison || isNetwork) ? '' : '<button class="btn btn-ghost btn-sm" onclick="navigate(\'history\')">History</button>'}
@@ -8278,6 +8295,7 @@ function _dlCell(run, caRuns) {
     if (run.has_pdf) files.push(['Report (PDF)', `/api/network/${run.run_id}/pdf?token=${tok}`]);
     if (run.has_teaser_pdf) files.push(['Teaser (PDF)', `/api/network/${run.run_id}/teaser-pdf?token=${tok}`]);
     if (run.has_full_detail_pdf) files.push(['Full Detail (PDF)', `/api/network/${run.run_id}/full-detail-pdf?token=${tok}`]);
+    acts.push(['📈 Track network in Trends', `handoffTrackNetworkRun('${run.run_id}')`]);
     if (run.has_pdf) acts.push(emailAct);
     return _dlMenu(run.run_id, files, acts);
   }
@@ -10130,7 +10148,8 @@ async function showTrackCompare() {
 let _trendLatestRun = null;
 function openLatestTrendRun() {
   if (!_trendLatestRun || !_trendLatestRun.run_id) return;
-  window.location.href = `/api/reports/${encodeURIComponent(_trendLatestRun.run_id)}/pdf?token=${encodeURIComponent(_token)}`;
+  const base = (_trackCurrentEntity && _trackCurrentEntity.entity_type === 'hospital_network') ? '/api/network/' : '/api/reports/';
+  window.location.href = `${base}${encodeURIComponent(_trendLatestRun.run_id)}/pdf?token=${encodeURIComponent(_token)}`;
 }
 function trendCompareAgainst() {
   const e = _trackCurrentEntity; if (!e) return;
@@ -10166,7 +10185,7 @@ function trackAsNewEntity(id) {
   if (e.entity_type === 'service_line') { set('te-name', (e.parent_system || '').toUpperCase()); set('te-specialty', e.service_line || ''); }
 }
 function _trackTypeLabel(t) {
-  return t === 'practice' ? 'Specialty Practice' : t === 'service_line' ? 'Hospital Service Line' : 'Hospital';
+  return t === 'practice' ? 'Specialty Practice' : t === 'service_line' ? 'Hospital Service Line' : t === 'hospital_network' ? 'Hospital Network' : 'Hospital';
 }
 async function deleteTracking(id) {
   const e = _trackEntities.find(x => x.id === id);
@@ -10275,6 +10294,7 @@ function _trackCfgPanel(e) {
         <span id="tc-roster-fix-msg-${e.id}" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
         <div id="tc-roster-fix-list-${e.id}" style="margin-top:10px"></div>
       </div>` : ''}
+      ${e.entity_type === 'hospital_network' ? lock('Facilities', `${(e.confirmed_roster || []).length} fixed facilit${(e.confirmed_roster || []).length === 1 ? 'y' : 'ies'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`) : ''}
       ${(e.entity_type === 'practice' || e.entity_type === 'service_line') ? lock('Locations', e.roster_count != null
           ? `${e.roster_count} fixed location${e.roster_count === 1 ? '' : 's'} <a href="#" onclick="toggleTrackRoster('${e.id}');return false" style="color:var(--teal);font-weight:600">view</a>`
           : 'Discovered each run (older entity) — track as a new entity to fix the roster') : ''}
@@ -10388,7 +10408,9 @@ function renderTrackEntityList() {
         + ((e.rubrics || []).length > 1 && !_trackAttentionItems(e).some(it => it.key === 'mixed' && it.acked) ? ` <a href="#" onclick="openTrackAttention('${e.id}');return false" title="This entity's history mixes both rubrics — click for what to do" style="color:#b45309;cursor:pointer;text-decoration:none">mixed</a>` : '')
       : '';
     const needsRoster = (e.entity_type === 'practice' || e.entity_type === 'service_line') && e.roster_count == null;
-    const rosterLbl = (e.entity_type === 'practice' || e.entity_type === 'service_line')
+    const rosterLbl = e.entity_type === 'hospital_network'
+      ? (e.roster_count != null ? `${e.roster_count - 1} facilit${e.roster_count - 1 === 1 ? 'y' : 'ies'}` : '')
+      : (e.entity_type === 'practice' || e.entity_type === 'service_line')
       ? (e.roster_count != null ? `${e.roster_count} location${e.roster_count === 1 ? '' : 's'}`
          : `<a href="#" onclick="openRosterFix('${e.id}');return false" class="badge" style="background:#fff3cd;color:#856404;font-size:10px;text-decoration:none;cursor:pointer" title="Locations are rediscovered on every run, so snapshots may not measure the same set. Confirm the roster once to fix it.">⚠ Confirm locations</a>`) : '';
     const sub = [`${e.city}, ${e.state}`, e.specialty || '', typeLbl, rosterLbl].filter(Boolean).join(' · ');
@@ -10459,6 +10481,8 @@ function showAddEntityFlow() {
   _teSelected     = null;
   _teResolvedCity = null;
   _teResolvedState = null;
+  _teNetFacilities = []; _teNetMeta = null;
+  document.getElementById('te-net-roster')?.classList.add('hidden');
   document.getElementById('te-name').focus();
 }
 
@@ -10468,9 +10492,15 @@ function teShowSchedule() {
 }
 function setTeType(type) {
   _teType = type;
-  ['hospital', 'service_line', 'specialty'].forEach(t => {
+  ['hospital', 'service_line', 'specialty', 'network'].forEach(t => {
     const b = document.getElementById('te-tg-' + t); if (b) b.classList.toggle('on', t === type);
   });
+  const netNote = document.getElementById('te-net-note'); if (netNote) netNote.classList.toggle('hidden', type !== 'network');
+  const cityLbl = document.querySelector('label[for="te-city"]');
+  if (type === 'network') {
+    const ni = document.getElementById('te-name'); if (ni) ni.placeholder = 'e.g. ATRIUM HEALTH';
+    const sb = document.getElementById('te-search-btn'); if (sb) sb.innerHTML = 'Find hospitals via AI →';
+  } else { const sb = document.getElementById('te-search-btn'); if (sb) sb.innerHTML = 'Search →'; }
   const isPractice = (type === 'specialty' || type === 'service_line');
   document.getElementById('te-specialty-wrap').classList.toggle('hidden', !isPractice);
   document.getElementById('te-type-note').classList.toggle('hidden', type !== 'service_line');
@@ -10500,6 +10530,7 @@ async function runTeSearch() {
     document.getElementById('te-name').value = sys;
     name = `${sys} ${line}`;
   }
+  if (_teType === 'network') return teDiscoverNetwork(name, city, state);
   if (!city)                         return showErr(errEl, 'Please enter a city.');
   if (!state || state.length !== 2)  return showErr(errEl, 'Please enter a 2-letter state code.');
 
@@ -10524,6 +10555,63 @@ async function runTeSearch() {
     btn.disabled = false;
     btn.innerHTML = 'Search →';
   }
+}
+
+// ── Hospital Network tracking: discover the roster, confirm it, then schedule ──
+let _teNetFacilities = [];
+let _teNetMeta = null;
+async function teDiscoverNetwork(name, city, state, preset) {
+  const errEl = document.getElementById('te-search-err');
+  const btn = document.getElementById('te-search-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Asking AI to find hospitals…';
+  try {
+    let facilities, canonical = name, hq = [city, state].filter(Boolean).join(', ');
+    if (preset && preset.facilities && preset.facilities.length) {
+      facilities = preset.facilities; canonical = (preset.name || name); hq = preset.hq || hq;
+    } else {
+      const params = new URLSearchParams({ network_name: name, facility_type: 'hospital' });
+      if (hq) params.set('hq_location', hq);
+      const res = await api(`/api/network-discover?${params}`);
+      if (!res.ok) throw new Error(await errDetail(res, 'Discovery failed'));
+      const data = await res.json();
+      facilities = data.facilities || [];
+      canonical = (data.network_canonical_name || name).toUpperCase();
+      if (!facilities.length) throw new Error('No hospitals found. Try the full official name of the system.');
+      if (!city || !state) { const inf = _npInferHq(facilities, data); if (inf) { city = inf.city; state = inf.state; } }
+    }
+    _teNetFacilities = facilities; _teNetMeta = { name: canonical, city, state };
+    _teSelected = { name: canonical, address: hq }; _teResolvedCity = city || ''; _teResolvedState = state || '';
+    document.getElementById('te-name').value = canonical;
+    if (city) document.getElementById('te-city').value = city;
+    if (state) document.getElementById('te-state').value = state;
+    document.getElementById('te-step2').classList.add('hidden');
+    document.getElementById('te-step3').classList.remove('hidden');
+    document.getElementById('te-selected-display').innerHTML = `<div style="font-weight:700;font-size:15px;color:var(--teal)">${_learnEsc(canonical)}</div><div style="font-size:12px;color:var(--muted);margin-top:2px">Hospital Network${city ? ` · HQ ${_learnEsc(city)}, ${_learnEsc(state)}` : ''} · ${facilities.length} facilit${facilities.length === 1 ? 'y' : 'ies'}</div>`;
+    document.getElementById('te-locations').classList.add('hidden');
+    teRenderNetRoster();
+    document.getElementById('te-step3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { showErr(errEl, e.message); }
+  finally { btn.disabled = false; btn.innerHTML = 'Find hospitals via AI →'; }
+}
+function teRenderNetRoster() {
+  const box = document.getElementById('te-net-roster'); box.classList.remove('hidden');
+  const states = [...new Set(_teNetFacilities.map(f => f.state).filter(Boolean))].sort();
+  document.getElementById('te-net-badge').innerHTML = `<span style="font-weight:700;background:var(--teal);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px">${_teNetFacilities.length}</span>`;
+  document.getElementById('te-net-summary').textContent = `${_teNetFacilities.length} facilities across ${states.length} state${states.length === 1 ? '' : 's'}: ${states.join(', ')}`;
+  const byState = {}; _teNetFacilities.forEach((f, i) => { (byState[f.state || 'Unknown'] = byState[f.state || 'Unknown'] || []).push([f, i]); });
+  document.getElementById('te-net-list').innerHTML = Object.keys(byState).sort().map(st => `<div style="padding:5px 8px;background:#eef7f1;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin:4px 0">${_learnEsc(st)}</div>` +
+    byState[st].map(([f, i]) => `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px"><input type="checkbox" id="te-net-${i}" checked style="width:15px;height:15px;flex-shrink:0">${_learnEsc(f.name)} <span style="color:var(--muted)">— ${_learnEsc(f.city || '')}</span>${f.beds ? ` <span style="color:var(--muted);font-size:11px">(${f.beds} beds)</span>` : ''}</label>`).join('')).join('');
+}
+function _teNetRoster() { return _teNetFacilities.filter((_, i) => document.getElementById(`te-net-${i}`)?.checked); }
+// From a finished Hospital Network run (completion screen or History row).
+let _lastNetworkRun = null;
+function handoffTrackNetwork(ctx) {
+  navigate('track'); showAddEntityFlow(); setTeType('network');
+  document.getElementById('te-name').value = (ctx.name || '').toUpperCase();
+  document.getElementById('te-city').value = ctx.city || ''; document.getElementById('te-state').value = ctx.state || '';
+  const preset = (_lastNetworkRun && _lastNetworkRun.facilities && String(_lastNetworkRun.name).toUpperCase() === String(ctx.name).toUpperCase()) ? _lastNetworkRun : null;
+  _flash(preset ? 'Roster carried over from the report — confirm it, then Add to Trends.' : 'Prefilled from the report — Find hospitals, confirm the roster, then Add to Trends.');
+  teDiscoverNetwork(ctx.name, ctx.city || '', ctx.state || '', preset);
 }
 
 function showTeCandidates() {
@@ -10657,7 +10745,8 @@ async function loadEntityTrend(entityId) {
     _trendAnnotations = annotations || [];
     const scoredPts = (data_points || []).filter(p => p.ai_visibility_score != null);
     _trendLatestRun = scoredPts.length ? scoredPts[scoredPts.length - 1] : null;
-    const lb = document.getElementById('trend-latest-btn'); if (lb) lb.style.display = (_trendLatestRun && _trendLatestRun.pdf_path) ? '' : 'none';
+    const lb = document.getElementById('trend-latest-btn'); if (lb) { lb.style.display = (_trendLatestRun && _trendLatestRun.pdf_path) ? '' : 'none'; lb.textContent = _trackCurrentEntity.entity_type === 'hospital_network' ? '⬇ Latest Network report' : '⬇ Latest Deep Diagnostic'; }
+    const cb = document.getElementById('trend-compare-btn'); if (cb) cb.style.display = _trackCurrentEntity.entity_type === 'hospital_network' ? 'none' : '';
     renderTrendCharts(data_points);
     renderTrendNotes();
   } catch (e) {
@@ -11050,7 +11139,13 @@ async function submitAddEntity() {
   const specialty = (_teType === 'specialty' || _teType === 'service_line')
     ? (document.getElementById('te-specialty').value.trim() || null)
     : null;
-  const entity_type = _teType === 'specialty' ? 'practice' : _teType === 'service_line' ? 'service_line' : 'hospital';
+  const entity_type = _teType === 'specialty' ? 'practice' : _teType === 'service_line' ? 'service_line' : _teType === 'network' ? 'hospital_network' : 'hospital';
+  if (entity_type === 'hospital_network') {
+    const roster = _teNetRoster();
+    if (!roster.length) { errEl.textContent = 'Keep at least one facility in the roster.'; errEl.classList.remove('hidden'); return; }
+    const sched = document.getElementById('te-schedule').value;
+    if (sched === 'weekly' && !confirm('A network snapshot is a full network run (10–20 minutes, every facility). Weekly is expensive — continue with weekly?')) return;
+  }
   const body = {
     entity_name: _teSelected.name,
     city:        _teResolvedCity,
@@ -11065,7 +11160,14 @@ async function submitAddEntity() {
     body.service_line = specialty;
     body.parent_system = document.getElementById('te-name').value.trim();
   }
-  if (entity_type !== 'hospital') {
+  if (entity_type === 'hospital_network') {
+    body.entity_name = (_teNetMeta && _teNetMeta.name) || body.entity_name;
+    body.city = _teResolvedCity || document.getElementById('te-city').value.trim() || '—';
+    body.state = (_teResolvedState || document.getElementById('te-state').value.trim() || '—').toUpperCase();
+    body.aggregate = true; body.specialty = null;
+    body.confirmed_roster = _teNetRoster().map(f => ({ name: f.name, city: f.city, state: f.state, beds: f.beds || null }));
+    body.facility_type = 'hospital';
+  } else if (entity_type !== 'hospital') {
     if (_teDiscovering) { errEl.textContent = 'Locations are still being discovered — one moment.'; errEl.classList.remove('hidden'); return; }
     body.confirmed_roster = _teConfirmedRoster();
     if (_teSelected.place_id) body.anchor_listing = { place_id: _teSelected.place_id, address: _teSelected.address || '',

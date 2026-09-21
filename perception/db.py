@@ -664,6 +664,11 @@ def _init_db_impl() -> None:
     if "alert_on_change" not in _te_cols:
         # Opt-in: email when a snapshot moves 5+ points or changes quartile
         con.execute("ALTER TABLE tracked_entities ADD COLUMN alert_on_change BOOLEAN DEFAULT FALSE")
+    if "facility_type" not in _te_cols:
+        # Hospital Network entities: facility type + locations page used for the roster
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN facility_type VARCHAR")
+    if "source_url" not in _te_cols:
+        con.execute("ALTER TABLE tracked_entities ADD COLUMN source_url VARCHAR")
 
     # Compare Two (head-to-head) reports — one row per comparison so History can list
     # and download the combined PDF (previously only the in-memory job knew the path).
@@ -2223,9 +2228,21 @@ def list_tracked_entities() -> list[dict]:
             if score is not None:
                 hist[k].append({"date": str(gen), "run_id": rid, "score": int(score),
                                 "rubric": rubric_for_profile(prof), "confidence": conf})
+    net_keys = sorted({(e.get("entity_name") or "").lower() for e in ents
+                       if e.get("entity_name") and (e.get("entity_type") == "hospital_network")})
+    if net_keys:
+        ph = ",".join("?" * len(net_keys))
+        for k, gen, rid, score in con.execute(
+            f"""SELECT LOWER(network_name), generated_at, run_id, ai_visibility_score
+                FROM network_runs WHERE LOWER(network_name) IN ({ph})
+                ORDER BY generated_at ASC, created_at ASC NULLS LAST""", net_keys).fetchall():
+            if score is not None:
+                hist.setdefault(k, []).append({"date": str(gen), "run_id": rid, "score": int(score),
+                                               "rubric": "hospital", "confidence": None})
     con.close()
     for e in ents:
-        h = hist.get((e.get("entity_name") or "").lower(), [])[-12:]
+        _k = (e.get("entity_name") or "").lower()
+        h = hist.get(_k, [])[-12:]
         e["recent_scores"] = h
         e["latest_score"] = h[-1]["score"] if h else None
         e["score_delta"] = (h[-1]["score"] - h[-2]["score"]) if len(h) >= 2 else None
@@ -2248,7 +2265,7 @@ def update_tracked_entity(entity_id: str, **kwargs) -> None:
     allowed = {"entity_name", "city", "state", "specialty", "aggregate",
                "schedule", "active", "notes", "next_run_at",
                "email_report", "report_emails", "display_name", "alert_on_change",
-               "confirmed_roster", "anchor_listing"}
+               "confirmed_roster", "anchor_listing", "facility_type", "source_url"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -2894,7 +2911,7 @@ def _suggest_index(role: str = None) -> list:
             """SELECT id, entity_name, city, state, COALESCE(entity_type, 'hospital'), specialty, service_line, parent_system, last_run_at
                FROM tracked_entities WHERE active = TRUE ORDER BY last_run_at DESC NULLS LAST LIMIT 1000""").fetchall()
         for tid, name, city, state, et, spec, sl, ps, last in rows:
-            kind = "service_line" if et == "service_line" or sl else "specialty" if et == "practice" else "hospital"
+            kind = "network" if et == "hospital_network" else "service_line" if et == "service_line" or sl else "specialty" if et == "practice" else "hospital"
             _put((kind, (name or "").lower(), (city or "").lower(), (state or "").upper()),
                  {"name": name, "kind": kind, "city": city or "", "state": (state or "").upper(), "specialty": spec,
                   "service_line": sl, "parent_system": ps, "last_run": str(last)[:10] if last else "", "run_count": 0,
@@ -2967,3 +2984,42 @@ def clear_trend_ack(entity_id: str, reason: str) -> None:
     con = get_connection()
     con.execute("DELETE FROM trend_acks WHERE entity_id = ? AND reason = ?", [entity_id, reason])
     con.close()
+
+
+def get_network_trend(network_name: str) -> list[dict]:
+    """Snapshot history for a tracked Hospital Network, in the same shape get_entity_trend
+    returns for hospitals/practices so Trends, the Trend Report and alerts work unchanged."""
+    import json as _json
+    con = get_connection()
+    rows = con.execute(
+        """SELECT run_id, generated_at, pdf_path, ai_visibility_score, total_hospitals, hq_location, result_json
+           FROM network_runs WHERE LOWER(network_name) = LOWER(?)
+           ORDER BY generated_at ASC, created_at ASC NULLS LAST""", [network_name]).fetchall()
+    con.close()
+    out = []
+    for run_id, gen, pdf, score, total, hq, rj in rows:
+        ts, prof, g_rating, g_count = {}, None, None, None
+        try:
+            r = _json.loads(rj or "{}")
+            ts = r.get("tier_scores") or {}
+            prof = r.get("weighting_profile")
+            # Review-weighted Google rating / total reviews across the facilities, when present.
+            fac = r.get("facilities") or []
+            pairs = [(f.get("google_rating"), f.get("google_review_count")) for f in fac
+                     if f.get("google_rating") is not None and f.get("google_review_count")]
+            if pairs:
+                g_count = sum(int(c) for _, c in pairs)
+                g_rating = round(sum(float(a) * int(c) for a, c in pairs) / g_count, 2) if g_count else None
+        except Exception:
+            pass
+        out.append({
+            "run_id": run_id, "generated_at": str(gen), "pdf_path": pdf,
+            "ai_visibility_score": score,
+            "tier_outcomes": ts.get("clinical_outcomes_safety"), "tier_credentials": ts.get("credentials_recognition"),
+            "tier_experience": ts.get("patient_experience_reviews"), "tier_access": ts.get("access_fit"),
+            "google_rating": g_rating, "google_count": g_count,
+            "leapfrog_grade": None, "cms_star_rating": None, "accreditations": [],
+            "run_aggregate": None, "run_specialty": None, "run_location": hq, "run_profile": prof or "procedural",
+            "rubric": "hospital", "confidence": None, "total_hospitals": total, "network": True,
+        })
+    return out

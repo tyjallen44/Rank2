@@ -4099,6 +4099,16 @@ class TrackEntityRequest(BaseModel):
     parent_system: Optional[str] = None    # service_line type: the health system
     confirmed_roster: Optional[List[dict]] = None   # practice types: the fixed Locations list every snapshot uses
     anchor_listing: Optional[dict] = None           # flagship Google listing (place_id, rating, …)
+    facility_type: Optional[str] = None             # hospital_network: hospital | asc | urgent_care | imaging | behavioral_health | other
+    source_url: Optional[str] = None                # hospital_network: locations page (optional)
+
+
+def _entity_points(entity: dict) -> list:
+    """Snapshot history for any tracked entity type (network runs vs Deep Diagnostic runs)."""
+    from perception.db import get_entity_trend, get_network_trend
+    if (entity.get("entity_type") or "hospital") == "hospital_network":
+        return get_network_trend(entity["entity_name"])
+    return get_entity_trend(entity["entity_name"])
 
 
 def _entity_roster(entity: dict):
@@ -4144,6 +4154,10 @@ def _launch_tracked_run(entity: dict, brand: str = "original") -> str:
         if etype == "service_line":
             j["service_line"] = entity.get("service_line")
             j["parent_system"] = entity.get("parent_system")
+    elif etype == "hospital_network":
+        j["entity_type"] = "hospital_network"
+        j["kind"] = "Hospital Network"
+        j["skip_pdf"] = False              # the network analyzer always renders its reports
     _pool.submit(_run_tracked_and_notify, job_id, entity)
     return job_id
 
@@ -4211,8 +4225,10 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_curr
         raise HTTPException(400, "schedule must be monthly, weekly, or manual")
     init_db()
     created_by = payload.get("email") or payload.get("uid") or "admin"
-    if req.entity_type not in ("hospital", "practice", "service_line"):
-        raise HTTPException(400, "entity_type must be hospital, practice, or service_line")
+    if req.entity_type not in ("hospital", "practice", "service_line", "hospital_network"):
+        raise HTTPException(400, "entity_type must be hospital, practice, service_line, or hospital_network")
+    if req.entity_type == "hospital_network" and not req.confirmed_roster:
+        raise HTTPException(400, "A Hospital Network needs its facility roster (confirm the hospitals first)")
     if req.entity_type == "service_line" and not (req.service_line and req.parent_system):
         raise HTTPException(400, "service_line and parent_system are required for a service line")
     entity = create_tracked_entity(
@@ -4230,6 +4246,10 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_curr
         confirmed_roster=json.dumps(req.confirmed_roster) if (req.entity_type != "hospital" and req.confirmed_roster is not None) else None,
         anchor_listing=json.dumps(req.anchor_listing) if req.anchor_listing else None,
     )
+    if req.entity_type == "hospital_network":
+        from perception.db import update_tracked_entity as _upd
+        _upd(entity["id"], facility_type=(req.facility_type or "hospital"), source_url=(req.source_url or None))
+        entity["facility_type"] = req.facility_type or "hospital"; entity["source_url"] = req.source_url or None
     # Fire initial collection run immediately so the first data point is captured now.
     job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
     mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
@@ -4314,7 +4334,7 @@ async def track_trend(entity_id: str, _: dict = Depends(get_current_user_payload
     if not entity:
         raise HTTPException(404, "tracked entity not found")
     from perception.db import list_annotations
-    data = get_entity_trend(entity["entity_name"])
+    data = _entity_points(entity)
     return {"entity": entity, "data_points": data, "annotations": list_annotations(entity_id)}
 
 
@@ -4374,7 +4394,7 @@ async def track_report_pdf(entity_id: str, payload: dict = Depends(get_current_u
     entity = get_tracked_entity(entity_id)
     if not entity:
         raise HTTPException(404, "tracked entity not found")
-    points = get_entity_trend(entity["entity_name"])
+    points = _entity_points(entity)
     if not points:
         raise HTTPException(404, "No snapshots yet — run the entity at least once first.")
     pdf_path = await asyncio.get_running_loop().run_in_executor(
@@ -4425,7 +4445,7 @@ def _email_trend_report(entity_id: str, emails: list, brand: str = "original",
     entity = get_tracked_entity(entity_id)
     if not entity:
         return 0
-    points = get_entity_trend(entity["entity_name"])
+    points = _entity_points(entity)
     if not points:
         return 0
     pdf_path = _trend_report_file(entity, points, brand)
@@ -4469,7 +4489,14 @@ def _email_trend_report(entity_id: str, emails: list, brand: str = "original",
 
 def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
     """Run one tracked-entity snapshot, then (opt-in) email the refreshed Trend Report."""
-    if (entity.get("entity_type") or "hospital") in ("practice", "service_line"):
+    if (entity.get("entity_type") or "hospital") == "hospital_network":
+        roster, _ = _entity_roster(entity)
+        hq = ", ".join(x for x in [entity.get("city"), entity.get("state")] if x)
+        # Monthly-style snapshot: same roster every time, teaser/full-detail/scorecard off.
+        _job_network_analyze(job_id, entity["entity_name"], hq, entity.get("source_url") or "",
+                             list(roster or []), entity.get("facility_type") or "hospital", "original",
+                             ignore_cache=False, teaser=False, service_line_audit=False, full_detail=False)
+    elif (entity.get("entity_type") or "hospital") in ("practice", "service_line"):
         _job_run_practice(job_id, entity["entity_name"], entity["city"], entity["state"],
                           entity.get("specialty"), True, None)
     else:
@@ -4503,7 +4530,7 @@ def _maybe_send_change_alert(entity: dict) -> int:
         ent = get_tracked_entity(entity["id"]) or entity
         if not ent.get("alert_on_change"):
             return 0
-        pts = [p for p in get_entity_trend(ent["entity_name"]) if p.get("ai_visibility_score") is not None]
+        pts = [p for p in _entity_points(ent) if p.get("ai_visibility_score") is not None]
         # one point per day (last run of the day), so a same-day re-run never triggers an alert
         by_day = {}
         for p in pts:
@@ -4523,7 +4550,7 @@ def _maybe_send_change_alert(entity: dict) -> int:
             return 0
         pdf = None
         try:
-            pdf = str(_trend_report_file(ent, get_entity_trend(ent["entity_name"]), "original"))
+            pdf = str(_trend_report_file(ent, _entity_points(ent), "original"))
         except Exception:
             pdf = None
         name = ent.get("display_name") or ent["entity_name"]

@@ -2744,3 +2744,15 @@ Commit: new `trend_acks` table (entity + reason + fingerprint + who/when); POST/
 **T2.** ✓ Reviewed on "Mixed rubric history" → the amber "mixed" marker disappears from the row; Undo brings both back.
 **T3.** Recurrence: after the next snapshot, if the score falls again the flag returns (new date); if it does not, nothing shows. Running a Deep Diagnostic of that name as the wrong type adds a new off-rubric date → the mixed flag returns.
 **T4.** Reviewing is available to any signed-in user; the recorded name is the reviewer's.
+
+## TRENDS-NETWORK — track a Hospital Network's system score over time
+
+Commit: new tracked entity type `hospital_network` (tracked_entities.facility_type / source_url added). Snapshots are full Hospital Network runs on a fixed facility roster (teaser, full detail and the service-line scorecard off); history comes from network_runs (`get_network_trend`) so existing Network reports for the same system name become the first snapshots. Trends list/detail, Trend Report, change alerts, compare-on-one-chart and the Reviewed flags all work for networks. Entry points: "📈 Track network in Trends" on the Hospital Network completion screen (roster carried over from the run) and in Network rows' History Downloads menu (roster rediscovered); Trends → Track New Entity → Hospital Network type (Find hospitals via AI → confirm roster → Add). Monthly by default; weekly asks for confirmation. NEEDS BROWSER TESTING.
+
+**T1 — From a completion.** Run a Hospital Network report; on the completion screen click "📈 Track network in Trends" → Trends add flow opens with type Hospital Network, the system name and HQ filled, and the roster from the run already listed (no discovery). Uncheck one facility, keep monthly, Add to Trends → the entity appears (label "Hospital Network · N facilities"), its first snapshot starts, and earlier Network runs of the same system name already show as history (sparkline/latest score).
+**T2 — From History.** Network row → Downloads ▾ → "📈 Track network in Trends" → add flow prefilled; Find hospitals runs discovery; confirm; Add.
+**T3 — From scratch.** Track New Entity → Hospital Network → name only (HQ blank) → Find hospitals via AI → HQ inferred and filled, roster listed by state → Add. Weekly cadence prompts a cost confirmation.
+**T4 — Detail + report.** View the network entity: pillar chart uses the hospital pillar labels; snapshot table shows Google rating/review totals across facilities; "⬇ Latest Network report" downloads the network PDF; Compare against… is hidden. Trend Report PDF header reads "Hospital Network · N facilities" (no rolled-up/single-location scope line).
+**T5 — Alerts + compare.** Change alert checkbox works for a network; compare-on-one-chart can mix a network with hospitals/practices.
+**T6 — Suggestions.** Typing a tracked network's name in Track New Entity name field offers it as a Hospital Network suggestion; picking it selects the type and starts discovery.
+**R1.** Hospital/practice/service-line tracking unchanged; a network entity never gets the "Confirm locations" flag; Run all due launches network snapshots too.

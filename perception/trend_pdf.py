@@ -459,11 +459,17 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
     points = _collapse_same_day(points)
     today = date.today().strftime("%B %-d, %Y")
     etype = {"practice": "Specialty Practice", "service_line": "Hospital Service Line",
-             "community_health": "Community Health"}.get(str(entity.get("entity_type") or ""), "Hospital")
+             "community_health": "Community Health", "hospital_network": "Hospital Network"}.get(str(entity.get("entity_type") or ""), "Hospital")
+    is_network = str(entity.get("entity_type") or "") == "hospital_network"
     sub_bits = [f"{_e(entity.get('city'))}, {_e(entity.get('state'))}", _e(etype)]
+    if is_network:
+        _nf = (points[-1].get("total_hospitals") if points else None)
+        if _nf:
+            sub_bits.append(f"{_nf} facilities")
     if entity.get("specialty"):
         sub_bits.append(_e(entity["specialty"]))
-    sub_bits.append("All locations rolled up" if entity.get("aggregate") else "Single location")
+    if not is_network:
+        sub_bits.append("All locations rolled up" if entity.get("aggregate") else "Single location")
     if st["period"][0]:
         sub_bits.append(f"Tracking since {_e(st['period'][0])} · {_plural(st['n'], 'snapshot')}" + (f" ({st['runs']} runs)" if st["runs"] > st["n"] else ""))
     sub = " &nbsp;·&nbsp; ".join(sub_bits)
