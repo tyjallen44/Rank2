@@ -2801,6 +2801,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
             <span id="trend-run-status" style="font-size:12px;color:var(--muted)"></span>
             <button class="btn btn-ghost btn-sm" id="trend-latest-btn" onclick="openLatestTrendRun()" style="display:none" title="Download the Deep Diagnostic PDF behind the newest snapshot">⬇ Latest Deep Diagnostic</button>
+            <button class="btn btn-secondary btn-sm" id="trend-create-btn" onclick="trendCreateFullReport(this)" title="Start a full report for this entity right now — Deep Diagnostic (hospital / practice / service line) or Hospital Network — using its tracked settings and roster. The finished report also becomes a snapshot in this trend.">▶ Create full report</button>
             <button class="btn btn-ghost btn-sm" id="trend-compare-btn" onclick="trendCompareAgainst()" title="Put this organization on side A of a Compare Two report">⇄ Compare against…</button>
             <button class="btn btn-secondary btn-sm" id="trend-pdf-btn" onclick="downloadTrendReport()" title="Customer-ready PDF: summary, score and pillar trends, Google reputation, snapshots">⬇ Trend Report (PDF)</button>
             <button class="btn btn-secondary btn-sm" id="trend-send-btn" onclick="sendTrendReportNow()" title="Email the current Trend Report PDF to one or more addresses">✉ Send report…</button>
@@ -10289,6 +10290,61 @@ async function showTrackCompare() {
       <td style="text-align:center">${v.length}</td><td style="text-align:center">${first ?? '—'}</td><td style="text-align:center;font-weight:700">${last ?? '—'}</td><td style="text-align:center">${d == null ? '—' : _deltaChip(d)}</td><td style="text-align:center">${last != null ? _scoreLabel(last) : '—'}</td><td>${_confChip(s.e.latest_confidence) || ''}</td></tr>`; }).join('');
   document.getElementById('track-compare-table').innerHTML = `<table class="tbl" style="font-size:13px"><thead><tr><th>Entity</th><th style="text-align:center">Snapshots</th><th style="text-align:center">First</th><th style="text-align:center">Latest</th><th style="text-align:center">Change</th><th style="text-align:center">Quartile</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table>`;
   if (meta) meta.textContent = `${series.length} entities · one point per day per entity · 0–100 scale`;
+}
+
+// ── Create a full report straight from a tracked entity ───────────────────────
+// Launches immediately with the entity's locked settings and confirmed roster; only when
+// something is missing (a practice without a roster) does it fall back to the prefilled form.
+async function trendCreateFullReport(btn) {
+  const e = _trackCurrentEntity; if (!e) return;
+  const type = e.entity_type || 'hospital';
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Starting…';
+  const st = document.getElementById('trend-run-status');
+  try {
+    if (type === 'hospital_network') {
+      const roster = e.confirmed_roster || [];
+      if (!roster.length) {
+        navigate('network'); document.getElementById('np-name').value = String(e.entity_name || '').toUpperCase();
+        document.getElementById('np-city').value = e.city || ''; document.getElementById('np-state').value = e.state || '';
+        _flash('Prefilled from Trends — Find hospitals, confirm the roster, then Run.'); npFindFacilities(); return;
+      }
+      _lastNetworkRun = { name: e.entity_name, hq: [e.city, e.state].filter(Boolean).join(', '), city: e.city, state: e.state, facilities: roster };
+      const r = await api('/api/network/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network_name: e.entity_name, hq_location: [e.city, e.state].filter(Boolean).join(', '), source_url: e.source_url || '',
+          facilities: roster.map(f => ({ name: f.name, city: f.city, state: f.state, beds: f.beds || null })), facility_type: e.facility_type || 'hospital',
+          ignore_cache: false, teaser: true, service_line_audit: false, full_detail: true }) });
+      if (!r.ok) throw new Error(await errDetail(r, 'Could not start the report'));
+      const { job_id } = await r.json();
+      _lastPage = 'network'; startProgress(job_id, `${e.display_name || e.entity_name} — Hospital Network`, false); return;
+    }
+    const isPractice = (type === 'practice' || type === 'service_line');
+    const roster = e.confirmed_roster, anchor = e.anchor_listing;
+    if (isPractice && (!roster || !anchor || !anchor.place_id)) {
+      // Not enough to launch blind — land on the prefilled Deep Diagnostic and search.
+      navigate('individual');
+      _irPickSuggest({ kind: type === 'service_line' ? 'service_line' : 'specialty', name: e.entity_name, parent_system: e.parent_system, service_line: e.service_line,
+                       specialty: e.specialty, city: e.city, state: e.state });
+      _flash('Prefilled from Trends — confirm the listing and locations, then Run Diagnostic.'); return;
+    }
+    const body = {
+      city: e.city, state: e.state, specialty: isPractice ? (e.specialty || e.service_line || null) : null,
+      aggregate: isPractice ? true : (e.aggregate !== false), individual_report: true, entity_name: e.entity_name,
+      report_title: e.display_name || undefined, patient_perspective: false, teaser_report: true, skip_pdf: false,
+      entity_type: isPractice ? 'practice' : null, practice_profile: isPractice ? 'practice_procedural' : null,
+      confirmed_siblings: isPractice ? roster : undefined,
+      anchor_listing: isPractice ? { place_id: anchor.place_id, address: anchor.address || '', rating: anchor.rating ?? null, review_count: anchor.review_count ?? null, maps_url: anchor.maps_url || null } : undefined,
+      org_name: undefined,
+      service_line: type === 'service_line' ? e.service_line : undefined, parent_system: type === 'service_line' ? e.parent_system : undefined,
+      practice_composite: isPractice, physician_composite: false, physician_roster: {},
+      practice_roster: isPractice ? [{ name: e.entity_name, entity_type: 'practice', is_anchor: true, city: e.city, state: e.state, address: anchor.address || '', place_id: anchor.place_id, rating: anchor.rating ?? null, review_count: anchor.review_count ?? null, maps_url: anchor.maps_url || null }] : [],
+      content_urls: [], override_today_lock: false, briefing_variant: null,
+    };
+    const r = await api('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not start the report'));
+    const { job_id } = await r.json();
+    _lastPage = 'individual'; startProgress(job_id, `${e.display_name || e.entity_name} — Deep Diagnostic`, false);
+  } catch (err) { if (st) st.textContent = err.message || String(err); else alert(err.message || err); }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
 }
 
 // ── Detail-view handoffs ──────────────────────────────────────────────────────

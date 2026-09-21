@@ -2848,3 +2848,14 @@ Commit: under the Hospital Network roster (and the Trends → Track New Entity �
 **T4.** Unknown name → "Nothing matched…" message but the preview still allows adding as typed.
 **T5.** Trends → Track New Entity → Hospital Network → same link under the facilities list; the added hospital is in the confirmed roster.
 **R1.** Excluding (unchecking) an added hospital still works; Cancel closes the form; existing discovery and roster review unchanged.
+
+## TRENDS-CREATE-REPORT — "Create full report" from a tracked entity
+
+Commit: the Trends entity view gains "▶ Create full report". It starts the right report immediately with the entity's locked settings: Deep Diagnostic for hospitals (aggregate as tracked), practices and service lines (confirmed roster + flagship listing carried over, composite on), or Hospital Network (facility roster, teaser + full detail, scorecard off). The progress screen opens as if launched from the form; the completion screen offers Download and Email report. The finished report joins the trend as a snapshot (matched by name). Only when the entity lacks what is needed (a practice without a confirmed roster/listing, or a network without a roster) does it land on the prefilled form with the search started. NEEDS BROWSER TESTING.
+
+**T1 — Hospital.** Trends → USA Health University Hospital → Create full report → progress screen "… — Deep Diagnostic" immediately; completion shows Download / Email report; the trend gains a snapshot dated today.
+**T2 — Practice with roster.** Campbell Clinic → Create full report → launches with its 10 fixed locations (no re-discovery); the report's reputation table lists those locations.
+**T3 — Practice without roster.** An unconfirmed practice → lands on Deep Diagnostic prefilled with the listing search running and a flash explaining why.
+**T4 — Network.** A tracked network → launches a Hospital Network run on its roster; completion offers the three files.
+**T5 — Cached window.** If the entity ran in the last 30 days the report returns from cache quickly; Refresh from scratch is not applied here (use the form for that).
+**R1.** Run Now (data-only snapshot), Trend Report and Send report unchanged.
