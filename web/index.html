@@ -1978,6 +1978,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
         </p>
         <div id="np-roster-summary" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
         <div id="np-roster-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+        <div id="np-roster-add" style="margin-top:8px"></div>
         <div id="np-step2-err" class="err hidden mt8"></div>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-secondary" onclick="npReset()">← Back</button>
@@ -2726,6 +2727,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:8px">Facilities to track <span id="te-net-badge"></span></div>
             <div id="te-net-summary" style="font-size:12.5px;color:var(--muted);margin-bottom:8px"></div>
             <div id="te-net-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:#fff"></div>
+            <div id="te-net-add" style="margin-top:8px"></div>
             <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Uncheck any facility that should not count. This roster is fixed once tracking starts.</div>
           </div>
 
@@ -4748,14 +4750,19 @@ function npShowRoster(facilities, networkName, confidenceNote, cfg) {
     for (const f of byState[st]) {
       const id = `np-fac-${f.name.replace(/\W+/g,'_')}`;
       const bedsStr = f.beds ? ` <span style="color:var(--muted);font-size:11px">(${f.beds} beds)</span>` : '';
+      const tag = f.added_by_user ? ' <span class="tag" style="background:#e3f4ea;color:#1a7a4a">added by you</span>' : f.added_earlier ? ' <span class="tag" title="Added by hand on an earlier run of this system">added earlier</span>' : '';
       html += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:4px;font-size:13px" onmouseover="this.style.background='var(--hover-bg,#f5f5f5)'" onmouseout="this.style.background=''">
         <input type="checkbox" id="${id}" checked style="width:15px;height:15px;flex-shrink:0" data-name="${f.name}" data-city="${f.city}" data-state="${f.state}" data-beds="${f.beds||''}">
-        ${f.name} — ${f.city}${bedsStr}
+        ${f.name} — ${f.city}${bedsStr}${tag}
       </label>`;
     }
     html += '<div style="height:8px"></div>';
   }
   listEl.innerHTML = html;
+  _mountFacilityAdd('np-roster-add', {
+    networkName: networkName, defaultState: (document.getElementById('np-state')?.value || '').trim().toUpperCase(),
+    onAdd: f => { _npRoster.push(f); npShowRoster(_npRoster, networkName, confidenceNote, cfg); npToggleRoster(true); },
+  });
 }
 
 async function npRunAnalysis() {
@@ -10152,6 +10159,76 @@ async function _trackTaskDone(id, message) {
   _flash(message);
 }
 
+// ── "Add a hospital" to a network roster (Network page + Trends network add flow) ──
+// Link → inline form (name, city, state) → verify via Google + CMS → accept → joins the roster
+// (checked, tagged) and is remembered for the next discovery of this system.
+function _mountFacilityAdd(containerId, opts) {
+  const host = document.getElementById(containerId); if (!host) return;
+  host.dataset.network = opts.networkName || '';
+  host._opts = opts;
+  if (host.dataset.open === '1') return;          // keep an open form as-is on re-render
+  host.innerHTML = `<a href="#" onclick="_facilityAddOpen('${containerId}');return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">＋ Add a hospital the AI missed</a>
+    <span style="font-size:11.5px;color:var(--muted);margin-left:8px">Verified against Google and CMS, added to this roster, and remembered for next time.</span>`;
+}
+function _facilityAddOpen(containerId) {
+  const host = document.getElementById(containerId); if (!host) return;
+  host.dataset.open = '1';
+  const st = (host._opts && host._opts.defaultState) || '';
+  host.innerHTML = `<div style="margin-top:6px;padding:12px 14px;background:#f6fafa;border:1px solid var(--border);border-radius:8px">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Add a hospital</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 80px auto;gap:8px;align-items:end">
+      <div><div class="fl">Hospital name</div><input id="${containerId}-name" class="fi" placeholder="e.g. Methodist Hospital South" style="padding:8px 10px;font-size:13px" onkeydown="if(event.key==='Enter'){event.preventDefault();_facilityAddResolve('${containerId}')}"></div>
+      <div><div class="fl">City</div><input id="${containerId}-city" class="fi" placeholder="Memphis" style="padding:8px 10px;font-size:13px" onkeydown="if(event.key==='Enter'){event.preventDefault();_facilityAddResolve('${containerId}')}"></div>
+      <div><div class="fl">State</div><input id="${containerId}-state" class="fi" maxlength="2" value="${_learnEsc(st)}" style="padding:8px 10px;font-size:13px;text-transform:uppercase"></div>
+      <div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" id="${containerId}-go" onclick="_facilityAddResolve('${containerId}')">Find it →</button><button class="btn btn-ghost btn-sm" onclick="_facilityAddClose('${containerId}')">Cancel</button></div>
+    </div>
+    <div id="${containerId}-msg" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+    <div id="${containerId}-preview" style="margin-top:8px"></div>
+  </div>`;
+  document.getElementById(`${containerId}-name`).focus();
+}
+function _facilityAddClose(containerId) {
+  const host = document.getElementById(containerId); if (!host) return;
+  host.dataset.open = '0'; _mountFacilityAdd(containerId, host._opts || {});
+}
+async function _facilityAddResolve(containerId) {
+  const name = (document.getElementById(`${containerId}-name`)?.value || '').trim();
+  const city = (document.getElementById(`${containerId}-city`)?.value || '').trim();
+  const state = (document.getElementById(`${containerId}-state`)?.value || '').trim().toUpperCase();
+  const msg = document.getElementById(`${containerId}-msg`); const prev = document.getElementById(`${containerId}-preview`); const go = document.getElementById(`${containerId}-go`);
+  if (!name) { msg.textContent = 'Enter the hospital name.'; return; }
+  go.disabled = true; go.innerHTML = '<span class="spinner"></span> Finding…'; msg.textContent = 'Checking Google and CMS Care Compare…'; prev.innerHTML = '';
+  try {
+    const r = await api('/api/network/resolve-facility', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, city, state }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Lookup failed'));
+    const d = await r.json();
+    msg.textContent = d.found ? '' : 'Nothing matched on Google or CMS. Check the spelling and city — or add it as typed below.';
+    const cms = d.cms ? `CMS Care Compare: ${_learnEsc(d.cms.name)} · ${_learnEsc(d.cms.hospital_type || 'hospital')}${d.cms.overall_rating ? ` · ${d.cms.overall_rating}★ overall` : ' · not rated'}${d.cms.emergency_services ? ' · ED' : ''}` : 'Not found on CMS Care Compare (may not be Medicare-certified, or listed under another name).';
+    const fac = { name: d.name || name, city: d.city || city, state: d.state || state, beds: null, place_id: d.place_id || null, added_by_user: true };
+    window._facilityPending = window._facilityPending || {}; window._facilityPending[containerId] = fac;
+    prev.innerHTML = `<div style="display:flex;gap:12px;align-items:center;padding:10px 12px;background:#fff;border:1.5px solid var(--teal);border-radius:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px"><div style="font-weight:700;color:var(--teal)">${_learnEsc(fac.name)}</div>
+        <div style="font-size:12px;color:var(--muted)">${_learnEsc(d.address || [fac.city, fac.state].filter(Boolean).join(', '))}${d.rating != null ? ` · ${d.rating}★ (${(d.review_count || 0).toLocaleString()} Google reviews)` : ''}</div>
+        <div style="font-size:12px;color:${d.cms ? '#1a7a4a' : '#856404'};margin-top:3px">${cms}</div></div>
+      <div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" onclick="_facilityAddAccept('${containerId}')">Add to roster</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById('${containerId}-preview').innerHTML=''">Not this one</button></div>
+    </div>`;
+  } catch (e) { msg.textContent = e.message || 'Lookup failed'; }
+  finally { go.disabled = false; go.innerHTML = 'Find it →'; }
+}
+async function _facilityAddAccept(containerId) {
+  const host = document.getElementById(containerId); const fac = (window._facilityPending || {})[containerId]; if (!host || !fac) return;
+  const opts = host._opts || {};
+  try {
+    const r = await api('/api/network/additions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ network_name: opts.networkName || host.dataset.network || '', name: fac.name, city: fac.city, state: fac.state, beds: fac.beds, place_id: fac.place_id }) });
+    if (r.ok) { const d = await r.json(); fac.addition_id = d.id; }
+  } catch (_) { /* remembering is best-effort */ }
+  host.dataset.open = '0';
+  if (opts.onAdd) opts.onAdd(fac);
+  _flash(`${fac.name} added to the roster and remembered for future runs of this system.`);
+  setTimeout(() => { const h = document.getElementById(containerId); if (h && h._opts) { _facilityAddOpen(containerId); const m = document.getElementById(`${containerId}-msg`); if (m) m.textContent = 'Added. Add another, or close.'; } }, 50);
+}
+
 // ── Admin: run every due entity now ──────────────────────────────────────────
 async function runAllDueTracked(btn) {
   const due = _trackEntities.filter(e => e.active && e.schedule !== 'manual' && e.next_run_at && new Date(e.next_run_at) <= new Date());
@@ -10670,7 +10747,12 @@ function teRenderNetRoster() {
   document.getElementById('te-net-summary').textContent = `${_teNetFacilities.length} facilities across ${states.length} state${states.length === 1 ? '' : 's'}: ${states.join(', ')}`;
   const byState = {}; _teNetFacilities.forEach((f, i) => { (byState[f.state || 'Unknown'] = byState[f.state || 'Unknown'] || []).push([f, i]); });
   document.getElementById('te-net-list').innerHTML = Object.keys(byState).sort().map(st => `<div style="padding:5px 8px;background:#eef7f1;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin:4px 0">${_learnEsc(st)}</div>` +
-    byState[st].map(([f, i]) => `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px"><input type="checkbox" id="te-net-${i}" checked style="width:15px;height:15px;flex-shrink:0">${_learnEsc(f.name)} <span style="color:var(--muted)">— ${_learnEsc(f.city || '')}</span>${f.beds ? ` <span style="color:var(--muted);font-size:11px">(${f.beds} beds)</span>` : ''}</label>`).join('')).join('');
+    byState[st].map(([f, i]) => `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px"><input type="checkbox" id="te-net-${i}" checked style="width:15px;height:15px;flex-shrink:0">${_learnEsc(f.name)} <span style="color:var(--muted)">— ${_learnEsc(f.city || '')}</span>${f.beds ? ` <span style="color:var(--muted);font-size:11px">(${f.beds} beds)</span>` : ''}${f.added_by_user ? ' <span class="tag" style="background:#e3f4ea;color:#1a7a4a">added by you</span>' : f.added_earlier ? ' <span class="tag">added earlier</span>' : ''}</label>`).join('')).join('');
+  _mountFacilityAdd('te-net-add', {
+    networkName: (_teNetMeta && _teNetMeta.name) || document.getElementById('te-name').value.trim(),
+    defaultState: (_teResolvedState || document.getElementById('te-state').value || '').trim().toUpperCase(),
+    onAdd: f => { _teNetFacilities.push(f); teRenderNetRoster(); },
+  });
 }
 function _teNetRoster() { return _teNetFacilities.filter((_, i) => document.getElementById(`te-net-${i}`)?.checked); }
 // From a finished Hospital Network run (completion screen or History row).

@@ -709,6 +709,21 @@ def _init_db_impl() -> None:
             sent_at       TIMESTAMP NOT NULL
         )
     """)
+    # Hospitals a user added to a network roster by hand — remembered per system so the
+    # next discovery of that system includes them automatically.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS network_roster_additions (
+            id            VARCHAR PRIMARY KEY,
+            network_key   VARCHAR NOT NULL,
+            name          VARCHAR NOT NULL,
+            city          VARCHAR,
+            state         VARCHAR,
+            beds          INTEGER,
+            place_id      VARCHAR,
+            added_by      VARCHAR,
+            created_at    TIMESTAMP NOT NULL
+        )
+    """)
     # Per-run cost metering (estimates from the price table in perception/cost_tracker.py)
     con.execute("""
         CREATE TABLE IF NOT EXISTS run_costs (
@@ -3100,4 +3115,42 @@ def set_run_spotcheck(run_id: str, sc: dict) -> None:
     import json as _json
     con = get_connection()
     con.execute("UPDATE analysis_runs SET spotcheck_json = ? WHERE run_id = ?", [_json.dumps(sc, default=str), run_id])
+    con.close()
+
+
+# ── Network roster additions (remembered per system) ─────────────────────────
+def _network_key(name: str) -> str:
+    import re as _re
+    return _re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
+
+
+def list_roster_additions(network_name: str) -> list:
+    con = get_connection()
+    rows = con.execute("SELECT id, name, city, state, beds, place_id, added_by, created_at FROM network_roster_additions "
+                       "WHERE network_key = ? ORDER BY created_at ASC", [_network_key(network_name)]).fetchall()
+    con.close()
+    return [{"id": r[0], "name": r[1], "city": r[2], "state": r[3], "beds": r[4], "place_id": r[5],
+             "added_by": r[6], "added_at": str(r[7])[:10], "added_earlier": True} for r in rows]
+
+
+def add_roster_addition(network_name: str, name: str, city: str, state: str, beds=None, place_id=None, added_by: str = "") -> dict:
+    import uuid
+    from datetime import datetime
+    key = _network_key(network_name)
+    con = get_connection()
+    dup = con.execute("SELECT id FROM network_roster_additions WHERE network_key = ? AND LOWER(name) = LOWER(?) AND LOWER(COALESCE(city,'')) = LOWER(?)",
+                      [key, name, city or ""]).fetchone()
+    if dup:
+        con.close()
+        return {"id": dup[0], "name": name, "city": city, "state": state, "beds": beds, "place_id": place_id, "added_earlier": True, "duplicate": True}
+    aid = str(uuid.uuid4())
+    con.execute("INSERT INTO network_roster_additions (id, network_key, name, city, state, beds, place_id, added_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [aid, key, name, city, (state or "").upper(), beds, place_id, added_by, datetime.utcnow()])
+    con.close()
+    return {"id": aid, "name": name, "city": city, "state": (state or "").upper(), "beds": beds, "place_id": place_id, "added_earlier": True}
+
+
+def delete_roster_addition(aid: str) -> None:
+    con = get_connection()
+    con.execute("DELETE FROM network_roster_additions WHERE id = ?", [aid])
     con.close()

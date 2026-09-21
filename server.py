@@ -1936,16 +1936,99 @@ async def network_discover(
     facility_type: str = "hospital",
     _: str = Depends(require_auth),
 ):
-    """Ask Claude + Gemini to enumerate all facilities owned by a named healthcare network."""
+    """Ask Claude + Gemini to enumerate all facilities owned by a named healthcare network.
+    Hospitals a user added by hand for this system earlier are merged in (flagged added_earlier)."""
     try:
         loop = asyncio.get_event_loop()
         from perception.network_analyzer import discover_hospitals_by_name
         data = await loop.run_in_executor(
             None, discover_hospitals_by_name, network_name, hq_location, facility_type
         )
+        try:
+            from perception.db import list_roster_additions
+            extra = list_roster_additions(data.get("network_canonical_name") or network_name) or list_roster_additions(network_name)
+            have = {(str(f.get("name", "")).lower(), str(f.get("city", "")).lower()) for f in (data.get("facilities") or [])}
+            for a in extra:
+                if (a["name"].lower(), (a.get("city") or "").lower()) not in have:
+                    data.setdefault("facilities", []).append({"name": a["name"], "city": a.get("city") or "", "state": a.get("state") or "",
+                                                              "beds": a.get("beds"), "added_earlier": True, "addition_id": a["id"]})
+            data["additions"] = extra
+        except Exception as _exc:
+            print(f"[roster-additions] merge failed: {_exc}")
         return data
     except Exception as exc:
         raise HTTPException(500, f"Network discover error: {type(exc).__name__}: {exc}")
+
+
+class FacilityResolveRequest(BaseModel):
+    name: str
+    city: str = ""
+    state: str = ""
+
+
+@app.post("/api/network/resolve-facility")
+async def network_resolve_facility(req: FacilityResolveRequest, _: dict = Depends(get_current_user_payload)):
+    """Verify a hospital a user wants to add to a network roster: Google listing (name,
+    address, rating) plus a CMS Care Compare match (facility id, type, overall stars)."""
+    from perception.data.places import search_entity_candidates
+    from perception.data import cms
+    name, city, state = req.name.strip(), req.city.strip(), req.state.strip().upper()
+    if not name:
+        raise HTTPException(400, "Enter the hospital name")
+
+    def _go():
+        cands = []
+        try:
+            cands = search_entity_candidates(name, city, state) or []
+        except Exception as exc:
+            print(f"[resolve-facility] places failed: {exc}")
+        best = cands[0] if cands else None
+        cms_rec = None
+        try:
+            if state:
+                hs = cms.list_hospitals(state, cities=[city] if city else None)
+                m = cms._best_match(name, city, hs) if hs else None
+                if m is None and city:
+                    hs = cms.list_hospitals(state)
+                    m = cms._best_match(name, city, hs) if hs else None
+                if m:
+                    cms_rec = {"facility_id": m.facility_id, "name": m.name, "city": m.city, "hospital_type": m.hospital_type,
+                               "overall_rating": m.overall_rating, "emergency_services": m.emergency_services}
+        except Exception as exc:
+            print(f"[resolve-facility] cms failed: {exc}")
+        out_city = city or (cms_rec or {}).get("city") or ""
+        return {"found": bool(best or cms_rec),
+                "name": (best or {}).get("name") or (cms_rec or {}).get("name") or name,
+                "address": (best or {}).get("address") or "", "rating": (best or {}).get("rating"),
+                "review_count": (best or {}).get("review_count"), "place_id": (best or {}).get("place_id"),
+                "city": out_city, "state": state or (best or {}).get("resolved_state") or "",
+                "cms": cms_rec, "candidates": cands[:4]}
+    return await asyncio.get_running_loop().run_in_executor(None, _go)
+
+
+class RosterAdditionRequest(BaseModel):
+    network_name: str
+    name: str
+    city: str = ""
+    state: str = ""
+    beds: Optional[int] = None
+    place_id: Optional[str] = None
+
+
+@app.post("/api/network/additions")
+async def network_addition_add(req: RosterAdditionRequest, payload: dict = Depends(get_current_user_payload)):
+    from perception.db import init_db, add_roster_addition
+    init_db()
+    return add_roster_addition(req.network_name, req.name.strip(), req.city.strip(), req.state.strip(), req.beds, req.place_id,
+                               added_by=payload.get("email") or payload.get("name") or "")
+
+
+@app.delete("/api/network/additions/{aid}")
+async def network_addition_delete(aid: str, _: dict = Depends(get_current_user_payload)):
+    from perception.db import init_db, delete_roster_addition
+    init_db()
+    delete_roster_addition(aid)
+    return {"ok": True}
 
 
 @app.get("/api/network-prefill")

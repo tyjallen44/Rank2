@@ -2837,3 +2837,14 @@ Commit: History (analysis, network and Compare Two rows), the report download/au
 **T1.** Sign in as a non-admin role (e.g. Sales Team). History lists reports the admin ran (Run by shows the admin) alongside the role's own; Downloads work for them; the "Run by" filter offers the admin's name.
 **T2.** Typeahead on any form suggests admin-run organizations; starting a Deep Diagnostic for one shows the 14-day notice naming the admin's run.
 **T3.** A Partner-role user does not see Sales Team runs (and vice versa); admins see all.
+
+## NETWORK-ADD-HOSPITAL — add a hospital the AI missed to the network roster
+
+Commit: under the Hospital Network roster (and the Trends → Track New Entity → Hospital Network roster) a "＋ Add a hospital the AI missed" link opens an inline form (name, city, state defaulting to HQ state). Find it → POST /api/network/resolve-facility verifies against Google (name, address, rating, reviews) and CMS Care Compare (record, type, overall stars, ED) and shows a preview card. Add to roster → the hospital joins the list checked and tagged "added by you", counts/states update, the list stays open, and the addition is remembered per system (network_roster_additions) so the next discovery of that system includes it tagged "added earlier". Run Hospital Network / Add to Trends use the checked list including additions. NEEDS BROWSER TESTING.
+
+**T1.** Hospital Network → find a system → "＋ Add a hospital the AI missed" → enter a hospital the AI omitted (e.g. "Methodist Hospital South", Memphis, TN) → Find it → preview shows the Google name/address/rating and the CMS line → Add to roster → it appears in the state group, checked, "added by you"; summary count +1; form reopens with "Added. Add another, or close."
+**T2.** Run Hospital Network → the added hospital is in the report's facility scorecard.
+**T3.** Re-run discovery for the same system later → the hospital is present, tagged "added earlier", before any run.
+**T4.** Unknown name → "Nothing matched…" message but the preview still allows adding as typed.
+**T5.** Trends → Track New Entity → Hospital Network → same link under the facilities list; the added hospital is in the confirmed roster.
+**R1.** Excluding (unchecking) an added hospital still works; Cancel closes the form; existing discovery and roster review unchanged.
