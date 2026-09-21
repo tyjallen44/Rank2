@@ -2867,3 +2867,11 @@ Commit: (1) Opening Track New Entity (including via "Track in Trends" from a com
 **T1.** Start tracking a practice, and while "Discovering locations…" is showing, go to Deep Diagnostic, run a report, and click Track in Trends on completion → the add flow opens with "Add to Trends" enabled (no spinner label); the old discovery's locations never appear in the new flow.
 **T2.** Simulate a hung discovery (throttle network) → after ~75 s the button re-enables with the explanatory note and the entity can be added; Find more locations later works.
 **T3.** Completion screen: the three handoff buttons are teal-outlined; Email report… and Start another report… remain ghost.
+
+## HISTORY-ALL-ROLES — every role sees every report (Partner stays isolated)
+
+Commit: all native accounts share the 'user' role while reports made with the legacy passwords carry 'admin' / 'rldatix' / 'salesteam' etc., so role-scoped History hid many reports from staff. History, downloads, the 14-day duplicate check and the organization typeahead now show every report to every signed-in role; only the Partner role remains limited to its own runs plus admin-created ones. NEEDS BROWSER TESTING.
+
+**T1.** Sign in as a native user (role 'user'): History row count equals the admin's; searching finds reports created under the admin password and under legacy roles; downloads work.
+**T2.** A Partner login still sees only Partner + admin runs.
+**T3.** Typeahead and duplicate notices reflect the same visibility.

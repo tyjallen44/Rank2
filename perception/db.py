@@ -1733,8 +1733,19 @@ def set_run_role(run_id: str, role: str, ran_by: Optional[str] = None) -> None:
     con.close()
 
 
+# Every signed-in role sees every report (all native accounts share the 'user' role, so
+# per-role isolation only hid admin/legacy-role reports from staff). Partner logins stay
+# limited to their own runs plus admin-created ones.
+_ISOLATED_ROLES = {"partner"}
+
+
+def _history_role(role):
+    return "admin" if role not in _ISOLATED_ROLES else role
+
+
 def query_history(role: str) -> list[dict[str, Any]]:
-    """Return analysis runs + network runs for the given role, newest first."""
+    """Return analysis runs + network runs visible to the given role, newest first."""
+    role = _history_role(role)
     con = get_connection()
 
     analysis_cols = ["run_id", "location", "specialty", "generated_at",
@@ -2809,6 +2820,7 @@ def recent_runs_matching(kind: str, name: str, name_b: str = "", role: str = Non
     if not name:
         return []
     since = date.today() - timedelta(days=days)
+    role = _history_role(role)
     role_sql, role_args = ("", []) if role in (None, "", "admin") else (" AND COALESCE(user_role, 'admin') IN (?, 'admin')", [role])
     con = get_connection()
     out = []
@@ -2906,7 +2918,7 @@ def _suggest_index(role: str = None) -> list:
     """All analyzed / tracked organizations for a role (deduped), cached for 2 minutes.
     Three cheap queries once, then every keystroke filters in memory."""
     import time as _time
-    key = role if role not in (None, "") else "admin"
+    key = _history_role(role) if role not in (None, "") else "admin"
     hit = _SUGGEST_CACHE.get(key)
     if hit and _time.time() - hit[0] < _SUGGEST_TTL:
         return hit[1]
