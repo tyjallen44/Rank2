@@ -708,6 +708,23 @@ def _init_db_impl() -> None:
             sent_at       TIMESTAMP NOT NULL
         )
     """)
+    # Per-run cost metering (estimates from the price table in perception/cost_tracker.py)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS run_costs (
+            job_id        VARCHAR PRIMARY KEY,
+            run_id        VARCHAR,
+            kind          VARCHAR,
+            label         VARCHAR,
+            cost_usd      DOUBLE PRECISION,
+            detail        VARCHAR,
+            seconds       DOUBLE PRECISION,
+            created_at    TIMESTAMP NOT NULL
+        )
+    """)
+    for _t in ("analysis_runs", "network_runs", "comparison_runs"):
+        _c = {r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name=?", [_t]).fetchall()}
+        if "cost_usd" not in _c:
+            con.execute(f"ALTER TABLE {_t} ADD COLUMN cost_usd DOUBLE PRECISION")
     # Reviewed "needs attention" flags: keyed by entity + reason + a fingerprint of the
     # data that raised it, so the flag comes back when the condition recurs with new data.
     con.execute("""
@@ -1707,7 +1724,7 @@ def query_history(role: str) -> list[dict[str, Any]]:
     analysis_cols = ["run_id", "location", "specialty", "generated_at",
                      "pdf_path", "teaser_pdf_path", "md_path", "briefing_pdf_path", "event_id",
                      "entity_type", "mqcr", "entity_name", "ran_by", "provider_count", "created_at",
-                     "service_line", "parent_system", "confidence", "confidence_note"]
+                     "service_line", "parent_system", "confidence", "confidence_note", "cost_usd"]
 
     if role == "admin":
         analysis_rows = con.execute("""
@@ -1728,20 +1745,23 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 COUNT(p.rank) AS provider_count,
                 a.created_at,
                 a.service_line,
-                a.parent_system
+                a.parent_system,
+                a.confidence,
+                a.confidence_note,
+                a.cost_usd
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             WHERE NOT (a.comparison_id IS NOT NULL AND a.pdf_path IS NULL)
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
                      a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at,
-                     a.service_line, a.parent_system
+                     a.service_line, a.parent_system, a.confidence, a.confidence_note, a.cost_usd
             ORDER BY a.generated_at DESC, a.run_id DESC
         """).fetchall()
         network_rows = con.execute("""
             SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
                    generated_at, pdf_path, total_hospitals, created_at,
-                   teaser_pdf_path, full_detail_pdf_path, ran_by
+                   teaser_pdf_path, full_detail_pdf_path, ran_by, cost_usd
             FROM network_runs
             ORDER BY generated_at DESC, run_id DESC
         """).fetchall()
@@ -1764,20 +1784,23 @@ def query_history(role: str) -> list[dict[str, Any]]:
                 COUNT(p.rank) AS provider_count,
                 a.created_at,
                 a.service_line,
-                a.parent_system
+                a.parent_system,
+                a.confidence,
+                a.confidence_note,
+                a.cost_usd
             FROM analysis_runs a
             LEFT JOIN ranked_providers p ON p.run_id = a.run_id
             WHERE a.user_role = ? AND NOT (a.comparison_id IS NOT NULL AND a.pdf_path IS NULL)
             GROUP BY a.run_id, a.location, a.specialty, a.generated_at,
                      a.pdf_path, a.teaser_pdf_path, a.md_path, a.briefing_pdf_path, a.event_id,
                      a.entity_type, a.mqcr, a.entity_name, a.ran_by, a.created_at,
-                     a.service_line, a.parent_system
+                     a.service_line, a.parent_system, a.confidence, a.confidence_note, a.cost_usd
             ORDER BY a.generated_at DESC, a.run_id DESC
         """, [role]).fetchall()
         network_rows = con.execute("""
             SELECT run_id, network_name, COALESCE(facility_type, 'hospital'),
                    generated_at, pdf_path, total_hospitals, created_at,
-                   teaser_pdf_path, full_detail_pdf_path, ran_by
+                   teaser_pdf_path, full_detail_pdf_path, ran_by, cost_usd
             FROM network_runs
             WHERE COALESCE(user_role, 'admin') = ?
             ORDER BY generated_at DESC, run_id DESC
@@ -1822,8 +1845,9 @@ def query_history(role: str) -> list[dict[str, Any]]:
 
     for row in network_rows:
         (run_id, network_name, facility_type, generated_at, pdf_path, total,
-         created_at, teaser_pdf_path, full_detail_pdf_path, ran_by) = row
+         created_at, teaser_pdf_path, full_detail_pdf_path, ran_by, cost_usd) = row
         results.append({
+            "cost_usd":          cost_usd,
             "run_id":            run_id,
             "location":          network_name,
             "specialty":         facility_type,
@@ -3023,3 +3047,49 @@ def get_network_trend(network_name: str) -> list[dict]:
             "rubric": "hospital", "confidence": None, "total_hospitals": total, "network": True,
         })
     return out
+
+
+# ── Cost metering persistence ────────────────────────────────────────────────
+def record_run_cost(job_id: str, run_id, kind: str, label: str, acc: dict) -> None:
+    import json as _json
+    from datetime import datetime
+    con = get_connection()
+    con.execute("DELETE FROM run_costs WHERE job_id = ?", [job_id])
+    con.execute("INSERT INTO run_costs (job_id, run_id, kind, label, cost_usd, detail, seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [job_id, run_id, kind, label, float(acc.get("cost_usd") or 0), _json.dumps(acc, default=str), acc.get("seconds"), datetime.utcnow()])
+    if run_id:
+        for t in ("analysis_runs", "network_runs", "comparison_runs"):
+            key = "id" if t == "comparison_runs" else "run_id"
+            try:
+                con.execute(f"UPDATE {t} SET cost_usd = ? WHERE {key} = ?", [float(acc.get("cost_usd") or 0), run_id])
+            except Exception:
+                pass
+    con.close()
+
+
+def cost_summary(days: int = 30) -> dict:
+    """Totals and averages per kind for the last `days` days, plus the most recent runs."""
+    from datetime import datetime, timedelta
+    con = get_connection()
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = con.execute("SELECT kind, COUNT(*), SUM(cost_usd), AVG(cost_usd), MIN(cost_usd), MAX(cost_usd), AVG(seconds) "
+                       "FROM run_costs WHERE created_at >= ? GROUP BY kind ORDER BY SUM(cost_usd) DESC", [since]).fetchall()
+    recent = con.execute("SELECT job_id, run_id, kind, label, cost_usd, seconds, created_at, detail FROM run_costs "
+                         "ORDER BY created_at DESC LIMIT 40").fetchall()
+    con.close()
+    import json as _json
+    def _d(v):
+        try:
+            return _json.loads(v or "{}")
+        except Exception:
+            return {}
+    return {
+        "days": days,
+        "by_kind": [{"kind": r[0] or "—", "runs": int(r[1]), "total": round(float(r[2] or 0), 2), "avg": round(float(r[3] or 0), 2),
+                     "min": round(float(r[4] or 0), 2), "max": round(float(r[5] or 0), 2), "avg_seconds": round(float(r[6] or 0))} for r in rows],
+        "total": round(sum(float(r[2] or 0) for r in rows), 2),
+        "runs": sum(int(r[1]) for r in rows),
+        "recent": [{"job_id": r[0], "run_id": r[1], "kind": r[2], "label": r[3], "cost_usd": round(float(r[4] or 0), 2),
+                    "seconds": r[5], "created_at": str(r[6]), **{k: _d(r[7]).get(k) for k in ("calls", "web_searches", "places_calls", "gemini_calls", "input_tokens", "output_tokens")}}
+                   for r in recent],
+    }

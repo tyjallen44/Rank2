@@ -2279,6 +2279,14 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div style="font-size:11px;color:var(--muted);margin-top:10px">In-memory job registry for this server process: running jobs plus everything finished since the last restart. Users see only their own analysis runs on Home.</div>
         </div>
         <div class="card" style="margin-top:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+            <div style="font-weight:600;font-size:15px">Spend per analysis run</div>
+            <select class="fi" style="width:auto;padding:6px 10px;font-size:12px" onchange="loadAdminCosts(this.value)"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Estimated API spend metered per run: Claude tokens and web searches, Google Places lookups, Gemini calls. Prices from the table in <code>cost_tracker.py</code> (override with PULSE_PRICES_JSON). Estimates, not invoices.</div>
+          <div id="admin-costs"><div class="empty" style="padding:12px 0"><div>Loading…</div></div></div>
+        </div>
+        <div class="card" style="margin-top:16px">
           <div style="font-weight:600;font-size:15px;margin-bottom:4px">Maintenance</div>
           <div style="font-size:12px;color:var(--muted);margin-bottom:12px">One-off data cleanups run on the server (database + reports volume). Dry run shows what would change; Apply writes.</div>
           <div id="admin-maint-list"><div class="empty" style="padding:12px 0"><div>Loading…</div></div></div>
@@ -7380,6 +7388,10 @@ function showSingleDone(r) {
   const fullDetailBtn = (isNetwork && r.full_detail_pdf_path)
     ? `<button class="btn btn-secondary" onclick="_download('/api/network/${r.run_id}/full-detail-pdf?token=${encodeURIComponent(_token)}')">⬇ Download Full Detail</button>`
     : '';
+  // Admins see what the run cost (estimate from the price table).
+  const costLine = (_role === 'admin' && r.cost && r.cost.cost_usd != null)
+    ? `<div style="font-size:12px;color:var(--muted);margin-top:10px" title="Estimated API spend for this analysis run: Claude tokens, web searches, Google Places lookups, Gemini calls. Prices from the table in cost_tracker.py.">Estimated cost: <strong>$${Number(r.cost.cost_usd).toFixed(2)}</strong> · ${_learnEsc(r.cost.summary || '')}${r.cost.seconds ? ` · ${Math.round(r.cost.seconds / 60)} min` : ''}</div>`
+    : '';
   // Handoffs: what a user typically does next with this report.
   _histRunIndex[r.run_id] = r;
   const canHand = _handoffable(r);
@@ -7399,6 +7411,7 @@ function showSingleDone(r) {
     ${briefingBtn}
     ${fullDetailBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
+    ${costLine}
     ${nextHtml}`;
   document.getElementById('prog-done').classList.remove('hidden');
 }
@@ -8655,7 +8668,7 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
               <td style="font-weight:500;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_entName}">${_entName}</td>
               <td>${typeBadge}${_confChip(run.confidence, run.confidence_note)}</td>
               <td style="text-align:right">${analyzedCount}</td>
-              <td style="font-size:12px;color:var(--muted);white-space:nowrap" title="${run.ran_by || ''}">${_ranBy}</td>
+              <td style="font-size:12px;color:var(--muted);white-space:nowrap" title="${run.ran_by || ''}">${_ranBy}${(_role === 'admin' && run.cost_usd != null) ? `<div style="font-size:11px" title="Estimated API spend for this analysis run">$${Number(run.cost_usd).toFixed(2)}</div>` : ''}</td>
               <td>${_dlCell(run, _caByBase[run.run_id] || [])}</td>
             </tr>`;
           });
@@ -9353,9 +9366,25 @@ async function runAdminMaint(task, apply, btn) {
   finally { btn.disabled = false; btn.innerHTML = orig; }
 }
 
+async function loadAdminCosts(days) {
+  const host = document.getElementById('admin-costs'); if (!host) return;
+  try {
+    const r = await api(`/api/admin/costs?days=${days || 30}`); if (!r.ok) throw new Error(await errDetail(r, 'Failed'));
+    const d = await r.json();
+    if (!d.runs) { host.innerHTML = '<div class="empty" style="padding:12px 0"><div>No metered analysis runs yet — costs are recorded for runs started after this feature was deployed.</div></div>'; return; }
+    host.innerHTML = `<div style="font-size:13px;margin-bottom:10px"><strong>${d.runs}</strong> analysis run${d.runs === 1 ? '' : 's'} · <strong>$${d.total.toFixed(2)}</strong> total · <strong>$${(d.total / d.runs).toFixed(2)}</strong> average</div>
+      <div style="overflow-x:auto"><table class="tbl" style="font-size:12.5px"><thead><tr><th>Kind</th><th style="text-align:right">Runs</th><th style="text-align:right">Average</th><th style="text-align:right">Min</th><th style="text-align:right">Max</th><th style="text-align:right">Total</th><th style="text-align:right">Avg time</th></tr></thead><tbody>
+      ${d.by_kind.map(k => `<tr><td>${_learnEsc(k.kind)}</td><td style="text-align:right">${k.runs}</td><td style="text-align:right;font-weight:700">$${k.avg.toFixed(2)}</td><td style="text-align:right">$${k.min.toFixed(2)}</td><td style="text-align:right">$${k.max.toFixed(2)}</td><td style="text-align:right">$${k.total.toFixed(2)}</td><td style="text-align:right">${Math.round((k.avg_seconds || 0) / 60)} min</td></tr>`).join('')}</tbody></table></div>
+      <details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal)">Most recent runs</summary>
+      <div style="overflow-x:auto;margin-top:8px"><table class="tbl" style="font-size:12px"><thead><tr><th>When</th><th>Kind</th><th>Analysis</th><th style="text-align:right">Claude calls</th><th style="text-align:right">Searches</th><th style="text-align:right">Places</th><th style="text-align:right">Tokens in / out</th><th style="text-align:right">Cost</th></tr></thead><tbody>
+      ${d.recent.map(x => `<tr><td style="white-space:nowrap;color:var(--muted)">${String(x.created_at).slice(0, 16).replace('T', ' ')}</td><td>${_learnEsc(x.kind || '')}</td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_learnEsc(x.label || '')}</td><td style="text-align:right">${x.calls ?? '—'}</td><td style="text-align:right">${x.web_searches ?? '—'}</td><td style="text-align:right">${x.places_calls ?? '—'}</td><td style="text-align:right;white-space:nowrap">${x.input_tokens != null ? (x.input_tokens / 1000).toFixed(0) + 'k / ' + (x.output_tokens / 1000).toFixed(0) + 'k' : '—'}</td><td style="text-align:right;font-weight:700">$${x.cost_usd.toFixed(2)}</td></tr>`).join('')}</tbody></table></div></details>`;
+  } catch (e) { host.innerHTML = `<div class="empty" style="padding:12px 0"><div>${_learnEsc(e.message || 'Failed')}</div></div>`; }
+}
+
 let _adminOpsTimer = null;
 async function loadAdminOps() {
   loadAdminMaint();
+  loadAdminCosts(30);
   const host = document.getElementById('admin-ops-table');
   const meta = document.getElementById('admin-ops-meta');
   clearTimeout(_adminOpsTimer);
@@ -9370,7 +9399,7 @@ async function loadAdminOps() {
       : j.status === 'done' ? '<span class="badge bg-teal" style="font-size:10px">Done</span>'
       : `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px" title="${_learnEsc(j.error || '')}">Failed</span>`;
     host.innerHTML = `<div style="overflow-x:auto"><table class="tbl" style="width:100%"><thead><tr>
-        <th style="text-align:left">Started</th><th style="text-align:left">Kind</th><th style="text-align:left">Analysis</th><th style="text-align:left">User</th><th style="text-align:left">Status</th><th style="text-align:right">Elapsed</th><th></th>
+        <th style="text-align:left">Started</th><th style="text-align:left">Kind</th><th style="text-align:left">Analysis</th><th style="text-align:left">User</th><th style="text-align:left">Status</th><th style="text-align:right">Elapsed</th><th style="text-align:right">Cost</th><th></th>
       </tr></thead><tbody>${d.jobs.map(j => `<tr>
         <td style="white-space:nowrap;color:var(--muted);font-size:12px">${new Date(j.started_at * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}</td>
         <td style="white-space:nowrap">${_learnEsc(j.kind)}</td>
@@ -9378,6 +9407,7 @@ async function loadAdminOps() {
         <td style="font-size:12px;color:var(--muted)" title="${_learnEsc(j.email)}">${_learnEsc((j.email || '').split('@')[0] || j.role || '—')}</td>
         <td>${badge(j)}</td>
         <td style="text-align:right;white-space:nowrap;font-size:12px">${j.minutes < 1 ? '<1 min' : Math.round(j.minutes) + ' min'}</td>
+        <td style="text-align:right;white-space:nowrap;font-size:12px">${j.cost_usd != null ? '$' + j.cost_usd.toFixed(2) + (j.status === 'running' ? ' so far' : '') : '—'}</td>
         <td>${j.status === 'done' && j.run_id ? `<button class="btn btn-ghost btn-sm" onclick="navigate('history')">History</button>` : ''}</td>
       </tr>`).join('')}</tbody></table></div>`;
     if ((st.running || 0) > 0 && document.getElementById('page-admin').classList.contains('active')

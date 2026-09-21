@@ -94,6 +94,33 @@ REPORTS_DIR = Path(os.environ.get(
     str(Path.home() / "Documents" / "Rank2 Reports"),
 ))
 
+# Per-run cost metering: hooks the Anthropic SDK, Google Places and Gemini calls.
+from perception import cost_tracker as _cost
+_cost.install()
+
+
+def _finish_cost(job_id: str) -> None:
+    """Close the job's cost accumulator, persist it, and attach it to the job/result."""
+    try:
+        acc = _cost.finish(job_id)
+        if not acc:
+            return
+        j = _jobs.get(job_id) or {}
+        res = j.get("result") or {}
+        run_id = res.get("run_id") or res.get("event_id")
+        j["cost"] = acc
+        if isinstance(res, dict):
+            res["cost"] = {"cost_usd": acc.get("cost_usd"), "calls": acc.get("calls"), "web_searches": acc.get("web_searches"),
+                           "places_calls": acc.get("places_calls"), "gemini_calls": acc.get("gemini_calls"),
+                           "input_tokens": acc.get("input_tokens"), "output_tokens": acc.get("output_tokens"),
+                           "seconds": acc.get("seconds"), "summary": _cost.summary_line(acc)}
+        from perception.db import record_run_cost
+        record_run_cost(job_id, run_id, j.get("kind") or acc.get("kind") or "", str(j.get("label") or ""), acc)
+        print(f"[cost] job={job_id[:8]} kind={j.get('kind')} {_cost.summary_line(acc)}")
+    except Exception as exc:
+        print(f"[cost] finish failed: {type(exc).__name__}: {exc}")
+
+
 # password → (role_id, display_name); anything not listed defaults to admin
 _ROLE_MAP: dict[str, tuple[str, str]] = {
     "RLD_Data_Access":  ("rldatix",         "RLDatix Team"),
@@ -314,7 +341,9 @@ async def admin_jobs(payload: dict = Depends(require_admin)):
         res = j.get("result") or {}
         label = (j.get("label") or j.get("entity_name") or res.get("network_name") or res.get("location")
                  or ("Compare Two" if res.get("comparison") else "—"))
+        live = j.get("cost") or _cost.snapshot(jid) or {}
         out.append({"job_id": jid, "status": j.get("status", "running"), "kind": j.get("kind") or "—",
+                    "cost_usd": round(float(live.get("cost_usd") or 0), 2) if live else None,
                     "label": label, "email": j.get("email") or "", "role": j.get("role") or "",
                     "started_at": started, "minutes": round((now - started) / 60, 1),
                     "run_id": res.get("run_id"), "error": j.get("error") if j.get("status") == "error" else None})
@@ -445,6 +474,14 @@ async def admin_maintenance(task: str, apply: bool = False, _: dict = Depends(re
     return await asyncio.get_running_loop().run_in_executor(None, _go)
 
 
+@app.get("/api/admin/costs")
+async def admin_costs(days: int = 30, _: dict = Depends(require_admin)):
+    """Estimated API spend per analysis run: totals/averages by kind and the most recent runs."""
+    from perception.db import init_db, cost_summary
+    init_db()
+    return await asyncio.get_running_loop().run_in_executor(None, lambda: cost_summary(max(1, min(int(days or 30), 365))))
+
+
 class SendReportRequest(BaseModel):
     emails: List[str]
     note: str = ""
@@ -563,6 +600,7 @@ def _job_run_single(
     entity_type: Optional[str] = None,
 ) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     job["kind"] = "Deep Diagnostic" if job.get("individual_report") else "Competitors Rankings"
     job.setdefault("label", job.get("entity_name") or f"{city}, {state}")
     loop, queue = job["loop"], job["queue"]
@@ -638,6 +676,7 @@ def _job_run_single(
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)  # sentinel → closes SSE stream
 
 
@@ -872,6 +911,7 @@ def _job_run_practice(
     radius_miles: Optional[int] = None,
 ) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     job["kind"] = "Deep Diagnostic"
     job.setdefault("label", entity_name)
     loop, queue = job["loop"], job["queue"]
@@ -947,6 +987,7 @@ def _job_run_practice(
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
@@ -955,6 +996,7 @@ def _job_run_fqhc(
     aggregate: bool = False,
 ) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     job["kind"] = "Community Health"
     job.setdefault("label", entity_name)
     loop, queue = job["loop"], job["queue"]
@@ -1007,11 +1049,13 @@ def _job_run_fqhc(
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
 def _job_run_battery(job_id: str, fqhc_run_id: str, entity_name: str, city: str, state: str) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
 
@@ -1083,11 +1127,13 @@ def _job_run_battery(job_id: str, fqhc_run_id: str, entity_name: str, city: str,
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
 def _job_run_batch(job_id: str, groups: List[dict]) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
 
@@ -1127,6 +1173,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
@@ -1334,6 +1381,7 @@ async def start_batch(req: BatchRequest, payload: dict = Depends(get_current_use
 
 def _job_run_comparison(job_id: str, req_dict: dict) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     job["kind"] = "Compare Two"
     job.setdefault("label", f"{req_dict.get('entity_a_name') or 'A'} vs {req_dict.get('entity_b_name') or 'B'}")
     loop, queue = job["loop"], job["queue"]
@@ -1405,6 +1453,7 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
@@ -1873,6 +1922,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
                           service_line_audit: bool = False,
                           full_detail: bool = False) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     job["kind"] = "Hospital Network"
     job.setdefault("label", network_name)
     loop, queue = job["loop"], job["queue"]
@@ -1921,6 +1971,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
@@ -2162,6 +2213,7 @@ def _run_network_bulk_job(job_id: str, bulk_id: str, input_path: str, brand: str
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
@@ -2474,6 +2526,7 @@ def _run_student_health_job(job_id: str, run_id: str, group_label: str,
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
@@ -2570,6 +2623,7 @@ async def content_analysis_run(req: ContentAnalysisRequest,
 
 def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
     try:
@@ -2701,6 +2755,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
@@ -2828,6 +2883,7 @@ async def content_analysis_draft(ca_id: str, payload: dict = Depends(get_current
 
 def _job_content_draft(job_id: str, ca_id: str) -> None:
     job = _jobs[job_id]
+    _cost.begin(job_id, job.get("kind") or "")
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
     try:
@@ -2907,6 +2963,7 @@ def _job_content_draft(job_id: str, ca_id: str) -> None:
         job["status"] = "error"
         job["error"] = _job_error(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 
@@ -5340,6 +5397,7 @@ def _run_event_job(
         job["status"] = "error"
         job["error"]  = str(exc)
     finally:
+        _finish_cost(job_id)
         _put(loop, queue, None)
 
 

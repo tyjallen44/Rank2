@@ -2779,3 +2779,14 @@ Commit: everywhere the noun "run(s)" appeared in the interface, help pop-overs, 
 **T1.** Walk Home, History, Trends (list + Details + attention box), Admin → Operations, Deep Diagnostic and Hospital Network pages, and each ⓘ pop-over listed above: no standalone noun "run"/"runs" remains; buttons still read Run Diagnostic / Run now / Run anyway.
 **T2.** Learn → "How to run a report", "Deep Diagnostic", "Hospital Network": "analysis run(s)" wording present after the maintenance sync.
 **T3.** Download a Trend Report and a Deep Diagnostic PDF: "analysis runs" / "Analysis settings" / "Analysis date" wording present.
+
+## COST-TRACKER — estimated API spend per analysis run
+
+Commit: perception/cost_tracker.py hooks the Anthropic SDK (create + stream, incl. beta), Google Places and Gemini HTTP calls, attributes them to the running job (thread-local, inherited by thread-pool workers), prices them from a table (Opus 4.8/5 $5/$25 per MTok, Haiku 4.5 $1/$5, cache write/read, $0.01 per web search, Places text search $0.032 / details $0.017, Gemini Flash tokens; override with PULSE_PRICES_JSON). Every job records a `run_costs` row and stamps `cost_usd` on the run (analysis / network / comparison). Shown: admin-only "Estimated cost: $x · N Claude calls · N web searches · N Places lookups · N min" on completion screens; a "$x" under Run by on History rows (admin); a Cost column in Admin → Operations (running jobs show "so far"); a new "Spend per analysis run" card in Operations with totals/averages by kind for 7/30/90 days and a most-recent-runs table (GET /api/admin/costs). Also fixes a latent bug: History rows never carried confidence (SELECT lacked the columns), so Score Evidence chips now appear in History. NEEDS BROWSER TESTING.
+
+**T1.** Run a Deep Diagnostic as admin. The completion screen shows the estimated cost line with call/search/lookup counts and minutes. History shows the same dollar figure under Run by; non-admins see neither.
+**T2.** Admin → Operations: the Cost column fills for finished jobs and shows "$x so far" while a job runs; the Spend card lists the kind with runs/avg/min/max/total; the recent-runs table shows the run with its token counts.
+**T3.** Run a Hospital Network and a Compare Two: both metered (network includes Gemini calls when GEMINI_API_KEY is set — not on production today); the network cost is visibly higher.
+**T4.** Trends: a scheduled/Run now snapshot is metered under its kind (Deep Diagnostic / Hospital Network).
+**T5.** History rows for runs since the Score Evidence deploy now show the evidence chip (previously missing).
+**R1.** Reports and their content are unchanged; a failure in metering never fails a run (log line "[cost] … failed").
