@@ -53,6 +53,7 @@ from .analyzer import (
     _warn_grade_mismatch,
     _warn_snake_case,
 )
+from .analyzer import pop_last_sources as _pop_sources, last_web_search_used as _last_ws
 
 _RUBRIC_VERSION = "practice-v1.0"
 
@@ -1254,12 +1255,14 @@ def analyze_practice(
         with console.status("[bold dark_sea_green4]Rendering practice PDF…[/bold dark_sea_green4]"):
             from .pdf import render_pdf
             pdf_path = output_dir / f"{_stem}.pdf"
+            if not result.sources_consulted: result.sources_consulted = _pop_sources(); result.web_search_used = _last_ws() if result.web_search_used is None else result.web_search_used
             render_pdf(result, pdf_path, brand=brand)
         console.print(f"[green]✓[/green] Practice PDF → [dim]{pdf_path}[/dim]")
         result.pdf_path = str(pdf_path)
         result.md_path  = str(report_path)
 
     # ── Persist to DB ─────────────────────────────────────────────────────────
+    if not result.sources_consulted: result.sources_consulted = _pop_sources(); result.web_search_used = _last_ws() if result.web_search_used is None else result.web_search_used
     _save_to_db(result)
     if result.practice_composite_rows:
         from .practice_reputation import save_practice_reputation

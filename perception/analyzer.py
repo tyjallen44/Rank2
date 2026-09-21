@@ -87,7 +87,9 @@ _AIVS_DISCLAIMER = _AIVS_DISCLAIMER_TEXT
 _WEB_SEARCH_DOMAINS = [
     "cms.gov", "medicare.gov", "usnews.com", "newsweek.com",
     "leapfroggroup.org", "qualitycheck.org", "healthgrades.com",
-    "castleconnolly.com", "ncqa.org", "nursingworld.org",
+    "ncqa.org", "nursingworld.org",
+    # castleconnolly.com removed 2026-09-21: Anthropic's crawler cannot access it and the
+    # API rejects the whole tool call, which silently disabled live search for every report.
 ]
 
 # NPPES taxonomy_description expects clinical spellings; map a few common terms.
@@ -473,6 +475,50 @@ def _web_search_tool() -> dict | None:
     }
 
 
+import threading as _threading
+_src_tl = _threading.local()
+
+
+def pop_last_sources() -> list:
+    """Pages consulted by the most recent _stream_narrative call in this thread."""
+    v = getattr(_src_tl, "sources", None) or []
+    _src_tl.sources = []
+    return v
+
+
+def last_web_search_used() -> bool:
+    return bool(getattr(_src_tl, "web_search_used", False))
+
+
+def _collect_sources(final_message) -> list:
+    """[{url, title, domain, cited}] from web_search_tool_result blocks and text citations."""
+    from urllib.parse import urlparse
+    seen: dict = {}
+    def _add(url, title="", cited=False):
+        if not url:
+            return
+        try:
+            dom = urlparse(url).netloc.lower().replace("www.", "")
+        except Exception:
+            dom = ""
+        e = seen.get(url)
+        if e:
+            e["cited"] = e["cited"] or cited
+            if title and not e.get("title"):
+                e["title"] = title
+        else:
+            seen[url] = {"url": url, "title": (title or "")[:160], "domain": dom, "cited": bool(cited)}
+    for b in getattr(final_message, "content", None) or []:
+        t = getattr(b, "type", "")
+        if t == "web_search_tool_result":
+            for r in (getattr(b, "content", None) or []) if not isinstance(getattr(b, "content", None), dict) else []:
+                _add(getattr(r, "url", None), getattr(r, "title", "") or "")
+        elif t == "text":
+            for c in (getattr(b, "citations", None) or []):
+                _add(getattr(c, "url", None), getattr(c, "title", "") or "", cited=True)
+    return list(seen.values())[:60]
+
+
 def _stream_narrative(client, system_prompt, user_prompt, emit, console) -> str:
     """Stream the analysis narrative. Adds the native web-search tool for
     currency; if web search isn't enabled on the key, retries once without it."""
@@ -492,20 +538,40 @@ def _stream_narrative(client, system_prompt, user_prompt, emit, console) -> str:
                 parts.append(text)
                 print(text, end="", flush=True, file=sys.stderr)
                 emit({"type": "text", "text": text})
+            try:
+                _src_tl.sources = _collect_sources(stream.get_final_message())
+            except Exception:
+                _src_tl.sources = []
         print(file=sys.stderr)
         return "".join(parts)
 
     console.print(Rule("[dim]Generating analysis[/dim]", style="dark_sea_green4"))
+    _src_tl.web_search_used = False
     tool = _web_search_tool()
     if tool is None:
+        emit({"type": "text", "text": "\n⚠ Live web search is disabled by configuration — this report is written from the model's knowledge only.\n"})
         return _run([])
     try:
-        return _run([tool])
+        out = _run([tool])
+        _src_tl.web_search_used = True
+        return out
     except Exception as exc:
         exc_str = str(exc)
         if "529" in exc_str or "overloaded" in exc_str.lower():
             raise  # propagate capacity errors; don't silently retry
+        # A domain the crawler cannot reach makes the API reject the whole tool call.
+        # Retry UNRESTRICTED before giving up on live search.
+        if "not accessible" in exc_str or "allowed_domains" in exc_str or "invalid_request" in exc_str:
+            try:
+                unrestricted = {k: v for k, v in tool.items() if k != "allowed_domains"}
+                emit({"type": "text", "text": f"\n⚠ Domain-restricted web search was rejected ({exc_str[:90]}) — retrying with unrestricted search.\n"})
+                out = _run([unrestricted])
+                _src_tl.web_search_used = True
+                return out
+            except Exception as exc2:
+                exc_str = str(exc2)
         console.print(f"[yellow]⚠[/yellow] Web search unavailable ({exc_str[:80]}); continuing without it.")
+        emit({"type": "text", "text": f"\n⚠ LIVE WEB SEARCH UNAVAILABLE ({exc_str[:100]}). This report is written from the model's knowledge only — treat ratings, grades and rankings as unverified.\n"})
         emit({"type": "phase", "name": "generating", "text": "Generating analysis (no web search)"})
         return _run([])
 
@@ -647,10 +713,12 @@ def _apply_format(result, *, simplified, obscure_competitors, target_entity,
     try:
         from .pdf import render_pdf
         pdf_path = _P(output_dir) / f"{_stem}.pdf"
+        if not result.sources_consulted: result.sources_consulted = pop_last_sources(); result.web_search_used = last_web_search_used() if result.web_search_used is None else result.web_search_used
         render_pdf(result, pdf_path, brand=brand)
         result.pdf_path = str(pdf_path)
     except Exception:
         pass
+    if not result.sources_consulted: result.sources_consulted = pop_last_sources(); result.web_search_used = last_web_search_used() if result.web_search_used is None else result.web_search_used
     _save_to_db(result, market_key=market_key)
     return result
 
@@ -1234,12 +1302,14 @@ def analyze_location(
         with console.status("[bold dark_sea_green4]Rendering PDF…[/bold dark_sea_green4]"):
             from .pdf import render_pdf
             pdf_path = output_dir / f"{_stem}.pdf"
+            if not result.sources_consulted: result.sources_consulted = pop_last_sources(); result.web_search_used = last_web_search_used() if result.web_search_used is None else result.web_search_used
             render_pdf(result, pdf_path, brand=brand)
         console.print(f"[green]✓[/green] PDF saved    → [dim]{pdf_path}[/dim]")
         result.pdf_path = str(pdf_path)
         result.md_path = str(report_path)
 
     if not skip_db_save:
+        if not result.sources_consulted: result.sources_consulted = pop_last_sources(); result.web_search_used = last_web_search_used() if result.web_search_used is None else result.web_search_used
         _save_to_db(result, market_key=_mkey)
 
     if result.practice_composite_rows:

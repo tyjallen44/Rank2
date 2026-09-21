@@ -2801,3 +2801,13 @@ Commit: perception/spotcheck.py asks 8 fixed patient-style questions (best in ma
 **T4 — Keys.** With OPENAI_API_KEY / GEMINI_API_KEY set on the service, the panel gains ChatGPT / Gemini rows and the progress line lists them; without keys, Claude only.
 **T5 — Not run for**: Competitors Rankings, Community Health, Trends snapshots (skip-PDF), Compare Two sides.
 **R1.** A spot-check failure never fails the report (log "[spotcheck] failed:"); Pulse Score unchanged with the panel present.
+
+## WEBSEARCH-FIX + SOURCES — live web search restored; "Sources Consulted" panel
+
+Commit: (1) FIX — the narrative model's domain-restricted web search tool included castleconnolly.com, which Anthropic's crawler cannot access; the API rejected the whole tool call and the analyzer fell back silently to writing reports WITHOUT live search (production runs today showed 0 web searches on Deep Diagnostics). The domain is removed; if the restricted tool is ever rejected again the analyzer retries UNRESTRICTED before giving up, and a no-search fallback now prints a loud "⚠ LIVE WEB SEARCH UNAVAILABLE…" line in the progress stream. Reports record web_search_used; Score Evidence adds "no live web search (written from model knowledge)" and drops the level when that happens. (2) Every report now records the pages Claude's web search read (sources_consulted: url, title, domain, cited-in-text) and the PDF gets a "Sources Consulted" box before the methodology appendix (count, cited count, most-used sites, up to 12 cited pages). (3) Cost tracker no longer records empty rows for helper jobs that made no calls. NEEDS BROWSER TESTING.
+
+**T1 — Search is back.** Run a Deep Diagnostic (hospital and practice). The completion cost line now shows web searches > 0 (typically 3–5); Admin → Operations recent runs show searches for Deep Diagnostic / Rankings / Compare Two. Score Evidence no longer says "no live web search".
+**T2 — Sources panel.** The PDF has "Sources Consulted" just before the methodology box: "N pages read by live web search…", most-used sites, and a two-column list of cited pages (domain — title).
+**T3 — Fallback visibility.** (Admin, optional) Set PULSE env SPOTCHECK… n/a; to simulate, temporarily add an inaccessible domain locally → progress shows the "retrying with unrestricted search" line and the report still has sources.
+**T4 — Zero rows gone.** Operations recent-runs table no longer lists $0.00 / 0-call rows for a report's helper job.
+**R1.** Community Health battery unchanged (its own unrestricted tool); Compare Two and Rankings pick up the same fix since they share the narrative function.

@@ -103,7 +103,7 @@ def _finish_cost(job_id: str) -> None:
     """Close the job's cost accumulator, persist it, and attach it to the job/result."""
     try:
         acc = _cost.finish(job_id)
-        if not acc:
+        if not acc or not (acc.get("calls") or acc.get("places_calls") or acc.get("gemini_calls")):
             return
         j = _jobs.get(job_id) or {}
         res = j.get("result") or {}

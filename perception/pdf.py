@@ -631,6 +631,29 @@ _AMBER_WARN = "#b8860b"
 _RED_BAD = "#b42318"
 
 
+def _sources_box_html(result: AnalysisResult) -> str:
+    """'Sources consulted' — the pages Claude's web search read while writing this report."""
+    src = list(getattr(result, "sources_consulted", None) or [])
+    if not src:
+        return ""
+    doms: dict = {}
+    for x in src:
+        d = x.get("domain") or "—"
+        doms[d] = doms.get(d, 0) + 1
+    top = sorted(doms.items(), key=lambda kv: -kv[1])[:10]
+    cited = [x for x in src if x.get("cited")] or src
+    items = "".join(
+        f'<li style="margin-bottom:2px"><span style="color:#5a7075">{_e(x.get("domain") or "")}</span> — {_e((x.get("title") or x.get("url") or "")[:90])}</li>'
+        for x in cited[:12])
+    return f"""
+  <div style="margin-top:18px;padding:12px 16px;border:1px solid #d0e4e8;border-radius:8px;page-break-inside:avoid">
+    <div class="section-title" style="margin-bottom:6px">Sources Consulted</div>
+    <div style="font-size:8.5pt;color:#5a7075;margin-bottom:6px">{len(src)} pages read by live web search while this report was written{(" · " + str(len([x for x in src if x.get("cited")])) + " cited in the text") if any(x.get("cited") for x in src) else ""}.
+      Most-used sites: {_e(", ".join(f"{d} ({c})" for d, c in top))}.</div>
+    <ul style="font-size:8pt;margin:0 0 0 16px;padding:0;columns:2;column-gap:18px">{items}</ul>
+  </div>"""
+
+
 def _spotcheck_section(result: AnalysisResult) -> str:
     """'What AI assistants actually said' — observed check panel (never affects the score)."""
     sc = getattr(result, "spotcheck", None)
@@ -1487,7 +1510,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
     if result.simplified:
         appendix_html = ""
     else:
-        appendix_html = _practice_appendix_html() if result.entity_type == "practice" else _appendix_html()
+        appendix_html = _sources_box_html(result) + (_practice_appendix_html() if result.entity_type == "practice" else _appendix_html())
 
     # The Roadmap block, OR — when content findings are supplied (practice combined
     # report) — the embedded Content Report body (contents index + findings +

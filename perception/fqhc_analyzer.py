@@ -46,6 +46,7 @@ from .analyzer import (
     _warn_grade_mismatch,
     _warn_snake_case,
 )
+from .analyzer import pop_last_sources as _pop_sources, last_web_search_used as _last_ws
 
 _RUBRIC_VERSION = "community-health-v1.0"
 
@@ -797,6 +798,7 @@ def analyze_fqhc(
 
     # ── Phase 5: Persist ─────────────────────────────────────────────────────
     emit({"type": "phase", "name": "saving", "text": "Saving to database"})
+    if not result.sources_consulted: result.sources_consulted = _pop_sources(); result.web_search_used = _last_ws() if result.web_search_used is None else result.web_search_used
     _save_to_db(result)
     _save_fqhc_extras(result)
 

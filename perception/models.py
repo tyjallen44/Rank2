@@ -313,6 +313,8 @@ class AnalysisResult(BaseModel):
     fqhc_missed_queries: list[dict] = Field(default_factory=list)  # Missed Queries exhibit
     fqhc_mqcr: Optional[float] = None               # MQCR (0.0–1.0); None until battery run
     spotcheck: Optional[dict] = None                # observed assistant check (perception/spotcheck.py); never affects the score
+    sources_consulted: list[dict] = Field(default_factory=list)  # pages Claude's web search read while writing the report [{url,title,domain,cited}]
+    web_search_used: Optional[bool] = None          # False when the narrative was written without live search (fallback path)
 
 
 # ── Network Pulse — multi-state hospital network models ──────────────────────
