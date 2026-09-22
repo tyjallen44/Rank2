@@ -21,7 +21,7 @@ from . import cost_tracker as _cost
 _PARSE_MODEL = "claude-haiku-4-5-20251001"
 _CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 _OPENAI_MODEL = os.environ.get("SPOTCHECK_OPENAI_MODEL", "gpt-5-mini")
-_GEMINI_MODEL = os.environ.get("SPOTCHECK_GEMINI_MODEL", "gemini-2.5-flash")
+_GEMINI_MODEL = os.environ.get("SPOTCHECK_GEMINI_MODEL", "gemini-3.6-flash")   # 2.5-flash is retired for new API users
 _MAX_QUERIES = 8
 
 _CONDITION = {  # specialty keyword → a patient-language condition/procedure

@@ -651,7 +651,7 @@ def _discover_via_gemini(system_prompt: str, user_prompt: str) -> dict:
 
     try:
         resp = httpx.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{os.environ.get('PULSE_GEMINI_MODEL', 'gemini-3.6-flash')}:generateContent?key={key}",
             json=payload,
             timeout=120,
         )

@@ -3024,3 +3024,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T3** A result that previously fell back (e.g. Orthocarolina Sports Medicine Center, Charlotte NC — cached) is retried on the next request: the PDF is re-rendered with real bullets and a plain verdict. Once the model pass succeeds, further requests make no extra model call. [pdf][ops]
 - **T4** If the model is unavailable, the fallback is still readable: overview ≤ 3 sentences, verdict ≤ 3 sentences, up to 4 sentence-bullets (not one blob). [pdf]
 - **R1** Hospital and Community Health reports: same bullets behaviour; scores, pillars, spot-check, profile audit unchanged. [pdf]
+
+## EXPAND-API-KEYS — ChatGPT and Gemini join the spot-check and network cross-check
+
+**Context:** OPENAI_API_KEY (existing secret) and GEMINI_API_KEY (new, 2026-09-22) are now mapped into Cloud Run; Gemini calls moved from the retired gemini-2.5-flash to gemini-3.6-flash. OpenAI still needs prepaid credit before ChatGPT answers appear (the code skips it on a billing error). Not deployed.
+
+- **T1** Run a Deep Diagnostic. In the PDF's "What AI assistants actually said" header and the completion panel, the assistants listed include **Gemini** (and **ChatGPT** once OpenAI credit is added). Each assistant shows its own Named / position line. [pdf][ui]
+- **T2** Admin → Operations → Spend per analysis run: the run shows Gemini calls/tokens (and OpenAI once funded); per-report cost rises by well under a dollar. [ops]
+- **T3** Hospital Network run: the roster confidence note no longer says "Claude only — set GEMINI_API_KEY"; discovery is cross-checked with Gemini. [ui]
+- **R1** With OpenAI unfunded, the spot-check still completes with Claude + Gemini and no error surfaces to the user. [ui]

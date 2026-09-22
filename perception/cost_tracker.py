@@ -9,6 +9,7 @@ be overridden with the PULSE_PRICES_JSON env var (same keys). Estimates, not inv
 from __future__ import annotations
 
 import json
+import re
 import os
 import threading
 import time
@@ -25,8 +26,8 @@ PRICES: dict = {
         "_default": (5.0, 25.0, 6.25, 0.5),
     },
     "web_search_per_call": 0.01,          # Anthropic web search: $10 per 1,000 searches
-    "gemini": {"gemini-2.5-flash": (0.30, 2.50), "_default": (0.30, 2.50)},
-    "gemini_grounding_per_query": 0.035,   # Google Search grounding (2.5 models $35/1k; 3.x $14/1k)
+    "gemini": {"gemini-2.5-flash": (0.30, 2.50), "gemini-3.6-flash": (0.50, 3.00), "_default": (0.50, 3.00)},   # 3.6-flash token prices are an estimate until confirmed on the price page
+    "gemini_grounding_per_query": 0.014,   # Google Search grounding on 3.x models ($14/1k); 2.5 models were $35/1k
     "openai": {"gpt-5-mini": (0.25, 2.00), "gpt-5": (1.25, 10.0), "_default": (0.25, 2.00)},
     "openai_web_search_per_call": 0.01,
     "places": {"text_search": 0.032, "nearby": 0.032, "details": 0.017, "other": 0.017},
@@ -238,7 +239,8 @@ def install() -> None:
             try:
                 if kind == "gemini":
                     um = (resp.json() or {}).get("usageMetadata", {}) if resp is not None else {}
-                    model = "gemini-2.5-flash" if "gemini-2.5-flash" in str(url) else "_default"
+                    _mm = re.search(r"/models/([^:/?]+)", str(url))
+                    model = _mm.group(1) if _mm and _mm.group(1) in PRICES["gemini"] else "_default"
                     record_gemini(model, int(um.get("promptTokenCount") or 0), int(um.get("candidatesTokenCount") or 0))
                 elif kind:
                     record_places(kind.split(":", 1)[1])
