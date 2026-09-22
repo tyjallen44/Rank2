@@ -57,6 +57,8 @@ def score_confidence(result) -> Optional[dict]:
         reasons.append(f"{len(unscored)} pillar{'s' if len(unscored) != 1 else ''} unscored"); penalties += 1
     if getattr(result, "web_search_used", None) is False:
         reasons.append("no live web search (written from model knowledge)"); penalties += 2
+    if getattr(result, "rubric_note", ""):
+        reasons.append("hospital rubric enforced (analysis read the organization as a practice/clinic network — consider re-running as a practice or community health center)"); penalties += 1
 
     if penalties == 0 and reviews >= 200:
         level = "high"

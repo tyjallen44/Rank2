@@ -46,6 +46,9 @@ _HOSPITAL_PILLARS = [("tier_outcomes", "Outcomes & Safety"), ("tier_credentials"
 _PRACTICE_PILLARS = [("tier_outcomes", "Practitioner Credentials & Clinical Quality"),
                      ("tier_credentials", "Reviews & Reputation"),
                      ("tier_experience", "Identity & Machine-Readability"), ("tier_access", "Access & Fit")]
+_COMMUNITY_PILLARS = [("tier_outcomes", "Access & Findability"), ("tier_credentials", "Eligibility & Cost Accuracy"),
+                      ("tier_experience", "Experience & Reputation"), ("tier_access", "Site & Service Completeness")]
+_RUBRIC_TAG = {"practice": "practice rubric", "community": "community health rubric", "hospital": "hospital rubric"}
 _PILLAR_COLORS = ["#0F4146", "#2E9BB3", "#3CB37A", "#B08D57"]     # the app's four pillar colours, print-safe
 _BIG_MOVE = 5                                                       # points; smaller moves are noise in "What changed"
 
@@ -119,7 +122,8 @@ def compute_stats(entity: dict, points: list[dict]) -> dict:
     prev = pts[-2] if len(pts) >= 2 else None
     first = pts[0] if pts else None
     practice = bool(latest and str(latest.get("run_profile") or "").startswith("practice_"))
-    pillars = _PRACTICE_PILLARS if practice else _HOSPITAL_PILLARS
+    community = bool(latest and str(latest.get("run_profile") or "") == "community_health")
+    pillars = _COMMUNITY_PILLARS if community else _PRACTICE_PILLARS if practice else _HOSPITAL_PILLARS
 
     def _delta(a, b):
         return (a - b) if (a is not None and b is not None) else None
@@ -169,7 +173,7 @@ def compute_stats(entity: dict, points: list[dict]) -> dict:
         "quartile_code": code, "quartile_label": band,
         "delta_prev": _delta(latest and latest["ai_visibility_score"], prev and prev["ai_visibility_score"]),
         "delta_first": _delta(latest and latest["ai_visibility_score"], first and first["ai_visibility_score"]),
-        "pillars": pillar_rows, "practice_rubric": practice,
+        "pillars": pillar_rows, "practice_rubric": practice, "community_rubric": community,
         "best_pillar": max(up, key=lambda r: r["delta"]) if up else None,
         "worst_pillar": min(down, key=lambda r: r["delta"]) if down else None,
         "biggest_mover": biggest,
@@ -527,7 +531,7 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
             extra += f' <span style="color:{_NOTE};font-weight:700" title="Settings differed">⚠</span>'
         if mixed:
             rb = p.get("rubric") or "hospital"
-            extra += f' <span class="tag">{"practice rubric" if rb == "practice" else "hospital rubric"}</span>'
+            extra += f' <span class="tag">{_RUBRIC_TAG.get(rb, "hospital rubric")}</span>'
         snap_rows.append(
             f'<tr><td style="white-space:nowrap">{_e(_fmt_date(p.get("generated_at")))}{extra}</td>'
             f'<td class="num" style="font-weight:800;color:{_color(s)}">{s if s is not None else "—"}</td>'
@@ -547,8 +551,10 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
     for dr in st["drift"]:
         changes.append(f'<li><b>{_e(_fmt_date(dr["date"]))}</b> — analysis settings differed from the current configuration ({_e(", ".join(dr["flags"]))}); treat that point with care.</li>')
     if mixed:
-        first_p = next((p for p in points if (p.get("rubric") or "hospital") == "practice"), None)
-        changes.append('<li><b>Rubric change</b> — earlier snapshots were scored on the hospital rubric and later ones on the practice rubric'
+        _last_rb = (points[-1].get("rubric") or "hospital") if points else "hospital"
+        first_p = next((p for p in points if (p.get("rubric") or "hospital") == _last_rb), None)
+        _other = sorted({(p.get("rubric") or "hospital") for p in points} - {_last_rb})
+        changes.append(f'<li><b>Rubric change</b> — earlier snapshots were scored on the {_e(", ".join(_RUBRIC_TAG.get(o, o) for o in _other) or "other")} and later ones on the {_e(_RUBRIC_TAG.get(_last_rb, _last_rb))}'
                        + (f' (from {_e(_fmt_date(first_p["generated_at"]))})' if first_p else '') + '; scores are comparable only within a rubric.</li>')
     if not changes:
         lo, hi = st["range"]
@@ -646,7 +652,7 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
         <div class="chart">{_pillar_chart(points, st["pillars"])}</div>
         <table class="t pillars"><thead><tr><th>Pillar</th><th>Latest score</th><th class="num">First</th><th class="num">Latest</th><th class="num">Change</th></tr></thead>
         <tbody>{"".join(pillar_rows)}</tbody></table>
-        <div class="cap">{"Scored on the practice rubric. " if st["practice_rubric"] else ""}Green 75+ · amber 58–74 · red below 58.</div>
+        <div class="cap">{"Scored on the Community Health rubric (Institutional Signals not charted). " if st.get("community_rubric") else "Scored on the practice rubric. " if st["practice_rubric"] else ""}Green 75+ · amber 58–74 · red below 58.</div>
       </div>
       </section>
 

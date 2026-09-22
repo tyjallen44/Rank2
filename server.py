@@ -707,6 +707,7 @@ def _job_run_single(
             "city": city, "state": state,
             "individual_report": bool(job.get("individual_report")),
             "confidence": _run_confidence(result) if job.get("individual_report") else None,
+            "rubric_note": getattr(result, "rubric_note", "") or None,
             "spotcheck": _spotcheck_brief(result),
         }
         if not job.get("skip_pdf"):
@@ -4463,7 +4464,8 @@ class TrackEntityRequest(BaseModel):
     aggregate: bool = True
     schedule: str = "monthly"   # "monthly" | "weekly" | "manual"
     notes: str = ""
-    entity_type: str = "hospital"          # "hospital" | "practice" | "service_line"
+    entity_type: str = "hospital"          # "hospital" | "practice" | "service_line" | "community_health" | "hospital_network"
+    force: bool = False                    # add even when the same organization is already tracked
     service_line: Optional[str] = None     # service_line type: the department (e.g. Orthopedics)
     parent_system: Optional[str] = None    # service_line type: the health system
     confirmed_roster: Optional[List[dict]] = None   # practice types: the fixed Locations list every snapshot uses
@@ -4594,8 +4596,25 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_curr
         raise HTTPException(400, "schedule must be monthly, weekly, or manual")
     init_db()
     created_by = payload.get("email") or payload.get("uid") or "admin"
-    if req.entity_type not in ("hospital", "practice", "service_line", "hospital_network"):
-        raise HTTPException(400, "entity_type must be hospital, practice, service_line, or hospital_network")
+    if req.entity_type not in ("hospital", "practice", "service_line", "community_health", "hospital_network"):
+        raise HTTPException(400, "entity_type must be hospital, practice, service_line, community_health, or hospital_network")
+    if not req.force:
+        # Duplicate guard: the same organization in the same state is already being tracked.
+        # Trends match snapshots by name, so a second copy shows the same line twice and
+        # doubles the scheduled analysis runs. The client turns this into "open it / add anyway".
+        from perception.db import list_tracked_entities as _list_te
+        _nm = _normalize_input(req.entity_name).strip().lower()
+        _st = req.state.upper().strip()
+        _dups = [e for e in _list_te() if e.get("active")
+                 and (e.get("entity_name") or "").strip().lower() == _nm
+                 and (e.get("state") or "").upper().strip() == _st]
+        if _dups:
+            _d = sorted(_dups, key=lambda e: str(e.get("created_at") or ""))[0]
+            raise HTTPException(409, detail={
+                "code": "already_tracked", "entity_id": _d["id"], "entity_name": _d.get("entity_name"),
+                "entity_type": _d.get("entity_type") or "hospital", "created_by": _d.get("created_by"),
+                "created_at": str(_d.get("created_at") or "")[:10], "count": len(_dups),
+                "message": f"{_d.get('entity_name')} is already being tracked."})
     if req.entity_type == "hospital_network" and not req.confirmed_roster:
         raise HTTPException(400, "A Hospital Network needs its facility roster (confirm the hospitals first)")
     if req.entity_type == "service_line" and not (req.service_line and req.parent_system):
@@ -4868,6 +4887,14 @@ def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
     elif (entity.get("entity_type") or "hospital") in ("practice", "service_line"):
         _job_run_practice(job_id, entity["entity_name"], entity["city"], entity["state"],
                           entity.get("specialty"), True, None)
+    elif (entity.get("entity_type") or "hospital") == "community_health":
+        # Community Health Edition snapshot: same confirmed site roster every time, no intake.
+        roster, _ = _entity_roster(entity)
+        j = _jobs[job_id]
+        j["site_roster"] = [(r.get("name") if isinstance(r, dict) else str(r)) for r in (roster or []) if r]
+        j["fqhc_intake"] = None
+        j["entity_name"] = entity["entity_name"]
+        _job_run_fqhc(job_id, entity["entity_name"], entity["city"], entity["state"], True)
     else:
         _job_run_single(job_id, entity["city"], entity["state"], entity.get("specialty"),
                         entity.get("aggregate", True), None)

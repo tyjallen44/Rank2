@@ -2304,12 +2304,22 @@ def list_tracked_entities() -> list[dict]:
 
 
 def rubric_for_profile(weighting_profile) -> str:
-    """Which pillar rubric a run used: 'practice' for practice_* profiles, else 'hospital'."""
-    return "practice" if str(weighting_profile or "").startswith("practice_") else "hospital"
+    """Which pillar rubric a run used: 'practice' for practice_* profiles, 'community' for the
+    Community Health Edition, else 'hospital'."""
+    wp = str(weighting_profile or "")
+    if wp.startswith("practice_"):
+        return "practice"
+    if wp == "community_health":
+        return "community"
+    return "hospital"
 
 
 def expected_rubric(entity_type) -> str:
-    return "practice" if entity_type in ("practice", "service_line") else "hospital"
+    if entity_type in ("practice", "service_line"):
+        return "practice"
+    if entity_type == "community_health":
+        return "community"
+    return "hospital"
 
 
 def update_tracked_entity(entity_id: str, **kwargs) -> None:
@@ -2379,7 +2389,8 @@ def get_entity_trend(entity_name: str) -> list[dict]:
                a.specialty,
                a.location,
                a.weighting_profile,
-               a.confidence
+               a.confidence,
+               CASE WHEN a.weighting_profile = 'community_health' THEN a.result_json END
            FROM analysis_runs a
            JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
            WHERE LOWER(a.entity_name) = LOWER(?)
@@ -2390,7 +2401,7 @@ def get_entity_trend(entity_name: str) -> list[dict]:
     cols = ["run_id", "generated_at", "pdf_path", "ai_visibility_score",
             "tier_scores", "google_footprint", "leapfrog_grade",
             "cms_star_rating", "accreditations",
-            "run_aggregate", "run_specialty", "run_location", "run_profile", "confidence"]
+            "run_aggregate", "run_specialty", "run_location", "run_profile", "confidence", "fqhc_json"]
     con.close()
 
     results = []
@@ -2403,6 +2414,22 @@ def get_entity_trend(entity_name: str) -> list[dict]:
         d["tier_credentials"]  = ts.get("credentials_recognition")
         d["tier_experience"]   = ts.get("patient_experience_reviews")
         d["tier_access"]       = ts.get("access_fit")
+        fq = d.pop("fqhc_json", None)
+        if fq:
+            # Community Health Edition: pillars live in fqhc_pillar_scores, not tier_scores.
+            # Map onto the four chart slots: Access & Findability (pillar 1 composite),
+            # Eligibility & Cost Accuracy, Experience & Reputation, Site & Service Completeness;
+            # Institutional Signals rides along as a fifth value for the table.
+            try:
+                fps = (json.loads(fq) if isinstance(fq, str) else fq).get("fqhc_pillar_scores") or {}
+                from .fqhc_scoring import pillar1_score
+                d["tier_outcomes"]      = pillar1_score(fps)
+                d["tier_credentials"]   = fps.get("eligibility_cost_accuracy")
+                d["tier_experience"]    = fps.get("experience_reputation")
+                d["tier_access"]        = fps.get("site_service_completeness")
+                d["tier_institutional"] = fps.get("institutional_signals")
+            except Exception:
+                pass
         d["google_rating"]     = fd.get("rating")
         d["google_count"]      = fd.get("count")
         d["rubric"]            = rubric_for_profile(d.get("run_profile"))

@@ -1042,6 +1042,22 @@ def analyze_location(
         run_profile = f"practice_{run_profile}"
     elif entity_type == "practice" and not run_profile:
         run_profile = "practice_procedural"
+    # A hospital-type run must stay on the hospital rubric. The model may still *believe* the
+    # organization is a practice or clinic network (it can pick a practice_* profile in the
+    # schema); when it does, keep the requested rubric and say so, instead of silently
+    # switching pillars — which made Trends flag "scored on the practice rubric".
+    rubric_note_text = ""
+    if entity_type not in ("practice", "service_line") and str(run_profile or "").startswith("practice_"):
+        _picked = run_profile
+        run_profile = {"practice_procedural": "procedural", "practice_relationship": "relationship",
+                       "practice_referral_fed": "relationship", "practice_hybrid": "procedural"}.get(_picked, "procedural")
+        rubric_note_text = (
+            "The analysis read this organization as a practice or clinic network rather than a hospital "
+            f"(it proposed the {_picked.replace('practice_', '').replace('_', ' ')} practice profile). "
+            "It was scored on the hospital rubric because the report was requested as a Hospital. "
+            "If this is not a hospital, re-run it as a Specialty Practice or a Community Health center so the right rubric applies.")
+        console.print(f"[yellow]⚠[/yellow] Model proposed {_picked}; hospital rubric enforced for a hospital-type run.")
+        emit({"type": "phase", "name": "rubric", "text": "⚠ Analysis read this organization as a clinic network — hospital rubric enforced (see Score Evidence)"})
     rankings = [_build_provider(r, run_profile) for r in structured_data.get("rankings", [])]
 
     # Remove consolidated_locations whose names match a standalone ranked provider.
@@ -1170,6 +1186,7 @@ def analyze_location(
         market_overview=_clean(structured_data.get("market_overview", "")),
         ai_visibility_verdict=_clean(structured_data.get("ai_visibility_verdict", "")),
         coverage_note=coverage_note_text,
+        rubric_note=rubric_note_text,
         top_recommendation=_clean(structured_data.get("top_recommendation", "")),
         practical_advice=[_clean(a) for a in structured_data.get("practical_advice", []) if isinstance(a, str)],
         improvement_sections=[
