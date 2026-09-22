@@ -368,6 +368,7 @@ _MAINT_TASKS = {
     "backfill-comparisons": "Record History rows for Compare Two PDFs on disk that pre-date persisted comparisons.",
     "retrack-practices": "Tracked entities that have a specialty but are typed Hospital → type Specialty Practice so the next snapshot uses the practice rubric.",
     "apply-learn-content": "Sync the live Learn / Methodology articles to the reviewed seed (perception/learn_seed.py); custom articles are left alone.",
+    "backfill-tracked-ran-by": "History rows with no 'Run by' that are Trends snapshots → attribute them to whoever set up that tracked entity.",
 }
 
 
@@ -458,6 +459,36 @@ async def admin_maintenance(task: str, apply: bool = False, _: dict = Depends(re
                         if apply:
                             update_learn_article(row["id"], title=new_title, category=art["category"], body=art["body"])
                 lines.append(f"{'Applied' if apply else 'Would update'}: {changed} article(s).")
+            elif task == "backfill-tracked-ran-by":
+                # Trends snapshots used to be created without the user's email, so History showed
+                # "—" for them. Attribute each unattributed run whose name matches a tracked entity
+                # (and that was generated on/after that tracking was set up) to the entity's owner.
+                ents = con.execute(
+                    "SELECT LOWER(entity_name), created_by, created_at FROM tracked_entities "
+                    "WHERE COALESCE(created_by, '') <> '' ORDER BY created_at ASC").fetchall()
+                owners: dict = {}
+                for nm, who, created in ents:
+                    owners.setdefault(nm, (who, created))       # earliest tracking wins
+                fixed = 0
+                for table, name_col in (("analysis_runs", "entity_name"), ("network_runs", "network_name")):
+                    rows = con.execute(
+                        f"SELECT run_id, {name_col}, generated_at FROM {table} "
+                        f"WHERE COALESCE(ran_by, '') = '' AND COALESCE({name_col}, '') <> '' ORDER BY generated_at ASC").fetchall()
+                    for rid, nm, gen in rows:
+                        own = owners.get(str(nm or "").lower())
+                        if not own:
+                            continue
+                        who, created = own
+                        try:
+                            if created and gen and str(gen)[:10] < str(created)[:10]:
+                                continue                        # run pre-dates the tracking
+                        except Exception:
+                            pass
+                        fixed += 1
+                        lines.append(f"{'SET' if apply else 'would set'} {table} {str(rid)[:8]} {nm} ({str(gen)[:10]}) → {who}")
+                        if apply:
+                            con.execute(f"UPDATE {table} SET ran_by = ? WHERE run_id = ?", [who, rid])
+                lines.append(f"{'Attributed' if apply else 'Would attribute'} {fixed} run(s).")
             elif task == "retrack-practices":
                 rows = con.execute(
                     "SELECT id, entity_name, specialty, city, state FROM tracked_entities "
@@ -4496,11 +4527,13 @@ def _entity_roster(entity: dict):
     return _load(entity.get("confirmed_roster")), _load(entity.get("anchor_listing"))
 
 
-def _launch_tracked_run(entity: dict, brand: str = "original") -> str:
+def _launch_tracked_run(entity: dict, brand: str = "original", email: Optional[str] = None) -> str:
     """Create the snapshot job for a tracked entity, routed by its type: hospitals go through
     the hospital analyzer, practices and service lines through the practice analyzer (practice
-    rubric, roster-based reviews pillar) — the same routing every other report uses."""
-    job_id = _new_job("admin", brand)
+    rubric, roster-based reviews pillar) — the same routing every other report uses.
+    The run is attributed ("Run by" in History) to the person who launched it, or — for
+    scheduled snapshots — to whoever set up the tracking."""
+    job_id = _new_job("admin", brand, email or entity.get("created_by") or None)
     j = _jobs[job_id]
     j["entity_name"] = entity["entity_name"]
     j["individual_report"] = True
@@ -4639,7 +4672,7 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_curr
         _upd(entity["id"], facility_type=(req.facility_type or "hospital"), source_url=(req.source_url or None))
         entity["facility_type"] = req.facility_type or "hospital"; entity["source_url"] = req.source_url or None
     # Fire initial collection run immediately so the first data point is captured now.
-    job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
+    job_id = _launch_tracked_run(entity, payload.get("brand", "original"), payload.get("email"))
     mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
     for k in ("last_run_at", "next_run_at", "created_at"):
         if entity and entity.get(k):
@@ -5023,7 +5056,7 @@ async def track_run_now(entity_id: str, payload: dict = Depends(get_current_user
     if not entity:
         raise HTTPException(404, "tracked entity not found")
 
-    job_id = _launch_tracked_run(entity, payload.get("brand", "original"))
+    job_id = _launch_tracked_run(entity, payload.get("brand", "original"), payload.get("email"))
     mark_tracked_entity_ran(entity_id, entity.get("schedule", "monthly"))
     return {"job_id": job_id}
 

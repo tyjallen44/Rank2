@@ -2930,3 +2930,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 
 - **T1** Trends list: the third column is now "Owner" and shows the email address of the person who set up tracking (hover shows the setup date). Legacy entities created before sign-in show "admin". The sparkline is gone from the list; the score chart in Details is unchanged. [ui]
 - **R1** Latest score, Schedule, Last/Next analysis, Analysis runs, Status and the action buttons are unchanged; Needs-attention badges still render under the entity name. [ui]
+
+## HISTORY-RUN-BY-TRACKED — Trends snapshots now carry "Run by"
+
+**Context:** History showed "—" under Run by for every analysis run launched from Trends (initial run on Add, Run now, scheduled runs) because those jobs were created without the user's email. Not a display rule — the rows had no user recorded.
+
+- **T1** Trends → Add entity (or Run now on an existing one) while signed in as a named user. When the run appears in History, Run by shows that user's name. [ui]
+- **T2** A scheduled snapshot (or Admin → run due entities) shows the email of whoever set up the tracking. [ui]
+- **T3** Admin → Operations → Maintenance → "backfill-tracked-ran-by": dry run lists every unattributed History row whose name matches a tracked entity and that was generated on/after tracking began, with the owner it would get; Apply sets them. Re-running afterwards lists nothing. Post-deploy step: run it once with apply. [ops]
+- **R1** Runs made from the Deep Diagnostic / Network / Compare pages are unaffected; the Run by filter dropdown lists the newly attributed users after a reload. [ui]
