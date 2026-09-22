@@ -655,6 +655,34 @@ def _sources_box_html(result: AnalysisResult) -> str:
   </div>"""
 
 
+def _profile_audit_section(result: AnalysisResult) -> str:
+    """'Google Business Profiles checked' — what is actually on each confirmed profile."""
+    au = getattr(result, "profile_audit", None)
+    if not au or not (au.get("summary") or {}).get("checked"):
+        return ""
+    sm = au["summary"]; dom = au.get("domain") or "practice site"
+    tick = lambda ok: f'<span style="color:{_GREEN_OK if ok else _RED_BAD};font-weight:700">{"✓" if ok else "—"}</span>'
+    rows = "".join(
+        f'<tr><td>{_e(p.get("name") or "")}<div style="font-size:7pt;color:#7a9095">{_e(p.get("city") or "")}</div></td>'
+        f'<td style="text-align:center">{tick(p.get("domain_matches"))}</td><td style="text-align:center">{tick(p.get("has_hours"))}</td>'
+        f'<td style="text-align:center">{tick(p.get("has_phone"))}</td><td style="text-align:center">{tick((p.get("photos") or 0) >= 3)}</td>'
+        f'<td style="text-align:center">{(str(p.get("rating")) + "★ (" + str(p.get("review_count") or 0) + ")") if p.get("rating") is not None else "—"}</td></tr>'
+        for p in (au.get("profiles") or []) if p.get("found"))
+    owner = (f'<div style="font-size:8pt;color:{_GREEN_OK};margin-top:5px">Owner-attested: the practice reports these profiles are claimed and managed'
+             + (f'; review invitations active since {_e((result.owner_facts or {}).get("reviews_since"))}' if (result.owner_facts or {}).get("reviews_since") else '') + '.</div>') if au.get("owner_attested") else ""
+    return f"""
+  <div style="margin-top:18px;padding:14px 18px;border:1px solid #d0e4e8;border-radius:8px;page-break-inside:avoid">
+    <div class="section-title" style="margin-bottom:6px">Google Business Profiles Checked</div>
+    <div style="font-size:8.5pt;color:#5a7075;margin-bottom:8px">{sm['checked']} confirmed location profile{'s' if sm['checked'] != 1 else ''} read directly from Google —
+      {sm['linked']} link to <strong>{_e(dom)}</strong>, {sm['with_hours']} list hours, {sm['with_phone']} list a phone, {sm['with_photos']} have 3+ photos, {sm['thin_reviews']} have under 5 reviews.
+      These are the signals AI assistants read as "managed"; claim status itself is not visible to them or to us.</div>
+    <table style="width:100%;border-collapse:collapse;font-size:8pt">
+      <thead><tr style="background:#0F4146;color:#fff"><th style="text-align:left;padding:4px 6px">Profile</th><th style="padding:4px 6px">Links to site</th><th style="padding:4px 6px">Hours</th><th style="padding:4px 6px">Phone</th><th style="padding:4px 6px">Photos</th><th style="padding:4px 6px">Google</th></tr></thead>
+      <tbody>{rows}</tbody></table>
+    {owner}
+  </div>"""
+
+
 def _spotcheck_section(result: AnalysisResult) -> str:
     """'What AI assistants actually said' — observed check panel (never affects the score)."""
     sc = getattr(result, "spotcheck", None)
@@ -1341,7 +1369,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
         rankings_html = _individual_teaser_section(all_ranked)
     elif result.individual_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
-        rankings_html = _individual_rankings_section(all_ranked) + _spotcheck_section(result)
+        rankings_html = _individual_rankings_section(all_ranked) + _spotcheck_section(result) + _profile_audit_section(result)
     elif result.teaser_report:
         # Teaser: summary-only cards, flat rank order
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)

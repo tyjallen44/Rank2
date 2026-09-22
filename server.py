@@ -826,6 +826,81 @@ def _finalize_hospital_combined(result, entity_name: str, city: str, state: str,
                         [report1, result.run_id])
 
 
+def _facts_evidence(facts: Optional[dict]) -> str:
+    """Evidence-block text for owner-attested facts (item 3)."""
+    if not facts:
+        return ""
+    lines = ["", "=== Owner-attested facts (supplied by the practice — treat as true) ==="]
+    if facts.get("profiles_claimed"):
+        lines.append("Google Business Profiles: CLAIMED and actively managed by the practice"
+                     + (" (via RLDatix Reputation Management)" if facts.get("managed_by_rldatix") else "")
+                     + ". Do NOT describe profiles as unclaimed; assess whether that ownership is VISIBLE to AI assistants (consistent NAP, website links, owner responses, recency) instead.")
+    if facts.get("reviews_since"):
+        lines.append(f"Review-invitation program active since {facts['reviews_since']} — expect rising review recency/volume; do not treat a thin count as neglect.")
+    if facts.get("locations"):
+        lines.append(f"The practice operates {facts['locations']} locations. If fewer surface online, that is a visibility gap, not a smaller practice.")
+    if facts.get("notes"):
+        lines.append(f"Practice note: {str(facts['notes'])[:300]}")
+    return "\n".join(lines) + "\n"
+
+
+def _profile_audit(result, job: dict, emit=None) -> None:
+    """Item 2: what is ACTUALLY on each confirmed Google Business Profile (Place Details):
+    website link (and whether it matches the practice domain), phone, hours, photos,
+    status, review count. Stored on result.profile_audit; feeds the content-analysis
+    reputation finding and a PDF block. Fail-soft."""
+    try:
+        from urllib.parse import urlparse
+        from perception.data.places import place_details
+        roster = []
+        a = job.get("anchor_listing") or {}
+        if a.get("place_id"):
+            roster.append({"name": result.entity_name, "city": job.get("city") or "", "place_id": a["place_id"]})
+        for sbl in (job.get("confirmed_siblings") or []):
+            if sbl.get("place_id"):
+                roster.append({"name": sbl.get("original_name") or sbl.get("name"), "city": sbl.get("city") or "", "place_id": sbl["place_id"]})
+        if not roster:
+            return
+        if emit:
+            emit({"type": "text", "text": f"\nChecking {len(roster)} Google Business Profile{'s' if len(roster) != 1 else ''} (website, phone, hours, photos, status)…"})
+        def _dom(u):
+            try:
+                return urlparse(u if "://" in str(u) else "https://" + str(u)).netloc.lower().replace("www.", "") if u else ""
+            except Exception:
+                return ""
+        site = (result.rankings[0].website_url if result.rankings else None) or ((job.get("content_urls") or [None])[0])
+        org_domain = _dom(site)
+        profiles = []
+        for r in roster[:25]:
+            d = place_details(r["place_id"]) or {}
+            web = d.get("websiteUri") or ""
+            wd = _dom(web)
+            profiles.append({"name": r["name"], "city": r["city"], "place_id": r["place_id"],
+                             "website": web, "website_domain": wd,
+                             "has_phone": bool(d.get("nationalPhoneNumber")), "has_hours": bool(d.get("regularOpeningHours")),
+                             "photos": len(d.get("photos") or []), "rating": d.get("rating"), "review_count": d.get("userRatingCount"),
+                             "status": d.get("businessStatus") or "", "primary_type": d.get("primaryType") or "", "found": bool(d)})
+        if not org_domain:
+            doms = [p["website_domain"] for p in profiles if p["website_domain"]]
+            org_domain = max(set(doms), key=doms.count) if doms else ""
+        for p in profiles:
+            p["domain_matches"] = bool(org_domain and p["website_domain"] and (p["website_domain"] == org_domain or p["website_domain"].endswith("." + org_domain)))
+        found = [p for p in profiles if p["found"]]
+        summary = {"checked": len(found), "requested": len(roster), "linked": sum(1 for p in found if p["domain_matches"]),
+                   "with_website": sum(1 for p in found if p["website"]), "with_phone": sum(1 for p in found if p["has_phone"]),
+                   "with_hours": sum(1 for p in found if p["has_hours"]), "with_photos": sum(1 for p in found if (p["photos"] or 0) >= 3),
+                   "thin_reviews": sum(1 for p in found if (p["review_count"] or 0) < 5),
+                   "not_operational": sum(1 for p in found if p["status"] and p["status"] != "OPERATIONAL"),
+                   "total_reviews": sum(int(p["review_count"] or 0) for p in found)}
+        result.profile_audit = {"domain": org_domain, "profiles": profiles, "summary": summary,
+                                "owner_attested": bool((job.get("practice_facts") or {}).get("profiles_claimed"))}
+        if emit:
+            s = summary
+            emit({"type": "text", "text": f"\nProfiles checked: {s['checked']} · linked to {org_domain or 'the practice site'}: {s['linked']} · hours: {s['with_hours']} · phone: {s['with_phone']} · under 5 reviews: {s['thin_reviews']}\n"})
+    except Exception as exc:
+        print(f"[profile-audit] failed: {type(exc).__name__}: {exc}")
+
+
 def _build_practice_reputation(result) -> Optional[dict]:
     """Reputation input for the practice content analysis, from the base diagnostic's
     verified Google data across ALL of the practice's locations (no new crawling)."""
@@ -849,6 +924,8 @@ def _build_practice_reputation(result) -> Optional[dict]:
                       "consistency": (fp.consistency if fp else "")},
         "aggregate_rating": agg_rating,
         "aggregate_count": agg_count,
+        "profile_audit": getattr(result, "profile_audit", None),
+        "owner_facts": getattr(result, "owner_facts", None),
     }
 
 
@@ -990,7 +1067,10 @@ def _job_run_practice(
             service_line=job.get("service_line"),
             parent_system=job.get("parent_system"),
             anchor_listing=job.get("anchor_listing"),
+            extra_evidence=_facts_evidence(job.get("practice_facts")),
         )
+        result.owner_facts = job.get("practice_facts") or None
+        _profile_audit(result, job, emit)
 
         set_run_role(result.run_id, job["role"], job.get("email"))
 
@@ -1005,6 +1085,11 @@ def _job_run_practice(
                                             job.get("brand", "original"), job, emit)
             except Exception as _ce:
                 emit({"type": "text", "text": f"\n(content analysis skipped: {type(_ce).__name__})"})
+        try:
+            from perception.analyzer import _save_to_db as _resave
+            _resave(result)          # persist audit / facts / spotcheck / sources into result_json
+        except Exception as _se:
+            print(f"[practice] result re-save failed: {_se}")
 
         job["status"] = "done"
         job["result"] = {
@@ -1340,6 +1425,7 @@ class AnalyzeRequest(BaseModel):
     practice_roster: List[dict] = []        # confirmed practice list for reputation collection
     physician_composite: bool = False       # include physician sub-rows in practice composite
     physician_roster: dict = {}             # {practice_name: [{name, npi, specialty, credential}]}
+    practice_facts: Optional[dict] = None   # owner-attested: {profiles_claimed: bool, reviews_since: 'YYYY-MM-DD', locations: int, notes: str}
     force_rerun: bool = False               # bypass 90-day score cache
     override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
     briefing_variant: Optional[str] = None  # "sales" | "cs" | None — generates Pulse Briefing companion
@@ -1430,6 +1516,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["org_name"] = _normalize_input(req.org_name) if req.org_name else None
     _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list
     _jobs[job_id]["anchor_listing"] = req.anchor_listing
+    _jobs[job_id]["practice_facts"] = req.practice_facts
     _jobs[job_id]["content_urls"] = [
         (u.strip() if u.strip().lower().startswith(("http://", "https://")) else "https://" + u.strip())
         for u in (req.content_urls or []) if (u or "").strip()]
@@ -2039,6 +2126,40 @@ async def track_roster_add(entity_id: str, req: "RosterAdditionRequest", payload
     except Exception:
         pass
     return {"ok": True, "facilities": len(roster), "note": note}
+
+
+class LocationResolveRequest(BaseModel):
+    name: str
+    address: str = ""
+    city: str = ""
+    state: str = ""
+
+
+@app.post("/api/practice/resolve-location")
+async def practice_resolve_location(req: LocationResolveRequest, _: dict = Depends(get_current_user_payload)):
+    """Match one line of a customer's location/profile list to its Google listing."""
+    from perception.data.places import text_search, search_entity_candidates
+    name, addr, city, state = req.name.strip(), req.address.strip(), req.city.strip(), req.state.strip().upper()
+    if not name:
+        raise HTTPException(400, "Enter the location name")
+
+    def _go():
+        cands = []
+        try:
+            q = " ".join(x for x in [name, addr, city, state] if x)
+            cands = text_search(q, max_results=5) or []
+            if not cands and city:
+                cands = search_entity_candidates(name, city, state) or []
+        except Exception as exc:
+            print(f"[resolve-location] failed: {exc}")
+        best = cands[0] if cands else None
+        if not best:
+            return {"found": False, "name": name, "address": addr, "city": city, "state": state}
+        return {"found": True, "name": best.get("name") or name, "address": best.get("formatted_address") or best.get("address") or addr,
+                "city": best.get("city") or city, "state": best.get("state") or state, "place_id": best.get("place_id"),
+                "rating": best.get("rating"), "review_count": best.get("review_count"), "maps_url": best.get("maps_url"),
+                "business_status": best.get("business_status")}
+    return await asyncio.get_running_loop().run_in_executor(None, _go)
 
 
 class RosterAdditionRequest(BaseModel):

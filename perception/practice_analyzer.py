@@ -730,6 +730,7 @@ def analyze_practice(
     service_line: Optional[str] = None,          # e.g. "Orthopedics" — scope aggregation to a hospital service line
     parent_system: Optional[str] = None,         # e.g. "Duke Health" — the system that operates the service line
     anchor_listing: Optional[dict] = None,       # the Google candidate the user picked: {place_id, address, rating, review_count, maps_url}
+    extra_evidence: str = "",                    # owner-attested facts etc., appended to the evidence block
 ) -> AnalysisResult:
     """Run a Practice Edition AI Visibility analysis for a single named practice.
 
@@ -777,7 +778,7 @@ def analyze_practice(
     emit({"type": "phase", "name": "evidence", "text": "Gathering practice evidence"})
     with console.status("[bold dark_sea_green4]Fetching entity Google data…[/bold dark_sea_green4]"):
         try:
-            evidence_text, _indiv_read = _gather_individual_evidence(entity_name, city, state)
+            evidence_text, _indiv_read, _ = _gather_individual_evidence(entity_name, city, state, "practice")
             if _indiv_read.formatted_address:
                 _ratio = places.city_match_ratio(city, _indiv_read.formatted_address)
                 if _ratio < 0.85:
@@ -887,7 +888,7 @@ def analyze_practice(
         city=city,
         state=state,
         specialty=specialty,
-        evidence_block=evidence_text,
+        evidence_block=evidence_text + (extra_evidence or ""),
         aggregate=aggregate,
         practice_profile=practice_profile,
         location_roster=_location_roster,

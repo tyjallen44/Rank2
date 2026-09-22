@@ -496,7 +496,7 @@ def analyze_fqhc(
     emit({"type": "phase", "name": "evidence", "text": "Gathering FQHC evidence"})
     with console.status("[bold dark_sea_green4]Fetching Google data…[/bold dark_sea_green4]"):
         try:
-            evidence_text, _indiv_read = _gather_individual_evidence(entity_name, city, state)
+            evidence_text, _indiv_read, _ = _gather_individual_evidence(entity_name, city, state, "community_health")
         except Exception as exc:
             console.print(f"[yellow]⚠[/yellow] Google fetch failed ({exc}); proceeding model-only.")
             evidence_text = (

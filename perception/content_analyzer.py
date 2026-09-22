@@ -532,14 +532,59 @@ def _check_reputation(rep: dict) -> list:
         return findings
     fp = rep.get("footprint") or {}
     consistency = (fp.get("consistency") or "").lower()
-    if "fragment" in consistency or "unclaim" in consistency:
-        findings.append(dict(
-            platform="reputation", category="risk", severity="high", status="verified",
-            teaser_summary="Google Business Profiles are fragmented or unclaimed across locations — a direct drag on local search and AI recommendations.",
-            current_state=f"Listing consistency: {fp.get('consistency')}."
-                          + (f" Ratings range {fp.get('rating_range')}." if fp.get("rating_range") else ""),
-            expected_state="Every location has a single, claimed, consistent Google Business Profile.",
-            remediation_type="listing_management", evidence=[]))
+    audit = rep.get("profile_audit") or {}
+    facts = rep.get("owner_facts") or {}
+    sm = audit.get("summary") or {}
+    if sm.get("checked"):
+        # Evidence-based: we looked at every confirmed profile. Say exactly what is missing.
+        n = sm["checked"]
+        gaps = []
+        if sm["linked"] < n:
+            gaps.append(f"{n - sm['linked']} of {n} do not link to {audit.get('domain') or 'the practice website'}")
+        if sm["with_hours"] < n:
+            gaps.append(f"{n - sm['with_hours']} missing hours")
+        if sm["with_phone"] < n:
+            gaps.append(f"{n - sm['with_phone']} missing a phone number")
+        if sm["with_photos"] < n:
+            gaps.append(f"{n - sm['with_photos']} with fewer than 3 photos")
+        if sm["not_operational"]:
+            gaps.append(f"{sm['not_operational']} not marked operational")
+        owner = " Ownership is owner-attested (profiles are claimed and managed)." if (facts.get("profiles_claimed") or audit.get("owner_attested")) else ""
+        if gaps:
+            frac = 1 - (sm["linked"] / n)
+            sev = "high" if (frac >= 0.5 or sm["not_operational"]) else "medium" if gaps else "low"
+            findings.append(dict(
+                platform="reputation", category="risk", severity=sev, status="verified",
+                teaser_summary=f"Google Business Profiles checked: {n} — " + "; ".join(gaps[:3]) + ". Ownership is not visible to AI assistants until every profile is complete and consistently linked.",
+                current_state=f"{n} profile(s) checked via Google Place Details: {sm['linked']} link to {audit.get('domain') or 'the practice site'}, "
+                              f"{sm['with_hours']} list hours, {sm['with_phone']} list a phone, {sm['with_photos']} have 3+ photos, {sm['thin_reviews']} have under 5 reviews." + owner,
+                expected_state="Every profile links to the practice website, lists hours and phone, carries photos, and matches the website's name/address/phone exactly — the signals assistants read as 'managed'.",
+                remediation_type="listing_management",
+                evidence=[f"https://www.google.com/maps/place/?q=place_id:{p['place_id']}" for p in (audit.get("profiles") or []) if p.get("place_id") and not p.get("domain_matches")][:6]))
+        else:
+            findings.append(dict(
+                platform="reputation", category="ok", severity="low", status="verified",
+                teaser_summary=f"Google Business Profiles verified: all {n} link to {audit.get('domain') or 'the practice site'} with hours, phone and photos.",
+                current_state=f"{n} profile(s) checked via Google Place Details — complete and consistently linked ({sm['total_reviews']:,} reviews across them)." + owner,
+                expected_state="Keep responding to reviews and maintain review recency; ownership is visible.",
+                remediation_type="listing_management", evidence=[]))
+    elif "fragment" in consistency or "unclaim" in consistency:
+        if facts.get("profiles_claimed"):
+            # The practice says they are claimed; we could not check the profiles — say so plainly.
+            findings.append(dict(
+                platform="reputation", category="risk", severity="medium", status="inferred",
+                teaser_summary="Profile ownership is not visible to AI assistants — the practice reports its Google Business Profiles are claimed, but the public footprint reads as fragmented.",
+                current_state=f"Owner-attested: profiles are claimed and managed. Public read (not verified per profile): {fp.get('consistency')}.",
+                expected_state="Make ownership visible: every profile linked to the website, consistent name/address/phone, owner responses to reviews, location pages on the site with schema pointing back to each profile.",
+                remediation_type="listing_management", evidence=[]))
+        else:
+            findings.append(dict(
+                platform="reputation", category="risk", severity="medium", status="inferred",
+                teaser_summary="Google Business Profiles may be fragmented or unclaimed across locations — not verified per profile; confirm before acting.",
+                current_state=f"Listing consistency (model read, no per-profile check): {fp.get('consistency')}."
+                              + (f" Ratings range {fp.get('rating_range')}." if fp.get("rating_range") else ""),
+                expected_state="Every location has a single, claimed, consistent Google Business Profile.",
+                remediation_type="listing_management", evidence=[]))
 
     locs = rep.get("locations") or []
     weak = []
