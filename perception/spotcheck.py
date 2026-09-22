@@ -122,10 +122,12 @@ def run_openai(query: str) -> Optional[dict]:
         return None
     from openai import OpenAI
     client = OpenAI(api_key=key)
+    # max_tool_calls bounds spend: one patient question needs a handful of searches, not seven.
     resp = client.responses.create(model=_OPENAI_MODEL, tools=[{"type": "web_search"}],
                                    include=["web_search_call.action.sources"],
+                                   max_tool_calls=int(os.environ.get("SPOTCHECK_OPENAI_MAX_SEARCHES", "3")),
                                    instructions=_SYS, input=query)
-    text, cites = "", []
+    text, cites, n_searches = "", [], 0
     for item in getattr(resp, "output", []) or []:
         t = getattr(item, "type", "")
         if t == "message":
@@ -137,6 +139,7 @@ def run_openai(query: str) -> Optional[dict]:
                         if u:
                             cites.append(u)
         elif t == "web_search_call":
+            n_searches += 1
             act = getattr(item, "action", None)
             for src in (getattr(act, "sources", None) or []):
                 u = getattr(src, "url", None) or (src.get("url") if isinstance(src, dict) else None)
@@ -144,7 +147,7 @@ def run_openai(query: str) -> Optional[dict]:
                     cites.append(u)
     try:
         u = resp.usage
-        _cost.record_openai(_OPENAI_MODEL, int(getattr(u, "input_tokens", 0) or 0), int(getattr(u, "output_tokens", 0) or 0), web_searches=1)
+        _cost.record_openai(_OPENAI_MODEL, int(getattr(u, "input_tokens", 0) or 0), int(getattr(u, "output_tokens", 0) or 0), web_searches=max(1, n_searches))
     except Exception:
         pass
     return {"assistant": "ChatGPT", "text": text, "citations": _dedupe(cites)}
