@@ -2925,3 +2925,8 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **R1 Existing types unchanged.** Add a Hospital, a Specialty Practice, a Service Line and a Hospital Network as before; rubric badges read Hospital/Practice rubric; H/P letters in mixed histories, plus C for community. [ui]
 - **R2 Hospital runs on real hospitals.** Deep Diagnostic on a true hospital: no "rubric enforced" wording anywhere; Score Evidence unchanged from the previous rollout. [pdf]
 - **R3 Trend query.** Trends list loads for every existing entity (the trend SQL gained a conditional result_json column for community runs only). [ui]
+
+## TRENDS-OWNER-COLUMN — Trend sparkline column replaced by the owner's email
+
+- **T1** Trends list: the third column is now "Owner" and shows the email address of the person who set up tracking (hover shows the setup date). Legacy entities created before sign-in show "admin". The sparkline is gone from the list; the score chart in Details is unchanged. [ui]
+- **R1** Latest score, Schedule, Last/Next analysis, Analysis runs, Status and the action buttons are unchanged; Needs-attention badges still render under the entity name. [ui]
