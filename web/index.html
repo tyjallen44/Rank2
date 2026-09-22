@@ -1155,7 +1155,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <button class="nav-btn" id="nav-release" onclick="navigate('release')" title="What's new in Pulse">
         <span class="ni">◈</span><span class="nb-lbl">Release Notes</span>
       </button>
-      <div class="sb-build" id="sb-version">Pulse Version 1.08</div>
+      <div class="sb-build" id="sb-version">Pulse Version 1.09</div>
       <div class="sb-build" id="sb-build"></div>
     </div>
   </nav>
@@ -3039,7 +3039,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--pale)">
           <div style="background:var(--teal);color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;text-transform:uppercase">Version 1.09</div>
-          <div style="font-size:13px;color:var(--muted)">Released September 14, 2026</div>
+          <div style="font-size:13px;color:var(--muted)">Released September 22, 2026</div>
         </div>
 
         <div class="rn-section">
@@ -3055,6 +3055,79 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div class="rn-item">
             <div class="rn-title">Reports Are Now AI Reputation Reports</div>
             <div class="rn-body">Pulse is now the <strong>AI Reputation Analysis Platform</strong>. Every report, cover, scorecard, email and page that said "AI Visibility" now says <strong>AI Reputation</strong> &mdash; including the <strong>AI Reputation Score</strong> and <strong>Pulse Score (AI Reputation)</strong> labels. Scoring, pillars and methodology are unchanged; only the name moved. Reports generated before this release keep their original wording.</div>
+          </div>
+
+          <div class="rn-heading new">Trends</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Track Hospital Networks and Community Health Centers</div>
+            <div class="rn-body">Trends now follows a <strong>Hospital Network's system score</strong> over a fixed facility roster (monthly by default) and <strong>Community Health centers</strong> on the Community Health Edition rubric, alongside hospitals, service lines and practices. Start tracking from a finished report's completion screen, a History row, <strong>Find an organization</strong> on Home, or the Trends page.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Trend Report Redesigned</div>
+            <div class="rn-body">The Trend Report opens with a <strong>headline sentence</strong>, three big tiles (latest score, change since first snapshot, quartile), a zoomed score chart with named quartile bands, a pillar chart and a plain-English line per pillar. Each tracked entity has an editable <strong>Display name</strong> used as the report title.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Needs Attention, Reviewed &amp; Notes</div>
+            <div class="rn-body">A <strong>Needs attention</strong> badge flags a score fall, an overdue analysis run, a rubric mismatch, a mixed-rubric history or an unconfirmed roster. Click it for the explanation and the fix; <strong>Reviewed</strong> hides a flag until new data raises it again. Dated <strong>notes</strong> record what changed and appear as markers on the chart and in the Trend Report.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Manage Roster &amp; Add a Hospital the AI Missed</div>
+            <div class="rn-body">Every tracked entity with a fixed roster has a <strong>Manage roster</strong> pop-over: the full list of facilities or locations, <strong>Remove</strong> per entry, and a roomy add form that verifies the entry against its Google listing (and CMS Care Compare for hospitals) before it joins. Each change is recorded as a dated <em>Roster changed</em> note. The Hospital Network page and the Trends add flow also offer <strong>Add a hospital the AI missed</strong>, remembered for future discoveries of that system.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Create Full Report, Owner &amp; Duplicate Warning</div>
+            <div class="rn-body"><strong>Create full report</strong> in Details launches the Deep Diagnostic or Hospital Network report immediately with the tracked settings; the result also joins the trend. The list shows the <strong>Owner</strong> who set up tracking, and adding an organization that is already tracked warns first and offers to open the existing entity. Search, filters and the Track New Entity button stay <strong>pinned</strong> while the list scrolls, and an open Details panel is framed with its row.</div>
+          </div>
+
+          <div class="rn-heading new">Deep Diagnostic Evidence</div>
+
+          <div class="rn-item">
+            <div class="rn-title">What AI Assistants Actually Said</div>
+            <div class="rn-body">Every Deep Diagnostic now puts <strong>eight fixed patient-style questions</strong> to real AI assistants (Claude always; ChatGPT and Gemini when configured) and records how often the organization was named, who was named instead and which pages were cited. An observational check that never changes the score, shown on the completion screen and in the PDF.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Verified Quality Signals &amp; Score Evidence</div>
+            <div class="rn-body">The <strong>CMS Care Compare star rating</strong> and <strong>Leapfrog safety grade</strong> are now fetched directly from those sources during the analysis run and override the model where they disagree. Each report carries a <strong>Score Evidence</strong> chip (High / Medium / Low) with the reason &mdash; review volume, whether CMS/Leapfrog were verified, whether live web search was available &mdash; on the completion screen, in History, in Trends and under the score in the PDF, which also lists the <strong>pages consulted</strong>. A Hospital-type run now always stays on the hospital rubric and says so when the analysis reads the organization as a clinic network.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Practice Profiles: Checked, Imported &amp; Owner-Attested</div>
+            <div class="rn-body">For practices and service lines, every confirmed location's <strong>Google Business Profile is read directly</strong> (website link, phone, hours, photos, status, reviews) and tabled in the PDF; the reputation finding is built from that table instead of inferred. <strong>Add locations from your own list</strong> imports the practice's own location list (paste or CSV, matched to Google listings) for practices spread beyond the discovery radius. <strong>Known facts</strong> under Advanced options passes what the practice has told you &mdash; profiles claimed, review program start, location count &mdash; as owner-attested evidence.</div>
+          </div>
+
+          <div class="rn-heading improved">Improvements</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Simpler Report Forms</div>
+            <div class="rn-body"><strong>Find an organization</strong> on Home and organization <strong>suggestions</strong> in every form (from your team's History and Trends) prefill the type, market and specialty. Rarely-changed settings moved under <strong>Advanced options</strong>; a <strong>Start a report</strong> chooser opens the right report in two questions; the 14-day <strong>duplicate-run check</strong> offers the existing report before starting a new analysis run.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">History for Everyone</div>
+            <div class="rn-body">Every signed-in user now sees <strong>every report</strong> (Partner accounts stay isolated). <strong>Run by</strong> is recorded for analysis runs started from Trends too. Search, filters and column headers stay pinned while the list scrolls, and downloads save the file directly instead of navigating the tab.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Scoring, Help &amp; Learn</div>
+            <div class="rn-body">The reviews pillars now differentiate above 4.5&#9733; so the strongest organizations can reach the top of the scale. Help pop-overs and the Learn / Methodology pages were rewritten for every change above, with new topics for Score Evidence, sources, the profile audit, roster management and Trends flags. Admins see estimated <strong>API spend per analysis run</strong> under Operations.</div>
+          </div>
+
+          <div class="rn-heading fixed">Fixes</div>
+
+          <div class="rn-item">
+            <div class="rn-title">Live Web Search Restored</div>
+            <div class="rn-body">Report narratives had silently been written without live web search after one allowed domain became unreachable; search is back, the report now says loudly when it is unavailable, and Score Evidence reflects it.</div>
+          </div>
+
+          <div class="rn-item">
+            <div class="rn-title">Report &amp; Data Fixes</div>
+            <div class="rn-body">Hospital and Community Health main PDFs no longer render as teasers; practice and Community Health reports regained their live evidence; organization names with "&amp;" render correctly; the <strong>Add to Trends</strong> button no longer sticks disabled after a slow location discovery; Trends entities created before sign-in are attributed to their owner in History.</div>
           </div>
         </div>
 
