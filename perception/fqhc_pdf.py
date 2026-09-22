@@ -821,11 +821,19 @@ def _assessment_block(result: AnalysisResult, primary: str) -> str:
 
     top_rec = result.top_recommendation
     if top_rec and not (battery_ran and _BATTERY_STALE_RE.search(top_rec)):
-        html_parts.append(
-            f'<div class="verdict-box" style="margin-bottom:16px">'
-            f'<strong>Priority recommendation:</strong> {_e(_strip_md(top_rec))}'
-            f'</div>'
-        )
+        if top_rec.lstrip().startswith("•"):
+            _items = [ln.lstrip("• ").strip() for ln in top_rec.splitlines() if ln.strip()]
+            html_parts.append(
+                f'<div class="verdict-box" style="margin-bottom:16px"><strong>What to do first:</strong>'
+                f'<ul style="margin:6px 0 0;padding-left:18px">'
+                + "".join(f"<li style='margin-bottom:4px'>{_e(_strip_md(i))}</li>" for i in _items)
+                + '</ul></div>')
+        else:
+            html_parts.append(
+                f'<div class="verdict-box" style="margin-bottom:16px">'
+                f'<strong>Priority recommendation:</strong> {_e(_strip_md(top_rec))}'
+                f'</div>'
+            )
 
     for sec in sections:
         # Skip entire section if its title tells the user to run the battery and it already ran

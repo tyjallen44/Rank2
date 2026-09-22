@@ -294,6 +294,7 @@ class AnalysisResult(BaseModel):
     ai_visibility_verdict: str = ""        # neutral analyst read on the market's AI visibility
     coverage_note: str = ""                # "covered N of M registry facilities"
     rubric_note: str = ""                  # set when the model's profile choice was overridden to match the requested type
+    plain_language: bool = False           # executive sections (overview / verdict / first moves) condensed by perception.plain
     top_recommendation: str = ""
     practical_advice: list[str] = Field(default_factory=list)
     improvement_sections: list[ImprovementSection] = Field(default_factory=list)

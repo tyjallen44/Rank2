@@ -790,6 +790,8 @@ def analyze_fqhc(
             _fqhc_infix = "community-health-teaser" if teaser_report else "community-health"
             pdf_filename = titlecase_filename(f"{slug}-{_fqhc_infix}-{run_id[:8]}") + ".pdf"
             pdf_path = output_dir / pdf_filename
+            from .plain import condense as _condense
+            _condense(result)
             render_fqhc_pdf(result, str(pdf_path), brand=brand)
             result.pdf_path = str(pdf_path)
             console.print(f"[green]✓[/green] PDF: {pdf_path}")

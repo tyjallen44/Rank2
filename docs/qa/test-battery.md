@@ -2991,3 +2991,16 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2** When the ceiling actually binds (raw composite above 74 with an unverifiable board cert or low resolution), a neutral line under the score reads "Score capped at 74 — board certification unverifiable; … The cap lifts once these are verifiable." No warning icon, no section number. When the raw score is already ≤ 74 the line is absent. [pdf]
 - **T3** Real gates still show in red: e.g. an open state board action, no active license, not accepting new patients, ownership confusion after a transaction. [pdf]
 - **R1** Hospital, service line and Community Health reports: Disqualifiers behave the same (real gates only); nothing else in the score block changes. History rows and Trends scores are unaffected (the ceiling value itself is unchanged; only its "applied" flag now means "binding"). [pdf][ui]
+
+## PLAIN-LANGUAGE — executive sections condensed (Deep Diagnostic full report + teaser, all editions)
+
+**Context:** customers and internal readers said the first pages were too long and too technical. A code pass (`perception/plain.py`, Claude Haiku, ~1¢) now rewrites three sections after the analysis and before the PDF: Organization Overview → one paragraph ≤ 80 words; Pulse Verdict → ≤ 3 sentences; Diagnostic Assessment → 3–5 "What to Do First" bullets. Prompts carry the same guidance. "What AI assistants currently see" is untouched. Not deployed.
+
+- **T1 Hospital Deep Diagnostic (full + teaser).** Run one (e.g. Valley View Health Center, Chehalis WA). **Expect:** page-1 Organization Overview is a single short paragraph (≤ ~80 words: who, where, what kind, bottom line); Pulse Verdict is ≤ 3 sentences (score, reason, the one change); the assessment section is titled **What to Do First** with 3–5 bullets, each one action + one reason, followed by the italic line "The detailed roadmap for your web and marketing teams follows." The teaser shows the same condensed overview/verdict. [pdf]
+- **T2 No jargon in those three sections.** None of: retrieval-time, training-data, entity resolution, linkage integrity, NAP, canonical domain, Schema.org, llms.txt, weighting profile, §. Technical items appear only in the roadmap below. Numbers (score, ratings, review counts) match the rest of the report. [pdf]
+- **T3 What AI assistants currently see** is unchanged in length and content. [pdf]
+- **T4 Practice Deep Diagnostic (combined report).** Same three caps; after the content-findings assessment is written, "What to Do First" bullets reference the verified findings. Service line likewise. [pdf]
+- **T5 Community Health report.** Overview/verdict condensed; the "Priority recommendation" box becomes "What to do first" bullets. [pdf]
+- **T6 Fail-soft.** With the Anthropic key blocked, the report still renders: overview trimmed to ≤ 3 sentences / 80 words, verdict to 3 sentences, assessment to one bullet. [ops]
+- **R1** Competitors Rankings, Compare Two, Hospital Network and Event Prep reports are unchanged (the pass only runs for individual reports). Tracked-entity snapshots (no PDF) are unchanged. [pdf]
+- **R2** History rows, scores, pillars, Score Evidence, spot-check and sources sections unchanged. [ui][pdf]

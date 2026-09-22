@@ -1026,6 +1026,9 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
     result.top_recommendation = synthesize_assessment(
         entity_name, result.location, result.top_recommendation,
         result.ai_visibility_verdict or result.top_recommendation, findings.findings)
+    # The synthesized assessment is a paragraph again — condense it back to "what to do first".
+    from perception.plain import condense as _plain_condense
+    _plain_condense(result, only_assessment=True)
 
     # Render the combined report, replacing the base PDF. Force teaser_report off so
     # the full render never uses the legacy blurred-card teaser layout — content_teaser

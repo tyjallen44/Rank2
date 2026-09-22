@@ -249,10 +249,11 @@ consistent across NPI, directories, and the practice site?
 ## AI Visibility Report: {entity_name}
 
 ### Organization Overview
-[2–3 paragraphs: practice history, specialty focus, physician roster overview, \
-market position, ownership status (independent vs. system/PE-owned), affiliations, \
-key recent events. Name the single clearest gap between the physicians' credential \
-record and the practice's current digital visibility.]
+[ONE short paragraph, at most 80 words, written for the practice's leadership: what \
+the practice is, where, its specialty focus and size, ownership (independent vs. \
+system/PE-owned), and one sentence naming the clearest gap between the physicians' \
+credential record and the practice's online reputation. Plain English — no marketing, \
+SEO or data-science jargon.]
 
 ### Physician Panel Assessment
 [For each sampled physician: one paragraph covering board certification status, \
@@ -260,10 +261,10 @@ licensure, training bio visibility, review profile, and practice linkage. Close 
 with a 1–sentence summary of the panel's overall credential visibility strength.]
 
 ### AI Visibility Verdict
-[2–3 sentences, neutral analyst voice: how {entity_name} and its physicians \
-currently surface to AI assistants, the weighting profile applied and why, and \
-where the most significant visibility gap exists. Describe physician-first discovery \
-performance qualitatively (do not state a numeric PCR estimate). Reference the 0–100 scale.]
+[At most 3 short sentences, neutral analyst voice: how {entity_name} and its physicians \
+currently surface to AI assistants on the 0–100 scale, the main reason, and the one \
+change that would move it most. Describe physician-first discovery qualitatively (no \
+numeric PCR estimate). Plain English; do not name a weighting profile.]
 
 ### {entity_name} — AI Visibility Profile
 **AI Visibility Score: [NN]/100** *(Profile: {profile_label})*

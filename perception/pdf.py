@@ -463,6 +463,25 @@ _MD_HR       = re.compile(r'^---+\s*$', re.MULTILINE)
 _MD_ITEM_NUM = re.compile(r'^#\d+\s*', re.MULTILINE)  # strips LLM global counters like #1, #5
 
 
+def _first_moves_title(result, default: str) -> str:
+    """Condensed executive sections render the assessment as 'What to Do First'."""
+    from .plain import is_bullets
+    return "What to Do First" if is_bullets(getattr(result, "top_recommendation", "")) else default
+
+
+def _assessment_body_html(text: str | None, footnote: bool = False) -> str:
+    """The assessment paragraph, or — when condensed — a short bullet list plus a pointer
+    to the technical roadmap for the web/marketing team."""
+    from .plain import is_bullets
+    if is_bullets(text):
+        items = [ln.lstrip("• ").strip() for ln in (text or "").splitlines() if ln.strip()]
+        lis = "".join(f"<li>{_e(_strip_md(i))}</li>" for i in items)
+        note = ('<div class="first-moves-note">The detailed roadmap for your web and marketing teams follows.</div>'
+                if footnote else "")
+        return f'<ul class="first-moves">{lis}</ul>{note}'
+    return f"<p>{_e(_strip_md(text or ''))}</p>"
+
+
 def _strip_md(text: str | None) -> str:
     """Remove markdown control characters from LLM-generated prose before HTML rendering."""
     if not text:
@@ -2065,6 +2084,9 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
     }}
 
     /* ── Top recommendation ────────────────────────── */
+    .first-moves {{ margin: 0; padding-left: 18px; }}
+    .first-moves li {{ font-size: 9.5pt; line-height: 1.45; margin-bottom: 5px; }}
+    .first-moves-note {{ font-size: 7.5pt; color: #7a9095; font-style: italic; margin-top: 6px; }}
     .recommendation {{
       background: {_PALE_GREEN};
       border-left: 4px solid {_SEAFOAM};
@@ -2318,8 +2340,8 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
   {rankings_html}
 
   <div class="recommendation">
-    <div class="section-title" style="margin-bottom:10px;">{recommendation_title}</div>
-    <p>{_e(_strip_md(result.top_recommendation))}</p>
+    <div class="section-title" style="margin-bottom:10px;">{_first_moves_title(result, recommendation_title)}</div>
+    {_assessment_body_html(result.top_recommendation, footnote=result.individual_report)}
   </div>
 
   {_advice_or_content_block}
@@ -2484,11 +2506,10 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
     card_html = _individual_entity_card(p, confidence=_conf) if p else ""
 
     # AI Reputation Assessment
-    assessment = _e(_strip_md(result.top_recommendation or ""))
     assessment_html = f"""
   <div class="recommendation" style="margin-top:20px">
-    <div class="section-title" style="margin-bottom:10px">{SECTION_ASSESSMENT}</div>
-    <p>{assessment}</p>
+    <div class="section-title" style="margin-bottom:10px">{_first_moves_title(result, SECTION_ASSESSMENT)}</div>
+    {_assessment_body_html(result.top_recommendation, footnote=include_roadmap)}
   </div>"""
 
     improvement_html = ""

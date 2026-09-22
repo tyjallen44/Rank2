@@ -528,15 +528,16 @@ substitute a different Google rating number.
 ## AI Visibility Report: {entity_name}
 
 ### Organization Overview
-[2–3 paragraphs providing a comprehensive overview of {entity_name}: its \
-history, size, services offered, market position, key affiliation, and any \
-notable achievements or recent events. Name the single clearest gap between \
-its clinical quality record and its current online reputation.]
+[ONE short paragraph, at most 80 words, written for a hospital executive: who \
+{entity_name} is, where, what kind of organization, key affiliation, and one \
+sentence naming the clearest gap between its quality record and its online \
+reputation. Plain English — no marketing, SEO or data-science jargon.]
 
 ### AI Visibility Verdict
-[2–3 sentences, neutral analyst voice: how {entity_name} currently surfaces \
-to AI assistants, the weighting profile applied and why, and where the most \
-significant visibility gap exists. Reference the 0–100 scale.]
+[At most 3 short sentences, neutral analyst voice: how {entity_name} currently \
+surfaces to AI assistants on the 0–100 scale, the main reason, and the one \
+change that would move it most. Say "scored as a surgical hospital / as a \
+primary-care organization" rather than naming a weighting profile.]
 
 ### {entity_name} — AI Visibility Profile
 **AI Visibility Score: [NN]/100**

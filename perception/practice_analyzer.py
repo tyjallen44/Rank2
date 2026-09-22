@@ -1259,6 +1259,8 @@ def analyze_practice(
             from .pdf import render_pdf
             pdf_path = output_dir / f"{_stem}.pdf"
             if not result.sources_consulted: result.sources_consulted = _pop_sources(); result.web_search_used = _last_ws() if result.web_search_used is None else result.web_search_used
+            from .plain import condense as _condense
+            _condense(result, console=console)
             render_pdf(result, pdf_path, brand=brand)
         console.print(f"[green]✓[/green] Practice PDF → [dim]{pdf_path}[/dim]")
         result.pdf_path = str(pdf_path)
