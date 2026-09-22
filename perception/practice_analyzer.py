@@ -424,7 +424,7 @@ def _build_practice_provider(r: dict, run_profile: str) -> RankedProvider:
             sources=tpa.get("sources") or "Healthgrades, Vitals, WebMD, Yelp",
             note=tpa.get("note") or "",
         ),
-        disqualifiers=[d for d in r.get("disqualifiers", []) if isinstance(d, str)],
+        disqualifiers=scoring.clean_disqualifiers(r.get("disqualifiers", [])),
         key_strengths=[s for s in r.get("key_strengths", [])
                        if isinstance(s, str) and not _hospital_signal(s)],
         notable_weaknesses=[w for w in r.get("notable_weaknesses", [])
@@ -657,9 +657,11 @@ def _ground_and_score_practice(
     # Grade is always computed — never left to the LLM.
     prov.overall_rating, _ = scoring.grade_from_score(prov.ai_visibility_score)
 
-    # Stash ceiling metadata on the provider for DB persistence
+    # Ceiling metadata: persisted, and shown under the score in the PDF only when it binds.
     prov._score_ceiling_applied = ceiling_applied   # type: ignore[attr-defined]
     prov._score_ceiling_reason  = ceiling_reason    # type: ignore[attr-defined]
+    prov.score_ceiling_applied = ceiling_applied
+    prov.score_ceiling_reason = ceiling_reason or None
 
 
 def _save_practice_extras(

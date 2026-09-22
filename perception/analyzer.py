@@ -1440,7 +1440,7 @@ def _build_provider(r: dict, run_profile: str) -> RankedProvider:
             sources=tpa.get("sources") or "Healthgrades, Vitals, WebMD",
             note=tpa.get("note") or "",
         ),
-        disqualifiers=[d for d in r.get("disqualifiers", []) if isinstance(d, str)],
+        disqualifiers=scoring.clean_disqualifiers(r.get("disqualifiers", [])),
         key_strengths=[s for s in r.get("key_strengths", []) if isinstance(s, str)],
         notable_weaknesses=[w for w in r.get("notable_weaknesses", []) if isinstance(w, str)],
         best_suited_for=r.get("best_suited_for") or "",

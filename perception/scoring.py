@@ -11,6 +11,7 @@ for is reproducible rather than discretionary.
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 # Canonical tier keys (stable across profiles; the *label* of the first slot
@@ -84,6 +85,30 @@ _RELATIONSHIP_HINTS = (
     "rheumatolog", "nephrolog", "pulmonolog", "allerg", "dermatolog",
     "multi-special", "multispecial", "general practice",
 )
+
+
+_DISQ_NOISE = re.compile(
+    r"^\s*(none|nothing|n/a)\b"                                       # "None", "None surfaced"
+    r"|^\s*no\s+[^.]*\b(surfaced|found|identified|reported|noted|observed|apply|applies|on record)\b"  # "No adverse events … were surfaced"
+    r"|\bnone\s+(found|surfaced|identified|apply|applies)\b"
+    r"|\bceiling\b|\bcapped\b|§|\bper\s+\S*2\.6\b|\bsection\s+2\.6\b",   # restated scoring rule
+    re.I)
+
+
+def clean_disqualifiers(items) -> list:
+    """Disqualifiers are gates that keep a provider out of a credible recommendation (license,
+    discipline, adverse events, not accepting patients, ownership confusion, hallucinated facts).
+    Models sometimes fill the field with 'none surfaced' sentences or a restatement of the
+    practice score ceiling; neither is a gate, and the PDF paints the field red. Drop those."""
+    out = []
+    for d in items or []:
+        if not isinstance(d, str):
+            continue
+        t = d.strip()
+        if not t or _DISQ_NOISE.search(t):
+            continue
+        out.append(t)
+    return out
 
 
 def classify_profile(specialty: Optional[str], mode: str = "hospital") -> str:

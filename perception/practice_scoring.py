@@ -94,9 +94,11 @@ def composite(
     if linkage_integrity_pct is not None and linkage_integrity_pct < 70:
         triggers.append(f"linkage integrity {linkage_integrity_pct:.0f}%")
 
-    if triggers:
+    if triggers and raw > 74:
         ceiling_reason = "; ".join(triggers)
-        return min(raw, 74), True, ceiling_reason
+        return 74, True, ceiling_reason
+    # Triggers present but the raw score is already at or below the ceiling: nothing to cap,
+    # so nothing to announce (the underlying gaps are still listed as weaknesses).
     return raw, False, ""
 
 

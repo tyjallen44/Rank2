@@ -2982,3 +2982,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T5 Next snapshot.** After an add or remove, Run now → the new snapshot's Locations/Facilities reflect the changed roster; the Trend Report shows the Roster changed note. [pdf]
 - **R1** The old inline "Add a hospital" widget and the inline "view" roster list are gone from Details; the Network page and the Trends network add flow still have their own Add a hospital widget. Legacy practice entities without a fixed roster still show the roster-fix box. [ui]
 - **R2** Closing the pop-over (✕ or clicking outside) leaves the Details panel open; Escape is not required. [ui]
+
+## DISQUALIFIERS-CLEANUP — red "Disqualifiers" line shows real gates only; score ceiling reported by code, only when it binds
+
+**Context:** a practice report showed "⚠ Disqualifiers: Score is ceiling-capped at 74 per §2.6 … No adverse events … were surfaced." — a rubric restatement (which did not even bind; score was 58) plus a positive finding, painted red. Not deployed.
+
+- **T1** Run a practice Deep Diagnostic on a practice with a clean record (e.g. Cancer and Blood Specialty Clinic, Long Beach CA). **Expect:** no red Disqualifiers line at all; the clean record appears under Strengths; board-certification / entity-resolution gaps stay in Areas for Improvement; no "§2.6", "ceiling" or "capped" wording anywhere in the narrative. [pdf]
+- **T2** When the ceiling actually binds (raw composite above 74 with an unverifiable board cert or low resolution), a neutral line under the score reads "Score capped at 74 — board certification unverifiable; … The cap lifts once these are verifiable." No warning icon, no section number. When the raw score is already ≤ 74 the line is absent. [pdf]
+- **T3** Real gates still show in red: e.g. an open state board action, no active license, not accepting new patients, ownership confusion after a transaction. [pdf]
+- **R1** Hospital, service line and Community Health reports: Disqualifiers behave the same (real gates only); nothing else in the score block changes. History rows and Trends scores are unaffected (the ceiling value itself is unchanged; only its "applied" flag now means "binding"). [pdf][ui]

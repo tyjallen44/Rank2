@@ -290,7 +290,7 @@ Rank ALL large/major entries (consolidated by ownership), strongest to weakest:
 - Yelp / Facebook: [rating + review count, or "not found"]
 - Locations: [campuses with individual ratings if consolidated — omit if single]
 - Key Strengths / Notable Weaknesses: [bullets]
-- Disqualifiers: [none / list]
+- Disqualifiers: [leave EMPTY unless a real gate applies — no active license, serious open discipline, adverse event, not accepting patients; never write "none" and never restate scoring rules]
 - Best Suited For / Summary: [patient types; 2–3 sentence recommendation]
 - What AI Currently Says: [1–2 sentences: how AI assistants (ChatGPT, Gemini, Claude) would describe \
 this hospital today based on its public signals — drawing from both training-data memory and live retrieval. \
@@ -433,7 +433,7 @@ Rank ALL independent {specialty} practices, strongest to weakest:
 - Website Machine-Readability: [Schema.org present / absent · key data in crawlable HTML or buried in PDFs/JS · llms.txt present/absent]
 - Yelp / Facebook: [rating + review count, or "not found"]
 - Key Strengths / Notable Weaknesses: [bullets]
-- Disqualifiers: [none / list]
+- Disqualifiers: [leave EMPTY unless a real gate applies — no active license, serious open discipline, adverse event, not accepting patients; never write "none" and never restate scoring rules]
 - Best Suited For / Summary: [patient types; 2–3 sentence recommendation]
 - What AI Currently Says: [1–2 sentences: how AI assistants (ChatGPT, Gemini, Claude) would describe \
 this practice today — drawing from both training-data memory and live retrieval. \
@@ -562,7 +562,7 @@ significant visibility gap exists. Reference the 0–100 scale.]
 - Yelp / Facebook: [rating + review count on each, or "not found"]
 {locations_format}
 - Key Strengths / Notable Weaknesses: [bullets]
-- Disqualifiers: [none / list if any apply]
+- Disqualifiers: [leave EMPTY unless a real gate applies — no active license, serious open discipline, adverse event, not accepting patients; never write "none" and never restate scoring rules]
 - Best Suited For / Summary: [who benefits most; 2–3 sentence AI visibility assessment]
 - What AI Currently Says: [2–3 sentences: how AI assistants (ChatGPT, Gemini, Claude) would \
 describe {entity_name} today when a patient asks for a recommendation — drawing from both \

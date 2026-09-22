@@ -119,7 +119,10 @@ for RELATIONSHIP, documented escalation partners.
 (b) entity-resolution integrity <85 %;
 (c) linkage integrity <70 %.
 You must set board_cert_unverifiable=true and report entity_resolution_pct / \
-linkage_integrity_pct accurately — the system applies the ceiling automatically.
+linkage_integrity_pct accurately — the system applies the ceiling automatically and \
+reports it itself. Do NOT mention the ceiling, §2.6 or "capped" anywhere in the narrative, \
+disqualifiers or weaknesses; describe the underlying gap instead (e.g. "board certification \
+not crawlably verifiable for the sampled panel").
 
 **Do NOT compute the composite yourself** — provide the four pillar scores and the \
 weighting profile; the system computes the weighted composite deterministically.
@@ -291,7 +294,7 @@ performance qualitatively (do not state a numeric PCR estimate). Reference the 0
 - Reddit / Community Forum: [sentiment + dominant theme, or "not found"]
 - Yelp / Facebook: [rating + review count on each, or "not found"]
 - Key Strengths / Notable Weaknesses: [bullets]
-- Disqualifiers: [none / list if any — adverse events, unresolved discipline, stale roster, etc.]
+- Disqualifiers: [leave EMPTY unless a real gate applies — adverse events, unresolved discipline, ownership confusion, repeated hallucinated facts; never write "none surfaced" and NEVER put the ceiling rule here — a clean record belongs in Key Strengths]
 - Key-Person Flag: [YES — [physician name] is the practice's primary visibility asset and departure would reset the visibility position / NO]
 - Best Suited For / Summary: [who benefits most; 2–3 sentence AI visibility assessment]
 - What AI Currently Says: [2–3 sentences: how AI assistants (ChatGPT, Gemini, Claude) describe {entity_name} \
@@ -444,7 +447,7 @@ Rank ALL independent {specialty} practices, strongest to weakest:
 - Website Machine-Readability: [Schema.org present / absent · physician bios crawlable or buried · llms.txt present/absent]
 - Yelp / Facebook: [rating + review count, or "not found"]
 - Key Strengths / Notable Weaknesses: [bullets]
-- Disqualifiers: [none / list]
+- Disqualifiers: [leave EMPTY unless a real gate applies; never "none"; never the ceiling rule]
 - Best Suited For / Summary: [patient types; 2–3 sentence recommendation]
 - What AI Currently Says: [1–2 sentences: how AI assistants (ChatGPT, Gemini, Claude) would describe \
 this practice today. Note whether physicians surface in physician-first queries. \

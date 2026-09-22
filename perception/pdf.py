@@ -614,7 +614,7 @@ def _aivs_block(p: RankedProvider, methodology_note: bool = True, confidence: di
         <div class="aivs-score">{score_txt}<span class="out">/100</span></div>
         {nat_q_html}
         <div class="profile-chip">{profile_label}</div>
-        {f'<div class="ceiling-note">⚠ Score capped at 74 ({_e(p.score_ceiling_reason)})</div>' if p.score_ceiling_applied else ""}
+        {f'<div class="ceiling-note">Score capped at 74 — {_e(p.score_ceiling_reason)}. The cap lifts once these are verifiable.</div>' if p.score_ceiling_applied and p.score_ceiling_reason else ""}
         {_confidence_line(confidence)}
       </div>
       <div class="tier-bars">{rows}
