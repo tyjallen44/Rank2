@@ -380,6 +380,15 @@ input[type="url"]::placeholder, textarea::placeholder {
 .tbl-card .tbl thead th { position: sticky; top: var(--tools-h, 0px); z-index: 20; box-shadow: 0 2px 0 var(--pale); }
 .tbl-card .tbl thead th:first-child { border-top-left-radius: inherit; }
 .tbl-card .tbl thead th:last-child { border-top-right-radius: inherit; }
+/* Trends: an open Details panel and its entity row read as one framed unit; other rows recede. */
+.tbl tr.tc-open td { background: #EEF7F1; border-bottom: none; }
+.tbl tr.tc-open td:first-child, .tbl tr.tc-panel-row td { box-shadow: inset 4px 0 0 var(--teal); }
+.tbl tr.tc-panel-row td { border-bottom: 3px solid var(--teal); }
+.tbl tr.tc-dim td { opacity: .42; transition: opacity .15s; }
+.tbl tr.tc-dim:hover td { opacity: 1; }
+.tc-panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 0 10px; margin-bottom: 12px; border-bottom: 1px dashed var(--border); }
+.tc-panel-kicker { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--teal); background: #fff; border: 1px solid var(--teal); border-radius: 999px; padding: 2px 8px; }
+.tc-panel-name { font-weight: 700; font-size: 15px; color: var(--teal); }
 .tbl tr:last-child td { border-bottom: none; }
 .tbl tr:hover td { background: var(--blue-light); }
 /* Per-row Downloads dropdown (History) */
@@ -10128,8 +10137,19 @@ function _trackFilterBar() {
 
 function toggleTrackRoster(id) { const el = document.getElementById(`tc-roster-${id}`); if (el) el.classList.toggle('hidden'); }
 function toggleTrackCfg(id) {
-  if (_trackCfgOpen.has(id)) _trackCfgOpen.delete(id); else _trackCfgOpen.add(id);
+  const opening = !_trackCfgOpen.has(id);
+  _trackCfgOpen.clear();                    // one Details panel at a time
+  if (opening) _trackCfgOpen.add(id);
   renderTrackEntityList();
+  if (opening) _trackScrollToRow(id);
+}
+// Scroll so the entity row sits just under the pinned tools strip (its Details panel follows).
+function _trackScrollToRow(id) {
+  const row = document.getElementById('track-row-' + id), main = document.getElementById('main');
+  if (!row || !main) return;
+  const strip = document.getElementById('track-tools');
+  const top = row.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop - (strip ? strip.offsetHeight : 0) - 6;
+  main.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
 async function saveTrackCfg(id) {
   const body = {
@@ -10163,7 +10183,7 @@ async function saveTrackCfg(id) {
 // ── Roster fix for entities tracked before fixed rosters existed ─────────────
 const _tcRosterDraft = {};
 function openRosterFix(id) {
-  _trackCfgOpen.add(id); renderTrackEntityList();
+  _trackCfgOpen.clear(); _trackCfgOpen.add(id); renderTrackEntityList();
   setTimeout(() => document.getElementById(`tc-roster-fix-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
 }
 async function tcFindRoster(id, btn) {
@@ -10216,7 +10236,7 @@ async function tcSaveRoster(id, btn) {
 // row into view, flash it green, and say in the panel what changed (so a cleared badge is
 // visibly the result of what the user just did).
 async function _trackTaskDone(id, message) {
-  _trackCfgOpen.add(id);
+  _trackCfgOpen.clear(); _trackCfgOpen.add(id);
   await refreshTrackEntities();
   const row = document.getElementById(`track-row-${id}`);
   if (row) { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); row.classList.add('row-flash'); setTimeout(() => row.classList.remove('row-flash'), 2600); }
@@ -10631,14 +10651,20 @@ async function unackTrackReason(id, reason) {
   } catch (e) { alert(e.message || e); }
 }
 function openTrackAttention(id) {
-  _trackCfgOpen.add(id); renderTrackEntityList();
+  _trackCfgOpen.clear(); _trackCfgOpen.add(id); renderTrackEntityList();
   setTimeout(() => (document.getElementById(`tc-attn-${id}`) || document.getElementById(`track-cfg-${id}`))?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
 }
 function _trackCfgPanel(e) {
   const created = (e.created_at || '').slice(0, 10);
   const nextVal = e.next_run_at ? String(e.next_run_at).slice(0, 10) : '';
   const lock = (label, value) => `<div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">${label} <span title="Locked — changing this would make earlier scores non-comparable" style="cursor:help">🔒</span></div><div style="font-size:13px;color:var(--text);margin-top:2px">${value || '—'}</div></div>`;
-  return `<tr id="track-cfg-${e.id}"><td colspan="9" style="background:#f6fafa;padding:16px 20px;border-top:1px solid var(--pale)">
+  return `<tr id="track-cfg-${e.id}" class="tc-panel-row"><td colspan="9" style="background:#f6fafa;padding:0 20px 18px">
+    <div class="tc-panel-head">
+      <span class="tc-panel-kicker">Details</span>
+      <span class="tc-panel-name">${_learnEsc(e.display_name || e.entity_name)}</span>
+      <span style="font-size:12px;color:var(--muted)">${_learnEsc(_trackTypeLabel(e.entity_type))} · ${_learnEsc(e.city || '')}${e.state ? ', ' + _learnEsc(e.state) : ''}</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="toggleTrackCfg('${e.id}')">✕ Close</button>
+    </div>
     ${_trackAttentionBox(e)}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 22px;margin-bottom:14px">
       <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Display name <span style="font-weight:400;text-transform:none;letter-spacing:0">(report title)</span></div>
@@ -10779,7 +10805,8 @@ function renderTrackEntityList() {
     const attn = _trackAttentionReasons(e);
     const attnBadge = attn.length ? ` <a href="#" onclick="openTrackAttention('${e.id}');return false" class="badge" style="background:#fff3cd;color:#856404;font-size:10px;text-decoration:none;cursor:pointer" title="${_learnEsc(attn.join(', '))} — click for what to do">Needs attention</a>` : '';
     const nextRel = (e.schedule !== 'manual' && e.next_run_at) ? _relDays(e.next_run_at) : '';
-    return `<tr id="track-row-${e.id}" style="${e.active ? '' : 'opacity:.7'}">
+    const _cfgOpen = _trackCfgOpen.has(e.id), _anyOpen = _trackCfgOpen.size > 0;
+    return `<tr id="track-row-${e.id}" class="${_cfgOpen ? 'tc-open' : _anyOpen ? 'tc-dim' : ''}" style="${e.active ? '' : 'opacity:.7'}">
       <td style="max-width:320px">
         <label style="float:left;margin:3px 8px 0 0" title="Select to compare on one chart"><input type="checkbox" class="track-cmp-cb" ${_trackCmpSel.has(e.id) ? 'checked' : ''} onchange="trackCmpToggle('${e.id}', this.checked)"></label>
         <a href="#" onclick="loadEntityTrend('${e.id}');return false" style="font-weight:600;color:var(--teal);text-decoration:none" title="${_learnEsc(e.entity_name)}">${_learnEsc(e.display_name || e.entity_name)}</a>
