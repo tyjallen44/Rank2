@@ -2138,26 +2138,72 @@ async def track_roster_add(entity_id: str, req: "RosterAdditionRequest", payload
     ent = get_tracked_entity(entity_id)
     if not ent:
         raise HTTPException(404, "tracked entity not found")
-    if (ent.get("entity_type") or "hospital") != "hospital_network":
-        raise HTTPException(400, "Only Hospital Network entities have a facility roster to add to")
+    etype = ent.get("entity_type") or "hospital"
+    if etype not in _ROLLUP_TYPES:
+        raise HTTPException(400, "Only Hospital Network, practice, service line and community health entities have a fixed roster")
     roster, _ = _entity_roster(ent)
     roster = list(roster or [])
     name, city, state = req.name.strip(), req.city.strip(), req.state.strip().upper()
     if not name:
-        raise HTTPException(400, "Enter the hospital name")
-    if any(str(f.get("name", "")).lower() == name.lower() and str(f.get("city", "")).lower() == city.lower() for f in roster):
+        raise HTTPException(400, "Enter the name")
+    if any((req.place_id and f.get("place_id") == req.place_id)
+           or (str(f.get("original_name") or f.get("name") or "").lower() == name.lower() and str(f.get("city", "")).lower() == city.lower())
+           for f in roster):
         raise HTTPException(400, f"{name} is already on the roster")
-    roster.append({"name": name, "city": city, "state": state, "beds": req.beds, "place_id": req.place_id, "added_by_user": True,
-                   "added_on": _date.today().isoformat()})
+    item = {"name": name, "city": city, "state": state, "place_id": req.place_id, "added_by_user": True,
+            "added_on": _date.today().isoformat(), "added_by": payload.get("email") or payload.get("name") or ""}
+    if etype == "hospital_network":
+        item["beds"] = req.beds
+    else:
+        item.update({"original_name": name, "entity_type": "clinic", "address": req.address or "",
+                     "rating": req.rating, "review_count": req.review_count})
+    roster.append(item)
     update_tracked_entity(entity_id, confirmed_roster=json.dumps(roster))
     who = payload.get("email") or payload.get("name") or ""
-    note = f"Roster changed: added {name}{(' (' + city + ')') if city else ''} — now {len(roster)} facilities. Snapshots before this date measured {len(roster) - 1}."
+    word = _roster_note_word(ent)
+    note = f"Roster changed: added {name}{(' (' + city + ')') if city else ''} — now {len(roster)} {word}. Snapshots before this date measured {len(roster) - 1}."
     add_annotation(entity_id, _date.today(), note, who)
-    try:
-        add_roster_addition(ent["entity_name"], name, city, state, req.beds, req.place_id, added_by=who)
-    except Exception:
-        pass
-    return {"ok": True, "facilities": len(roster), "note": note}
+    if etype == "hospital_network":
+        try:
+            add_roster_addition(ent["entity_name"], name, city, state, req.beds, req.place_id, added_by=who)
+        except Exception:
+            pass
+    return {"ok": True, "facilities": len(roster), "note": note, "roster": roster}
+
+
+@app.post("/api/track/entities/{entity_id}/roster/remove")
+async def track_roster_remove(entity_id: str, req: RosterRemovalRequest, payload: dict = Depends(get_current_user_payload)):
+    """Remove a facility / location from a tracked entity's fixed roster. Recorded as a dated
+    'Roster changed' trend note, like additions, so the step is explained on the chart."""
+    from datetime import date as _date
+    from perception.db import init_db, get_tracked_entity, update_tracked_entity, add_annotation
+    init_db()
+    ent = get_tracked_entity(entity_id)
+    if not ent:
+        raise HTTPException(404, "tracked entity not found")
+    etype = ent.get("entity_type") or "hospital"
+    if etype not in _ROLLUP_TYPES:
+        raise HTTPException(400, "This entity has no fixed roster")
+    roster, _ = _entity_roster(ent)
+    roster = list(roster or [])
+    def _match(f):
+        if req.place_id and f.get("place_id"):
+            return f.get("place_id") == req.place_id
+        return (str(f.get("original_name") or f.get("name") or "").lower() == req.name.strip().lower()
+                and str(f.get("city") or "").lower() == req.city.strip().lower())
+    idx = next((i for i, f in enumerate(roster) if _match(f)), None)
+    if idx is None:
+        raise HTTPException(404, "That entry is not on the roster")
+    if etype == "hospital_network" and len(roster) <= 1:
+        raise HTTPException(400, "A network needs at least one facility on its roster")
+    gone = roster.pop(idx)
+    update_tracked_entity(entity_id, confirmed_roster=json.dumps(roster))
+    who = payload.get("email") or payload.get("name") or ""
+    gname = gone.get("original_name") or gone.get("name") or "entry"
+    word = _roster_note_word(ent)
+    note = f"Roster changed: removed {gname}{(' (' + gone['city'] + ')') if gone.get('city') else ''} — now {len(roster)} {word}. Snapshots before this date measured {len(roster) + 1}."
+    add_annotation(entity_id, _date.today(), note, who)
+    return {"ok": True, "facilities": len(roster), "note": note, "roster": roster}
 
 
 class LocationResolveRequest(BaseModel):
@@ -2195,12 +2241,28 @@ async def practice_resolve_location(req: LocationResolveRequest, _: dict = Depen
 
 
 class RosterAdditionRequest(BaseModel):
-    network_name: str
+    network_name: str = ""
     name: str
     city: str = ""
     state: str = ""
     beds: Optional[int] = None
     place_id: Optional[str] = None
+    address: str = ""                       # practice / community health locations
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+
+
+class RosterRemovalRequest(BaseModel):
+    name: str = ""
+    city: str = ""
+    place_id: Optional[str] = None
+
+
+_ROLLUP_TYPES = ("hospital_network", "practice", "service_line", "community_health")
+
+
+def _roster_note_word(ent: dict) -> str:
+    return "facilities" if (ent.get("entity_type") or "hospital") == "hospital_network" else "locations"
 
 
 @app.post("/api/network/additions")
