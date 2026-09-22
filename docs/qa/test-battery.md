@@ -2965,3 +2965,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T4 Details open.** Open a tracked entity's Details panel and scroll inside the list; the strip stays pinned. [ui]
 - **T5 Type filter.** Trends Type dropdown now offers Community Health and Hospital Network; selecting either filters the list. [ui]
 - **R1** Card corners remain rounded at the top of both tables; no horizontal scrollbar appears; the Feedback and Admin lists are unchanged. [ui]
+
+## TRENDS-DETAILS-FRAME — the open Details panel and its row read as one unit
+
+- **T1** Trends → click ⚙ Details on a row. **Expect:** the row turns pale green with a teal bar down its left edge; the panel below shares the teal bar, opens with a header "DETAILS · <entity name> · type · city, state" and a "✕ Close" button, and ends with a thick teal rule. All other rows fade to ~40% (hover restores one). The list scrolls so the row sits just under the pinned strip. [ui]
+- **T2** Click Details on a second row: the first panel closes and the second opens (one at a time). The Needs-attention badge, roster-fix and "Track a new entity" links that open Details also close any other open panel. [ui]
+- **T3** ✕ Close in the panel header and ⚙ Hide on the row both close it; the fade lifts from the other rows. [ui]
+- **R1** Save, Run now, Delete tracking, roster add and notes inside the panel work as before and re-render into the same framed panel. Paused rows still show at reduced opacity when no panel is open. [ui]
