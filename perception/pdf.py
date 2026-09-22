@@ -407,7 +407,8 @@ def render_practice_combined(result: AnalysisResult, findings, pdf_path,
 
 
 def _e(text: str | None) -> str:
-    return _html_lib.escape(str(text or ""))
+    # Decode entities that may already be in stored names ('&amp;' → '&') so they are escaped exactly once.
+    return _html_lib.escape(_html_lib.unescape(str(text or "")))
 
 
 def _fmt_cached(gen) -> str:

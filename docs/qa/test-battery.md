@@ -2885,3 +2885,10 @@ Commit: Trends → a Hospital Network entity's Details shows the "＋ Add a hosp
 **T3.** Adding a duplicate name → "already on the roster" error. Adding to a 3-facility network prompts the "consider tracking a new entity" confirmation.
 **T4.** A later Hospital Network discovery for that system includes the hospital tagged "added earlier".
 **R1.** Practice/service-line entities show no widget; the Network page widget unchanged.
+
+## FIX-AMPERSAND — '&' in organization names printed as '&amp;' / '&Amp;'
+
+Commit: names that reached the server already HTML-escaped ('&amp;') were title-cased into '&Amp;' and then escaped again in the PDF ('&amp;amp;' → shows '&AMP;'). _normalize_input now decodes entities before title-casing, and the PDF escaper decodes before escaping so stored names print exactly once. NEEDS BROWSER TESTING.
+
+**T1.** Run a Deep Diagnostic for an organization with '&' in its name (e.g. Cancer & Blood Specialty Clinic). Cover title, page headers, History row and completion screen all show '&'.
+**T2.** Re-render an older report whose stored name contains '&amp;' (Rebuild content report) → prints '&'.

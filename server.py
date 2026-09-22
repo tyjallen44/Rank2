@@ -68,10 +68,12 @@ def _smart_title(text: str) -> str:
 
 
 def _normalize_input(text: str | None) -> str | None:
-    """Title-case a free-text field received in ALL CAPS from the UI."""
+    """Title-case a free-text field received in ALL CAPS from the UI. HTML entities that
+    leaked in from the page (e.g. '&amp;' for '&') are decoded first so names print as typed."""
     if not text:
         return text
-    return _smart_title(text.strip())
+    import html as _html
+    return _smart_title(_html.unescape(text.strip()))
 
 app = FastAPI(title="Pulse", docs_url=None, redoc_url=None)
 
