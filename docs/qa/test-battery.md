@@ -2956,3 +2956,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T4 Learn (after seed + apply).** /learn shows a new **Trends** article under The Reports; *Deep Diagnostic* mentions the observed check, Score Evidence, the profile audit table, importing a location list and Known facts; *Hospital Network* mentions adding a missed hospital and Track in Trends; *How to run a report* mentions the hero Start a report and History visibility. /methodology: *Where the signals come from* says CMS/Leapfrog are fetched directly and describes live web search; *How the score is produced* has step 4 (observed check) and the rubric/evidence rules. [ui]
 - **R1** Untouched topics (analysis-type, cache, briefing, teaser, report-format, location-mode, physicians, service-line-scorecard, event-options, compare-service-line, suggestions, spotcheck, known-facts, trend-notes) still open and read as before. [ui]
 - **R2** Dry-running apply-learn-content on production lists exactly the five rewritten titles (plus MISSING for Trends until seeded). [ops]
+
+## PINNED-TOOLS — History and Trends: search/filters and sort headers stay visible while scrolling
+
+- **T1 History.** Scroll a long History list. **Expect:** the search box, Type / Everyone / date filters and any active-filter chips stay pinned at the top of the content area (title and subtitle scroll away); the column headers (Date, Name, Type, Analyzed, Run By, Downloads) stay pinned directly beneath them and still sort on click. Typing in the search box while scrolled keeps the cursor. [ui]
+- **T2 Trends.** Same on the Trends list: the pinned strip holds the entity count, "+ Track New Entity" (and, for admins, "Run all due"), the Compare bar when entities are ticked, and the search/filters. Column headers pin below it. The "Two ways to start tracking" note now sits above the strip and scrolls away. [ui]
+- **T3 Wrapped chips.** Apply several filters so the chips row wraps; the pinned column headers move down to stay under the taller strip (no overlap). Clear filters — headers move back up. [ui]
+- **T4 Details open.** Open a tracked entity's Details panel and scroll inside the list; the strip stays pinned. [ui]
+- **T5 Type filter.** Trends Type dropdown now offers Community Health and Hospital Network; selecting either filters the list. [ui]
+- **R1** Card corners remain rounded at the top of both tables; no horizontal scrollbar appears; the Feedback and Admin lists are unchanged. [ui]

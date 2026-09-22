@@ -371,6 +371,15 @@ input[type="url"]::placeholder, textarea::placeholder {
   background: #fafcfb;
 }
 .tbl td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+/* Pinned tools (search / filters / actions) + pinned sort headers on list pages.
+   #main is the scroll container, so position:sticky pins to it. The card around the
+   table must not clip (overflow:visible) or the sticky headers cannot escape it. */
+.sticky-tools { position: sticky; top: 0; z-index: 30; background: var(--bg); padding: 10px 0 8px; margin: 0 0 8px;
+  box-shadow: 0 8px 10px -10px rgba(15,65,70,.35); }
+.tbl-card { overflow: visible !important; }
+.tbl-card .tbl thead th { position: sticky; top: var(--tools-h, 0px); z-index: 20; box-shadow: 0 2px 0 var(--pale); }
+.tbl-card .tbl thead th:first-child { border-top-left-radius: inherit; }
+.tbl-card .tbl thead th:last-child { border-top-right-radius: inherit; }
 .tbl tr:last-child td { border-bottom: none; }
 .tbl tr:hover td { background: var(--blue-light); }
 /* Per-row Downloads dropdown (History) */
@@ -2639,7 +2648,18 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
       <!-- Entity list view -->
       <div id="track-list-view" style="max-width:1180px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <!-- How entries get here: from a finished report or from Track New Entity -->
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px 16px;margin-bottom:18px;background:#EEF7F1;border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.5;color:var(--text)">
+          <span style="font-size:18px;line-height:1;color:var(--teal)">📈</span>
+          <div>
+            <strong>Two ways to start tracking.</strong>
+            When a <strong>Deep Diagnostic</strong> finishes, click <strong>Track in Trends</strong> on its completion screen (also in any History row's Downloads menu) — the organization, market and type carry over and you only confirm the listing and schedule.
+            Or use <strong>+ Track New Entity</strong> below to set one up from scratch. Every entry here is re-analyzed on its schedule and charts the score over time.
+            <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a>
+          </div>
+        </div>
+        <div id="track-tools" class="sticky-tools">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <div id="track-entity-count" style="font-size:13px;color:var(--muted)"></div>
           <div style="display:flex;gap:8px;align-items:center">
             <button class="btn btn-ghost btn-sm" id="track-run-due-btn" onclick="runAllDueTracked(this)" style="display:none" title="Admin: start a snapshot now for every active entity whose next run is due or overdue">▶ Run all due</button>
@@ -2652,15 +2672,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <button class="btn btn-primary btn-sm" id="track-cmp-go" onclick="showTrackCompare()" style="margin-left:auto">Compare on one chart →</button>
           <button class="btn btn-ghost btn-sm" onclick="trackCmpClear()">Clear</button>
         </div>
-        <!-- How entries get here: from a finished report or from Track New Entity -->
-        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px 16px;margin-bottom:18px;background:#EEF7F1;border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.5;color:var(--text)">
-          <span style="font-size:18px;line-height:1;color:var(--teal)">📈</span>
-          <div>
-            <strong>Two ways to start tracking.</strong>
-            When a <strong>Deep Diagnostic</strong> finishes, click <strong>Track in Trends</strong> on its completion screen (also in any History row's Downloads menu) — the organization, market and type carry over and you only confirm the listing and schedule.
-            Or use <strong>+ Track New Entity</strong> above to set one up from scratch. Every entry here is re-analyzed on its schedule and charts the score over time.
-            <a href="#" class="help-link" onclick="showHelp('trend-schedule',event);return false">ⓘ What is this?</a>
-          </div>
+          <div id="track-filter-host"></div>
         </div>
         <div id="track-entities-body">
           <div class="empty"><div class="ei"><svg width="34" height="26" viewBox="0 0 18 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,11 5,6 8,9 12,3 15,6"/><polyline points="12,3 15.5,2.5 15,6"/></svg></div><div>Loading…</div></div>
@@ -8711,10 +8723,11 @@ function renderHistory(events, bulkRuns, studentRuns, contentRuns) {
             </tr>`;
           });
   const firstRows = rowHtml.slice(0, _HIST_FIRST_CHUNK).join('');
+  setTimeout(() => _pinTools('hist-tools', '#history-body .tbl-card .tbl'), 0);
   el.innerHTML = _histBatchWrap(evHtml + nbHtml + shHtml) + `
     <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">All Reports</div>
-    <div style="margin-bottom:14px">${_histFilterBar()}</div>
-    <div class="card" style="padding:0;overflow:hidden">
+    <div id="hist-tools" class="sticky-tools">${_histFilterBar()}</div>
+    <div class="card tbl-card" style="padding:0">
       <table class="tbl">
         <thead><tr>
           ${th('Date', 'date')}
@@ -8889,6 +8902,16 @@ async function histApplyFilters() {
     if (Array.isArray(data.ran_by_options)) _histRanByOptions = data.ran_by_options;
     renderHistory();
   } catch (e) { /* keep what's shown */ }
+}
+// Keep each pinned table header exactly below its pinned tools strip (strip height varies
+// with wrapped chips). Re-run after every render of the strip or table.
+const _pinObservers = {};
+function _pinTools(stripId, tableSel) {
+  const strip = document.getElementById(stripId); if (!strip) return;
+  const apply = () => { const h = strip.offsetHeight; document.querySelectorAll(tableSel).forEach(t => t.style.setProperty('--tools-h', h + 'px')); };
+  if (_pinObservers[stripId]) _pinObservers[stripId].disconnect();
+  if (window.ResizeObserver) { const ro = new ResizeObserver(apply); ro.observe(strip); _pinObservers[stripId] = ro; }
+  apply();
 }
 function _histFilterBar() {
   const q = (_historySearch || '').replace(/"/g, '&quot;');
@@ -10093,7 +10116,7 @@ function _trackFilterBar() {
     ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12px">${chips.map(c => `<span class="badge bg-teal" style="font-size:11px">${c}</span>`).join('')}<a href="#" onclick="trackClearFilters();return false" style="color:var(--teal);font-weight:600">Clear all</a></div>` : '';
   return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
       <input id="track-search" type="text" class="input" placeholder="Search name, market, specialty, notes…" value="${_learnEsc(f.q)}" oninput="trackSetFilter('q', this.value)" style="max-width:300px">
-      ${sel('type', [['', 'All types'], ['hospital', 'Hospital'], ['service_line', 'Hospital Service Line'], ['practice', 'Specialty Practice']], 'Type')}
+      ${sel('type', [['', 'All types'], ['hospital', 'Hospital'], ['service_line', 'Hospital Service Line'], ['practice', 'Specialty Practice'], ['community_health', 'Community Health'], ['hospital_network', 'Hospital Network']], 'Type')}
       ${sel('status', [['active', 'Active'], ['paused', 'Paused'], ['all', 'All']], 'Status')}
       ${sel('cadence', [['', 'Any cadence'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['manual', 'Manual']], 'Cadence')}
       ${sel('by', byOpts, 'Tracked by')}
@@ -10781,7 +10804,9 @@ function renderTrackEntityList() {
     ? `<div class="empty" style="padding:36px 0"><div>No tracked entities match these filters. <a href="#" onclick="trackClearFilters();return false" style="color:var(--teal);font-weight:600">Clear all</a></div></div>` : '';
   const matchLine = _trackFiltersActive()
     ? `<div style="font-size:12px;color:var(--muted);margin:0 0 8px">${ordered.length} of ${_trackEntities.length} tracked entit${_trackEntities.length === 1 ? 'y' : 'ies'} match.</div>` : '';
-  body.innerHTML = `<div style="margin-bottom:12px">${_trackFilterBar()}</div>${matchLine}${noMatch}` + (ordered.length ? `<div class="card" style="padding:0;overflow:hidden">
+  const _fh = document.getElementById('track-filter-host'); if (_fh) _fh.innerHTML = _trackFilterBar();
+  setTimeout(() => _pinTools('track-tools', '#track-entities-body .tbl-card .tbl'), 0);
+  body.innerHTML = `${matchLine}${noMatch}` + (ordered.length ? `<div class="card tbl-card" style="padding:0">
     <table class="tbl">
       <thead><tr>
         <th>Entity</th><th>Latest score</th><th>Owner <a href="#" class="help-link" style="font-weight:400;text-transform:none;letter-spacing:0" onclick="showHelp('trend-owner',event);return false">ⓘ</a></th><th>Schedule</th>
