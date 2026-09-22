@@ -1250,6 +1250,8 @@ def analyze_practice(
         console.print(f"[yellow]⚠[/yellow] {_failure_msg}")
         skip_pdf = True
 
+    from .plain import condense as _condense
+    _condense(result, console=console)
     if skip_pdf:
         console.print("[dim]skip_pdf=True — PDF rendering skipped[/dim]")
         result.md_path = str(report_path)
@@ -1259,8 +1261,6 @@ def analyze_practice(
             from .pdf import render_pdf
             pdf_path = output_dir / f"{_stem}.pdf"
             if not result.sources_consulted: result.sources_consulted = _pop_sources(); result.web_search_used = _last_ws() if result.web_search_used is None else result.web_search_used
-            from .plain import condense as _condense
-            _condense(result, console=console)
             render_pdf(result, pdf_path, brand=brand)
         console.print(f"[green]✓[/green] Practice PDF → [dim]{pdf_path}[/dim]")
         result.pdf_path = str(pdf_path)

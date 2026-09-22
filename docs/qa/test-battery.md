@@ -3004,3 +3004,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T6 Fail-soft.** With the Anthropic key blocked, the report still renders: overview trimmed to ≤ 3 sentences / 80 words, verdict to 3 sentences, assessment to one bullet. [ops]
 - **R1** Competitors Rankings, Compare Two, Hospital Network and Event Prep reports are unchanged (the pass only runs for individual reports). Tracked-entity snapshots (no PDF) are unchanged. [pdf]
 - **R2** History rows, scores, pillars, Score Evidence, spot-check and sources sections unchanged. [ui][pdf]
+
+## FIX-PLAIN-CACHED — plain-language pass now applies to cached / same-day results too
+
+**Context:** the first production run after 08ed7c0 (a practice) still had a 319-word overview: the analyzer served a stored result (same-day lock / 30-day cache) and the pass only ran on the fresh-analysis path. Now the pass runs on every analyzer path (including data-only and truncated runs) and the server re-checks every individual result after the analyzer returns; when a cached result is condensed for the first time its main PDF is re-rendered in place and the stored text updated. Not deployed.
+
+- **T1** Re-run a Deep Diagnostic on an organization analyzed earlier today or within 30 days (cache hit — the progress stream says "Returning cached result"). **Expect:** the downloaded PDF has the condensed overview (≤ ~80 words), ≤ 3-sentence verdict and "What to Do First" bullets; the History row's PDF is the same file, now rewritten. [pdf]
+- **T2** Fresh run (Refresh from scratch): same result as T1. [pdf]
+- **T3** Practice and Community Health cached runs: same; the practice combined report keeps the findings-citing bullets. [pdf]
+- **T4** Running the same cached organization twice more does not re-render again (the stored result is flagged; no extra model call in Operations spend). [ops]
+- **R1** Tracked-entity snapshots (data-only) are unaffected in score; their stored overview/verdict are now condensed too (no PDF). Market / network / compare reports untouched. [ui]

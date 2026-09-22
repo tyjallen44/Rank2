@@ -1346,6 +1346,9 @@ def analyze_location(
         console.print(f"[yellow]⚠[/yellow] {_failure_msg}")
         skip_pdf = True
 
+    if individual_report:
+        from .plain import condense as _condense
+        _condense(result, console=console)
     if skip_pdf:
         console.print("[dim]skip_pdf=True — PDF rendering skipped[/dim]")
         result.md_path = str(report_path)
@@ -1355,9 +1358,6 @@ def analyze_location(
             from .pdf import render_pdf
             pdf_path = output_dir / f"{_stem}.pdf"
             if not result.sources_consulted: result.sources_consulted = pop_last_sources(); result.web_search_used = last_web_search_used() if result.web_search_used is None else result.web_search_used
-            if individual_report:
-                from .plain import condense as _condense
-                _condense(result, console=console)
             render_pdf(result, pdf_path, brand=brand)
         console.print(f"[green]✓[/green] PDF saved    → [dim]{pdf_path}[/dim]")
         result.pdf_path = str(pdf_path)

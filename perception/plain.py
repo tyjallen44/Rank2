@@ -98,7 +98,8 @@ def _fallback(result) -> None:
 
 
 def condense(result, *, only_assessment: bool = False, console=None) -> bool:
-    """Rewrite the executive sections in place. Returns True when the model pass ran.
+    """Rewrite the executive sections in place. Returns True when anything was changed
+    (model pass or deterministic fallback), False when there was nothing to do.
 
     only_assessment=True re-runs just the bullets (used after the practice assessment is
     re-synthesized with content findings, which replaces top_recommendation with a paragraph)."""
@@ -154,6 +155,8 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
         if not only_assessment:
             _fallback(result)
             result.plain_language = True
-        elif result.top_recommendation:
+            return True
+        if result.top_recommendation:
             result.top_recommendation = bullets_to_text([_sentences(result.top_recommendation, 3)])
+            return True
         return False

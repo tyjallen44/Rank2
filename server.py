@@ -706,6 +706,7 @@ def _job_run_single(
             parent_system=job.get("parent_system"),
         )
         if job.get("individual_report"):
+            _plain_ensure(result, job)          # cached results too; before the teaser is built
             _ensure_individual_teaser(result, job)
         else:
             _backfill_teaser_pdf(result, job)
@@ -1105,6 +1106,7 @@ def _job_run_practice(
             extra_evidence=_facts_evidence(job.get("practice_facts")),
         )
         result.owner_facts = job.get("practice_facts") or None
+        _plain_ensure(result, job)              # cached results too; the combined render below reuses the text
         _profile_audit(result, job, emit)
 
         set_run_role(result.run_id, job["role"], job.get("email"))
@@ -1189,6 +1191,7 @@ def _job_run_fqhc(
             briefing_variant=job.get("briefing_variant"),
             report_title=job.get("report_title"),
         )
+        _plain_ensure(result, job)              # cached results too; before the teaser is built
         _ensure_individual_teaser(result, job)
         set_run_role(result.run_id, job["role"], job.get("email"))
         job["status"] = "done"
@@ -1347,6 +1350,30 @@ def _new_job(role: str, brand: str = "original", email: Optional[str] = None) ->
     _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role,
                      "brand": brand, "email": email, "started_at": time.time()}
     return job_id
+
+
+def _plain_ensure(result, job: dict) -> None:
+    """Make sure the executive sections are condensed on EVERY path — including results served
+    from the same-day lock or the 30-day cache, whose stored text and PDF pre-date the pass.
+    When anything changed and a main PDF exists, re-render it in place and re-save. Fail-soft."""
+    try:
+        from perception.plain import condense
+        if not getattr(result, "individual_report", False) or not condense(result):
+            return
+        if result.pdf_path and not job.get("skip_pdf"):
+            try:
+                if (result.entity_type or "") == "community_health":
+                    from perception.fqhc_pdf import render_fqhc_pdf
+                    render_fqhc_pdf(result, str(result.pdf_path), brand=job.get("brand", "original"))
+                else:
+                    from perception.pdf import render_pdf
+                    render_pdf(result, Path(result.pdf_path), brand=job.get("brand", "original"))
+            except Exception as exc:
+                print(f"[plain] re-render failed run={result.run_id}: {type(exc).__name__}: {exc}")
+        from perception.analyzer import _save_to_db as _resave_plain
+        _resave_plain(result)
+    except Exception as exc:
+        print(f"[plain] ensure failed run={getattr(result, 'run_id', '?')}: {type(exc).__name__}: {exc}")
 
 
 def _run_confidence(result) -> Optional[dict]:
