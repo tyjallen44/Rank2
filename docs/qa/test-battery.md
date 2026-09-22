@@ -2939,3 +2939,9 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2** A scheduled snapshot (or Admin → run due entities) shows the email of whoever set up the tracking. [ui]
 - **T3** Admin → Operations → Maintenance → "backfill-tracked-ran-by": dry run lists every unattributed History row whose name matches a tracked entity and that was generated on/after tracking began, with the owner it would get; Apply sets them. Re-running afterwards lists nothing. Post-deploy step: run it once with apply. [ops]
 - **R1** Runs made from the Deep Diagnostic / Network / Compare pages are unaffected; the Run by filter dropdown lists the newly attributed users after a reload. [ui]
+
+## HOME-HERO-TWEAKS — title on one line, video lower, Start a report CTA
+
+- **T1** Home hero: "AI REPUTATION ANALYSIS PLATFORM" renders on a single line at desktop widths (font scales down rather than wrapping); on narrow screens (< 860 px) it may wrap. [ui]
+- **T2** The welcome video sits about half an inch lower than before (48 px top margin) at desktop widths; no extra offset on narrow screens. [ui]
+- **T3** Hero buttons are "Start a report →" (white) and "How it works". "Start a report" opens the same chooser as the sidebar's Start a report; "How it works" opens Learn. The Hospital Network and Deep Diagnostic hero buttons are gone (still reachable from the sidebar and the Start a report cards below). [ui]

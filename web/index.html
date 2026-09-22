@@ -847,18 +847,18 @@ input[type="url"]::placeholder, textarea::placeholder {
 /* ── Home page ───────────────────────────────────────────────── */
 .home-hero{background:linear-gradient(135deg,#0b3c43 0%,var(--teal) 62%,#1aa3ab 100%);color:#fff;border-radius:16px;padding:44px 48px 40px;position:relative;overflow:hidden;margin-bottom:22px;display:flex;gap:32px;align-items:center}
 .home-hero-text{flex:1;min-width:0;position:relative}
-.home-hero-video{flex:0 0 280px;width:280px;position:relative;z-index:1}
+.home-hero-video{flex:0 0 280px;width:280px;position:relative;z-index:1;margin-top:48px}
 .home-hero-video .video-embed{margin:0;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.25)}
 .home-hero-video:empty{display:none}
 .home-hero-video .hv-lbl{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.75;margin-bottom:8px}
-@media (max-width:860px){.home-hero{flex-direction:column;align-items:stretch}.home-hero-video{flex:0 0 auto;width:100%;max-width:360px}}
+@media (max-width:860px){.home-hero{flex-direction:column;align-items:stretch}.home-hero-video{flex:0 0 auto;width:100%;max-width:360px;margin-top:0}.home-h1{white-space:normal}}
 .home-hero::after{content:'';position:absolute;right:-90px;top:-90px;width:340px;height:340px;border-radius:50%;background:rgba(255,255,255,.07);pointer-events:none}
 .home-hero::before{content:'';position:absolute;right:120px;bottom:-140px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.05);pointer-events:none}
 .home-rl-logo{height:30px;width:auto;display:block;margin-bottom:24px;filter:brightness(0) invert(1);opacity:.95}
 [data-brand="extension1"] .home-rl-logo,[data-brand="extension2"] .home-rl-logo{display:none}
 .home-kicker{font-family:'Barlow Condensed',Impact,sans-serif;font-size:15px;font-weight:700;letter-spacing:.24em;text-transform:uppercase;opacity:.85;margin-bottom:6px}
 .home-kicker span{opacity:.75}
-.home-h1{font-family:'Barlow Condensed',Impact,sans-serif;font-size:44px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;line-height:1.02;margin:0 0 14px;position:relative}
+.home-h1{font-family:'Barlow Condensed',Impact,sans-serif;font-size:clamp(24px,3.7vw,38px);font-weight:700;text-transform:uppercase;letter-spacing:.03em;line-height:1.02;margin:0 0 14px;position:relative;white-space:nowrap}
 .home-lede{font-size:16px;line-height:1.55;max-width:660px;opacity:.95;margin:0 0 26px;position:relative}
 .home-cta{display:flex;gap:12px;flex-wrap:wrap;position:relative}
 .home-cta .btn-light{background:#fff;color:var(--teal);border:1px solid #fff;font-weight:700}
@@ -2936,8 +2936,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <h1 class="home-h1">AI Reputation Analysis Platform</h1>
           <p class="home-lede">See how AI assistants describe, rank and recommend your hospitals and practices — scored on four pillars, benchmarked nationally, with the exact fixes that move the score.</p>
           <div class="home-cta">
-            <button class="btn btn-light" onclick="navigate('network')">Run a Hospital Network report →</button>
-            <button class="btn btn-outline" onclick="navigate('individual')">Deep Diagnostic</button>
+            <button class="btn btn-light" onclick="openChooser(null, event)">Start a report →</button>
             <button class="btn btn-outline" onclick="navigate('learn')">How it works</button>
           </div>
         </div>
