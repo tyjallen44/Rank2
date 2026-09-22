@@ -89,12 +89,35 @@ def is_bullets(text: str | None) -> bool:
     return bool(text) and text.lstrip().startswith("•")
 
 
+def _log(msg: str, console=None) -> None:
+    line = f"[plain] {msg}"
+    if console:
+        console.print(line)
+    else:
+        print(line, flush=True)
+
+
+def _sentence_bullets(text: str, n: int = 4) -> str:
+    """Fallback bullets: the first n sentences, one per bullet (readable even if not rewritten)."""
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", (text or "").strip()) if p.strip()]
+    return bullets_to_text(parts[:n])
+
+
+def looks_fallback(result) -> bool:
+    """True when the executive sections still look like trimmed originals (a bullet over 45 words,
+    only one bullet, or a verdict over 90 words) — i.e. the model pass never succeeded on them."""
+    tr = getattr(result, "top_recommendation", "") or ""
+    items = [ln for ln in tr.splitlines() if ln.strip()]
+    if not is_bullets(tr) or len(items) < 2 or any(len(i.split()) > 45 for i in items):
+        return True
+    return len((getattr(result, "ai_visibility_verdict", "") or "").split()) > 90
+
+
 def _fallback(result) -> None:
     result.market_overview = _words(_sentences(result.market_overview, 3), OVERVIEW_WORDS)
     result.ai_visibility_verdict = _sentences(result.ai_visibility_verdict, VERDICT_SENTENCES)
-    # Assessment: keep the first three sentences as a single bullet so the layout is consistent.
     if result.top_recommendation and not is_bullets(result.top_recommendation):
-        result.top_recommendation = bullets_to_text([_sentences(result.top_recommendation, 3)])
+        result.top_recommendation = _sentence_bullets(result.top_recommendation)
 
 
 def condense(result, *, only_assessment: bool = False, console=None) -> bool:
@@ -105,7 +128,7 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
     re-synthesized with content findings, which replaces top_recommendation with a paragraph)."""
     if not getattr(result, "individual_report", False):
         return False
-    if getattr(result, "plain_language", False) and not only_assessment:
+    if getattr(result, "plain_language", False) and not only_assessment and not looks_fallback(result):
         return False
     if only_assessment and is_bullets(result.top_recommendation):
         return False
@@ -125,18 +148,31 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
         "assessment": result.top_recommendation or "",
         "roadmap_items": roadmap[:12],
     }
+    if only_assessment:
+        material.pop("overview", None); material.pop("verdict", None)
+    ask = ("Rewrite ONLY first_moves from the assessment and roadmap. Return JSON {\"first_moves\": [...]} and nothing else."
+           if only_assessment else "Rewrite all three.")
+    last_err = None
+    for attempt in (1, 2):
+        try:
+            resp = _client().messages.create(
+                model=_MODEL, max_tokens=1500, temperature=0, system=_SYSTEM,
+                messages=[{"role": "user", "content": "Material:\n" + json.dumps(material, ensure_ascii=False, indent=1) + "\n\n" + ask}],
+            )
+            txt = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+            m = re.search(r"\{.*\}", txt, re.S)
+            data = json.loads(m.group(0) if m else txt)
+            moves = [str(x).strip() for x in (data.get("first_moves") or []) if str(x).strip()]
+            if len(moves) < 2:
+                raise ValueError(f"only {len(moves)} bullets returned")
+            last_err = None
+            break
+        except Exception as exc:
+            last_err = exc
+            _log(f"attempt {attempt} failed run={getattr(result, 'run_id', '?')}: {type(exc).__name__}: {str(exc)[:160]}", console)
     try:
-        resp = _client().messages.create(
-            model=_MODEL, max_tokens=900, temperature=0, system=_SYSTEM,
-            messages=[{"role": "user", "content": "Material:\n" + json.dumps(material, ensure_ascii=False, indent=1)
-                       + ("\n\nRewrite only first_moves (still return all three keys; copy overview and verdict through unchanged)." if only_assessment else "\n\nRewrite all three.")}],
-        )
-        txt = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
-        m = re.search(r"\{.*\}", txt, re.S)
-        data = json.loads(m.group(0) if m else txt)
-        moves = [str(x).strip() for x in (data.get("first_moves") or []) if str(x).strip()]
-        if not (BULLETS_MIN <= len(moves) <= BULLETS_MAX + 1):
-            raise ValueError("bullet count out of range")
+        if last_err is not None:
+            raise last_err
         if not only_assessment:
             ov = str(data.get("overview") or "").strip()
             vd = str(data.get("verdict") or "").strip()
@@ -146,17 +182,14 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
             result.ai_visibility_verdict = _sentences(vd, VERDICT_SENTENCES)
         result.top_recommendation = bullets_to_text(moves[:BULLETS_MAX])
         result.plain_language = True
-        if console:
-            console.print("[green]✓[/green] Executive sections condensed to plain language")
+        _log(f"condensed run={getattr(result, 'run_id', '?')} ({'assessment only' if only_assessment else 'all sections'})", console)
         return True
     except Exception as exc:
-        if console:
-            console.print(f"[yellow]⚠[/yellow] Plain-language pass failed ({type(exc).__name__}: {exc}); trimming instead.")
+        _log(f"model pass failed run={getattr(result, 'run_id', '?')} ({type(exc).__name__}: {str(exc)[:160]}); trimming instead.", console)
         if not only_assessment:
-            _fallback(result)
-            result.plain_language = True
+            _fallback(result)           # readable now; plain_language stays False so the next request retries
             return True
         if result.top_recommendation:
-            result.top_recommendation = bullets_to_text([_sentences(result.top_recommendation, 3)])
+            result.top_recommendation = _sentence_bullets(result.top_recommendation)
             return True
         return False

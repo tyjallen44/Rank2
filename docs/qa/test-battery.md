@@ -3014,3 +3014,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T3** Practice and Community Health cached runs: same; the practice combined report keeps the findings-citing bullets. [pdf]
 - **T4** Running the same cached organization twice more does not re-render again (the stored result is flagged; no extra model call in Operations spend). [ops]
 - **R1** Tracked-entity snapshots (data-only) are unaffected in score; their stored overview/verdict are now condensed too (no PDF). Market / network / compare reports untouched. [ui]
+
+## FIX-PLAIN-FALLBACK — "What to Do First" is always short bullets; failures logged and retried
+
+**Context:** a production practice report showed a 150-word single "bullet" under What to Do First and a jargon verdict: the model rewrite failed silently (no console on the server path) and the deterministic fallback wrote trimmed originals. Not deployed.
+
+- **T1** Practice Deep Diagnostic (fresh or cached): What to Do First is 3–5 bullets, each one action + one reason (~25 words), naming the verified findings in plain words. No 100-word bullets, no "entity resolution / linkage / schema.org / Procedural profile" wording in the bullets, overview or verdict. [pdf]
+- **T2** Cloud Run logs for the run contain `[plain] condensed run=<id> (all sections)` and, for practices, `(assessment only)` or the writer's own bullets; on a failure they contain `[plain] attempt 1 failed …` with the reason and a second attempt. [ops]
+- **T3** A result that previously fell back (e.g. Orthocarolina Sports Medicine Center, Charlotte NC — cached) is retried on the next request: the PDF is re-rendered with real bullets and a plain verdict. Once the model pass succeeds, further requests make no extra model call. [pdf][ops]
+- **T4** If the model is unavailable, the fallback is still readable: overview ≤ 3 sentences, verdict ≤ 3 sentences, up to 4 sentence-bullets (not one blob). [pdf]
+- **R1** Hospital and Community Health reports: same bullets behaviour; scores, pillars, spot-check, profile audit unchanged. [pdf]

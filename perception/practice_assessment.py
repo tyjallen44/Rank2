@@ -13,13 +13,18 @@ import anthropic
 client = anthropic.Anthropic()
 _MODEL = "claude-opus-4-8"
 
+from .plain import PLAIN_TERMS, BULLETS_MAX, bullets_to_text, is_bullets
+
 _SYSTEM = (
-    "You are a healthcare AI-visibility analyst writing the 'Diagnostic Assessment' paragraph "
-    "for a practice report. Interpret how AI assistants currently see this practice and name the "
-    "single biggest lever, then explicitly reference the specific VERIFIED content findings you are "
-    "given (by their plain description) so the reader sees the assessment and the fixes that follow "
-    "are one coherent story. 3–5 sentences, plain and factual. Use ONLY the material provided — never "
-    "invent facts, numbers, or findings. Do not use markdown or headers; return the paragraph text only."
+    "You write the 'What to do first' list for a practice's AI reputation report, read by the "
+    "practice's leadership (not marketing or web specialists). From the four-pillar read and the "
+    "VERIFIED content findings you are given, write 3 to 5 bullets, ordered by impact. Each bullet is "
+    "ONE action and ONE reason, at most 25 words, and where it rests on a finding it names that finding "
+    "in plain words so the list and the fixes that follow read as one story.\n"
+    "Plain English, short sentences, no parentheses, no jargon. Never use these terms (say the plain "
+    "version instead): " + "; ".join(f"'{a}' → '{b}'" for a, b in PLAIN_TERMS) + ".\n"
+    "Use ONLY the material provided — never invent facts, numbers or findings. Return the bullets only, "
+    "one per line, each starting with '• '. No headers, no preamble."
 )
 
 
@@ -40,13 +45,17 @@ def synthesize_assessment(entity_name: str, location: str, base_assessment: str,
             f"Practice: {entity_name} ({location}).\n\n"
             f"Four-pillar AI-visibility read (context, do not just repeat verbatim):\n{verdict or base_assessment}\n\n"
             f"Verified content findings (cite these specifically):\n" + "\n".join(lines) +
-            "\n\nWrite the Diagnostic Assessment paragraph."
+            "\n\nWrite the 'What to do first' bullets."
         )
         resp = client.messages.create(
-            model=_MODEL, max_tokens=500, system=_SYSTEM,
+            model=_MODEL, max_tokens=600, system=_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         out = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
-        return out or (base_assessment or "")
+        if not out:
+            return base_assessment or ""
+        items = [ln for ln in out.splitlines() if ln.strip()]
+        text = bullets_to_text(items[:BULLETS_MAX])
+        return text if is_bullets(text) else (base_assessment or "")
     except Exception:
         return base_assessment or ""
