@@ -58,7 +58,15 @@ STARTER_ARTICLES: list[dict] = [
             '- Your Pulse Score and national quartile, with a full breakdown across the four pillars\n'
             '- What AI assistants currently say about you — in their own words\n'
             '- A **content analysis and drafted prescription** — the exact website, listing, Wikidata, and structured-data fixes, written out\n'
-            "- For practices and service lines, a **per-location reputation table**: every location's Google and third-party ratings and review volume\n"
+            "- For practices and service lines, a **per-location reputation table**: every location's Google and third-party ratings and review volume — plus a **Google Business Profiles checked** table read directly from Google for every confirmed location (website link, phone, hours, photos, status, reviews), which is what the reputation finding is built on\n"
+            '- **What AI assistants actually said** — an observed check: eight fixed patient-style questions put to real assistants (Claude always; ChatGPT and Gemini when configured), with how often the organization was named, who was named instead, and which pages were cited. It never changes the score.\n'
+            '- **Score Evidence** (High / Medium / Low) under the score, with the reason — review volume, whether CMS and Leapfrog were verified from the source, and whether live web search was available\n'
+            '\n'
+            '**Getting the roster right (practices and service lines)**\n'
+            '\n'
+            '- Discovery finds locations within about 50 miles of the flagship. For practices spread across metros, use **Add locations from your own list** — paste names or upload the practice\'s Google profile CSV; each row is matched to its Google listing and joins the roster.\n'
+            '- **Known facts** (Advanced options) lets you pass what the practice has told you — profiles claimed and managed, when review invitations started, how many locations it operates. They enter the analysis as owner-attested evidence, and the recommendations shift from "claim your profiles" to "make ownership visible".\n'
+            '- For hospitals, the CMS star rating and Leapfrog grade are fetched directly from those sources during the analysis run.\n'
             '\n'
             'Every analysis run also produces a **Teaser** version (details blurred) for sending to a prospect.\n'
             '\n'
@@ -79,6 +87,10 @@ STARTER_ARTICLES: list[dict] = [
             "- Optionally, a **service-line scorecard** grading each department's listings\n"
             '\n'
             'Every analysis run produces three files: the **standard report**, a **Teaser** for prospects, and a **Full Detail** report with the complete content analysis and a publication-ready remediation draft for every finding.\n'
+            '\n'
+            '**The roster is yours to fix.** Pulse discovers the system\'s facilities and shows them for confirmation. If it misses one, **Add a hospital the AI missed**: the facility is verified against its Google listing and its CMS Care Compare record before it joins the roster, and Pulse remembers it for future discoveries of that network.\n'
+            '\n'
+            'From the completion screen, **Track in Trends** follows the system score month by month over the same fixed roster (see *Trends*).\n'
             '\n'
             '**Best for:** health systems that need to see their AI reputation across every facility at once and spot which locations need attention.'
         ),
@@ -163,6 +175,36 @@ STARTER_ARTICLES: list[dict] = [
     },
     # ── Who It's For ──────────────────────────────────────────────────────────
     {
+        "category": "The Reports",
+        "title": "Trends",
+        "body": (
+            'Trends follows an organization\'s Pulse Score over time: a snapshot every month (or week, or on demand), the four pillars charted, and a **Trend Report** PDF that reads like a briefing.\n'
+            '\n'
+            '**What can be tracked**\n'
+            '\n'
+            '- **Hospital**, **Hospital Service Line**, **Specialty Practice**, **Community Health** (on the Community Health Edition rubric) and **Hospital Network** (the system score over a fixed facility roster).\n'
+            '- Start from the completion screen of a finished report (**Track in Trends**), from a History row, from **Find an organization** on Home, or from the Trends page itself.\n'
+            '\n'
+            '**How it stays comparable**\n'
+            '\n'
+            '- Practice types, community health centers and networks measure the **same confirmed roster** every snapshot. Fix the roster once; for a network, **Add a hospital the AI missed** appends a verified facility and records a dated *Roster changed* note.\n'
+            '- The entity\'s identity — name, market, specialty, scope, type — is locked. Everything else is editable in Details: the **Display name** (list and report title), cadence, next analysis date, notes, email delivery and change alerts. To change identity, *track a new entity* prefilled from this one.\n'
+            '- **Notes** date what changed (a new website, a review campaign) and appear as markers on the chart and in the Trend Report.\n'
+            '\n'
+            '**Needs attention**\n'
+            '\n'
+            'A badge appears when the score fell, an analysis run is overdue, a snapshot was scored on a different rubric than the entity\'s type, the history mixes rubrics (rows marked H / P / C), or the roster is not yet confirmed. Click it for the explanation and the action; **Reviewed** hides the flag for that data.\n'
+            '\n'
+            '**Also in Details**\n'
+            '\n'
+            '- **Create full report** launches the Deep Diagnostic or Hospital Network report immediately with the tracked settings; the result also joins the trend.\n'
+            '- **Compare** two tracked entities from the list, or open the latest snapshot\'s full report.\n'
+            '- The **Owner** column shows who set up tracking; adding an organization that is already tracked warns first, so a system does not get two trend lines by accident.\n'
+            '\n'
+            '**Best for:** showing a customer that the fixes moved the score, and catching a slide before the next business review.'
+        ),
+    },
+    {
         "category": "Who It's For",
         "title": "Who benefits from Pulse",
         "body": (
@@ -181,15 +223,15 @@ STARTER_ARTICLES: list[dict] = [
         "title": "How to run a report",
         "body": (
             '- Sign in — you land on the **Home** page: a short welcome video, **Find an organization**, and **Which report do I need?**\n'
-            '- **Not sure which report?** Answer two questions on Home (or click **Start a report** in the sidebar, or the link beside any report title) and Pulse opens the right report with the type preselected.\n'
+            '- **Not sure which report?** Click **Start a report** (in the hero, in the sidebar, or the link beside any report title) or answer the two questions on Home, and Pulse opens the right report with the type preselected.\n'
             '- **Find an organization** — start typing a hospital, practice or health system your team has analyzed before; pick it to open it in Deep Diagnostic, Compare Two or Trends. The same suggestions appear in every report form.\n'
             '- Otherwise pick a report from the Home cards or **Report Creation** in the sidebar, enter the organization or market, confirm the listing and locations Pulse finds, and run. Rarely-changed settings sit under **Advanced options** on each page.\n'
             '- If the same organization ran in the last 14 days, Pulse offers the existing report before starting a new analysis run.\n'
             '- Long analysis runs keep going if you close the tab: the result lands in **History** and, unless you turn it off on Home, in your inbox with the PDF attached. **Runs in progress** on Home shows what is still running.\n'
             '- When an analysis run finishes, the completion screen offers the next step: download, **Track in Trends**, **Compare against…**, **Email report…**, or start another report.\n'
-            '- Every Deep Diagnostic states its **Score Evidence** (High / Medium / Low) — how much public data sits behind the score.\n'
+            '- Every Deep Diagnostic states its **Score Evidence** (High / Medium / Low) — how much public data sits behind the score — and lists the pages its live web search consulted.\n'
             '\n'
-            'Past reports are always available under **History**.'
+            'Past reports are always available under **History**, where every signed-in user sees every report — yours, your colleagues\' and the admins\' — with **Run by** showing who started each analysis run.'
         ),
     },
     {
@@ -253,9 +295,10 @@ METHODOLOGY_ARTICLES: list[dict] = [
         "body": (
             'Scores, rankings, and content findings are derived from publicly available signals collected at the time of the report. No quotes, patient statements, or clinical outcomes are fabricated. Primary sources include:\n'
             '\n'
-            '- **CMS Care Compare** — Overall Hospital Quality Star Rating.\n'
-            '- **The Leapfrog Group** — Hospital Safety Grade (A–F).\n'
-            '- **Google Business Profiles** — verified ratings and review volume, with each location pinned to its own listing.\n'
+            '- **CMS Care Compare** — Overall Hospital Quality Star Rating, fetched directly from CMS during the analysis run (Care Compare pages need JavaScript, so web search cannot read them). "Not rated" is reported only when CMS lists the facility without a star.\n'
+            '- **The Leapfrog Group** — Hospital Safety Grade (A–F), fetched directly; "not found" means the grade could not be retrieved, not that the hospital is ungraded.\n'
+            '- **Google Business Profiles** — verified ratings and review volume, with each location pinned to its own listing; for practices, each profile\'s website link, phone, hours, photos and status are read directly and reported in the *Google Business Profiles checked* table.\n'
+            '- **Live web search** — the narrative is written while reading current pages, and the report lists the pages consulted. When search is unavailable the report says so and its Score Evidence drops.\n'
             '- **Healthgrades, Vitals, WebMD, Yelp, and RateMDs** — third-party ratings for the per-location reputation table.\n'
             '- **U.S. News & World Report** — national and specialty rankings.\n'
             '- **NPPES** — provider/organization identity and physician rosters.\n'
@@ -273,7 +316,10 @@ METHODOLOGY_ARTICLES: list[dict] = [
             '\n'
             "1. **Evidence first.** Pulse gathers the public signals an AI assistant would find — Google listings for every confirmed location, CMS and Leapfrog quality data, U.S. News rankings, NPPES identity records, and the organization's own website, Wikidata, and Wikipedia presence.\n"
             '2. **Rubric-scored analysis.** An AI analyst model assesses each pillar against that evidence using a fixed rubric — the same questions patients and referrers actually ask (*"best orthopedic surgeon near me," "which hospital for heart surgery in [city]"*) across brand, local, specialty, and referral framings — and reports what AI assistants currently say in their own words.\n'
-            "3. **Deterministic scoring.** The four pillar scores are combined by the organization's weighting profile into the Pulse Score. Google-verified signals override the model where they disagree, so a rating or review count in a report is always the real one.\n"
+            "3. **Deterministic scoring.** The four pillar scores are combined by the organization's weighting profile into the Pulse Score. Google-verified signals — and the CMS star rating and Leapfrog grade fetched in code — override the model where they disagree, so a rating, review count or star in a report is always the real one.\n"
+            '4. **Observed check.** Eight fixed patient-style questions are put to real AI assistants and the answers recorded: whether the organization was named, who was named instead, which pages were cited. This is reported alongside the score and never changes it.\n'
+            '\n'
+            'Two rules keep scores comparable. The **rubric follows the requested type**: a Hospital-type report stays on the hospital rubric even when the analysis reads the organization as a clinic network (the report says so in Score Evidence — re-run it as a practice or community health center if that is what it is). And **Score Evidence** (High / Medium / Low) states how much data sits behind the number without ever altering it.\n'
             '\n'
             'The Community Health Edition adds a true query battery: the **Mission Query Capture Rate (MQCR)** measures how often a health center is actually surfaced for the mission-related questions its patients ask.'
         ),
