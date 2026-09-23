@@ -3033,3 +3033,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2** Admin → Operations → Spend per analysis run: the run shows Gemini calls/tokens (and OpenAI once funded); per-report cost rises by well under a dollar. [ops]
 - **T3** Hospital Network run: the roster confidence note no longer says "Claude only — set GEMINI_API_KEY"; discovery is cross-checked with Gemini. [ui]
 - **R1** With OpenAI unfunded, the spot-check still completes with Claude + Gemini and no error surfaces to the user. [ui]
+
+## SIMPLIFY-HOME-RANKINGS — Home card grid removed; Competitors Rankings opens on the form with a three-pill type row
+
+**Not deployed.** After rollout, run the apply-learn-content maintenance task (Competitors Rankings article updated).
+
+- **T1 Home.** The "Start a report" card grid at the bottom is gone; the page ends after Recently finished. Every report is still reachable from the sidebar, the hero's Start a report button and the chooser. [ui]
+- **T2 Rankings landing.** Competitors Rankings opens directly on the location form. Above it, one **Analysis Type** pill row: Hospital Market · Specialty Practice · Student Health Clinics (same style as Compare Two). No large cards. [ui]
+- **T3 Student Health.** Click the Student Health Clinics pill: the campus-clinic form (State / Radius / Conference, roster, Run) replaces the location form; the pill row stays; clicking Hospital Market or Specialty Practice returns to the location form. [ui]
+- **T4 Spreadsheet path.** Under the Run button: "Ranking several markets at once? Upload a spreadsheet →" reveals the upload form (the pill row hides, since the file carries its own rows); "← Back to entering a location" restores the form and pill row. [ui]
+- **T5 Handoffs.** The chooser (Which report do I need?) and Home suggestions that land on Rankings with a type preselect the right pill; "Analysis Type ⓘ" mentions Student Health Clinics and the spreadsheet link. [ui]
+- **R1** Hospital Market and Specialty Practice runs, ZIP/radius under Advanced options, report formats and the Run button behave exactly as before. Student Health runs and spreadsheet runs complete as before. [ui]
