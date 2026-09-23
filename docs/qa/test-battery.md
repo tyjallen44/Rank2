@@ -3091,3 +3091,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2** Hospital Network discovery: the roster confidence note reads "Dual-source roster: N confirmed by both Claude and Gemini…" with N > 0 for a real system. [ui]
 - **T3** If an assistant fails (e.g. key removed or quota exceeded), its row reads "no answers · 8 errors" in red rather than "0 of 0", and Cloud Run logs contain `[spotcheck] Gemini '<question>' failed: …`. [pdf][ops]
 - **R1** Claude and ChatGPT rows unchanged. [pdf]
+
+## FIX-NETWORK-GEMINI-SCHEMA — Hospital Network Gemini cross-check had never worked
+
+**Context:** with a Gemini key present, every cross-check call returned HTTP 400 (the Anthropic tool schema's `additionalProperties` and list-valued `type` are rejected by Gemini's function-declaration subset) and the error was swallowed, so rosters were always "Claude only". The schema is now reduced to Gemini's subset and failures are logged.
+
+- **T1** Hospital Network → discover a system (e.g. Baystate Health, Springfield MA). **Expect:** confidence note "Dual-source roster: N hospitals confirmed by both Claude and Gemini…" with N > 0. [ui]
+- **T2** Cloud Run logs show no `[network] Gemini cross-check failed` lines for that discovery. [ops]
+- **R1** Rosters, facility counts and the rest of the Network flow unchanged when Gemini agrees; extra Gemini-only facilities appear flagged for confirmation as before. [ui]

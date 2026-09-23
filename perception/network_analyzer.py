@@ -630,8 +630,10 @@ def _discover_via_gemini(system_prompt: str, user_prompt: str) -> dict:
     if not key:
         return {}
 
-    # Convert Anthropic tool schema → Gemini function declaration format
-    tool_schema = _DISCOVERY_TOOL["input_schema"]
+    # Convert Anthropic tool schema → Gemini function declaration format. Gemini's schema
+    # subset rejects additionalProperties and list-valued "type" (["string","null"]); those
+    # made every call a silent 400 until 2026-09-23.
+    tool_schema = _gemini_schema(_DISCOVERY_TOOL["input_schema"])
     payload = {
         "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
@@ -662,9 +664,35 @@ def _discover_via_gemini(system_prompt: str, user_prompt: str) -> dict:
             if fn.get("name") == _DISCOVERY_TOOL["name"]:
                 args = fn.get("args", {})
                 return args
-    except Exception:
-        pass
+    except Exception as exc:
+        try:
+            detail = resp.text[:200] if "resp" in dir() else ""
+        except Exception:
+            detail = ""
+        print(f"[network] Gemini cross-check failed: {type(exc).__name__}: {str(exc)[:120]} {detail}", flush=True)
     return {}
+
+
+def _gemini_schema(node):
+    """Reduce a JSON schema to the subset Gemini function declarations accept: no
+    additionalProperties / $schema / examples; list-valued types become a single type
+    with nullable=true."""
+    if isinstance(node, list):
+        return [_gemini_schema(x) for x in node]
+    if not isinstance(node, dict):
+        return node
+    out = {}
+    for k, v in node.items():
+        if k in ("additionalProperties", "$schema", "examples", "default", "title"):
+            continue
+        if k == "type" and isinstance(v, list):
+            types = [t for t in v if t != "null"]
+            out["type"] = types[0] if types else "string"
+            if "null" in v:
+                out["nullable"] = True
+            continue
+        out[k] = _gemini_schema(v)
+    return out
 
 
 def _normalize_tokens(name: str) -> frozenset[str]:
