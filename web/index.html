@@ -3922,6 +3922,11 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
     <div class="home-chooser"><div id="chooser-modal-body"></div></div>
   </div>
 </div>
+<datalist id="dl-states"></datalist>
+<datalist id="dl-specialties"></datalist>
+<datalist id="dl-cities"></datalist>
+<datalist id="dl-hospitals"></datalist>
+<datalist id="dl-emails"></datalist>
 <div id="roster-modal" onclick="if(event.target===this)closeRosterModal()">
   <div class="modal-card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
@@ -10410,7 +10415,7 @@ function _facilityAddOpen(containerId) {
   host.innerHTML = `<div style="margin-top:6px;padding:12px 14px;background:#f6fafa;border:1px solid var(--border);border-radius:8px">
     <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Add a hospital</div>
     <div style="display:grid;grid-template-columns:2fr 1fr 80px auto;gap:8px;align-items:end">
-      <div><div class="fl">Hospital name</div><input id="${containerId}-name" class="fi" placeholder="e.g. Methodist Hospital South" style="padding:8px 10px;font-size:13px" onkeydown="if(event.key==='Enter'){event.preventDefault();_facilityAddResolve('${containerId}')}"></div>
+      <div><div class="fl">Hospital name</div><input id="${containerId}-name" class="fi" data-lookup="hospital" placeholder="e.g. Methodist Hospital South" style="padding:8px 10px;font-size:13px" onkeydown="if(event.key==='Enter'){event.preventDefault();_facilityAddResolve('${containerId}')}"></div>
       <div><div class="fl">City</div><input id="${containerId}-city" class="fi" placeholder="Memphis" style="padding:8px 10px;font-size:13px" onkeydown="if(event.key==='Enter'){event.preventDefault();_facilityAddResolve('${containerId}')}"></div>
       <div><div class="fl">State</div><input id="${containerId}-state" class="fi" maxlength="2" value="${_learnEsc(st)}" style="padding:8px 10px;font-size:13px;text-transform:uppercase"></div>
       <div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" id="${containerId}-go" onclick="_facilityAddResolve('${containerId}')">Find it →</button><button class="btn btn-ghost btn-sm" onclick="_facilityAddClose('${containerId}')">Cancel</button></div>
@@ -10947,7 +10952,7 @@ function _rosterModalRender(e) {
     <div style="padding:14px 16px;background:#f6fafa;border:1px solid var(--border);border-radius:8px">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Add a ${net ? 'hospital the AI missed' : word + ' discovery missed'} <a href="#" class="help-link" onclick="showHelp('${net ? 'add-hospital' : 'location-import'}',event);return false">ⓘ How this works</a></div>
       <div style="display:grid;grid-template-columns:2.2fr 1fr 70px;gap:10px;align-items:end">
-        <div><div class="fl">${net ? 'Hospital name' : 'Name'}</div><input id="rm-name" class="fi" placeholder="${net ? 'e.g. Methodist Hospital South' : 'e.g. ' + _learnEsc(e.entity_name) + ' - Downtown'}" style="padding:9px 11px;font-size:14px" onkeydown="if(event.key==='Enter'){event.preventDefault();_rosterModalFind();}"></div>
+        <div><div class="fl">${net ? 'Hospital name' : 'Name'}</div><input id="rm-name" class="fi" ${net ? 'data-lookup="hospital"' : ''} placeholder="${net ? 'e.g. Methodist Hospital South' : 'e.g. ' + _learnEsc(e.entity_name) + ' - Downtown'}" style="padding:9px 11px;font-size:14px" onkeydown="if(event.key==='Enter'){event.preventDefault();_rosterModalFind();}"></div>
         <div><div class="fl">City</div><input id="rm-city" class="fi" placeholder="${_learnEsc(e.city || 'City')}" style="padding:9px 11px;font-size:14px" onkeydown="if(event.key==='Enter'){event.preventDefault();_rosterModalFind();}"></div>
         <div><div class="fl">State</div><input id="rm-state" class="fi" maxlength="2" value="${_learnEsc(st)}" style="padding:9px 11px;font-size:14px;text-transform:uppercase"></div>
       </div>
@@ -12323,6 +12328,117 @@ async function loadEventHistory() {
 }
 
 // Organization typeahead on every form (inputs are static markup, safe to bind now).
+// ── Form autofill: states, cities (bundled list, state-aware), specialties / service lines,
+//    ZIP → city + state, hospital-name lookup, teammate emails. Native datalists — never block free typing. ──
+const _US_STATES = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"],["PR","Puerto Rico"]];
+const _SPECIALTIES = ["Allergy & Immunology","Anesthesiology","Bariatric Surgery","Behavioral Health","Cardiology","Cardiothoracic Surgery","Colorectal Surgery","Dental","Dermatology","Emergency Medicine","Endocrinology","ENT (Otolaryngology)","Family Medicine","Fertility & Reproductive Medicine","Gastroenterology","General Surgery","Geriatrics","Hand Surgery","Hematology","Hospice & Palliative Care","Infectious Disease","Internal Medicine","Interventional Radiology","Nephrology","Neurology","Neurosurgery","OB-GYN","Occupational Medicine","Oncology","Ophthalmology","Oral & Maxillofacial Surgery","Orthopedics","Orthopedic Spine","Pain Management","Pediatrics","Pediatric Cardiology","Pediatric Orthopedics","Physical Medicine & Rehabilitation","Physical Therapy","Plastic Surgery","Podiatry","Primary Care","Psychiatry","Pulmonology","Radiation Oncology","Radiology","Rheumatology","Sleep Medicine","Sports Medicine","Spine Surgery","Surgical Oncology","Transplant","Urgent Care","Urology","Vascular Surgery","Weight Loss","Women's Health","Wound Care"];
+let _cityIndex = null, _cityLoading = null, _teamEmails = null;
+function _dlFill(id, values, labels) {
+  const dl = document.getElementById(id); if (!dl) return;
+  dl.innerHTML = values.map((v, i) => `<option value="${_learnEsc(v)}"${labels && labels[i] ? ` label="${_learnEsc(labels[i])}"` : ''}></option>`).join('');
+}
+function _autofillInit() {
+  _dlFill('dl-states', _US_STATES.map(s => s[0]), _US_STATES.map(s => s[1]));
+  _dlFill('dl-specialties', _SPECIALTIES);
+  document.addEventListener('focusin', _autofillFocus, true);
+  document.addEventListener('input', _autofillInput, true);
+  document.addEventListener('change', _autofillChange, true);
+}
+function _afKind(el) {
+  if (!el || el.tagName !== 'INPUT') return null;
+  const id = el.id || '';
+  if (el.dataset.lookup === 'hospital') return 'hospital';
+  if (id.startsWith('tc-email-')) return 'emails';
+  if (/-state$/.test(id)) return 'state';
+  if (/-city$/.test(id)) return 'city';
+  if (/-(specialty|service-line)$/.test(id)) return 'specialty';
+  if (/-zip$/.test(id)) return 'zip';
+  return null;
+}
+function _afSibling(el, suffix) { return document.getElementById(el.id.replace(/-(city|state|zip)$/, '-' + suffix)); }
+function _loadCities() {
+  if (_cityIndex) return Promise.resolve(_cityIndex);
+  if (!_cityLoading) _cityLoading = fetch('/assets/us-cities.json').then(r => r.json()).then(j => { _cityIndex = j; return j; }).catch(() => ({}));
+  return _cityLoading;
+}
+function _autofillFocus(ev) {
+  const el = ev.target, k = _afKind(el); if (!k) return;
+  if (k === 'state') el.setAttribute('list', 'dl-states');
+  else if (k === 'specialty') el.setAttribute('list', 'dl-specialties');
+  else if (k === 'city') { el.setAttribute('list', 'dl-cities'); el.setAttribute('autocomplete', 'off'); _loadCities().then(() => _cityOptions(el)); }
+  else if (k === 'hospital') { el.setAttribute('list', 'dl-hospitals'); el.setAttribute('autocomplete', 'off'); }
+  else if (k === 'emails') { el.setAttribute('list', 'dl-emails'); el.setAttribute('autocomplete', 'off'); if (!_teamEmails) api('/api/team/emails').then(r => r.ok ? r.json() : []).then(l => { _teamEmails = l; _emailOptions(el); }).catch(() => { _teamEmails = []; }); }
+}
+function _cityOptions(el) {
+  if (!_cityIndex) return;
+  const q = (el.value || '').trim().toLowerCase().split(',')[0].trim();
+  const st = ((_afSibling(el, 'state') || {}).value || '').trim().toUpperCase();
+  if (q.length < 2) { _dlFill('dl-cities', []); return; }
+  const out = [];
+  const states = (st.length === 2 && _cityIndex[st]) ? [st] : Object.keys(_cityIndex);
+  for (const s of states) {
+    for (const c of _cityIndex[s]) {
+      if (c.toLowerCase().startsWith(q)) { out.push(states.length === 1 ? c : `${c}, ${s}`); if (out.length >= 14) break; }
+    }
+    if (out.length >= 14) break;
+  }
+  _dlFill('dl-cities', out);
+}
+let _hospLookupTimer = null;
+function _autofillInput(ev) {
+  const el = ev.target, k = _afKind(el); if (!k) return;
+  if (k === 'city') { _loadCities().then(() => _cityOptions(el)); return; }
+  if (k === 'emails') { _emailOptions(el); return; }
+  if (k === 'hospital') {
+    clearTimeout(_hospLookupTimer);
+    const name = (el.value || '').trim(); if (name.length < 3) return;
+    const cityEl = _afSibling(el, 'city') || document.getElementById(el.id.replace(/-name$/, '-city'));
+    const stateEl = _afSibling(el, 'state') || document.getElementById(el.id.replace(/-name$/, '-state'));
+    _hospLookupTimer = setTimeout(async () => {
+      try {
+        const r = await api('/api/network/resolve-facility', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, city: (cityEl && cityEl.value) || '', state: (stateEl && stateEl.value) || '' }) });
+        if (!r.ok) return;
+        const d = await r.json();
+        const names = []; const seen = new Set();
+        for (const c of [{ name: d.name, address: d.address }].concat(d.candidates || [])) { if (c && c.name && !seen.has(c.name)) { seen.add(c.name); names.push(c.name); } }
+        _dlFill('dl-hospitals', names.slice(0, 6));
+      } catch (_) {}
+    }, 400);
+  }
+}
+function _emailOptions(el) {
+  if (!_teamEmails) return;
+  const parts = (el.value || '').split(','); const last = parts.pop().trim().toLowerCase(); const prefix = parts.map(p => p.trim()).filter(Boolean).join(', ');
+  const m = _teamEmails.filter(e => !last || e.toLowerCase().includes(last)).filter(e => !parts.map(p => p.trim().toLowerCase()).includes(e.toLowerCase())).slice(0, 8);
+  _dlFill('dl-emails', m.map(e => prefix ? `${prefix}, ${e}` : e));
+}
+function _setVal(el, v) { if (!el || el.value === v) return; el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }
+async function _autofillChange(ev) {
+  const el = ev.target, k = _afKind(el); if (!k) return;
+  if (k === 'state') {
+    const v = (el.value || '').trim().toLowerCase();
+    const hit = _US_STATES.find(s => s[1].toLowerCase() === v || s[0].toLowerCase() === v);
+    if (hit && el.value !== hit[0]) _setVal(el, hit[0]);
+    const cityEl = _afSibling(el, 'city'); if (cityEl && cityEl.value) _loadCities().then(() => _cityOptions(cityEl));
+  } else if (k === 'city') {
+    const m = /^(.*),\s*([A-Za-z]{2})$/.exec((el.value || '').trim());
+    if (m && _US_STATES.some(s => s[0] === m[2].toUpperCase())) {
+      _setVal(el, m[1].trim());
+      const stEl = _afSibling(el, 'state'); if (stEl) _setVal(stEl, m[2].toUpperCase());
+    }
+  } else if (k === 'zip') {
+    const z = (el.value || '').trim(); if (!/^\d{5}$/.test(z)) return;
+    try {
+      const r = await api(`/api/zip/${z}`); if (!r.ok) return;
+      const d = await r.json();
+      const cityEl = _afSibling(el, 'city'), stEl = _afSibling(el, 'state');
+      if (cityEl && !cityEl.value.trim()) _setVal(cityEl, d.city || '');
+      if (stEl && !stEl.value.trim()) _setVal(stEl, d.state || '');
+    } catch (_) {}
+  }
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _autofillInit); else _autofillInit();
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _initSuggest); else _initSuggest();
 </script>
 </body>

@@ -3070,3 +3070,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T5 What to Do First** stays 3–5 short bullets. Score, pillars, Score Evidence and the narrative box are unchanged. [pdf]
 - **T6 Single assistant.** With only Claude available (keys removed), the table still renders with Claude alone. Community Health reports (no spot-check) are unchanged. [pdf]
 - **R1** Reports run before this rollout show the old two lists only; History rows unaffected. Progress stream shows "Citation evidence attached to N roadmap items." [ui]
+
+## FORM-AUTOFILL — suggestions for state, city, specialty / service line, ZIP, hospital names and recipient emails
+
+**Not deployed.** Bundled city list: `web/assets/us-cities.json` (29,738 US cities/towns by state, MIT-licensed source), fetched once on first city-field focus.
+
+- **T1 State.** On any state field (Deep Diagnostic, Rankings, Compare Two, Trends add, Network, Manage roster, Add a hospital): typing shows the browser dropdown of state abbreviations with full names ("no" → NC, ND…). Free typing still works. [ui]
+- **T2 City.** Typing 2+ letters in a city field lists matching cities. With the state blank, entries read "City, ST" from every state; picking one fills the city and sets the state. With a state already entered, only that state's cities appear, as plain names. Uppercasing fields keep uppercasing. Cities not in the list can still be typed. [ui]
+- **T3 Specialty / service line.** Specialty fields (Deep Diagnostic, Rankings specialty mode, Compare Two, Trends) and the Network service-line field list ~58 specialties as you type; free typing allowed. [ui]
+- **T4 ZIP → city + state.** Under Advanced options (ZIP mode) on Deep Diagnostic / Rankings, entering a 5-digit ZIP fills empty city and state fields (e.g. 28202 → Charlotte, NC). Filled fields are not overwritten. [ui]
+- **T5 Hospital name lookup.** In Add a hospital (Network page, Trends network flow) and the Manage roster pop-over for a network, after 3+ characters the name field suggests matching hospitals from Google/CMS (debounced). Practice roster pop-over: no lookup on the name. [ui]
+- **T6 Recipients.** Trends Details → Recipients: typing suggests teammates' addresses; with several addresses the suggestion completes only the last one and keeps the earlier ones. [ui]
+- **R1** Suggestions never block a run; forms submit exactly as before. Organization-name suggestions unchanged. Student Health conference remains a select. `/api/zip/{code}` returns 404 for unknown ZIPs; `/api/team/emails` needs a session. [ui]

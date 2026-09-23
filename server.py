@@ -304,6 +304,32 @@ async def jobs_mine(payload: dict = Depends(get_current_user_payload)):
     return out[:12]
 
 
+@app.get("/api/zip/{code}")
+async def zip_lookup(code: str, _: dict = Depends(get_current_user_payload)):
+    """City + state for a US ZIP (form autofill). Fail-soft 404."""
+    code = (code or "").strip()[:5]
+    if not (code.isdigit() and len(code) == 5):
+        raise HTTPException(400, "5-digit ZIP required")
+    try:
+        city, state = await asyncio.get_running_loop().run_in_executor(None, _zip_to_city_state, code)
+        return {"zip": code, "city": city, "state": state}
+    except Exception:
+        raise HTTPException(404, "ZIP not found")
+
+
+@app.get("/api/team/emails")
+async def team_emails(_: dict = Depends(get_current_user_payload)):
+    """Active teammates' addresses, for recipient autofill (any signed-in user)."""
+    from perception.db import init_db, get_connection
+    init_db()
+    con = get_connection()
+    try:
+        rows = con.execute("SELECT email FROM users WHERE COALESCE(is_active, TRUE) AND email IS NOT NULL ORDER BY LOWER(email)").fetchall()
+    finally:
+        con.close()
+    return [r[0] for r in rows if r and r[0]]
+
+
 @app.get("/api/entities/suggest")
 async def entities_suggest(q: str = "", limit: int = 8, kinds: str = "",
                            payload: dict = Depends(get_current_user_payload)):
