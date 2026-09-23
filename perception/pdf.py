@@ -720,7 +720,7 @@ def _spotcheck_section(result: AnalysisResult) -> str:
         return ""
     rows = "".join(
         f'<tr><td style="font-weight:600">{_e(a["assistant"])}</td>'
-        f'<td style="text-align:center">{a["mentioned"]} of {a["asked"]}</td>'
+        f'<td style="text-align:center">{_sc_named_cell(a)}</td>'
         f'<td style="text-align:center">{("#" + str(a["avg_rank"])) if a.get("avg_rank") else "—"}</td>'
         f'<td style="text-align:center">{"yes" if a.get("direct_ok") else "no"}</td></tr>'
         for a in sc.get("per_assistant") or [])
@@ -757,6 +757,14 @@ def _spotcheck_section(result: AnalysisResult) -> str:
     </div>
     {_spotcheck_sources_table(sc)}
   </div>"""
+
+
+def _sc_named_cell(a: dict) -> str:
+    """'5 of 8', or a red 'no answers · N errors' when an assistant never answered."""
+    if a.get("asked"):
+        return f'{a["mentioned"]} of {a["asked"]}'
+    n = int(a.get("errors") or 0)
+    return f'<span style="color:{_RED_BAD}">no answers · {n} error{"s" if n != 1 else ""}</span>'
 
 
 def _spotcheck_sources_table(sc: dict) -> str:

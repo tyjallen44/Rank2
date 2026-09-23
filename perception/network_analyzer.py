@@ -618,7 +618,7 @@ def _entity_pulse_score(entity_name: str, location: str, brand: str = "original"
 
 def _gemini_api_key() -> str | None:
     import os
-    return os.environ.get("GEMINI_API_KEY") or None
+    return (os.environ.get("GEMINI_API_KEY") or "").strip() or None
 
 
 def _discover_via_gemini(system_prompt: str, user_prompt: str) -> dict:

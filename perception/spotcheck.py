@@ -117,7 +117,7 @@ def run_claude(query: str) -> dict:
 
 
 def run_openai(query: str) -> Optional[dict]:
-    key = os.environ.get("OPENAI_API_KEY")
+    key = (os.environ.get("OPENAI_API_KEY") or "").strip()   # secrets can carry a trailing newline
     if not key:
         return None
     from openai import OpenAI
@@ -154,7 +154,7 @@ def run_openai(query: str) -> Optional[dict]:
 
 
 def run_gemini(query: str) -> Optional[dict]:
-    key = os.environ.get("GEMINI_API_KEY")
+    key = (os.environ.get("GEMINI_API_KEY") or "").strip()
     if not key:
         return None
     import httpx
@@ -235,9 +235,9 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
     queries = build_queries(entity_name, city, state, specialty, entity_type)
     aliases = [entity_name] + [a for a in (aliases or []) if a]
     runners = [("Claude", run_claude)]
-    if os.environ.get("OPENAI_API_KEY"):
+    if (os.environ.get("OPENAI_API_KEY") or "").strip():
         runners.append(("ChatGPT", run_openai))
-    if os.environ.get("GEMINI_API_KEY"):
+    if (os.environ.get("GEMINI_API_KEY") or "").strip():
         runners.append(("Gemini", run_gemini))
     if emit:
         emit({"type": "text", "text": f"\nObserved check: asking {len(queries)} patient questions of {', '.join(n for n, _ in runners)}…"})
@@ -255,6 +255,7 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
                     "competitors": [n for i, n in enumerate(named) if i not in us][:6],
                     "citations": r["citations"][:12], "answer": (r["text"] or "")[:1200]}
         except Exception as exc:
+            print(f"[spotcheck] {name} '{q['key']}' failed: {type(exc).__name__}: {str(exc)[:160]}", flush=True)
             return {"assistant": name, "key": q["key"], "query": q["query"], "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
 
     jobs = [(n, fn, q) for n, fn in runners for q in queries]

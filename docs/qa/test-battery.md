@@ -3082,3 +3082,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T5 Hospital name lookup.** In Add a hospital (Network page, Trends network flow) and the Manage roster pop-over for a network, after 3+ characters the name field suggests matching hospitals from Google/CMS (debounced). Practice roster pop-over: no lookup on the name. [ui]
 - **T6 Recipients.** Trends Details → Recipients: typing suggests teammates' addresses; with several addresses the suggestion completes only the last one and keeps the earlier ones. [ui]
 - **R1** Suggestions never block a run; forms submit exactly as before. Organization-name suggestions unchanged. Student Health conference remains a select. `/api/zip/{code}` returns 404 for unknown ZIPs; `/api/team/emails` needs a session. [ui]
+
+## FIX-GEMINI-KEY-NEWLINE — Gemini produced no spot-check answers on production
+
+**Context (2026-09-23):** the Gemini secret was stored with a trailing newline (here-string), Cloud Run passed it verbatim, every Gemini call failed and the PDF showed "0 of 0" with no explanation. Fixed on both sides: a clean secret version (53 bytes) was added, and the code strips whitespace from every API key it reads. Spot-check errors are now logged; a silent assistant shows "no answers · N errors" in red. Not deployed (the clean secret takes effect on the next revision too).
+
+- **T1** Run a Deep Diagnostic. In "What AI assistants actually said", Gemini's row shows "n of 8" with an average position, and Gemini appears among the assistants in "Named you" cells of the per-question table. Operations shows Gemini calls > 0 for the run. [pdf][ops]
+- **T2** Hospital Network discovery: the roster confidence note reads "Dual-source roster: N confirmed by both Claude and Gemini…" with N > 0 for a real system. [ui]
+- **T3** If an assistant fails (e.g. key removed or quota exceeded), its row reads "no answers · 8 errors" in red rather than "0 of 0", and Cloud Run logs contain `[spotcheck] Gemini '<question>' failed: …`. [pdf][ops]
+- **R1** Claude and ChatGPT rows unchanged. [pdf]
