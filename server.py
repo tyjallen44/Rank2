@@ -1475,7 +1475,8 @@ def _spotcheck_brief(result) -> Optional[dict]:
             "unprompted_mentioned": sc.get("unprompted_mentioned"), "assistants": sc.get("assistants"),
             "per_assistant": sc.get("per_assistant"), "top_competitors": sc.get("top_competitors"),
             "our_domain_cited": sc.get("our_domain_cited"), "summary": summary_sentence(sc),
-            "sourcing": (sc.get("sourcing") or {}).get("sentence") or ""}
+            "sourcing": (sc.get("sourcing") or {}).get("sentence") or "",
+            "passes": sc.get("passes"), "queries": sc.get("queries"), "rate_range": sc.get("rate_range")}
 
 
 def _notify_run_complete(job: dict, kind: str, title: str, files: list) -> None:

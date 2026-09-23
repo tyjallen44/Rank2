@@ -22,7 +22,8 @@ _PARSE_MODEL = "claude-haiku-4-5-20251001"
 _CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 _OPENAI_MODEL = os.environ.get("SPOTCHECK_OPENAI_MODEL", "gpt-5-mini")
 _GEMINI_MODEL = os.environ.get("SPOTCHECK_GEMINI_MODEL", "gemini-3.6-flash")   # 2.5-flash is retired for new API users
-_MAX_QUERIES = 8
+_MAX_QUERIES = int(os.environ.get("SPOTCHECK_MAX_QUERIES", "30"))
+_PASSES = max(1, int(os.environ.get("SPOTCHECK_PASSES", "2")))      # each question asked this many times
 
 _CONDITION = {  # specialty keyword → a patient-language condition/procedure
     "ortho": "a knee replacement", "spine": "back surgery", "cardio": "a heart valve problem",
@@ -59,7 +60,14 @@ def _spec_es(specialty: str) -> str:
 
 def build_queries(entity_name: str, city: str, state: str, specialty: Optional[str],
                   entity_type: str = "hospital") -> list[dict]:
-    """Eight fixed patient-style questions for this entity's type and market."""
+    """~30 patient-language questions from the per-specialty bank (see spotcheck_bank)."""
+    from .spotcheck_bank import build_question_set
+    return build_question_set(entity_name, city, state, specialty, entity_type, max_q=_MAX_QUERIES)
+
+
+def _legacy_build_queries(entity_name: str, city: str, state: str, specialty: Optional[str],
+                          entity_type: str = "hospital") -> list[dict]:
+    """The original eight fixed questions (kept for reference)."""
     loc = f"{city}, {state}"
     is_practice = entity_type in ("practice", "service_line") and bool(specialty)
     spec = (specialty or "").strip()
@@ -239,27 +247,29 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
         runners.append(("ChatGPT", run_openai))
     if (os.environ.get("GEMINI_API_KEY") or "").strip():
         runners.append(("Gemini", run_gemini))
+    passes = _PASSES
     if emit:
-        emit({"type": "text", "text": f"\nObserved check: asking {len(queries)} patient questions of {', '.join(n for n, _ in runners)}…"})
+        emit({"type": "text", "text": f"\nObserved check: asking {len(queries)} patient questions of {', '.join(n for n, _ in runners)}"
+                                      f"{f', {passes} passes each' if passes > 1 else ''}…"})
 
     def _one(args):
-        name, fn, q = args
+        name, fn, q, p = args
         try:
             r = fn(q["query"])
             if not r:
                 return None
             named = parse_answer(r["text"])
             us = [i for i, n in enumerate(named) if _is_us(n, aliases)]
-            return {"assistant": name, "key": q["key"], "query": q["query"], "named": named,
+            return {"assistant": name, "key": q["key"], "category": q.get("category", ""), "pass": p, "query": q["query"], "named": named,
                     "mentioned": bool(us), "rank": (us[0] + 1) if us else None,
                     "competitors": [n for i, n in enumerate(named) if i not in us][:6],
                     "citations": r["citations"][:12], "answer": (r["text"] or "")[:1200]}
         except Exception as exc:
             print(f"[spotcheck] {name} '{q['key']}' failed: {type(exc).__name__}: {str(exc)[:160]}", flush=True)
-            return {"assistant": name, "key": q["key"], "query": q["query"], "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+            return {"assistant": name, "key": q["key"], "category": q.get("category", ""), "pass": p, "query": q["query"], "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
 
-    jobs = [(n, fn, q) for n, fn in runners for q in queries]
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    jobs = [(n, fn, q, p) for p in range(1, passes + 1) for n, fn in runners for q in queries]
+    with ThreadPoolExecutor(max_workers=8) as ex:
         results = [r for r in ex.map(_one, jobs) if r]
 
     our_domain = None
@@ -274,9 +284,15 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
         errs = [r for r in results if r["assistant"] == name and "error" in r]
         ment = [r for r in rs if r["mentioned"]]
         ranks = [r["rank"] for r in ment if r.get("rank")]
+        _rates = []
+        for p in range(1, passes + 1):
+            _nd = [r for r in rs if r.get("pass", 1) == p and r.get("category", r["key"]) != "direct"]
+            if _nd:
+                _rates.append(round(100 * sum(1 for r in _nd if r["mentioned"]) / len(_nd)))
         per_assistant.append({"assistant": name, "asked": len(rs), "errors": len(errs), "mentioned": len(ment),
                               "avg_rank": round(sum(ranks) / len(ranks), 1) if ranks else None,
-                              "direct_ok": any(r["key"] == "direct" and r["mentioned"] for r in rs)})
+                              "direct_ok": any(r["key"] == "direct" and r["mentioned"] for r in rs),
+                              "rate_by_pass": _rates, "rate_range": [min(_rates), max(_rates)] if _rates else None})
     comp: dict = {}
     for r in results:
         for c in r.get("competitors") or []:
@@ -293,10 +309,16 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
                 domains[d] = domains.get(d, 0) + 1
     top_domains = sorted(domains.items(), key=lambda kv: -kv[1])[:10]
     ok = [r for r in results if "error" not in r]
-    non_direct = [r for r in ok if r["key"] != "direct"]
+    non_direct = [r for r in ok if r.get("category", r["key"]) != "direct"]
+    rate_by_pass = []
+    for p in range(1, passes + 1):
+        _nd = [r for r in non_direct if r.get("pass", 1) == p]
+        if _nd:
+            rate_by_pass.append(round(100 * sum(1 for r in _nd if r["mentioned"]) / len(_nd)))
     from .citations import analyze as _cite_analyze
     return _cite_analyze({
-        "date": date.today().isoformat(), "queries": len(queries), "assistants": [n for n, _ in runners],
+        "date": date.today().isoformat(), "queries": len(queries), "passes": passes, "assistants": [n for n, _ in runners],
+        "rate_by_pass": rate_by_pass, "rate_range": [min(rate_by_pass), max(rate_by_pass)] if rate_by_pass else None,
         "asked": len(ok), "mentioned": sum(1 for r in ok if r["mentioned"]),
         "unprompted_asked": len(non_direct), "unprompted_mentioned": sum(1 for r in non_direct if r["mentioned"]),
         "per_assistant": per_assistant, "top_competitors": [{"name": n, "count": c} for n, c in top_comp],
@@ -310,7 +332,11 @@ def summary_sentence(sc: dict) -> str:
     if not sc or not sc.get("asked"):
         return ""
     n, m = sc["unprompted_asked"], sc["unprompted_mentioned"]
-    parts = [f"Named in {m} of {n} unprompted patient questions" if n else ""]
+    rr = sc.get("rate_range")
+    if n and rr and sc.get("passes", 1) > 1 and rr[0] != rr[1]:
+        parts = [f"Named in {round(100 * m / n)}% of unprompted patient answers ({rr[0]}–{rr[1]}% across {sc['passes']} passes)"]
+    else:
+        parts = [f"Named in {m} of {n} unprompted patient answers" if n else ""]
     tc = sc.get("top_competitors") or []
     if tc:
         parts.append("named instead: " + ", ".join(x["name"] for x in tc[:3]))

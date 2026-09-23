@@ -720,7 +720,7 @@ def _spotcheck_section(result: AnalysisResult) -> str:
         return ""
     rows = "".join(
         f'<tr><td style="font-weight:600">{_e(a["assistant"])}</td>'
-        f'<td style="text-align:center">{_sc_named_cell(a)}</td>'
+        f'<td style="text-align:center">{_sc_named_cell(a)}{_sc_range_note(a)}</td>'
         f'<td style="text-align:center">{("#" + str(a["avg_rank"])) if a.get("avg_rank") else "—"}</td>'
         f'<td style="text-align:center">{"yes" if a.get("direct_ok") else "no"}</td></tr>'
         for a in sc.get("per_assistant") or [])
@@ -730,6 +730,9 @@ def _spotcheck_section(result: AnalysisResult) -> str:
     n, m = sc.get("unprompted_asked") or 0, sc.get("unprompted_mentioned") or 0
     pct = round(100 * m / n) if n else 0
     col = _GREEN_OK if pct >= 50 else (_AMBER_WARN if pct >= 25 else _RED_BAD)
+    rr, passes = sc.get("rate_range"), sc.get("passes") or 1
+    pct_txt = f"{rr[0]}–{rr[1]}%" if (rr and passes > 1 and rr[0] != rr[1]) else f"{pct}%"
+    sub_txt = (f"named in {m} of {n}<br>unprompted answers" + (f"<br>{sc.get('queries')} questions · {passes} passes" if passes > 1 else ""))
     site = ""
     if sc.get("our_domain"):
         cited = bool(sc.get("our_domain_cited"))
@@ -743,8 +746,8 @@ def _spotcheck_section(result: AnalysisResult) -> str:
       — an observational check. It does not change the score above.</div>
     <div style="display:flex;gap:18px;align-items:flex-start">
       <div style="flex:0 0 auto;text-align:center;padding:10px 16px;background:#f4f9f8;border-radius:8px">
-        <div style="font-size:26pt;font-weight:800;color:{col};line-height:1">{pct}%</div>
-        <div style="font-size:7.5pt;color:#5a7075;margin-top:4px">named in {m} of {n}<br>unprompted questions</div>
+        <div style="font-size:{'20pt' if len(pct_txt) > 4 else '26pt'};font-weight:800;color:{col};line-height:1">{pct_txt}</div>
+        <div style="font-size:7.5pt;color:#5a7075;margin-top:4px">{sub_txt}</div>
       </div>
       <div style="flex:1">
         <table style="width:100%;border-collapse:collapse;font-size:8.5pt">
@@ -759,6 +762,38 @@ def _spotcheck_section(result: AnalysisResult) -> str:
   </div>"""
 
 
+def _sc_range_note(a: dict) -> str:
+    rr = a.get("rate_range")
+    if rr and rr[0] != rr[1]:
+        return f' <span style="color:#7a9095;font-size:7pt">({rr[0]}–{rr[1]}% by pass)</span>'
+    return ""
+
+
+def _spotcheck_category_table(sc: dict) -> str:
+    trs = []
+    for g in sc.get("by_category") or []:
+        doms = ", ".join((f'<strong style="color:{_GREEN_OK}">{_e(d["domain"])}</strong>' if d.get("ours") else _e(d["domain"]))
+                         for d in (g.get("domains") or [])[:4]) or '<span style="color:#7a9095">—</span>'
+        pc = g.get("named_pct") or 0
+        pcol = _GREEN_OK if pc >= 50 else (_AMBER_WARN if pc >= 25 else _RED_BAD)
+        by = ", ".join(f"{_e(a)} {c}" for a, c in sorted((g.get("named_by") or {}).items()))
+        trs.append(f'<tr><td style="padding:3px 6px"><strong>{_e(g["label"])}</strong></td>'
+                   f'<td style="padding:3px 6px;text-align:center">{g["questions"]}</td>'
+                   f'<td style="padding:3px 6px;text-align:center;white-space:nowrap"><span style="color:{pcol};font-weight:700">{pc}%</span> <span style="color:#7a9095">({g["named"]} of {g["answers"]}{(" · " + by) if by else ""})</span></td>'
+                   f'<td style="padding:3px 6px">{doms}</td>'
+                   f'<td style="padding:3px 6px;text-align:center">{g["ours_questions"]} of {g["questions"]}</td></tr>')
+    src = (sc.get("sourcing") or {}).get("sentence") or ""
+    src_html = f'<div style="font-size:9pt;margin-top:8px;padding:8px 10px;background:#f4f9f8;border-radius:6px"><strong>Where the answers came from.</strong> {_e(src)}</div>' if src else ""
+    return f"""
+    <div style="margin-top:12px">
+      <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#5a7075;margin-bottom:4px">Where each kind of question was answered from</div>
+      <table style="width:100%;border-collapse:collapse;font-size:7.8pt">
+        <thead><tr style="background:#eef4f5;color:#0F4146"><th style="text-align:left;padding:4px 6px">Question type</th><th style="padding:4px 6px">Questions</th><th style="padding:4px 6px">Answers naming you</th><th style="text-align:left;padding:4px 6px">Pages the answers drew on</th><th style="padding:4px 6px">Your site cited</th></tr></thead>
+        <tbody>{"".join(trs)}</tbody></table>
+      {src_html}
+    </div>"""
+
+
 def _sc_named_cell(a: dict) -> str:
     """'5 of 8', or a red 'no answers · N errors' when an assistant never answered."""
     if a.get("asked"):
@@ -768,7 +803,10 @@ def _sc_named_cell(a: dict) -> str:
 
 
 def _spotcheck_sources_table(sc: dict) -> str:
-    """Per-question sourcing: named or not, the pages each answer drew on, your site among them?"""
+    """Per-category sourcing (compact) when the bank is in use; per-question rows for small runs."""
+    cats = sc.get("by_category") or []
+    if cats and len(sc.get("by_question") or []) > 10:
+        return _spotcheck_category_table(sc)
     rows = sc.get("by_question") or []
     if not rows:
         return ""

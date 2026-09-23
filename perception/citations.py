@@ -82,6 +82,28 @@ def analyze(sc: dict) -> dict:
         by_q.append({**row, "named": bool(row["named_by"]),
                      "domains": [{"domain": d, "count": c, "ours": _ours(d, our)} for d, c in top]})
     sc["by_question"] = by_q
+    # Per-category roll-up (the PDF table): questions, answers, answers naming us, our site cited.
+    from .spotcheck_bank import CATEGORIES
+    cats: dict[str, dict] = {}
+    for r in results:
+        c = r.get("category") or ("direct" if r.get("key") == "direct" else "other")
+        g = cats.setdefault(c, {"key": c, "label": CATEGORIES.get(c, c.title()), "questions": set(), "answers": 0, "named": 0,
+                                "ours_q": set(), "domains": {}, "named_by": {}})
+        g["questions"].add(r.get("key")); g["answers"] += 1
+        if r.get("mentioned"):
+            g["named"] += 1; g["named_by"][r.get("assistant")] = g["named_by"].get(r.get("assistant"), 0) + 1
+        for u in r.get("citations") or []:
+            d = _dom(u)
+            if d:
+                g["domains"][d] = g["domains"].get(d, 0) + 1
+                if _ours(d, our):
+                    g["ours_q"].add(r.get("key"))
+    order_c = list(CATEGORIES.keys()) + [c for c in cats if c not in CATEGORIES]
+    sc["by_category"] = [{"key": c, "label": g["label"], "questions": len(g["questions"]), "answers": g["answers"], "named": g["named"],
+                          "named_pct": round(100 * g["named"] / g["answers"]) if g["answers"] else 0,
+                          "ours_questions": len(g["ours_q"]), "named_by": g["named_by"],
+                          "domains": [{"domain": d, "count": k, "ours": _ours(d, our)} for d, k in sorted(g["domains"].items(), key=lambda kv: (-kv[1], kv[0]))[:4]]}
+                         for c in order_c if (g := cats.get(c))]
 
     n = len(by_q)
     cited_rows = [q for q in by_q if q["ours_cited"]]

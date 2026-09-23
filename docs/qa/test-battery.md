@@ -3099,3 +3099,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T1** Hospital Network → discover a system (e.g. Baystate Health, Springfield MA). **Expect:** confidence note "Dual-source roster: N hospitals confirmed by both Claude and Gemini…" with N > 0. [ui]
 - **T2** Cloud Run logs show no `[network] Gemini cross-check failed` lines for that discovery. [ops]
 - **R1** Rosters, facility counts and the rest of the Network flow unchanged when Gemini agrees; extra Gemini-only facilities appear flagged for confirmation as before. [ui]
+
+## SPOTCHECK-BANK — observed check deepened: ~30 specialty-written questions, two passes, ranges (heart-surgery item 1, middle path)
+
+**Not deployed.** After rollout run apply-learn-content (Deep Diagnostic + How the score is produced updated). Tunables: `SPOTCHECK_MAX_QUERIES` (default 30), `SPOTCHECK_PASSES` (default 2). Adds roughly 4–5 minutes and ~$3 per Deep Diagnostic at current caps.
+
+- **T1 Question set fits the specialty.** Run a practice Deep Diagnostic (e.g. a sports medicine or dermatology practice). In the PDF's "What AI assistants actually said", the header says "N patient-style questions … 2 passes"; the progress stream lists the count. The category table shows Conditions / Procedures / Symptoms rows whose pages and wording reflect that specialty (sports medicine → ACL, meniscus, PRP; dermatology → moles, psoriasis, Mohs), not "knee replacement" for every orthopedic sub-specialty. Unknown specialties still get sensible generic wording with the specialty name. [pdf]
+- **T2 Hospitals.** A hospital Deep Diagnostic without a specialty is asked across cardiac, orthopedics, oncology, maternity, stroke and emergency; with a specialty, that service line's questions. [pdf]
+- **T3 Range headline.** The big number reads as a range across passes (e.g. "57–64%") with "N questions · 2 passes" under it; each assistant row shows "(x–y% by pass)" when the passes differ. The completion screen summary carries the same range. [pdf][ui]
+- **T4 Category table.** "Where each kind of question was answered from": one row per question type with Questions, Answers naming you (% and count, per assistant), pages drawn on, and Your site cited (k of n questions). The takeaway sentence follows. Counts are consistent with the assistant rows. [pdf]
+- **T5 Why this matters** lines on roadmap items / findings still appear and now rest on the larger set. [pdf]
+- **T6 Cost & time.** Operations shows the run's spot-check spend (Claude + ChatGPT + Gemini) around $3; the run completes. Setting `SPOTCHECK_PASSES=1` halves it. [ops]
+- **R1** Score, pillars, Score Evidence unchanged. Community Health reports unchanged (no spot-check). Reports run before rollout keep their 8-question panel. [pdf]
