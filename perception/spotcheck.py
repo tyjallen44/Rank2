@@ -293,7 +293,8 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
     top_domains = sorted(domains.items(), key=lambda kv: -kv[1])[:10]
     ok = [r for r in results if "error" not in r]
     non_direct = [r for r in ok if r["key"] != "direct"]
-    return {
+    from .citations import analyze as _cite_analyze
+    return _cite_analyze({
         "date": date.today().isoformat(), "queries": len(queries), "assistants": [n for n, _ in runners],
         "asked": len(ok), "mentioned": sum(1 for r in ok if r["mentioned"]),
         "unprompted_asked": len(non_direct), "unprompted_mentioned": sum(1 for r in non_direct if r["mentioned"]),
@@ -301,7 +302,7 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
         "cited_domains": [{"domain": d, "count": c, "ours": bool(our_domain and (d == our_domain or d.endswith("." + our_domain)))} for d, c in top_domains],
         "our_domain": our_domain, "our_domain_cited": any(d == our_domain or (our_domain and d.endswith("." + our_domain)) for d, _ in top_domains) if our_domain else None,
         "results": results,
-    }
+    })
 
 
 def summary_sentence(sc: dict) -> str:

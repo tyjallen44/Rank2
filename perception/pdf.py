@@ -463,6 +463,17 @@ _MD_HR       = re.compile(r'^---+\s*$', re.MULTILINE)
 _MD_ITEM_NUM = re.compile(r'^#\d+\s*', re.MULTILINE)  # strips LLM global counters like #1, #5
 
 
+def _roadmap_item_html(item: str) -> str:
+    """A roadmap bullet; an attached 'Why this matters: …' (observed citation evidence) renders
+    as its own muted line under the action."""
+    txt = _strip_md(item or "")
+    if "Why this matters:" in txt:
+        action, why = txt.split("Why this matters:", 1)
+        return (f"<li>{_e(action.strip())}<div style=\"font-size:7.5pt;color:#5a7075;margin-top:2px\">"
+                f"<strong>Why this matters:</strong> {_e(why.strip())}</div></li>")
+    return f"<li>{_e(txt)}</li>"
+
+
 def _first_moves_title(result, default: str) -> str:
     """Condensed executive sections render the assessment as 'What to Do First'."""
     from .plain import is_bullets
@@ -744,7 +755,37 @@ def _spotcheck_section(result: AnalysisResult) -> str:
         {site}
       </div>
     </div>
+    {_spotcheck_sources_table(sc)}
   </div>"""
+
+
+def _spotcheck_sources_table(sc: dict) -> str:
+    """Per-question sourcing: named or not, the pages each answer drew on, your site among them?"""
+    rows = sc.get("by_question") or []
+    if not rows:
+        return ""
+    trs = []
+    for q in rows:
+        doms = ", ".join((f'<strong style="color:{_GREEN_OK}">{_e(d["domain"])}</strong>' if d.get("ours") else _e(d["domain"]))
+                         for d in (q.get("domains") or [])[:5]) or '<span style="color:#7a9095">—</span>'
+        named = (f'<span style="color:{_GREEN_OK};font-weight:700">yes</span> <span style="color:#7a9095">({_e(", ".join(q.get("named_by") or []))})</span>'
+                 if q.get("named") else f'<span style="color:{_RED_BAD};font-weight:700">no</span>')
+        ours = (f'<span style="color:{_GREEN_OK};font-weight:700">✓</span>' if q.get("ours_cited")
+                else f'<span style="color:{_RED_BAD};font-weight:700">✗</span>')
+        trs.append(f'<tr><td style="padding:3px 6px"><strong>{_e(q.get("label"))}</strong><br><span style="color:#7a9095">{_e((q.get("query") or "")[:90])}</span></td>'
+                   f'<td style="padding:3px 6px;text-align:center;white-space:nowrap">{named}</td>'
+                   f'<td style="padding:3px 6px">{doms}</td>'
+                   f'<td style="padding:3px 6px;text-align:center">{ours}</td></tr>')
+    src = (sc.get("sourcing") or {}).get("sentence") or ""
+    src_html = f'<div style="font-size:9pt;margin-top:8px;padding:8px 10px;background:#f4f9f8;border-radius:6px"><strong>Where the answers came from.</strong> {_e(src)}</div>' if src else ""
+    return f"""
+    <div style="margin-top:12px">
+      <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#5a7075;margin-bottom:4px">Where each answer came from</div>
+      <table style="width:100%;border-collapse:collapse;font-size:7.8pt">
+        <thead><tr style="background:#eef4f5;color:#0F4146"><th style="text-align:left;padding:4px 6px">Question</th><th style="padding:4px 6px">Named you</th><th style="text-align:left;padding:4px 6px">Pages the answer drew on</th><th style="padding:4px 6px">Your site</th></tr></thead>
+        <tbody>{"".join(trs)}</tbody></table>
+      {src_html}
+    </div>"""
 
 
 def _confidence_line(conf: dict = None) -> str:
@@ -1434,7 +1475,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
         if result.improvement_sections:
             parts = []
             for sec in result.improvement_sections:
-                items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
+                items_li = "\n".join(_roadmap_item_html(item) for item in sec.items)
                 parts.append(
                     f'<div class="advice-group">'
                     f'<div class="advice-group-title">{_e(_strip_md(sec.title))}</div>'
@@ -2517,7 +2558,7 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
         if result.improvement_sections:
             parts = []
             for sec in result.improvement_sections:
-                items_li = "\n".join(f"<li>{_e(_strip_md(item))}</li>" for item in sec.items)
+                items_li = "\n".join(_roadmap_item_html(item) for item in sec.items)
                 parts.append(
                     f'<div class="advice-group">'
                     f'<div class="advice-group-title">{_e(_strip_md(sec.title))}</div>'

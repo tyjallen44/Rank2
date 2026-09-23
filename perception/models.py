@@ -217,6 +217,7 @@ class ContentFinding(BaseModel):
     remediation_type: str = ""                   # website_fix | schema_markup | wikidata_edit | talk_page_request | monitor_respond | directory_update
     draft_content: Optional[str] = None          # populated only in the remediation phase
     meta: dict = Field(default_factory=dict)     # structured extras, e.g. grouped per-location rows
+    why_it_matters: str = ""                     # observed evidence from the spot-check citations (perception.citations)
 
 
 class ContentFindings(BaseModel):

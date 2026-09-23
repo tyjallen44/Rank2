@@ -59,7 +59,7 @@ STARTER_ARTICLES: list[dict] = [
             '- What AI assistants currently say about you — in their own words\n'
             '- A **content analysis and drafted prescription** — the exact website, listing, Wikidata, and structured-data fixes, written out\n'
             "- For practices and service lines, a **per-location reputation table**: every location's Google and third-party ratings and review volume — plus a **Google Business Profiles checked** table read directly from Google for every confirmed location (website link, phone, hours, photos, status, reviews), which is what the reputation finding is built on\n"
-            '- **What AI assistants actually said** — an observed check: eight fixed patient-style questions put to real assistants (Claude always; ChatGPT and Gemini when configured), with how often the organization was named, who was named instead, and which pages were cited. It never changes the score.\n'
+            '- **What AI assistants actually said** — an observed check: eight fixed patient-style questions put to real assistants (Claude, ChatGPT and Gemini), with how often the organization was named, who was named instead, and — question by question — which pages each answer drew on and whether yours was among them. Roadmap items and content findings that address a page assistants relied on carry a **Why this matters** line with that evidence. It never changes the score.\n'
             '- **Score Evidence** (High / Medium / Low) under the score, with the reason — review volume, whether CMS and Leapfrog were verified from the source, and whether live web search was available\n'
             '\n'
             '**Getting the roster right (practices and service lines)**\n'

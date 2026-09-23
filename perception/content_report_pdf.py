@@ -259,6 +259,7 @@ def _finding_block(f: dict) -> str:
         <span class="stat"><span style="color:{dot_c}">&#9679;</span> {dot_l}</span>
       </div>
       <div class="fsum">{_e(f.get("teaser_summary"))}</div>
+      {('<div style="font-size:8pt;color:#5a7075;margin:-4px 0 8px"><strong>Why this matters:</strong> ' + _e(str(f.get("why_it_matters")).replace("Why this matters:", "").strip()) + '</div>') if f.get("why_it_matters") else ''}
       <div class="grid">
         <div><div class="lbl">Current state</div><div class="val">{_e(f.get("current_state")) or "&mdash;"}</div></div>
         <div><div class="lbl">Expected state</div><div class="val">{_e(f.get("expected_state")) or "&mdash;"}</div></div>

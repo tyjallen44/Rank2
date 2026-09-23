@@ -3058,3 +3058,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T7 Plain-language pass on production.** Run a Deep Diagnostic; logs show `[plain] condensed run=… (all sections)` and the PDF opens with the ≤80-word overview, 3-sentence verdict and What to Do First bullets (no TypeError in logs). [pdf][ops]
 - **T8 Cached results keep their date.** Re-running a cached organization no longer bumps its History created_at; the row keeps its original date. [ui]
 - **R1** Network tracked runs ignore the 30-day cache too; hospital/practice weekly schedules still produce weekly points. Compare Two, Rankings and Event Prep unchanged. [ui]
+
+## CITATION-GAPS — spot-check citations become prescription evidence (heart-surgery item 2, middle path)
+
+**Not deployed.** After rollout run apply-learn-content (Deep Diagnostic article updated).
+
+- **T1 Per-question table.** Run a Deep Diagnostic (hospital or practice) with Refresh from scratch. In the PDF's "What AI assistants actually said" section, below "Pages the assistants cited", a new **Where each answer came from** table has one row per question (8): the question label and text, **Named you** (yes + which assistants / no), the pages that answer drew on (your domain in green bold), and **Your site** ✓/✗. The number of rows equals the questions asked; every domain in the table appears in "Pages the assistants cited". [pdf]
+- **T2 Takeaway sentence.** Under the table: "Where the answers came from. Your website <domain> was cited for X of N questions[, all of them when you were asked about by name]. For the K questions where patients are choosing and you were not cited, assistants relied on A, B and C." The same sentence shows on the completion screen under the spot-check summary. [pdf][ui]
+- **T3 Roadmap reasons (hospital / base report).** Roadmap items that address a domain assistants relied on (Healthgrades, Vitals, WebMD, Yelp, U.S. News, Wikipedia/Wikidata, Google Business Profile, CMS Care Compare, Leapfrog, Zocdoc, Facebook, NPPES, Reddit) carry a muted line "Why this matters: <assistants> cited <domain> for k of N patient questions where you were not cited." Items with no matching citation are unchanged. Verify one: the domain named appears in the table for at least k rows where Your site is ✗. [pdf]
+- **T4 Content findings (practice combined / hospital content report).** Findings that address such a domain carry the same "Why this matters" line under the summary; website / structured-data / llms.txt findings carry the takeaway sentence when the site was under-cited. [pdf]
+- **T5 What to Do First** stays 3–5 short bullets. Score, pillars, Score Evidence and the narrative box are unchanged. [pdf]
+- **T6 Single assistant.** With only Claude available (keys removed), the table still renders with Claude alone. Community Health reports (no spot-check) are unchanged. [pdf]
+- **R1** Reports run before this rollout show the old two lists only; History rows unaffected. Progress stream shows "Citation evidence attached to N roadmap items." [ui]

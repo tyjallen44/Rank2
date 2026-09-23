@@ -814,6 +814,11 @@ def _finalize_hospital_combined(result, entity_name: str, city: str, state: str,
             if f.get("finding_id") in drafts:
                 f["draft_content"] = drafts[f["finding_id"]]
         findings.findings = [ContentFinding(**f) for f in fdicts]
+    try:
+        from perception.citations import attach_finding_reasons
+        attach_finding_reasons(findings.findings, getattr(result, "spotcheck", None))
+    except Exception as _cx:
+        print(f"[citations] finding reasons failed: {type(_cx).__name__}: {_cx}")
     save_content_findings(result.run_id, _norm_entity_name(entity_name),
                           snap, [f.model_dump() for f in findings.findings], findings.status)
     for f in findings.findings:
@@ -1019,6 +1024,11 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
             if f.get("finding_id") in drafts:
                 f["draft_content"] = drafts[f["finding_id"]]
         findings.findings = [ContentFinding(**f) for f in fdicts]
+    try:
+        from perception.citations import attach_finding_reasons
+        attach_finding_reasons(findings.findings, getattr(result, "spotcheck", None))
+    except Exception as _cx:
+        print(f"[citations] finding reasons failed: {type(_cx).__name__}: {_cx}")
     save_content_findings(result.run_id, _norm_entity_name(entity_name),
                           snap, [f.model_dump() for f in findings.findings], findings.status)
 
@@ -1416,6 +1426,13 @@ def _run_spotcheck(result, entity_name: str, city: str, state: str, specialty, e
         sc = run_spotcheck(entity_name, city, state, specialty, entity_type, aliases=aliases, website=website, emit=emit)
         result.spotcheck = sc
         set_run_spotcheck(result.run_id, sc)
+        try:
+            from perception.citations import attach_roadmap_reasons
+            _n_reasons = attach_roadmap_reasons(result)
+            if emit and _n_reasons:
+                emit({"type": "text", "text": f"\nCitation evidence attached to {_n_reasons} roadmap item{'s' if _n_reasons != 1 else ''}."})
+        except Exception as _cx:
+            print(f"[citations] roadmap reasons failed: {type(_cx).__name__}: {_cx}")
         line = summary_sentence(sc)
         if emit and line:
             emit({"type": "text", "text": f"\nObserved check: {line}"})
@@ -1431,7 +1448,8 @@ def _spotcheck_brief(result) -> Optional[dict]:
     return {"asked": sc.get("asked"), "mentioned": sc.get("mentioned"), "unprompted_asked": sc.get("unprompted_asked"),
             "unprompted_mentioned": sc.get("unprompted_mentioned"), "assistants": sc.get("assistants"),
             "per_assistant": sc.get("per_assistant"), "top_competitors": sc.get("top_competitors"),
-            "our_domain_cited": sc.get("our_domain_cited"), "summary": summary_sentence(sc)}
+            "our_domain_cited": sc.get("our_domain_cited"), "summary": summary_sentence(sc),
+            "sourcing": (sc.get("sourcing") or {}).get("sentence") or ""}
 
 
 def _notify_run_complete(job: dict, kind: str, title: str, files: list) -> None:
