@@ -3111,3 +3111,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T5 Why this matters** lines on roadmap items / findings still appear and now rest on the larger set. [pdf]
 - **T6 Cost & time.** Operations shows the run's spot-check spend (Claude + ChatGPT + Gemini) around $3; the run completes. Setting `SPOTCHECK_PASSES=1` halves it. [ops]
 - **R1** Score, pillars, Score Evidence unchanged. Community Health reports unchanged (no spot-check). Reports run before rollout keep their 8-question panel. [pdf]
+
+## SPOTCHECK-OPTIN — the observed check is an opt-in checkbox on the Deep Diagnostic form (all roles)
+
+- **T1** Deep Diagnostic form (hospital, practice, service line): above Run Diagnostic, a checkbox "Ask the AI assistants what they actually say (~30 patient questions × 2 passes · adds ~5 min)" with a ⓘ link to the topic; unchecked by default; hidden for Community Health. Visible to non-admin users. [ui]
+- **T2** Run with the box unchecked: no "Observed check" lines in the progress stream, no "What AI assistants actually said" section in the PDF, no per-category table, no "Why this matters" citation lines; Operations shows no ChatGPT/Gemini spend for the run. [pdf][ops]
+- **T3** Run with the box checked: full observed panel as in SPOTCHECK-BANK. [pdf]
+- **R1** Trends "Create full report" and tracked snapshots do not run the check. Compare Two / Rankings / Event Prep unchanged. [ui]

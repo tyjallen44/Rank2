@@ -743,7 +743,8 @@ def _job_run_single(
         # reports, FQHC and skip-pdf data pulls are unchanged. Fail-soft.
         if (job.get("individual_report") and entity_type in (None, "hospital")
                 and job.get("entity_name") and not job.get("skip_pdf")):
-            _run_spotcheck(result, job["entity_name"], city, state, None, "hospital", emit)
+            if job.get("spotcheck"):
+                _run_spotcheck(result, job["entity_name"], city, state, None, "hospital", emit)
             try:
                 _finalize_hospital_combined(result, job["entity_name"], city, state,
                                             job.get("brand", "original"), job, emit)
@@ -1152,7 +1153,8 @@ def _job_run_practice(
         # teaser (blurred content) is produced too when the toggle is set.
         # Fail-soft — a content/render failure leaves the base four-pillar report.
         if not job.get("skip_pdf"):
-            _run_spotcheck(result, entity_name, city, state, specialty, "service_line" if job.get("service_line") else "practice", emit)
+            if job.get("spotcheck"):
+                _run_spotcheck(result, entity_name, city, state, specialty, "service_line" if job.get("service_line") else "practice", emit)
             try:
                 _finalize_practice_combined(result, entity_name, city, state,
                                             job.get("brand", "original"), job, emit)
@@ -1545,6 +1547,7 @@ class AnalyzeRequest(BaseModel):
     physician_composite: bool = False       # include physician sub-rows in practice composite
     physician_roster: dict = {}             # {practice_name: [{name, npi, specialty, credential}]}
     practice_facts: Optional[dict] = None   # owner-attested: {profiles_claimed: bool, reviews_since: 'YYYY-MM-DD', locations: int, notes: str}
+    spotcheck: bool = False                 # opt-in: ask real AI assistants ~30 questions × 2 passes (~$3, ~5 min)
     force_rerun: bool = False               # bypass 90-day score cache
     override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
     briefing_variant: Optional[str] = None  # "sales" | "cs" | None — generates Pulse Briefing companion
@@ -1636,6 +1639,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list
     _jobs[job_id]["anchor_listing"] = req.anchor_listing
     _jobs[job_id]["practice_facts"] = req.practice_facts
+    _jobs[job_id]["spotcheck"] = bool(req.spotcheck)
     _jobs[job_id]["content_urls"] = [
         (u.strip() if u.strip().lower().startswith(("http://", "https://")) else "https://" + u.strip())
         for u in (req.content_urls or []) if (u or "").strip()]
