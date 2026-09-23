@@ -285,11 +285,11 @@ async def me_prefs_update(req: PrefsRequest, payload: dict = Depends(get_current
 @app.get("/api/jobs/mine")
 async def jobs_mine(payload: dict = Depends(get_current_user_payload)):
     """This user's runs known to this server process: running, and recently finished."""
-    me = (payload.get("email") or "").lower()
+    me = _owner_key(payload.get("email"), payload.get("role"))
     out = []
     now = time.time()
     for jid, j in list(_jobs.items()):
-        if (j.get("email") or "").lower() != me:
+        if (j.get("owner") or _owner_key(j.get("email"), j.get("role"))) != me:
             continue
         started = j.get("started_at") or now
         if j.get("status") != "running" and now - started > 6 * 3600:
@@ -710,7 +710,7 @@ def _job_run_single(
             _ensure_individual_teaser(result, job)
         else:
             _backfill_teaser_pdf(result, job)
-        set_run_role(result.run_id, job["role"], job.get("email"))
+        set_run_role(result.run_id, job["role"], _job_ran_by(job))
 
         # Single-hospital Deep Diagnostic: fold the content analysis + prescription
         # into the run (the standalone Content Analysis panel is retired). Market
@@ -1109,7 +1109,7 @@ def _job_run_practice(
         _plain_ensure(result, job)              # cached results too; the combined render below reuses the text
         _profile_audit(result, job, emit)
 
-        set_run_role(result.run_id, job["role"], job.get("email"))
+        set_run_role(result.run_id, job["role"], _job_ran_by(job))
 
         # Practice combined report: content analysis + prescription + findings-citing
         # Diagnostic Assessment, merged into the report (replaces the Roadmap). A
@@ -1193,7 +1193,7 @@ def _job_run_fqhc(
         )
         _plain_ensure(result, job)              # cached results too; before the teaser is built
         _ensure_individual_teaser(result, job)
-        set_run_role(result.run_id, job["role"], job.get("email"))
+        set_run_role(result.run_id, job["role"], _job_ran_by(job))
         job["status"] = "done"
         job["result"] = {
             "run_id": result.run_id,
@@ -1324,7 +1324,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
                 output_dir=REPORTS_DIR, on_event=emit,
                 brand=job.get("brand", "original"),
             )
-            set_run_role(result.run_id, job["role"], job.get("email"))
+            set_run_role(result.run_id, job["role"], _job_ran_by(job))
             results.append({
                 "run_id": result.run_id,
                 "location": result.location,
@@ -1348,8 +1348,20 @@ def _new_job(role: str, brand: str = "original", email: Optional[str] = None) ->
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     _jobs[job_id] = {"status": "running", "loop": loop, "queue": queue, "role": role,
-                     "brand": brand, "email": email, "started_at": time.time()}
+                     "brand": brand, "email": email, "started_at": time.time(),
+                     "owner": _owner_key(email, role)}
     return job_id
+
+
+def _owner_key(email: Optional[str], role: Optional[str]) -> str:
+    """Who a job belongs to for the Home 'Your analysis runs' list: the signed-in email, or —
+    for password sessions (admin / partner) that carry no email — the shared role."""
+    return (email or "").lower() or f"role:{role or 'user'}"
+
+
+def _job_ran_by(job: dict) -> Optional[str]:
+    """History attribution: the launcher, or (scheduled Trends snapshots) the tracking owner."""
+    return job.get("ran_by") or job.get("email") or None
 
 
 def _plain_ensure(result, job: dict) -> None:
@@ -2381,11 +2393,11 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             service_line_audit=service_line_audit,   # internal opt-in: scorecard section
             full_detail=full_detail,   # opt-in: Hospital Network Full Detail report
         )
-        if job.get("email"):
+        if _job_ran_by(job):
             from perception.db import get_connection as _gc
             with _gc() as _con:
                 _con.execute("UPDATE network_runs SET ran_by = ? WHERE run_id = ?",
-                             [job.get("email"), result.run_id])
+                             [_job_ran_by(job), result.run_id])
         job["status"] = "done"
         _notify_run_complete(job, "Hospital Network report", result.network_canonical_name or result.network_name,
                              [result.pdf_path, result.teaser_pdf_path, getattr(result, "full_detail_pdf_path", None)])
@@ -3099,7 +3111,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
                 brand=brand, report_title=req.get("report_title"),
                 force_rerun=override, override_today_lock=override,
             )
-        set_run_role(result.run_id, job["role"], job.get("email"))
+        set_run_role(result.run_id, job["role"], _job_ran_by(job))
 
         # 2. Website URLs: user-confirmed, else the resolved provider's site.
         urls = [u for u in (req.get("urls") or []) if (u or "").strip()]
@@ -4619,15 +4631,22 @@ def _entity_roster(entity: dict):
     return _load(entity.get("confirmed_roster")), _load(entity.get("anchor_listing"))
 
 
-def _launch_tracked_run(entity: dict, brand: str = "original", email: Optional[str] = None) -> str:
+def _launch_tracked_run(entity: dict, brand: str = "original", email: Optional[str] = None,
+                        owner_key: Optional[str] = None) -> str:
     """Create the snapshot job for a tracked entity, routed by its type: hospitals go through
     the hospital analyzer, practices and service lines through the practice analyzer (practice
     rubric, roster-based reviews pillar) — the same routing every other report uses.
     The run is attributed ("Run by" in History) to the person who launched it, or — for
     scheduled snapshots — to whoever set up the tracking."""
-    job_id = _new_job("admin", brand, email or entity.get("created_by") or None)
+    job_id = _new_job("admin", brand, email or None)
     j = _jobs[job_id]
+    j["ran_by"] = email or entity.get("created_by") or None
+    if owner_key:
+        j["owner"] = owner_key
+    j["tracked_entity_id"] = entity["id"]
+    j["force_rerun"] = True            # a snapshot must be a fresh analysis, not the 30-day cached result
     j["entity_name"] = entity["entity_name"]
+    j["label"] = f"{entity.get('display_name') or entity['entity_name']} — Trends snapshot"
     j["individual_report"] = True
     j["skip_pdf"] = True              # data-only snapshot; the Trend Report is the deliverable
     j["patient_perspective"] = False
@@ -4764,7 +4783,8 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_curr
         _upd(entity["id"], facility_type=(req.facility_type or "hospital"), source_url=(req.source_url or None))
         entity["facility_type"] = req.facility_type or "hospital"; entity["source_url"] = req.source_url or None
     # Fire initial collection run immediately so the first data point is captured now.
-    job_id = _launch_tracked_run(entity, payload.get("brand", "original"), payload.get("email"))
+    job_id = _launch_tracked_run(entity, payload.get("brand", "original"), payload.get("email"),
+                                 owner_key=_owner_key(payload.get("email"), payload.get("role")))
     mark_tracked_entity_ran(entity["id"], entity.get("schedule", "monthly"))
     for k in ("last_run_at", "next_run_at", "created_at"):
         if entity and entity.get(k):
@@ -5008,7 +5028,7 @@ def _run_tracked_and_notify(job_id: str, entity: dict) -> None:
         # Monthly-style snapshot: same roster every time, teaser/full-detail/scorecard off.
         _job_network_analyze(job_id, entity["entity_name"], hq, entity.get("source_url") or "",
                              list(roster or []), entity.get("facility_type") or "hospital", "original",
-                             ignore_cache=False, teaser=False, service_line_audit=False, full_detail=False)
+                             ignore_cache=True, teaser=False, service_line_audit=False, full_detail=False)
     elif (entity.get("entity_type") or "hospital") in ("practice", "service_line"):
         _job_run_practice(job_id, entity["entity_name"], entity["city"], entity["state"],
                           entity.get("specialty"), True, None)
@@ -5148,9 +5168,22 @@ async def track_run_now(entity_id: str, payload: dict = Depends(get_current_user
     if not entity:
         raise HTTPException(404, "tracked entity not found")
 
-    job_id = _launch_tracked_run(entity, payload.get("brand", "original"), payload.get("email"))
+    running = next((jid for jid, j in _jobs.items()
+                    if j.get("status") == "running" and j.get("tracked_entity_id") == entity_id), None)
+    if running:
+        raise HTTPException(409, "An analysis run for this entity is already in progress — it will appear as a snapshot when it finishes.")
+    etype = entity.get("entity_type") or "hospital"
+    if etype in ("hospital", "practice", "service_line"):
+        from perception.db import get_recent_run
+        today = get_recent_run(entity["entity_name"], f"{entity.get('city')}, {entity.get('state')}", days=0,
+                               entity_type="practice" if etype != "hospital" else "hospital")
+        if today:
+            return {"already_today": True, "run_id": today.get("run_id"),
+                    "message": "A snapshot was already taken today; the next analysis run will add a new point tomorrow or on schedule."}
+    job_id = _launch_tracked_run(entity, payload.get("brand", "original"), payload.get("email"),
+                                 owner_key=_owner_key(payload.get("email"), payload.get("role")))
     mark_tracked_entity_ran(entity_id, entity.get("schedule", "monthly"))
-    return {"job_id": job_id}
+    return {"job_id": job_id, "label": _jobs[job_id].get("label")}
 
 
 class AckRequest(BaseModel):

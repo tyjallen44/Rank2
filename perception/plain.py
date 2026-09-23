@@ -156,7 +156,7 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
     for attempt in (1, 2):
         try:
             resp = _client().messages.create(
-                model=_MODEL, max_tokens=1500, temperature=0, system=_SYSTEM,
+                model=_MODEL, max_tokens=1500, system=_SYSTEM,
                 messages=[{"role": "user", "content": "Material:\n" + json.dumps(material, ensure_ascii=False, indent=1) + "\n\n" + ask}],
             )
             txt = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()

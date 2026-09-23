@@ -3044,3 +3044,17 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T4 Spreadsheet path.** Under the Run button: "Ranking several markets at once? Upload a spreadsheet →" reveals the upload form (the pill row hides, since the file carries its own rows); "← Back to entering a location" restores the form and pill row. [ui]
 - **T5 Handoffs.** The chooser (Which report do I need?) and Home suggestions that land on Rankings with a type preselect the right pill; "Analysis Type ⓘ" mentions Student Health Clinics and the spreadsheet link. [ui]
 - **R1** Hospital Market and Specialty Practice runs, ZIP/radius under Advanced options, report formats and the Run button behave exactly as before. Student Health runs and spreadsheet runs complete as before. [ui]
+
+## FIX-TRENDS-RUN-NOW — Run now takes a fresh snapshot, shows on Home, and the plain-language pass works on production
+
+**Context (2026-09-23):** Run now on a tracked entity returned the 30-day cached result in under a second (no new snapshot), emailed "Ready" to the tracking owner instead of the person clicking, and never appeared under Home → Your analysis runs for password (admin) sessions, which carry no email. Separately, production logs showed the plain-language pass failing every time with `TypeError: unexpected keyword argument 'temperature'` (newer Anthropic SDK); reports fell back to trimmed originals. Not deployed.
+
+- **T1 Fresh snapshot.** Trends → Run now on an entity last analyzed within 30 days (but not today). **Expect:** the row's message says the run started with a "Watch progress →" link; the run appears on Home under Your analysis runs; it takes minutes (real analysis, Claude calls in Operations); a new data point with today's date appears when done. [ui][ops]
+- **T2 Same-day notice.** Run now again the same day → message "A snapshot was already taken today…" with an "Open today's report" link; no run launched, no cost. [ui]
+- **T3 In-progress guard.** Click Run now twice quickly → the second click reports "already in progress"; only one run exists. [ui]
+- **T4 Emails.** Run now as a signed-in email user → the "Ready" email goes to that user only. Run now from an admin password session → no Ready email. Scheduled snapshots → no Ready email to the owner (Trend-report email delivery remains opt-in per entity). [email]
+- **T5 Attribution.** History "Run by" = the person who clicked (admin sessions show "admin"); scheduled snapshots show the tracking owner. [ui]
+- **T6 Home list (admin).** Signed in with the admin password, start any report → it appears under Your analysis runs; Trends snapshots are labelled "<name> — Trends snapshot". [ui]
+- **T7 Plain-language pass on production.** Run a Deep Diagnostic; logs show `[plain] condensed run=… (all sections)` and the PDF opens with the ≤80-word overview, 3-sentence verdict and What to Do First bullets (no TypeError in logs). [pdf][ops]
+- **T8 Cached results keep their date.** Re-running a cached organization no longer bumps its History created_at; the row keeps its original date. [ui]
+- **R1** Network tracked runs ignore the 30-day cache too; hospital/practice weekly schedules still produce weekly points. Compare Two, Rankings and Event Prep unchanged. [ui]

@@ -1855,8 +1855,7 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
             md_path               = EXCLUDED.md_path,
             entity_name           = EXCLUDED.entity_name,
             individual_report     = EXCLUDED.individual_report,
-            result_json           = EXCLUDED.result_json,
-            created_at            = EXCLUDED.created_at
+            result_json           = EXCLUDED.result_json
         """,
         [
             result.run_id, result.location, result.specialty, result.aggregate,

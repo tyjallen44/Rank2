@@ -10612,7 +10612,12 @@ async function runTrackNowFromList(id) {
   try {
     const r = await api(`/api/track/entities/${id}/run`, { method: 'POST' });
     if (!r.ok) throw new Error(await errDetail(r, 'Analysis run failed to start'));
-    if (msg) msg.textContent = 'Analysis run started — a new snapshot will appear when it finishes.';
+    const d = await r.json();
+    if (d.already_today) {
+      if (msg) msg.innerHTML = `${_learnEsc(d.message || 'A snapshot was already taken today.')}${d.run_id ? ` <a href="#" onclick="_download('/api/reports/${d.run_id}/pdf?token=' + encodeURIComponent(_token));return false" style="color:var(--teal);font-weight:600">Open today's report</a>` : ''}`;
+      return;
+    }
+    if (msg) msg.innerHTML = `Analysis run started — it is listed under <strong>Your analysis runs</strong> on Home and a new snapshot appears when it finishes. <a href="#" onclick="startProgress('${d.job_id}', ${_jsq(d.label || 'Trends snapshot')}, false);return false" style="color:var(--teal);font-weight:600">Watch progress →</a>`;
   } catch (e) { if (msg) msg.textContent = e.message; }
 }
 // Start a NEW tracked entity prefilled from this one (the safe way to change identity
