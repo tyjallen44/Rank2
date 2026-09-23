@@ -12374,15 +12374,17 @@ function _cityOptions(el) {
   const q = (el.value || '').trim().toLowerCase().split(',')[0].trim();
   const st = ((_afSibling(el, 'state') || {}).value || '').trim().toUpperCase();
   if (q.length < 2) { _dlFill('dl-cities', []); return; }
-  const out = [];
   const states = (st.length === 2 && _cityIndex[st]) ? [st] : Object.keys(_cityIndex);
+  const hits = [];
   for (const s of states) {
     for (const c of _cityIndex[s]) {
-      if (c.toLowerCase().startsWith(q)) { out.push(states.length === 1 ? c : `${c}, ${s}`); if (out.length >= 14) break; }
+      const cl = c.toLowerCase();
+      if (cl.startsWith(q)) hits.push({ c, s, exact: cl === q ? 0 : 1 });
     }
-    if (out.length >= 14) break;
   }
-  _dlFill('dl-cities', out);
+  // Exact name matches first (Boston before Bostwick), then shorter names, then alphabetical.
+  hits.sort((a, b) => a.exact - b.exact || a.c.length - b.c.length || a.c.localeCompare(b.c) || a.s.localeCompare(b.s));
+  _dlFill('dl-cities', hits.slice(0, 14).map(h => states.length === 1 ? h.c : `${h.c}, ${h.s}`));
 }
 let _hospLookupTimer = null;
 function _autofillInput(ev) {
