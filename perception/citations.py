@@ -133,14 +133,14 @@ def analyze(sc: dict) -> dict:
     if not our:
         sentence = ""
     elif not cited_rows:
-        sentence = (f"Your website {our} was not cited for any of the {n} questions"
-                    + (f"; assistants relied on {_join(top3)} instead." if top3 else "."))
+        sentence = (f"The AI assistants did not use your website {our} in their answers to any of the {n} questions"
+                    + (f"; they relied on {_join(top3)} instead." if top3 else "."))
     else:
-        sentence = f"Your website {our} was cited for {len(cited_rows)} of {n} questions"
-        sentence += ", all of them when you were asked about by name." if only_direct else "."
+        sentence = f"The AI assistants used your website {our} in their answers for {len(cited_rows)} of {n} questions"
+        sentence += ", all of them when they were asked about you by name." if only_direct else "."
         if choosing_uncited and top3:
             sentence += (f" For the {len(choosing_uncited)} question{'s' if len(choosing_uncited) != 1 else ''} where patients are choosing "
-                         f"and you were not cited, assistants relied on {_join(top3)}.")
+                         f"and your site was not used, they relied on {_join(top3)}.")
     sc["sourcing"] = {"our_domain": our, "cited_questions": len(cited_rows), "questions": n,
                       "only_direct": only_direct, "choosing_uncited": len(choosing_uncited),
                       "relied_on": top3, "sentence": sentence}
