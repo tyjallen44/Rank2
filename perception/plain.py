@@ -120,6 +120,53 @@ def _fallback(result) -> None:
         result.top_recommendation = _sentence_bullets(result.top_recommendation)
 
 
+_STRUCT_SYSTEM = (
+    "You edit healthcare reputation reports for hospital executives. Turn the section you are given "
+    "into a one-sentence headline (at most 25 words) that states the main point, followed by 3 to 5 "
+    "bullets (each at most 22 words, one idea each) that support it. Keep every fact, name and number "
+    "from the source; add nothing. Plain English, no parentheses, no jargon (say 'what assistants look "
+    "up live' not 'retrieval-time', 'whether assistants can tell your locations apart' not 'entity "
+    "resolution'). Return JSON only: {\"headline\": str, \"bullets\": [str, ...]}."
+)
+
+
+def structure_prose(text: str, *, label: str = "section", console=None) -> Optional[dict]:
+    """{'headline', 'bullets'} for a prose section, via the model; deterministic sentence split on failure."""
+    t = (text or "").strip()
+    if not t:
+        return None
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", t) if s.strip()]
+    fallback = {"headline": sents[0] if sents else t[:200], "bullets": sents[1:6]}
+    try:
+        resp = _client().messages.create(
+            model=_MODEL, max_tokens=700, system=_STRUCT_SYSTEM,
+            messages=[{"role": "user", "content": f"Section ({label}):\n{t[:6000]}\n\nReturn the JSON."}],
+        )
+        txt = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+        m = re.search(r"\{.*\}", txt, re.S)
+        data = json.loads(m.group(0) if m else txt)
+        head = str(data.get("headline") or "").strip()
+        bullets = [str(x).strip() for x in (data.get("bullets") or []) if str(x).strip()]
+        if not head or len(bullets) < 2:
+            raise ValueError("thin structure")
+        return {"headline": head, "bullets": bullets[:5]}
+    except Exception as exc:
+        _log(f"structure_prose failed for {label} ({type(exc).__name__}: {str(exc)[:120]}); sentence split used.", console)
+        return fallback if fallback["bullets"] else {"headline": fallback["headline"], "bullets": []}
+
+
+def condense_network(result, console=None) -> bool:
+    """Hospital Network: executive summary and 'What AI assistants currently see' → headline + bullets."""
+    changed = False
+    if getattr(result, "executive_summary", "") and not getattr(result, "executive_summary_structured", None):
+        result.executive_summary_structured = structure_prose(result.executive_summary, label="executive summary", console=console)
+        changed = True
+    if getattr(result, "ai_says", "") and not getattr(result, "ai_says_structured", None):
+        result.ai_says_structured = structure_prose(result.ai_says, label="what AI assistants currently see", console=console)
+        changed = True
+    return changed
+
+
 def condense(result, *, only_assessment: bool = False, console=None) -> bool:
     """Rewrite the executive sections in place. Returns True when anything was changed
     (model pass or deterministic fallback), False when there was nothing to do.

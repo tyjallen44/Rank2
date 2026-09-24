@@ -433,23 +433,51 @@ def _fmt_cached(gen) -> str:
 _METHODOLOGY_URL = "careclimb.com/methodology"
 
 
-def _methodology_box_html(pillars: list[str], n_label: str = "four pillars") -> str:
-    """Compact methodology summary + link to the full public /methodology page —
-    replaces the former multi-page in-report appendix (details now live online)."""
+def _methodology_box_html(pillars: list[str], n_label: str = "four pillars", edition: str = "hospital") -> str:
+    """Compact methodology summary + link to the full public /methodology page. One text for every
+    report type (edition tailors two sentences); the full rubric lives online."""
     T, S, BD, TXT, ALT = "#0F4146", "#177B6E", "#d0e4e8", "#3a5a60", "#f8fbfa"
     pill = " &middot; ".join(pillars)
+    if edition == "practice":
+        verified = ("Google Business Profile ratings, review counts and profile details for every confirmed location are read "
+                    "directly from Google. The organization&rsquo;s website is crawled for schema markup, physician pages, a sitemap, "
+                    "llms.txt and whether AI crawlers are allowed; that measured result sets the website part of Identity &amp; "
+                    "Machine-Readability, replacing the model&rsquo;s estimate. Quality claims made on the site are checked.")
+    elif edition == "community":
+        verified = ("Google Business Profile ratings and review counts for every confirmed site are read directly from Google, "
+                    "the HRSA Find-a-Health-Center record is fetched, and a query battery measures how often the center is surfaced "
+                    "for mission-related questions (Mission Query Capture Rate). The center&rsquo;s website is crawled for AI-crawler "
+                    "access and for the quality claims it makes.")
+    else:
+        verified = ("Google Business Profile ratings and review counts are read directly from Google. The CMS Care Compare overall "
+                    "star rating and the Leapfrog Hospital Safety Grade are fetched directly from those sources and set Outcomes &amp; "
+                    "Safety deterministically; the model cannot override them. The organization&rsquo;s website is crawled for "
+                    "AI-crawler access and for the quality claims it makes, which are checked against the verified values.")
+    p = lambda label, body: f'<p style="margin:0 0 6px"><strong>{label}</strong> {body}</p>'
     return (
         f'<div style="page-break-inside:avoid;background:{ALT};border:1px solid {BD};'
         f'border-radius:6px;padding:16px 20px;margin:22px 0;font-size:8.5pt;color:{TXT};line-height:1.55">'
         f'<div style="font-size:9.5pt;font-weight:700;color:{T};margin-bottom:8px">Methodology &mdash; Pulse AI Reputation</div>'
-        f'<p style="margin:0 0 6px">The <strong>Pulse Score</strong> (0&ndash;100) measures how visibly and '
-        f'favorably an organization surfaces when patients and referrers ask AI assistants (ChatGPT, Claude, '
-        f'Gemini) where to get care &mdash; a market-perception measure, not a clinical-quality verdict. It is a '
-        f'weighted blend of {n_label}: {pill}.</p>'
-        f'<p style="margin:0 0 6px"><strong>National quartiles:</strong> 1st (&#8805;75) &middot; 2nd (68&ndash;74) '
-        f'&middot; 3rd (58&ndash;67) &middot; 4th (&lt;58). &nbsp;<strong>Sources:</strong> CMS Care Compare, Google, '
-        f'The Leapfrog Group, U.S. News, HRSA (Community Health).</p>'
-        f'<p style="margin:0">The complete scoring rubric, data sources, and prompt battery are published at '
+        + p("What the score is.", f"The <strong>Pulse Score</strong> (0&ndash;100) measures how visibly and favorably an organization surfaces "
+            f"when patients and referrers ask AI assistants (ChatGPT, Claude, Gemini) where to get care &mdash; a market-perception measure, "
+            f"not a clinical-quality verdict. It is a weighted blend of {n_label}: {pill}. National quartiles: 1st (&#8805;75) &middot; "
+            f"2nd (68&ndash;74) &middot; 3rd (58&ndash;67) &middot; 4th (&lt;58).")
+        + p("Verified from the source.", verified)
+        + p("Where the model is used.", "An AI analyst model, working with live web search, reads the public record for the judgments that need it "
+            "(credentials, recognition, patient voice, access) against a fixed rubric, and writes the narrative. The pages it consulted are listed "
+            "in the report. Verified values override the model wherever they disagree, and the pillars are blended into the score by code.")
+        + p("Score Evidence.", "Every report states how much public data sits behind its score &mdash; High, Medium or Low &mdash; with the reason: "
+            "review volume, which facts were verified from the source, whether the website could be read, and whether live search was available. "
+            "It never changes the score.")
+        + p("What AI assistants actually said (optional).", "When requested, about 30 patient-language questions written for the organization&rsquo;s "
+            "specialty are put to Claude, ChatGPT and Gemini, each twice. The report shows how often the organization was named (as a range), "
+            "who was named instead, and which pages each kind of answer drew on; those citations attach &ldquo;Why this matters&rdquo; evidence to "
+            "the recommendations. It is observational and never changes the score.")
+        + p("If the website cannot be read.", "When the crawl finds a bot wall or a robots.txt rule that turns AI crawlers away, the report says so on "
+            "its first page: nothing the organization publishes can reach AI answers until it is fixed, so that fix is placed first.")
+        + p("Rosters.", "Locations and facilities are confirmed once and reused (Trends and later reports measure the same roster); finished "
+            "analyses refresh details but never add or remove locations on their own.")
+        + f'<p style="margin:0">The complete scoring rubric, data sources and question sets are published at '
         f'<a href="https://{_METHODOLOGY_URL}" style="color:{S};font-weight:700;text-decoration:none">{_METHODOLOGY_URL}</a>.</p>'
         f'</div>'
     )
@@ -1475,7 +1503,7 @@ def _practice_appendix_html() -> str:
     """Appendix — compact methodology summary + link (Practice Edition)."""
     return _methodology_box_html(
         ["Practitioner Credentials &amp; Clinical Quality", "Reviews &amp; Reputation",
-         "Identity &amp; Machine-Readability", "Access &amp; Fit"])
+         "Identity &amp; Machine-Readability", "Access &amp; Fit"], edition="practice")
 
 
 def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,

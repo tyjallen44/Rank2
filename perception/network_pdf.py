@@ -819,13 +819,22 @@ def _cover_block(
 </div>"""
 
 
+def _structured_html(struct: dict | None, fallback: str, *, primary: str = "#0F4146") -> str:
+    """Headline sentence + bullets when a structured version exists; else the paragraph."""
+    if struct and struct.get("headline"):
+        lis = "".join(f'<li style="margin:0 0 4px">{_e(_strip_md(b))}</li>' for b in (struct.get("bullets") or []))
+        return (f'<p style="font-weight:700;color:{primary};margin:0 0 6px">{_e(_strip_md(struct["headline"]))}</p>'
+                + (f'<ul style="margin:0;padding-left:18px">{lis}</ul>' if lis else ""))
+    return f"<p>{_e(fallback)}</p>"
+
+
 def _exec_summary_block(result: NetworkResult) -> str:
     summary = _strip_md(result.executive_summary or "")
     if not summary:
         return ""
     return f"""
 <h2>Executive Summary</h2>
-<div class="exec-summary"><p>{_e(summary)}</p></div>"""
+<div class="exec-summary">{_structured_html(getattr(result, "executive_summary_structured", None), summary)}</div>"""
 
 
 def _score_breakdown_block(
@@ -863,7 +872,7 @@ def _score_breakdown_block(
         ai_says_html = f"""
 <div style="background:{pale};border-left:3px solid {accent};padding:12px 16px;margin-top:12px;border-radius:4px">
   <div style="font-size:8.5pt;font-weight:700;letter-spacing:0.05em;color:{primary};text-transform:uppercase;margin-bottom:4px">What AI Assistants Currently See</div>
-  <p style="font-size:9.5pt;color:#3a4a5a;margin:0">{_e(ai_says)}</p>
+  <div style="font-size:9.5pt;color:#3a4a5a">{_structured_html(getattr(result, "ai_says_structured", None), ai_says, primary=primary)}</div>
 </div>"""
 
     return f"""

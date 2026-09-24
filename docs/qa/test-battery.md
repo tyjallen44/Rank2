@@ -3203,3 +3203,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T1 Hospital Network.** Run a network whose system website walls off crawlers (USA Health). **Expect:** on page 1, inside the System-Level AI Reputation section right after "What AI assistants currently see", the red "URGENT: AI assistants cannot read your website" box with "See below for details"; present in the standard, teaser and Full Detail files; the completion screen shows the same box. A system with a readable site shows nothing. [pdf][ui]
 - **T2 Community Health.** A center whose site blocks crawlers or disallows AI in robots.txt: the box appears directly under the Pulse Verdict; Score Evidence says "website quality claims checked by crawl" / "website blocks AI crawlers (verified)". [pdf]
 - **R1** Network system scores, facility scorecards, MQCR and pillars unchanged; only the alert and the crawl-verified facts were added. Tracked network snapshots record the facts but produce no PDF. [ui]
+
+## NETWORK-EXEC-STRUCTURE + METHODOLOGY-REFRESH
+
+**Not deployed.** After rollout run apply-learn-content (two methodology articles updated).
+
+- **T1 Hospital Network page 2.** Executive Summary is a bold one-sentence headline followed by 3–5 short bullets (one idea each, plain English, every fact from the original), not a paragraph. The same treatment applies to "What AI assistants currently see" inside the System-Level section. Standard, teaser and Full Detail files all show it. If the structuring model call fails, the section still renders as a headline (first sentence) plus sentence bullets. [pdf]
+- **T2 Methodology box (every report type).** The appendix box at the end of Deep Diagnostic (hospital and practice), Hospital Network and Community Health reports now has labelled paragraphs: What the score is; Verified from the source (edition-specific: CMS/Leapfrog for hospitals; Google profile facts + website machine-readability for practices; HRSA + MQCR for community health); Where the model is used; Score Evidence; What AI assistants actually said (optional); If the website cannot be read; Rosters; link to careclimb.com/methodology. [pdf]
+- **T3 Learn /methodology.** "Where the signals come from" gains the website-crawl bullet; "How the score is produced" states what is measured vs judged. [ui]
+- **R1** Deep Diagnostic executive sections unchanged (already condensed). Scores unchanged. [pdf]

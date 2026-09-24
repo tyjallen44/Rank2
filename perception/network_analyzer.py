@@ -537,6 +537,13 @@ def _finalize_network(result, *, network_name, hq_location, source_url, brand,
     if full_detail and content_findings and content_findings.findings:
         content_findings = _ensure_drafts(result, content_findings, network_name, emit)
 
+    # 3b. Executive sections → headline + bullets (plain language) before any render / save.
+    try:
+        from .plain import condense_network as _condense_network
+        _condense_network(result)
+    except Exception as _px:
+        print(f"[plain] network structuring failed: {type(_px).__name__}: {_px}", flush=True)
+
     # 4. Renders.
     emit({"type": "phase", "name": "pdf", "text": "Rendering Hospital Network report"})
     try:

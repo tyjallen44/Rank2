@@ -365,6 +365,8 @@ class NetworkResult(BaseModel):
     weighting_profile: Optional[str] = None     # drives pillar labels in the PDF
     ai_says: str = ""                           # "What AI assistants currently see" for the network entity
     website_facts: Optional[dict] = None        # crawl-verified facts for the system's website (AI-access alert on page 1)
+    executive_summary_structured: Optional[dict] = None   # {"headline", "bullets"} (perception.plain.condense_network)
+    ai_says_structured: Optional[dict] = None             # {"headline", "bullets"}
     # Narrative (written for C-suite)
     executive_summary: str = ""
     brand_visibility_narrative: str = ""

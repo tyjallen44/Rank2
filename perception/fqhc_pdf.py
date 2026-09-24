@@ -866,7 +866,7 @@ def _appendix_block(primary: str, pale: str) -> str:
     return _methodology_box_html(
         ["Access &amp; Findability", "Eligibility &amp; Cost Accuracy",
          "Site &amp; Service Completeness", "Experience &amp; Reputation",
-         "Institutional Signals"], n_label="five pillars")
+         "Institutional Signals"], n_label="five pillars", edition="community")
 
 
 def _disclaimer_block(result: AnalysisResult, primary: str) -> str:
