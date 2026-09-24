@@ -36,13 +36,18 @@ def fetch_hospital_quality(name: str, city: str, state: str, *, timeout: float =
 
     def _lf():
         try:
-            from .leapfrog import fetch_leapfrog_grade
-            g = fetch_leapfrog_grade(name, city, state)
-            out["leapfrog_checked"] = True
-            out["leapfrog_grade"] = g
-            if not g:
-                out["notes"].append("Leapfrog: automated lookup found no grade for this exact name (may still be rated under another name)")
+            from .leapfrog import fetch_leapfrog
+            lf = fetch_leapfrog(name, city, state)
+            out["leapfrog_checked"] = lf.get("status") in ("graded", "not_graded", "not_found")
+            out["leapfrog_status"] = lf.get("status")
+            out["leapfrog_grade"] = lf.get("grade")
+            out["leapfrog_matched"] = lf.get("matched_name")
+            out["leapfrog_url"] = lf.get("url")
+            out["leapfrog_cycle"] = lf.get("cycle")
+            if lf.get("note"):
+                out["notes"].append(lf["note"])
         except Exception as exc:
+            out["leapfrog_status"] = "error"
             out["notes"].append(f"Leapfrog lookup failed: {type(exc).__name__}")
 
     with ThreadPoolExecutor(max_workers=2) as ex:
@@ -62,10 +67,14 @@ def evidence_lines(q: dict) -> str:
     else:
         lines.append("CMS Care Compare overall star rating: no matching Care Compare record")
     if q.get("leapfrog_grade"):
-        lines.append(f"Leapfrog Hospital Safety Grade: {q['leapfrog_grade']} (verified on leapfroggroup.org, current cycle)")
-    elif q.get("leapfrog_checked"):
-        lines.append("Leapfrog Hospital Safety Grade: our automated lookup did not find a grade for this exact name — "
-                     "if you can confirm the current grade on hospitalsafetygrade.org, report it; otherwise say 'not rated'.")
+        lines.append(f"Leapfrog Hospital Safety Grade: {q['leapfrog_grade']} (verified on hospitalsafetygrade.org, {q.get('leapfrog_cycle') or 'current cycle'}"
+                     f"{', listed as ' + repr(q['leapfrog_matched']) if q.get('leapfrog_matched') else ''}). USE THIS GRADE VERBATIM.")
+    elif q.get("leapfrog_status") == "not_graded":
+        lines.append("Leapfrog Hospital Safety Grade: VERIFIED not graded this cycle — hospitalsafetygrade.org lists the hospital "
+                     "without a grade. Say 'not graded this cycle'; do NOT say it declined the survey (the Safety Grade is separate from the Leapfrog Survey).")
+    elif q.get("leapfrog_status") == "not_found":
+        lines.append("Leapfrog Hospital Safety Grade: our lookup found no hospital by this name in its city on hospitalsafetygrade.org — "
+                     "if you can confirm the current grade there, report it; otherwise say 'not found'. Do NOT infer that the hospital declined the survey.")
     for n in q.get("notes") or []:
         lines.append(f"Note: {n}")
     lines.append("Do not substitute other values for these two signals; if you find a conflicting number online, mention the conflict but score from the verified values.")
@@ -80,6 +89,6 @@ def sources(q: dict) -> list:
                     "title": f"CMS Care Compare — {q.get('cms_name')} (overall rating {q.get('cms_star') or 'not rated'})",
                     "domain": "medicare.gov", "cited": True, "verified": True})
     if q and q.get("leapfrog_grade"):
-        src.append({"url": "https://www.hospitalsafetygrade.org/", "title": f"Leapfrog Hospital Safety Grade — {q['leapfrog_grade']}",
+        src.append({"url": q.get("leapfrog_url") or "https://www.hospitalsafetygrade.org/", "title": f"Leapfrog Hospital Safety Grade — {q['leapfrog_grade']}",
                     "domain": "hospitalsafetygrade.org", "cited": True, "verified": True})
     return src

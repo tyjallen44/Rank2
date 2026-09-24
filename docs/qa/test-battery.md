@@ -3166,3 +3166,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T1** Trends → a tracked Hospital with snapshots before 2026-09-21 (e.g. USA Health University Hospital) → Run now. **Expect:** the new snapshot carries a note dated today: "Method changed: from this snapshot, Outcomes & Safety uses the hospital's quality data verified from the source (2★ on CMS Care Compare; no Leapfrog grade published) instead of the model's estimate…" — a numbered marker on the chart and a line in the Trend Report's Notes. [ui][pdf]
 - **T2** Run now again: no second note (idempotent). A hospital tracked for the first time today gets no note (nothing to explain). Practice / community health / network entities never get one. [ui]
 - **T3** The "score fell" Needs-attention flag may still appear on that snapshot; the note beside it explains the step. [ui]
+
+## FIX-LEAPFROG-LOOKUP — Leapfrog Hospital Safety Grade actually fetched (heart-surgery item 3, Leapfrog piece)
+
+**Context:** the old scraper searched hospitalsafetygrade.org by name (which returns nothing) and swallowed the miss, so every hospital read "Leapfrog: not found" and Outcomes & Safety rested on CMS alone. The new lookup renders the CITY + STATE results in a headless browser, reads every card (name, address, grade class), fuzzy-matches the hospital (system prefixes like "USA Health" stripped), and distinguishes graded / not graded this cycle / not found / lookup unavailable. Results are cached per city for 30 days (table leapfrog_city_cache) so the site is touched at most once per city per month; a bot-challenge page is reported as "lookup unavailable", never as "not found". Not deployed.
+
+- **T1** Hospital Deep Diagnostic on USA Health University Hospital (Mobile, AL): Score Evidence says "CMS/Leapfrog verified from source"; the evidence/narrative states Leapfrog Safety Grade **C (Spring 2026, listed as 'University Hospital')**; Outcomes & Safety lands near 59 (2★ CMS inside the C band) instead of 48. The PDF's sources list links hospitalsafetygrade.org/h/university-hospital-mobile-al. [pdf]
+- **T2** USA Health Providence Hospital → grade B. Springhill Medical Center → "not graded this cycle (verified)", and the narrative must NOT claim the hospital declined the Leapfrog survey. [pdf]
+- **T3** A second hospital in the same city the same month makes no new site fetch (Operations/logs show no Playwright run; the cache row exists). [ops]
+- **T4** If the site serves a challenge page, the run continues with "Leapfrog lookup unavailable — grade not verified this run" and the model's read stands. [ops]
+- **R1** Hospitals with no Leapfrog listing in their city still score on CMS alone as before. Practices and community health unaffected. [pdf]

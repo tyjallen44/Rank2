@@ -1,165 +1,165 @@
-"""Leapfrog Hospital Safety Grade scraper.
+"""Leapfrog Hospital Safety Grade lookup (hospitalsafetygrade.org).
 
-Fetches the current A/B/C/D/F Hospital Safety Grade from leapfroggroup.org
-for a named hospital using Playwright.  Grades are published semi-annually;
-this always returns the current published grade.
+The public site renders results client-side, and its search only returns hospitals for a
+CITY + STATE (a bare name search returns nothing). So: load the city/state results in a
+headless browser, read every result card (name, address, grade class), and fuzzy-match the
+requested hospital. Distinguishes three outcomes:
 
-Usage:
-    grade = fetch_leapfrog_grade("Atrium Health Pineville", "Charlotte", "NC")
-    # → "A" | "B" | "C" | "D" | "F" | None
+  graded      → {"grade": "A".."F"}
+  not_graded  → the hospital is listed but Leapfrog assigns no grade this cycle (class grade-gna)
+  not_found   → no card in that city/state matched the name
+
+Grades are published twice a year; the card's date label is returned as `cycle`.
 """
 from __future__ import annotations
 
 import re
 from typing import Optional
 
-
-_SEARCH_URL = "https://www.leapfroggroup.org/ratings-report"
-_GRADE_RE   = re.compile(r'\b([A-F])\b')
-_VALID      = frozenset("ABCDF")
-_STOP       = frozenset({
-    "hospital", "medical", "center", "health", "system", "regional",
-    "memorial", "general", "community", "care", "of", "the", "at",
-})
+_SEARCH = "https://www.hospitalsafetygrade.org/search?findBy=hospital&zip_code=&city={city}&state_prov={state}&hospital="
+_UA = "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/128 Safari/537.36"   # this exact string passes the site's bot check; longer UAs get a challenge page
+_STOP = frozenset({"hospital", "medical", "center", "centre", "health", "healthcare", "system", "regional", "memorial",
+                   "general", "community", "care", "of", "the", "at", "and", "inc", "llc", "dba", "usa"})
+_SYSTEM_PREFIXES = ("usa health ", "uab ", "hca ", "ascension ", "baptist health ", "adventhealth ", "atrium health ",
+                    "novant health ", "prisma health ", "ochsner ", "ssm health ", "mercy ", "st. luke's ", "trinity health ")
 
 
-def _tokens(name: str) -> frozenset[str]:
-    toks = re.sub(r"[^a-z0-9 ]", "", name.lower()).split()
-    return frozenset(t for t in toks if t not in _STOP and len(t) > 1)
+def _tokens(name: str) -> frozenset:
+    n = re.sub(r"[^a-z0-9 ]", " ", (name or "").lower())
+    return frozenset(t for t in n.split() if t not in _STOP and len(t) > 1)
 
 
-def _name_similarity(a: str, b: str) -> float:
+def _similarity(a: str, b: str) -> float:
     ta, tb = _tokens(a), _tokens(b)
     if not ta or not tb:
         return 0.0
     return len(ta & tb) / min(len(ta), len(tb))
 
 
-def fetch_leapfrog_grade(name: str, city: str, state: str) -> Optional[str]:
-    """Return the Leapfrog Hospital Safety Grade for a hospital, or None.
+def _variants(name: str) -> list:
+    n = (name or "").strip()
+    out = [n]
+    low = n.lower()
+    for p in _SYSTEM_PREFIXES:
+        if low.startswith(p):
+            out.append(n[len(p):].strip())
+    m = re.match(r"^(.*?)\s*[-–—]\s*(.+)$", n)          # "System - Campus" → "Campus"
+    if m:
+        out.append(m.group(2).strip())
+    return [v for v in out if v]
 
-    Launches a headless Chromium browser, searches leapfroggroup.org, and
-    extracts the grade letter.  Returns None if the hospital is not rated,
-    not found, or the scrape fails for any reason.
-    """
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        return None
 
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            page    = browser.new_page()
-
-            # Load the ratings search page
-            page.goto(_SEARCH_URL, wait_until="domcontentloaded", timeout=30000)
+def search_city(city: str, state: str, timeout_ms: int = 45000) -> list:
+    """All result cards for a city/state: [{name, address, grade|None, status, href, cycle}]."""
+    from playwright.sync_api import sync_playwright
+    url = _SEARCH.format(city=(city or "").strip().replace(" ", "+"), state=(state or "").strip().upper())
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page(user_agent=_UA)
+            resp = page.goto(url, wait_until="networkidle", timeout=timeout_ms)
             page.wait_for_timeout(1500)
-
-            # Try to fill the hospital name search field
-            # Leapfrog uses various input patterns — try each in priority order
-            filled = False
-            for selector in [
-                'input[placeholder*="ospital"]',
-                'input[placeholder*="earch"]',
-                'input[name*="ospital"]',
-                'input[name*="earch"]',
-                'input[type="search"]',
-                'input[type="text"]:first-of-type',
-            ]:
-                try:
-                    page.fill(selector, name, timeout=2000)
-                    filled = True
-                    break
-                except Exception:
-                    continue
-
-            if not filled:
-                browser.close()
-                return None
-
-            # Try to set state filter if a dropdown exists
-            for sel_selector in [
-                'select[name*="tate"]',
-                'select[id*="tate"]',
-                'select[aria-label*="tate"]',
-            ]:
-                try:
-                    page.select_option(sel_selector, state, timeout=1000)
-                    break
-                except Exception:
-                    continue
-
-            # Submit the search
-            page.keyboard.press("Enter")
-            page.wait_for_timeout(3000)
-
-            # Also try clicking a search button if Enter didn't trigger results
-            for btn_selector in [
-                'button[type="submit"]',
-                'button:has-text("Search")',
-                'input[type="submit"]',
-            ]:
-                try:
-                    page.click(btn_selector, timeout=1000)
-                    page.wait_for_timeout(2000)
-                    break
-                except Exception:
-                    continue
-
-            # Extract page text and look for grade near matching hospital name
-            body_text = page.inner_text("body")
+            body = page.inner_text("body")[:600].lower()
+            if (resp is not None and resp.status == 202) or "confirm you are human" in body or "security check" in body:
+                raise RuntimeError("bot challenge page")
+            cards = page.evaluate("""() => Array.from(document.querySelectorAll('.gradeWrapper')).map(g => {
+                const wrap = g.parentElement || g;
+                const nameEl = wrap.querySelector('.detailWrapper .name a, .name a, .name');
+                const addr = wrap.querySelector('.detailWrapper .address, .address');
+                const cls = Array.from(g.classList).find(c => /^grade-/.test(c)) || '';
+                const date = g.querySelector('.date');
+                return { name: nameEl ? nameEl.innerText.trim() : '', href: nameEl && nameEl.getAttribute ? (nameEl.getAttribute('href') || '') : '',
+                         address: addr ? addr.innerText.replace(/\\s+/g, ' ').trim() : '', cls, cycle: date ? date.innerText.trim() : '' };
+            })""")
+        finally:
             browser.close()
+    out = []
+    for c in cards or []:
+        letter = c.get("cls", "").replace("grade-", "").strip().lower()
+        if letter in ("a", "b", "c", "d", "f"):
+            grade, status = letter.upper(), "graded"
+        else:
+            grade, status = None, "not_graded"
+        out.append({"name": c.get("name") or "", "address": c.get("address") or "", "grade": grade, "status": status,
+                    "href": ("https://www.hospitalsafetygrade.org" + c["href"]) if c.get("href", "").startswith("/") else c.get("href", ""),
+                    "cycle": c.get("cycle") or ""})
+    return out
 
-        return _parse_grade(body_text, name, state)
 
+_CACHE_DAYS = 30     # grades change twice a year; one browser fetch per city per month keeps us under the site's bot threshold
+
+
+def _cached_city(city: str, state: str):
+    """(cards, fetched_at) from the DB cache, or None. Fail-soft."""
+    try:
+        import json
+        from datetime import datetime, timedelta
+        from ..db import get_connection
+        con = get_connection()
+        try:
+            con.execute("""CREATE TABLE IF NOT EXISTS leapfrog_city_cache (
+                               city_key VARCHAR PRIMARY KEY, cards VARCHAR NOT NULL, fetched_at TIMESTAMP NOT NULL)""")
+            row = con.execute("SELECT cards, fetched_at FROM leapfrog_city_cache WHERE city_key = ?",
+                              [f"{(city or '').strip().lower()}|{(state or '').strip().upper()}"]).fetchone()
+        finally:
+            con.close()
+        if row and row[1] and datetime.utcnow() - row[1] < timedelta(days=_CACHE_DAYS):
+            return json.loads(row[0]), row[1]
     except Exception:
-        return None
-
-
-def _parse_grade(text: str, hospital_name: str, state: str) -> Optional[str]:
-    """Extract the most likely grade for this hospital from page text.
-
-    Strategy: find lines/sections that mention the hospital name (fuzzy),
-    then look for a grade letter in the surrounding context.
-    """
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-
-    # Find lines that closely match the hospital name
-    best_grade: Optional[str] = None
-    best_sim   = 0.4  # minimum similarity threshold
-
-    for i, line in enumerate(lines):
-        sim = _name_similarity(line, hospital_name)
-        if sim > best_sim:
-            # Look for a standalone grade letter in the next ~5 lines
-            context = " ".join(lines[max(0, i-1): i+6])
-            grade = _extract_grade_from_context(context)
-            if grade:
-                best_sim   = sim
-                best_grade = grade
-
-    return best_grade
-
-
-def _extract_grade_from_context(context: str) -> Optional[str]:
-    """Find a valid grade letter (A/B/C/D/F) in a short text snippet.
-
-    Avoids false positives by requiring the letter to appear as a standalone
-    word or after common patterns like "Grade: A" or "Safety Grade A".
-    """
-    # Pattern 1: explicit "Grade" label followed by letter
-    explicit = re.search(
-        r'(?:grade|safety\s+grade|hospital\s+grade)[:\s]+([ABCDF])\b',
-        context, re.IGNORECASE
-    )
-    if explicit:
-        return explicit.group(1).upper()
-
-    # Pattern 2: standalone grade letter surrounded by whitespace/punctuation
-    standalone = re.findall(r'(?<!\w)([ABCDF])(?!\w)', context)
-    valid = [g for g in standalone if g in _VALID]
-    if len(valid) == 1:
-        return valid[0]
-
+        pass
     return None
+
+
+def _store_city(city: str, state: str, cards: list) -> None:
+    try:
+        import json
+        from datetime import datetime
+        from ..db import get_connection
+        con = get_connection()
+        try:
+            con.execute("""CREATE TABLE IF NOT EXISTS leapfrog_city_cache (
+                               city_key VARCHAR PRIMARY KEY, cards VARCHAR NOT NULL, fetched_at TIMESTAMP NOT NULL)""")
+            key = f"{(city or '').strip().lower()}|{(state or '').strip().upper()}"
+            con.execute("DELETE FROM leapfrog_city_cache WHERE city_key = ?", [key])
+            con.execute("INSERT INTO leapfrog_city_cache (city_key, cards, fetched_at) VALUES (?, ?, ?)",
+                        [key, json.dumps(cards), datetime.utcnow()])
+        finally:
+            con.close()
+    except Exception:
+        pass
+
+
+def fetch_leapfrog(name: str, city: str, state: str) -> dict:
+    """{'status': graded|not_graded|not_found|error, 'grade': letter|None, 'matched_name', 'url', 'cycle', 'note'}.
+    City results are cached for a month, so most lookups never touch the site."""
+    cached = _cached_city(city, state)
+    if cached:
+        cards = cached[0]
+    else:
+        try:
+            cards = search_city(city, state)
+        except Exception as exc:
+            return {"status": "error", "grade": None, "matched_name": None, "url": None, "cycle": None,
+                    "note": f"Leapfrog lookup unavailable ({'bot challenge' if 'challenge' in str(exc) else type(exc).__name__}) — grade not verified this run"}
+        if cards:
+            _store_city(city, state, cards)
+    if not cards:
+        return {"status": "not_found", "grade": None, "matched_name": None, "url": None, "cycle": None,
+                "note": f"Leapfrog lists no hospitals for {city}, {state}"}
+    best, best_sim = None, 0.0
+    for v in _variants(name):
+        for c in cards:
+            s = _similarity(v, c["name"])
+            if s > best_sim or (s == best_sim and best and c["name"].lower() == v.lower()):
+                best, best_sim = c, s
+    if not best or best_sim < 0.6:
+        return {"status": "not_found", "grade": None, "matched_name": None, "url": None, "cycle": None,
+                "note": f"Leapfrog: no hospital in {city}, {state} matched '{name}' (closest: {best['name'] if best else 'none'})"}
+    return {"status": best["status"], "grade": best["grade"], "matched_name": best["name"], "url": best["href"], "cycle": best["cycle"],
+            "note": (f"Leapfrog Hospital Safety Grade {best['grade']} ({best['cycle']}) — listed as '{best['name']}'" if best["grade"]
+                     else f"Leapfrog lists '{best['name']}' but assigns no grade this cycle ({best['cycle']})")}
+
+
+def fetch_leapfrog_grade(name: str, city: str, state: str) -> Optional[str]:
+    """Compatibility wrapper: the letter grade, or None (not graded / not found / error)."""
+    return fetch_leapfrog(name, city, state).get("grade")
