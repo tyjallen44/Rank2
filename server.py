@@ -1262,6 +1262,8 @@ def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
             emit({"type": "text", "text": "\nLocations taken from your confirmed roster (entity graph) — no discovery needed."})
 
         set_run_role(result.run_id, job["role"], _job_ran_by(job))
+        if job.get("tracked_entity_id") and etype == "hospital":
+            _note_method_change(job["tracked_entity_id"], result)
 
         if not job.get("skip_pdf"):
             if job.get("spotcheck") and not is_fqhc:
@@ -1472,6 +1474,37 @@ def _plain_ensure(result, job: dict) -> None:
         _resave_plain(result)
     except Exception as exc:
         print(f"[plain] ensure failed run={getattr(result, 'run_id', '?')}: {type(exc).__name__}: {exc}")
+
+
+def _note_method_change(entity_id: str, result) -> None:
+    """Tracked hospitals: the first snapshot that carries CMS / Leapfrog data verified from the
+    source gets a dated 'Method changed' note, so the step in Outcomes & Safety on the chart and
+    in the Trend Report is explained (earlier snapshots used the model's estimate). Idempotent,
+    fail-soft, skipped when this is the entity's first snapshot."""
+    try:
+        vq = getattr(result, "verified_quality", None) or {}
+        if not (vq.get("cms_star") or vq.get("cms_facility_id") or vq.get("leapfrog_grade")):
+            return
+        from datetime import date as _date
+        from perception.db import get_tracked_entity, get_entity_trend, list_annotations, add_annotation
+        ent = get_tracked_entity(entity_id)
+        if not ent:
+            return
+        if any("Method changed" in (a.get("note") or "") for a in list_annotations(entity_id)):
+            return
+        prior = [p for p in get_entity_trend(ent["entity_name"]) if p.get("run_id") != result.run_id]
+        if not prior:
+            return
+        cms = vq.get("cms_star")
+        lf = vq.get("leapfrog_grade")
+        cms_txt = f"{cms}★ on CMS Care Compare" if cms else ("listed on CMS Care Compare without a star rating" if vq.get("cms_facility_id") else "")
+        lf_txt = f"Leapfrog safety grade {lf}" if lf else "no Leapfrog grade published"
+        note = ("Method changed: from this snapshot, Outcomes & Safety uses the hospital's quality data verified from the source "
+                f"({cms_txt}; {lf_txt}) instead of the model's estimate. A step in the score on this date reflects the "
+                "measurement, not a change at the hospital.")
+        add_annotation(entity_id, _date.today(), note, "system")
+    except Exception as exc:
+        print(f"[trend-note] method-change note failed entity={entity_id}: {type(exc).__name__}: {exc}", flush=True)
 
 
 def _run_confidence(result) -> Optional[dict]:

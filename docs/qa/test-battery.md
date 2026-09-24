@@ -3160,3 +3160,9 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T1** Deep Diagnostic → Advanced options: no "Include Pulse Briefing" checkbox or edition selector; the "briefing" ⓘ topic is gone; the walkthrough step 8 no longer mentions it. [ui]
 - **T2** A run never produces a briefing PDF, and the completion panel shows no "Briefing skipped" note. History rows from before today that have a briefing file still offer it in Downloads. [ui]
 - **R1** API callers passing briefing_variant are ignored (no error). Teaser and content report unchanged. [ops]
+
+## TREND-METHOD-NOTE — tracked hospitals get a dated "Method changed" note on their first verified-CMS snapshot
+
+- **T1** Trends → a tracked Hospital with snapshots before 2026-09-21 (e.g. USA Health University Hospital) → Run now. **Expect:** the new snapshot carries a note dated today: "Method changed: from this snapshot, Outcomes & Safety uses the hospital's quality data verified from the source (2★ on CMS Care Compare; no Leapfrog grade published) instead of the model's estimate…" — a numbered marker on the chart and a line in the Trend Report's Notes. [ui][pdf]
+- **T2** Run now again: no second note (idempotent). A hospital tracked for the first time today gets no note (nothing to explain). Practice / community health / network entities never get one. [ui]
+- **T3** The "score fell" Needs-attention flag may still appear on that snapshot; the note beside it explains the step. [ui]
