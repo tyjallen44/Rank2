@@ -3219,3 +3219,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2** Cached organizations: re-running (or re-downloading after a re-render) an organization analyzed before this rollout shows the box structured too (structured once on the next request, then stored). [pdf]
 - **T3** If the structuring model call fails, the box still shows the first sentence as the headline and the remaining sentences as bullets. [pdf]
 - **R1** Teaser and combined practice report show the same box; scores unchanged. [pdf]
+
+## FIX-LAYOUT-STRAY-DIV — every page renders inside the main content area again
+
+**Context:** removing the Pulse Briefing block (8da16d7) left one closing `</div>` behind in the Deep Diagnostic form, so every page after it in the markup (Network, Compare, Progress, Admin, Feedback, Events, History, Trends, Home, Learn, Release Notes) rendered outside the scrolling main area, pushed to the right on wide screens. Not deployed.
+
+- **T1** Home, Trends, History, Network, Compare, Learn: content starts at the left edge of the main area (36 px padding) on a wide monitor, not at the far right. [ui]
+- **T2** Pinned History/Trends filter strips still stick (they need to be inside the scrolling main area). [ui]
+- **R1** Deep Diagnostic Advanced options render as before (Known facts block, spot-check checkbox). [ui]
