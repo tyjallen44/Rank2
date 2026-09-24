@@ -262,13 +262,16 @@ def _crawl_site(client: httpx.Client, url: str, page_budget: int,
     snap = {"url": url, "origin": origin, "reachable": home is not None,
             "fetch_status": reason,
             "schema_types": set(), "pages": 0, "home_text_len": 0,
-            "llms_txt": None, "robots_blocks_ai": None, "robots_blocks_all": None}
+            "llms_txt": None, "robots_blocks_ai": None, "robots_blocks_all": None,
+            "key_pages": [], "text_sample": "", "sitemap": None}
     if home is None:
         return snap
     snap["pages"] = 1
     snap["schema_types"] |= _schema_types(home)
     soup = BeautifulSoup(home, "html.parser")
-    snap["home_text_len"] = len(soup.get_text(" ", strip=True))
+    _home_text = soup.get_text(" ", strip=True)
+    snap["home_text_len"] = len(_home_text)
+    snap["text_sample"] = _home_text[:20000]
 
     # A few key same-domain pages
     seen = {_norm_url(url)}
@@ -297,7 +300,16 @@ def _crawl_site(client: httpx.Client, url: str, page_budget: int,
             h = _fetch(client, href)
         if h:
             snap["pages"] += 1
-            snap["schema_types"] |= _schema_types(h)
+            _st = _schema_types(h)
+            snap["schema_types"] |= _st
+            try:
+                _t = BeautifulSoup(h, "html.parser").get_text(" ", strip=True)
+            except Exception:
+                _t = ""
+            snap["key_pages"].append({"url": href, "text_len": len(_t), "physician_schema": "Physician" in _st,
+                                      "provider_page": any(k in href.lower() for k in ("provider", "physician", "doctor", "team", "staff", "find-a"))})
+            if len(snap["text_sample"]) < 60000:
+                snap["text_sample"] += " " + _t[:12000]
 
     # Fetch a text file (llms.txt/robots.txt), preferring the browser context if
     # it's active so Cloudflare-protected sites return the real file, not a 403.
@@ -318,12 +330,20 @@ def _crawl_site(client: httpx.Client, url: str, page_budget: int,
         code, body = res
         snap["llms_txt"] = (code == 200 and len(body.strip()) > 0)
 
+    # sitemap.xml (or a Sitemap: line in robots.txt)
+    res = _get_text("/sitemap.xml")
+    if res is not None:
+        code, body = res
+        snap["sitemap"] = (code == 200 and ("<urlset" in body.lower() or "<sitemapindex" in body.lower()))
+
     # robots.txt AI-crawler posture
     res = _get_text("/robots.txt")
     if res is not None:
         code, body = res
         if code == 200:
             txt = body.lower()
+            if snap["sitemap"] is not True and "sitemap:" in txt:
+                snap["sitemap"] = True
             snap["robots_blocks_ai"] = [b for b in _AI_CRAWLERS
                                         if re.search(rf"user-agent:\s*{re.escape(b)}", txt)
                                         and re.search(r"disallow:\s*/", txt)]

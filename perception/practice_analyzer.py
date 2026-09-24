@@ -217,6 +217,14 @@ _PRACTICE_TOOL = {
                 },
             },
             "disclaimer": {"type": "string"},
+            "website_readability_pts": {
+                "type": ["integer", "null"],
+                "description": (
+                    "The points (0-20) you assumed for the 'Website machine-readability' sub-score "
+                    "inside patient_experience_reviews (Identity & Machine-Readability). The system "
+                    "replaces it with the crawl-measured value when one is in the evidence block."
+                ),
+            },
             "entity_resolution_pct": {
                 "type": ["number", "null"],
                 "description": (
@@ -805,6 +813,7 @@ def _practice_extraction_prompt(report_markdown: str, location_roster: Optional[
         "  patient_experience_reviews = Identity & Machine-Readability score\n"
         "  access_fit                 = Access & Fit score\n\n"
         "DERIVED METRICS: Set entity_resolution_pct and linkage_integrity_pct based on "
+        "WEBSITE SUB-SCORE: set website_readability_pts to the 0–20 points you assumed for the website machine-readability sub-score inside Identity & Machine-Readability; when the evidence block carries a crawl-measured value, the system substitutes it. "
         "your analysis of naming/identity risks and physician attribution risks observed. "
         "Set board_cert_unverifiable=true if ANY sampled physician's ABMS/AOA cert "
         "could not be confirmed from crawlable sources. "

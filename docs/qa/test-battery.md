@@ -3176,3 +3176,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T3** A second hospital in the same city the same month makes no new site fetch (Operations/logs show no Playwright run; the cache row exists). [ops]
 - **T4** If the site serves a challenge page, the run continues with "Leapfrog lookup unavailable — grade not verified this run" and the model's read stands. [ops]
 - **R1** Hospitals with no Leapfrog listing in their city still score on CMS alone as before. Practices and community health unaffected. [pdf]
+
+## WEBSITE-FACTS — Identity & Machine-Readability's website sub-score measured by crawl; quality claims on the site checked (heart-surgery item 3, increment 1)
+
+**Context:** the practice rubric's 20-point "website machine-readability" sub-score was the model's guess; it is now measured by a crawl of the Google-listed website (org schema 6 · Physician schema 4 · crawlable physician pages 5 · sitemap 2 · llms.txt 2 · robots allows AI crawlers 1). The model states the points it assumed and the system substitutes the measured value inside the pillar. Hospitals and practices: the pages read are scanned for Leapfrog / CMS / U.S. News / Magnet / Joint Commission claims; a claim that disagrees with the verified value is flagged. Unified pipeline only (legacy path unchanged). Not deployed.
+
+- **T1 Practice.** Deep Diagnostic on a practice with a Google-listed website. Progress stream shows "Reading the website…" then "Website: website facts verified by crawl (N/20)" and "Identity & Machine-Readability: website sub-score measured N/20 by crawl (model assumed M) → pillar A → B". Score Evidence note includes "website facts verified by crawl (N/20)". Run it twice (Refresh from scratch): the identity pillar moves by no more than a few points between runs. [ui][pdf]
+- **T2 Bot wall.** A practice whose site walls off non-browser clients (e.g. USA Health's site for a USA Health clinic): "website blocks AI crawlers (verified)" in Score Evidence; sub-score 0/20 applied. [pdf]
+- **T3 Unreachable.** A practice with a dead or wrong website URL: "website unreachable — machine-readability unverified" in Score Evidence, confidence one level lower, pillar unchanged. [pdf]
+- **T4 No website on the listing:** nothing added; report as before. [pdf]
+- **T5 Hospital claims.** Hospital Deep Diagnostic on South Shore Hospital: evidence/narrative notes the site references Magnet and Joint Commission; Score Evidence says "website quality claims checked by crawl". A hospital whose site states a Leapfrog grade different from hospitalsafetygrade.org gets "site quality claim disagrees with the verified value" and the narrative flags it. [pdf]
+- **R1** Reviews & Reputation, Practitioner Credentials and Access & Fit unchanged; ceiling rule unchanged; Community Health unaffected; content analysis findings unchanged (the crawler gained fields only). [pdf]

@@ -59,6 +59,15 @@ def score_confidence(result) -> Optional[dict]:
         reasons.append("no live web search (written from model knowledge)"); penalties += 2
     if getattr(result, "rubric_note", ""):
         reasons.append("hospital rubric enforced (analysis read the organization as a practice/clinic network — consider re-running as a practice or community health center)"); penalties += 1
+    wf = getattr(result, "website_facts", None) or {}
+    if wf.get("status") == "unreachable":
+        reasons.append("website unreachable — machine-readability unverified"); penalties += 1
+    elif wf.get("status") == "blocked":
+        reasons.append("website blocks AI crawlers (verified)")
+    elif wf.get("status") == "measured":
+        reasons.append(f"website facts verified by crawl ({wf.get('points')}/20)" if is_practice else "website quality claims checked by crawl")
+        if wf.get("claim_mismatch"):
+            reasons.append("site quality claim disagrees with the verified value")
 
     if penalties == 0 and reviews >= 200:
         level = "high"

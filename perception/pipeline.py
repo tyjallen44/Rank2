@@ -82,6 +82,31 @@ class _Ctx:
         return None
 
 
+def _website_facts(ctx: "_Ctx", kind: str) -> Optional[dict]:
+    """Crawl the listed website (fail-soft) and fold the facts into the evidence block."""
+    try:
+        url = getattr(ctx.read, "website", None) if ctx.read is not None else None
+        if not url:
+            return None
+        from .data import website_facts as _wf
+        ctx.emit({"type": "phase", "name": "website", "text": "Reading the website (schema, physician pages, sitemap, quality claims)"})
+        with ctx.console.status("[bold dark_sea_green4]Reading the website…[/bold dark_sea_green4]"):
+            f = _wf.fetch_website_facts(url)
+        ctx.evidence_text += _wf.evidence_lines(f, kind)
+        mm = _wf.claim_mismatch(f, getattr(ctx, "quality", None))
+        if mm:
+            f["claim_mismatch"] = mm
+            ctx.evidence_text += f"NOTE: {mm}. Report the verified value and flag the discrepancy.\n"
+        s = _wf.summary(f, kind)
+        if s:
+            ctx.emit({"type": "text", "text": f"\nWebsite: {s}" + (f" — {mm}" if mm else "")})
+        ctx.console.print(f"[green]✓[/green] Website facts: {f.get('status')} ({f.get('points', '—')}/20)")
+        return f
+    except Exception as exc:
+        ctx.console.print(f"[yellow]⚠[/yellow] Website facts failed ({type(exc).__name__}: {exc}); proceeding without.")
+        return {"status": "unreachable", "url": None, "note": f"{type(exc).__name__}"}
+
+
 def _confirm_city(read, city: str, emit) -> None:
     """Emit confirm_city when the verified Google address disagrees with the input city."""
     if read is not None and getattr(read, "formatted_address", None):
@@ -201,6 +226,8 @@ class HospitalAdapter(_Adapter):
                 console.print(f"[yellow]⚠[/yellow] Google fetch failed ({exc}); proceeding model-only.")
                 ctx.evidence_text = f"=== Evidence for {ctx.entity_name}, {ctx.city}, {ctx.state} ===\nGoogle data unavailable this run."
         console.print(f"[green]✓[/green] Individual report: {ctx.entity_name}")
+        # Quality claims on the hospital's own site (Leapfrog / CMS / U.S. News / Magnet / Joint Commission).
+        ctx.website_facts = _website_facts(ctx, "hospital")
 
     def prompt(self, ctx: _Ctx) -> tuple[str, str]:
         from .prompts import build_individual_prompt
@@ -332,6 +359,8 @@ class PracticeAdapter(_Adapter):
         ctx.evidence_text += _suffix
         ctx.roster_fp = (_prac._roster_key(ctx.entity_name, ctx.aggregate_siblings)
                          if ctx.aggregate_siblings is not None else "")
+        # Website facts verified by crawl (identity sub-score + quality claims).
+        ctx.website_facts = _website_facts(ctx, "practice")
 
     def prompt(self, ctx: _Ctx) -> tuple[str, str]:
         from .practice_prompts import build_practice_prompt
@@ -358,6 +387,20 @@ class PracticeAdapter(_Adapter):
         ctx.key_person_flag = bool(structured.get("key_person_flag", False))
 
         rankings = [_prac._build_practice_provider(r, run_profile) for r in structured.get("rankings", [])]
+        # Measured website sub-score replaces the model's assumed one inside Identity & Machine-Readability.
+        ctx.identity_override = None
+        wf = getattr(ctx, "website_facts", None) or {}
+        if rankings and wf.get("status") in ("measured", "blocked"):
+            from .data.website_facts import apply_identity_override
+            _p0 = rankings[0]
+            _before = _p0.tier_scores.patient_experience_reviews
+            _after = apply_identity_override(_before, structured.get("website_readability_pts"), int(wf.get("points") or 0))
+            if _after is not None and _after != _before:
+                _p0.tier_scores.patient_experience_reviews = _after
+            ctx.identity_override = {"before": _before, "after": _after, "model_pts": structured.get("website_readability_pts"),
+                                     "measured_pts": int(wf.get("points") or 0), "status": wf.get("status")}
+            emit({"type": "text", "text": f"\nIdentity & Machine-Readability: website sub-score measured {wf.get('points', 0)}/20 by crawl"
+                                          f" (model assumed {structured.get('website_readability_pts') if structured.get('website_readability_pts') is not None else 'unstated'}) → pillar {_before} → {_after}."})
 
         emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})
         for _i, prov in enumerate(rankings):
@@ -648,6 +691,10 @@ def run_individual(
         report_markdown=ctx.report_markdown,
     )
     result = AnalysisResult(**{**common, **adapter.extra_fields(ctx)})
+    if getattr(ctx, "website_facts", None):
+        result.website_facts = ctx.website_facts
+        if getattr(ctx, "identity_override", None):
+            result.website_facts = {**result.website_facts, "identity_override": ctx.identity_override}
     adapter.post_assemble(ctx, result)        # composites / MQCR battery (may rescore)
 
     # ── 9. markdown ───────────────────────────────────────────────────────────
