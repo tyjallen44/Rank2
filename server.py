@@ -1681,7 +1681,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["physician_roster"] = req.physician_roster
     _jobs[job_id]["force_rerun"] = req.force_rerun
     _jobs[job_id]["override_today_lock"] = req.override_today_lock and (role == "admin")
-    _jobs[job_id]["briefing_variant"] = req.briefing_variant
+    _jobs[job_id]["briefing_variant"] = None   # Pulse Briefing retired 2026-09-24 (unused); request field kept for API compatibility
     _jobs[job_id]["report_title"] = _normalize_input(req.report_title) if req.report_title else None
     _jobs[job_id]["org_name"] = _normalize_input(req.org_name) if req.org_name else None
     _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list

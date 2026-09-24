@@ -3154,3 +3154,9 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T3 Rollback switch:** setting `PULSE_PIPELINE=legacy` on the Cloud Run service restores the original analyzers with no redeploy of code. [ops]
 - **T4** Tracked-entity snapshots (skip_pdf) for all types still add data points. Compare Two, Competitors Rankings, Event Prep and Hospital Network are unaffected (they do not use the individual pipeline). [ui]
 - **R1** `scripts/pipeline_compare.py --type practice|hospital --name … --city … --state … [--specialty …]` runs legacy and unified side by side (real API calls, ~$4 each) and cleans up after itself; use it whenever a scoring helper changes. [ops]
+
+## RETIRE-BRIEFING — Pulse Briefing option removed (unused)
+
+- **T1** Deep Diagnostic → Advanced options: no "Include Pulse Briefing" checkbox or edition selector; the "briefing" ⓘ topic is gone; the walkthrough step 8 no longer mentions it. [ui]
+- **T2** A run never produces a briefing PDF, and the completion panel shows no "Briefing skipped" note. History rows from before today that have a briefing file still offer it in Downloads. [ui]
+- **R1** API callers passing briefing_variant are ignored (no error). Teaser and content report unchanged. [ops]
