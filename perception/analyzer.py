@@ -733,6 +733,415 @@ def _apply_format(result, *, simplified, obscure_competitors, target_entity,
     return result
 
 
+# ── Individual-report phase helpers ──────────────────────────────────────────
+# Factored out of analyze_location so the unified pipeline (perception.pipeline)
+# and the legacy function run the SAME code. Text and semantics are unchanged.
+
+def _extraction_notes(individual_report: bool, entity_type: str | None) -> tuple[str, str]:
+    """(individual_note, tier_score_note) blocks for the structured-extraction prompt."""
+    _individual_note = (
+        "INDIVIDUAL REPORT — field mapping:\n"
+        "• market_overview = the full text of the '### Organization Overview' section\n"
+        "• ai_visibility_verdict = the '### AI Visibility Verdict' section\n"
+        "• top_recommendation = the COMPLETE introductory prose of the "
+        "'### AI Visibility Assessment & Improvement Opportunities' section — the "
+        "2–3 paragraphs of analysis text that appear BEFORE the grouped improvement sections. "
+        "Do NOT include any section headers or bullet items here — only the prose paragraphs.\n"
+        "• improvement_sections = the grouped sections that follow the prose in "
+        "'### AI Visibility Assessment & Improvement Opportunities'. For each bold-headed "
+        "section (e.g. '**1. Your Website...**'), capture: title (strip the leading number), "
+        "description (the line below the header), items (the bulleted action items).\n"
+        "• practical_advice = empty array []\n\n"
+    ) if individual_report else (
+        "• improvement_sections = the grouped sections from '### AI Visibility Assessment "
+        "& Improvement Opportunities'. For each labeled section in that part, capture: "
+        "title (strip any leading number), description (the line below the header), "
+        "items (the bulleted action items in that section). Leave practical_advice as [].\n\n"
+    )
+    if entity_type == "practice":
+        _tier_score_note = (
+            "PRACTICE EDITION TIER SCORES — compute all four fresh from the verified "
+            "evidence block AND the narrative. Do NOT copy tier scores from the report "
+            "text (those are from a different sampling pass). Use the Practice Edition "
+            "field mapping — NOT hospital rubric signals:\n\n"
+            "• clinical_outcomes_safety = Practitioner Credentials & Clinical Quality: "
+            "board cert verifiability (ABMS/AOA), licensure cleanliness, training bio "
+            "visibility, MIPS/QPP scores, practice-level accreditations (AAAHC/AAAASF/"
+            "NCQA), hospital affiliations/privileges. "
+            "DO NOT use CMS stars, Leapfrog grades, or HCAHPS — those are hospital-only.\n"
+            "• credentials_recognition = Reviews & Reputation: Google front-door "
+            "rating+volume, physician review profiles (Healthgrades/Vitals/Google), "
+            "aggregator breadth, listing hygiene, recency/velocity.\n"
+            "• patient_experience_reviews = Identity & Machine-Readability: entity "
+            "resolution integrity, physician↔practice linkage, NPI/registry consistency, "
+            "website schema.org markup and bio crawlability, roster currency.\n"
+            "• access_fit = Access & Fit: new-patient availability, online scheduling, "
+            "insurance clarity, telehealth, appointment lead-time.\n\n"
+            "cms_star_rating: set to null for ALL practices (field is hospital-only).\n"
+            "weighting_profile: select practice_procedural / practice_relationship / "
+            "practice_referral_fed / practice_hybrid based on the specialty.\n\n"
+            "Practice anchor rubric:\n"
+            "• Practitioner Credentials & Clinical Quality: all sampled physicians "
+            "board-certified and crawlably verifiable + clean licenses + training bios "
+            "public + MIPS ≥85 + specialty accreditation → 80–90. Any unverifiable "
+            "board cert → ceiling 74. Mix of verifiable/unverifiable → 55–70.\n"
+            "• Reviews & Reputation: org 4.5★+ with solid volume + physicians "
+            "individually reviewed + claimed listings + active flow → 85+. 4.0–4.4★ "
+            "or thin physician profiles → 65–80. Sparse/unclaimed → <60.\n"
+            "• Identity & Machine-Readability: entity resolution >95% + linkage "
+            ">90% + clean NPI + Schema.org present → 80+. Resolution or linkage "
+            "issues → cap 74.\n"
+            "• Access & Fit: online booking + published insurance list + telehealth "
+            "+ new-patient signals current → 70+. Limited signals → 40–55.\n\n"
+        )
+    else:
+        _tier_score_note = (
+            "TIER SCORES — compute all four fresh from the verified evidence block AND the "
+            "narrative report section. The narrative's findings about accreditations, trauma "
+            "designations, quality programs, and program depth ARE authoritative evidence for "
+            "scoring — use them freely. Do NOT copy tier scores written in the report text "
+            "(those are from a different sampling pass).\n\n"
+            "IMPORTANT: cms_star_rating is a SEPARATE field for the raw CMS number. "
+            "The clinical_outcomes_safety tier score incorporates ALL quality signals "
+            "— CMS stars, Leapfrog grade, HCAHPS, mortality/readmission rates, safety "
+            "indicators, procedure volume, trauma designation, and teaching status. "
+            "Set it to null ONLY if the provider is genuinely unknown with zero quality "
+            "signals of any kind. Any of the following is sufficient for a non-null score: "
+            "Level I/II trauma designation, Joint Commission accreditation, Magnet nursing "
+            "recognition, academic medical center affiliation, HCAHPS data, Leapfrog grade, "
+            "CMS star rating, or published clinical program depth.\n\n"
+            "Anchor rubric:\n"
+            "• Outcomes & Safety: CMS 5★→88, 4★→73, 3★→58, 2★→43, 1★→28. "
+            "No CMS but Leapfrog A→85, B→72, C→58, D→44, F→32. "
+            "No CMS/Leapfrog but HCAHPS above national avg→55–65, below→40–52. "
+            "Level I trauma center (no CMS/Leapfrog confirmed)→62–72. "
+            "Level II trauma center→55–65. "
+            "Joint Commission–accredited hospital with major clinical programs, no published "
+            "safety warnings→50–60. "
+            "Specialty practice with strong procedure volume / outcomes→50–70. "
+            "Apply Leapfrog modifier on top of CMS base: A adds ~8, F subtracts ~12.\n"
+            "• Credentials & Recognition: U.S. News nationally ranked→85+ floor; "
+            "high-performing→70+; academic medical center / Level I trauma / fellowship "
+            "depth / Magnet→band up; board-certification alone is a floor (~60).\n"
+            "• Experience & Reviews: Google 4.5★+/high volume→85+, 4.0–4.4→70–84, "
+            "3.5–3.9→55–69, 3.0–3.4→40–54, <3.0 or thin/stale→<40. Fragmented or "
+            "largely unclaimed footprint caps this tier even with a strong flagship.\n"
+            "• Access & Fit: broad multi-payer network + many locations + active "
+            "new-patient availability + telehealth→70+; limited access→40–55.\n\n"
+        )
+    return _individual_note, _tier_score_note
+
+
+def _hospital_extraction_prompt(individual_report: bool, entity_type: str | None,
+                                evidence_text: str, report_markdown: str) -> str:
+    """The full structured-extraction prompt for the hospital tool (submit_analysis_result)."""
+    _individual_note, _tier_score_note = _extraction_notes(individual_report, entity_type)
+    return (
+        "Extract the structured data from the completed market analysis report below "
+        "by calling submit_analysis_result. Include every provider in the rankings.\n\n"
+        + _individual_note
+        + _tier_score_note
+        + f"{evidence_text}\n\n"
+        "--- REPORT (qualitative context — do NOT copy tier scores from here) ---\n"
+        f"{report_markdown}\n--- END REPORT ---"
+    )
+
+
+def _pin_hospital_rubric(run_profile: str | None, entity_type: str | None, emit, console) -> tuple[str, str]:
+    """Normalize the weighting profile to the requested rubric.
+
+    Practice market reports get the practice_ prefix; a hospital-type run that the
+    model read as a practice is pinned back to the hospital rubric with a note.
+    Returns (run_profile, rubric_note_text)."""
+    # For practice specialty market reports, ensure the profile has the practice_ prefix
+    # so the PDF renders practice pillar labels instead of hospital pillar labels.
+    if entity_type == "practice" and run_profile and not run_profile.startswith("practice_"):
+        run_profile = f"practice_{run_profile}"
+    elif entity_type == "practice" and not run_profile:
+        run_profile = "practice_procedural"
+    # A hospital-type run must stay on the hospital rubric. The model may still *believe* the
+    # organization is a practice or clinic network (it can pick a practice_* profile in the
+    # schema); when it does, keep the requested rubric and say so, instead of silently
+    # switching pillars — which made Trends flag "scored on the practice rubric".
+    rubric_note_text = ""
+    if entity_type not in ("practice", "service_line") and str(run_profile or "").startswith("practice_"):
+        _picked = run_profile
+        run_profile = {"practice_procedural": "procedural", "practice_relationship": "relationship",
+                       "practice_referral_fed": "relationship", "practice_hybrid": "procedural"}.get(_picked, "procedural")
+        rubric_note_text = (
+            "The analysis read this organization as a practice or clinic network rather than a hospital "
+            f"(it proposed the {_picked.replace('practice_', '').replace('_', ' ')} practice profile). "
+            "It was scored on the hospital rubric because the report was requested as a Hospital. "
+            "If this is not a hospital, re-run it as a Specialty Practice or a Community Health center so the right rubric applies.")
+        console.print(f"[yellow]⚠[/yellow] Model proposed {_picked}; hospital rubric enforced for a hospital-type run.")
+        emit({"type": "phase", "name": "rubric", "text": "⚠ Analysis read this organization as a clinic network — hospital rubric enforced (see Score Evidence)"})
+    return run_profile, rubric_note_text
+
+
+def _dedup_consolidated_locations(rankings: list) -> None:
+    """Remove consolidated_locations whose names match a standalone ranked provider.
+
+    Claude sometimes lists a child hospital both as a sub-location of its parent
+    system AND as its own ranked entry. Strip the duplicate from the parent's list."""
+    _top_level = {p.name.lower().strip() for p in rankings}
+    for prov in rankings:
+        own = prov.name.lower().strip()
+        prov.consolidated_locations = [
+            loc for loc in prov.consolidated_locations
+            if not any(
+                other != own and (
+                    loc.name.lower().strip() == other
+                    or loc.name.lower().strip() in other
+                    or other in loc.name.lower().strip()
+                )
+                for other in _top_level
+            )
+        ]
+
+
+def _apply_verified_quality(rankings: list, quality: dict | None) -> None:
+    """Verified CMS/Leapfrog signals override the model's recall on the entity itself and
+    anchor Outcomes & Safety deterministically (the composite is recomputed by grounding)."""
+    if not (quality and rankings):
+        return
+    _q = quality
+    _p0 = rankings[0]
+    if _q.get("cms_facility_id"):
+        _p0.cms_star_rating = _q.get("cms_star")
+    if _q.get("leapfrog_grade"):
+        _p0.leapfrog_grade = _q["leapfrog_grade"]          # a miss keeps the model's own finding
+    _ob = scoring.outcomes_band(_q.get("leapfrog_grade") or _p0.leapfrog_grade, _q.get("cms_star"))
+    if _ob is not None:
+        _p0.tier_scores.clinical_outcomes_safety = _ob
+
+
+def _sync_entity_scores(rankings: list, city: str, state: str, run_profile: str | None,
+                        run_id: str, override_today_lock: bool, source: str) -> None:
+    """Canonical entity-score sync (shared across reports).
+
+    Market reports and hospital Deep Diagnostics participate in the shared
+    entity_scores cache so a system reads an IDENTICAL four-pillar score in the
+    Hospital Market, Hospital Network, and Deep Diagnostic reports. Adopt a
+    fresh canonical score if one exists, otherwise seed it. Only the numbers
+    sync — each report keeps its own narrative. Re-sort only when an adoption
+    actually changed a score, to leave ordinary runs untouched."""
+    from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
+    _loc = f"{city}, {state}"
+    _run_family = "practice" if (run_profile or "").startswith("practice_") else "hospital"
+    _adopted = False
+    for prov in rankings:
+        _canon = None if override_today_lock else _get_es(prov.name, _loc, days=30)
+        _cf = "practice" if (_canon or {}).get("weighting_profile", "").startswith("practice_") else "hospital"
+        # Only adopt a canonical score computed under the SAME rubric — the
+        # practice and hospital rubrics reuse the same four slots with different
+        # pillar meanings, so a cross-rubric adoption would mislabel the values.
+        if _canon and _canon.get("pulse_score") is not None and _cf == _run_family:
+            prov.ai_visibility_score = _canon["pulse_score"]
+            for _k, _v in (_canon.get("tier_scores") or {}).items():
+                if hasattr(prov.tier_scores, _k):
+                    setattr(prov.tier_scores, _k, _v)
+            prov.overall_rating, _ = scoring.grade_from_score(prov.ai_visibility_score)
+            if _canon.get("ai_says"):          # sync the "what AI sees" narrative too
+                prov.ai_says = _canon["ai_says"]
+            _adopted = True
+        elif prov.ai_visibility_score is not None:
+            _code, _band = scoring.grade_from_score(prov.ai_visibility_score)
+            _put_es(prov.name, _loc, prov.ai_visibility_score,
+                    prov.tier_scores.as_dict(), overall_rating=_code,
+                    band_label=_band, ai_says=getattr(prov, "ai_says", "") or "",
+                    source=source, run_id=run_id, overwrite=override_today_lock,
+                    weighting_profile=getattr(prov, "weighting_profile", None) or run_profile)
+    if _adopted:
+        rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))
+        for _i, prov in enumerate(rankings, start=1):
+            prov.rank = _i
+
+
+def _improvement_sections(structured_data: dict, drop=None) -> list:
+    """ImprovementSection list from the tool output. `drop(text) -> bool` filters
+    titles/items (the practice edition drops hospital-only signals)."""
+    drop = drop or (lambda _t: False)
+    return [
+        ImprovementSection(
+            title=_clean(s.get("title", "")),
+            description=_clean(s.get("description", "")),
+            items=[_clean(i) for i in s.get("items", []) if isinstance(i, str) and not drop(i)],
+        )
+        for s in structured_data.get("improvement_sections", [])
+        if isinstance(s, dict) and s.get("title") and not drop(s.get("title", ""))
+    ]
+
+
+def _apply_simplified_target(result, *, simplified, obscure_competitors, target_entity,
+                             service_line, parent_system, city, state, specialty, brand,
+                             force_rerun, override_today_lock, emit) -> None:
+    """Simplified Patient Pulse: flag the prospect/target so the PDF renders it in
+    full and obscures every competitor. Best-effort name match against the
+    ranked market set (exact first, then substring either direction)."""
+    if not (simplified and obscure_competitors and target_entity):
+        return
+    # If the target is a hospital service line, compute its EXACT aggregate on
+    # the practice rubric (its own scoped clinic roster) so the ranking shows
+    # the real number, not the market's incidental read of one clinic.
+    _subject_agg = None
+    if service_line and parent_system:
+        try:
+            from .practice_analyzer import analyze_practice as _ap
+            emit({"type": "phase", "name": "subject",
+                  "text": f"Scoring {target_entity} as a {service_line} service line"})
+            _subj = _ap(entity_name=target_entity, city=city, state=state,
+                        specialty=specialty, aggregate=True,
+                        service_line=service_line, parent_system=parent_system,
+                        skip_pdf=True, on_event=emit, brand=brand,
+                        force_rerun=force_rerun, override_today_lock=override_today_lock)
+            _sp = _subj.rankings[0] if _subj.rankings else None
+            if _sp and _sp.ai_visibility_score is not None:
+                _subject_agg = {
+                    "ai_visibility_score": _sp.ai_visibility_score,
+                    "tier_scores": _sp.tier_scores.as_dict() if hasattr(_sp.tier_scores, "as_dict") else {},
+                    "ai_says": getattr(_sp, "ai_says", "") or "",
+                }
+        except Exception as _exc:
+            emit({"type": "text", "text": f"Service-line subject scoring failed: {_exc}"})
+    _n_before = len(result.rankings)
+    _ensure_target_present(result, target_entity, subject=_subject_agg)
+    if len(result.rankings) > _n_before:
+        emit({"type": "phase", "name": "target_injected",
+              "text": f"'{target_entity}' did not surface in AI market answers; "
+                      "included as a minimal-visibility entity."})
+    if _subject_agg:
+        result.rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))
+        for _i, _p in enumerate(result.rankings, start=1):
+            _p.rank = _i
+
+
+def _collect_physician_composite(result, entity_name: str, city: str, state: str,
+                                 physician_roster: dict | None, emit) -> None:
+    """Physician reputation rows for the anchor row of the practice composite table
+    (shared by the hospital and practice paths)."""
+    emit({"type": "phase", "name": "physician_reputation", "text": "Collecting physician reputation"})
+    from .physician_discovery import discover_physicians
+    from .physician_reputation import collect_physician_data
+    confirmed = physician_roster or {}
+    # Flatten confirmed physicians (keyed by org name from the UI)
+    all_confirmed = [ph for v in confirmed.values() for ph in v]
+    # Discover at the organization level once — sub-location names yield 0 results
+    # since NPPES indexes physicians under the parent organization, not specific clinics.
+    target_row = (
+        next((r for r in result.practice_composite_rows if r.get("is_anchor")), None)
+        or next((r for r in result.practice_composite_rows if r.get("entity_type") != "hospital"), None)
+    )
+    if target_row:
+        physicians = all_confirmed or discover_physicians(entity_name, city, state, on_event=emit)
+        if physicians:
+            ph_results = collect_physician_data(
+                physicians, entity_name, city, state, on_event=emit
+            )
+            target_row["physicians"] = ph_results
+            result.physician_composite_rows.extend(ph_results)
+
+
+def _collect_hospital_practice_composite(result, entity_name: str, city: str, state: str,
+                                         practice_roster: list | None, physician_composite: bool,
+                                         physician_roster: dict | None, emit, force_rerun: bool) -> None:
+    """Practice Composite reputation collection for a hospital-anchored report
+    (before PDF so the table is included)."""
+    emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
+    from .practice_reputation import collect_platform_data
+
+    roster = list(practice_roster or [])
+    if not roster:
+        # Auto-discover when no roster provided (comparison path — no UI confirmation step)
+        from .practice_discovery import discover_practices
+        roster = discover_practices(entity_name, city, state, on_event=emit,
+                                    force_rerun=force_rerun)
+
+    # Hospital-anchored table: remove the anchor itself and canonicalize
+    # brand-prefixed sibling names ("Nevada Health Centers - Cambridge Family
+    # Health Center" → "Cambridge Family Health Center") to prevent the same
+    # clinic appearing twice under its long and short form.
+    _anchor_lc = entity_name.strip().lower()
+    _anchor_prefix = entity_name.strip() + " - "
+    _anchor_prefix_lc = _anchor_prefix.lower()
+
+    def _strip_anchor_prefix(name: str) -> str:
+        if name.strip().lower().startswith(_anchor_prefix_lc):
+            return name.strip()[len(_anchor_prefix):]
+        return name.strip()
+
+    _seen_roster_names: set[str] = set()
+    _deduped_roster: list[dict] = []
+    for _r in roster:
+        _canonical = _strip_anchor_prefix(_r.get("name", ""))
+        _cn_lc = _canonical.lower()
+        if _cn_lc == _anchor_lc or _cn_lc in _seen_roster_names:
+            continue
+        _seen_roster_names.add(_cn_lc)
+        _deduped_roster.append(
+            {**_r, "name": _canonical} if _canonical != _r.get("name", "").strip() else _r
+        )
+    roster = _deduped_roster
+
+    result.practice_composite_rows = collect_platform_data(
+        roster, entity_name, city, state, on_event=emit, run_id=result.run_id
+    )
+
+    if physician_composite and result.practice_composite_rows:
+        _collect_physician_composite(result, entity_name, city, state, physician_roster, emit)
+
+
+def _individual_stem(entity_name: str, city: str, state: str, teaser_report: bool) -> str:
+    """Filename stem for a hospital Deep Diagnostic (markdown / PDF / briefing)."""
+    _ts = datetime.utcnow().strftime("%y%m%d-%H%M")
+    _entity_slug = _slug(entity_name)[:40]
+    if teaser_report:
+        _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_{FILE_INDIVIDUAL_SUM}-{_ts}"
+    else:
+        _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_{FILE_INDIVIDUAL}-{_ts}"
+    return titlecase_filename(_stem)
+
+
+def _save_reputation_rows(result) -> None:
+    """Persist practice / physician composite rows collected for this run."""
+    if not result.practice_composite_rows:
+        return
+    from .practice_reputation import save_practice_reputation
+    from .physician_reputation import save_physician_reputation
+    rep_run_id = save_practice_reputation(result.run_id, result.practice_composite_rows)
+    if result.physician_composite_rows and rep_run_id:
+        save_physician_reputation(rep_run_id, result.physician_composite_rows)
+
+
+def _run_briefing(result, briefing_variant: str, output_dir: Path, stem: str, emit, console) -> None:
+    """Generate the companion Pulse Briefing PDF; validation misses and render
+    failures are recorded on the result (briefing_skipped_reason) and emitted."""
+    result.briefing_variant = briefing_variant
+    try:
+        from .briefing import extract as _briefing_extract, BriefingValidationError
+        from .briefing_pdf import render_briefing_pdf
+        emit({"type": "phase", "name": "briefing", "text": f"Generating Pulse Briefing ({briefing_variant})"})
+        with console.status(f"[bold dark_sea_green4]Generating Pulse Briefing ({briefing_variant})…[/bold dark_sea_green4]"):
+            _br = _briefing_extract(result, briefing_variant)
+            _variant_label = "Sales" if briefing_variant == "sales" else "CS"
+            _briefing_path = Path(output_dir) / f"{stem}_Briefing-{_variant_label}.pdf"
+            render_briefing_pdf(_br, str(_briefing_path))
+        result.briefing_pdf_path = str(_briefing_path)
+        from .db import update_briefing_pdf_path
+        update_briefing_pdf_path(result.run_id, str(_briefing_path))
+        console.print(f"[green]✓[/green] Briefing PDF  → [dim]{_briefing_path}[/dim]")
+        emit({"type": "briefing_ready", "path": str(_briefing_path)})
+    except BriefingValidationError as exc:
+        reason = f"Missing inputs: {', '.join(exc.missing)}"
+        result.briefing_skipped_reason = reason
+        console.print(f"[yellow]⚠[/yellow] Briefing skipped — {reason}")
+        emit({"type": "briefing_skipped", "reason": reason})
+    except Exception as exc:
+        reason = str(exc)
+        result.briefing_skipped_reason = reason
+        console.print(f"[yellow]⚠[/yellow] Briefing generation failed: {reason}")
+        emit({"type": "briefing_skipped", "reason": reason})
+
+
 def analyze_location(
     city: str,
     state: str,
@@ -918,106 +1327,7 @@ def analyze_location(
     # temperature=0 makes this call deterministic: same evidence data → same tier
     # scores every time, regardless of how Phase 1 sampling varied.
     emit({"type": "phase", "name": "structured", "text": "Extracting structured data"})
-    _individual_note = (
-        "INDIVIDUAL REPORT — field mapping:\n"
-        "• market_overview = the full text of the '### Organization Overview' section\n"
-        "• ai_visibility_verdict = the '### AI Visibility Verdict' section\n"
-        "• top_recommendation = the COMPLETE introductory prose of the "
-        "'### AI Visibility Assessment & Improvement Opportunities' section — the "
-        "2–3 paragraphs of analysis text that appear BEFORE the grouped improvement sections. "
-        "Do NOT include any section headers or bullet items here — only the prose paragraphs.\n"
-        "• improvement_sections = the grouped sections that follow the prose in "
-        "'### AI Visibility Assessment & Improvement Opportunities'. For each bold-headed "
-        "section (e.g. '**1. Your Website...**'), capture: title (strip the leading number), "
-        "description (the line below the header), items (the bulleted action items).\n"
-        "• practical_advice = empty array []\n\n"
-    ) if individual_report else (
-        "• improvement_sections = the grouped sections from '### AI Visibility Assessment "
-        "& Improvement Opportunities'. For each labeled section in that part, capture: "
-        "title (strip any leading number), description (the line below the header), "
-        "items (the bulleted action items in that section). Leave practical_advice as [].\n\n"
-    )
-    if entity_type == "practice":
-        _tier_score_note = (
-            "PRACTICE EDITION TIER SCORES — compute all four fresh from the verified "
-            "evidence block AND the narrative. Do NOT copy tier scores from the report "
-            "text (those are from a different sampling pass). Use the Practice Edition "
-            "field mapping — NOT hospital rubric signals:\n\n"
-            "• clinical_outcomes_safety = Practitioner Credentials & Clinical Quality: "
-            "board cert verifiability (ABMS/AOA), licensure cleanliness, training bio "
-            "visibility, MIPS/QPP scores, practice-level accreditations (AAAHC/AAAASF/"
-            "NCQA), hospital affiliations/privileges. "
-            "DO NOT use CMS stars, Leapfrog grades, or HCAHPS — those are hospital-only.\n"
-            "• credentials_recognition = Reviews & Reputation: Google front-door "
-            "rating+volume, physician review profiles (Healthgrades/Vitals/Google), "
-            "aggregator breadth, listing hygiene, recency/velocity.\n"
-            "• patient_experience_reviews = Identity & Machine-Readability: entity "
-            "resolution integrity, physician↔practice linkage, NPI/registry consistency, "
-            "website schema.org markup and bio crawlability, roster currency.\n"
-            "• access_fit = Access & Fit: new-patient availability, online scheduling, "
-            "insurance clarity, telehealth, appointment lead-time.\n\n"
-            "cms_star_rating: set to null for ALL practices (field is hospital-only).\n"
-            "weighting_profile: select practice_procedural / practice_relationship / "
-            "practice_referral_fed / practice_hybrid based on the specialty.\n\n"
-            "Practice anchor rubric:\n"
-            "• Practitioner Credentials & Clinical Quality: all sampled physicians "
-            "board-certified and crawlably verifiable + clean licenses + training bios "
-            "public + MIPS ≥85 + specialty accreditation → 80–90. Any unverifiable "
-            "board cert → ceiling 74. Mix of verifiable/unverifiable → 55–70.\n"
-            "• Reviews & Reputation: org 4.5★+ with solid volume + physicians "
-            "individually reviewed + claimed listings + active flow → 85+. 4.0–4.4★ "
-            "or thin physician profiles → 65–80. Sparse/unclaimed → <60.\n"
-            "• Identity & Machine-Readability: entity resolution >95% + linkage "
-            ">90% + clean NPI + Schema.org present → 80+. Resolution or linkage "
-            "issues → cap 74.\n"
-            "• Access & Fit: online booking + published insurance list + telehealth "
-            "+ new-patient signals current → 70+. Limited signals → 40–55.\n\n"
-        )
-    else:
-        _tier_score_note = (
-            "TIER SCORES — compute all four fresh from the verified evidence block AND the "
-            "narrative report section. The narrative's findings about accreditations, trauma "
-            "designations, quality programs, and program depth ARE authoritative evidence for "
-            "scoring — use them freely. Do NOT copy tier scores written in the report text "
-            "(those are from a different sampling pass).\n\n"
-            "IMPORTANT: cms_star_rating is a SEPARATE field for the raw CMS number. "
-            "The clinical_outcomes_safety tier score incorporates ALL quality signals "
-            "— CMS stars, Leapfrog grade, HCAHPS, mortality/readmission rates, safety "
-            "indicators, procedure volume, trauma designation, and teaching status. "
-            "Set it to null ONLY if the provider is genuinely unknown with zero quality "
-            "signals of any kind. Any of the following is sufficient for a non-null score: "
-            "Level I/II trauma designation, Joint Commission accreditation, Magnet nursing "
-            "recognition, academic medical center affiliation, HCAHPS data, Leapfrog grade, "
-            "CMS star rating, or published clinical program depth.\n\n"
-            "Anchor rubric:\n"
-            "• Outcomes & Safety: CMS 5★→88, 4★→73, 3★→58, 2★→43, 1★→28. "
-            "No CMS but Leapfrog A→85, B→72, C→58, D→44, F→32. "
-            "No CMS/Leapfrog but HCAHPS above national avg→55–65, below→40–52. "
-            "Level I trauma center (no CMS/Leapfrog confirmed)→62–72. "
-            "Level II trauma center→55–65. "
-            "Joint Commission–accredited hospital with major clinical programs, no published "
-            "safety warnings→50–60. "
-            "Specialty practice with strong procedure volume / outcomes→50–70. "
-            "Apply Leapfrog modifier on top of CMS base: A adds ~8, F subtracts ~12.\n"
-            "• Credentials & Recognition: U.S. News nationally ranked→85+ floor; "
-            "high-performing→70+; academic medical center / Level I trauma / fellowship "
-            "depth / Magnet→band up; board-certification alone is a floor (~60).\n"
-            "• Experience & Reviews: Google 4.5★+/high volume→85+, 4.0–4.4→70–84, "
-            "3.5–3.9→55–69, 3.0–3.4→40–54, <3.0 or thin/stale→<40. Fragmented or "
-            "largely unclaimed footprint caps this tier even with a strong flagship.\n"
-            "• Access & Fit: broad multi-payer network + many locations + active "
-            "new-patient availability + telehealth→70+; limited access→40–55.\n\n"
-        )
-
-    extraction_prompt = (
-        "Extract the structured data from the completed market analysis report below "
-        "by calling submit_analysis_result. Include every provider in the rankings.\n\n"
-        + _individual_note
-        + _tier_score_note
-        + f"{evidence_text}\n\n"
-        "--- REPORT (qualitative context — do NOT copy tier scores from here) ---\n"
-        f"{report_markdown}\n--- END REPORT ---"
-    )
+    extraction_prompt = _hospital_extraction_prompt(individual_report, entity_type, evidence_text, report_markdown)
     structured_data: dict = {}
     with console.status("[bold dark_sea_green4]Extracting structured data…[/bold dark_sea_green4]"):
         with client.messages.stream(
@@ -1036,63 +1346,17 @@ def analyze_location(
             break
 
     run_profile = structured_data.get("weighting_profile") or scoring.classify_profile(specialty, evidence.mode)
-    # For practice specialty market reports, ensure the profile has the practice_ prefix
-    # so the PDF renders practice pillar labels instead of hospital pillar labels.
-    if entity_type == "practice" and run_profile and not run_profile.startswith("practice_"):
-        run_profile = f"practice_{run_profile}"
-    elif entity_type == "practice" and not run_profile:
-        run_profile = "practice_procedural"
-    # A hospital-type run must stay on the hospital rubric. The model may still *believe* the
-    # organization is a practice or clinic network (it can pick a practice_* profile in the
-    # schema); when it does, keep the requested rubric and say so, instead of silently
-    # switching pillars — which made Trends flag "scored on the practice rubric".
-    rubric_note_text = ""
-    if entity_type not in ("practice", "service_line") and str(run_profile or "").startswith("practice_"):
-        _picked = run_profile
-        run_profile = {"practice_procedural": "procedural", "practice_relationship": "relationship",
-                       "practice_referral_fed": "relationship", "practice_hybrid": "procedural"}.get(_picked, "procedural")
-        rubric_note_text = (
-            "The analysis read this organization as a practice or clinic network rather than a hospital "
-            f"(it proposed the {_picked.replace('practice_', '').replace('_', ' ')} practice profile). "
-            "It was scored on the hospital rubric because the report was requested as a Hospital. "
-            "If this is not a hospital, re-run it as a Specialty Practice or a Community Health center so the right rubric applies.")
-        console.print(f"[yellow]⚠[/yellow] Model proposed {_picked}; hospital rubric enforced for a hospital-type run.")
-        emit({"type": "phase", "name": "rubric", "text": "⚠ Analysis read this organization as a clinic network — hospital rubric enforced (see Score Evidence)"})
+    run_profile, rubric_note_text = _pin_hospital_rubric(run_profile, entity_type, emit, console)
     rankings = [_build_provider(r, run_profile) for r in structured_data.get("rankings", [])]
-
-    # Remove consolidated_locations whose names match a standalone ranked provider.
-    # Claude sometimes lists a child hospital both as a sub-location of its parent
-    # system AND as its own ranked entry. Strip the duplicate from the parent's list.
-    _top_level = {p.name.lower().strip() for p in rankings}
-    for prov in rankings:
-        own = prov.name.lower().strip()
-        prov.consolidated_locations = [
-            loc for loc in prov.consolidated_locations
-            if not any(
-                other != own and (
-                    loc.name.lower().strip() == other
-                    or loc.name.lower().strip() in other
-                    or other in loc.name.lower().strip()
-                )
-                for other in _top_level
-            )
-        ]
+    _dedup_consolidated_locations(rankings)
 
     # --- Phase 3: inject verified Google + system reputation + composite ---
     emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})
     systems_done = 0
     # Verified quality signals override the model's recall on the entity itself and
     # anchor Outcomes & Safety deterministically (the composite is recomputed below).
-    if individual_report and _indiv_quality and rankings:
-        _q = _indiv_quality
-        _p0 = rankings[0]
-        if _q.get("cms_facility_id"):
-            _p0.cms_star_rating = _q.get("cms_star")
-        if _q.get("leapfrog_grade"):
-            _p0.leapfrog_grade = _q["leapfrog_grade"]          # a miss keeps the model's own finding
-        _ob = scoring.outcomes_band(_q.get("leapfrog_grade") or _p0.leapfrog_grade, _q.get("cms_star"))
-        if _ob is not None:
-            _p0.tier_scores.clinical_outcomes_safety = _ob
+    if individual_report:
+        _apply_verified_quality(rankings, _indiv_quality)
     for prov in rankings:
         if individual_report:
             do_system = aggregate and settings.enable_system_reputation
@@ -1124,37 +1388,8 @@ def analyze_location(
     # deep-dives are excluded (their pillar rubric is not comparable).
     if (not practice_composite and not physician_composite
             and (not individual_report or entity_type != "practice")):
-        from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
-        _es_src = "deep_diagnostic" if individual_report else "market"
-        _loc = f"{city}, {state}"
-        _run_family = "practice" if (run_profile or "").startswith("practice_") else "hospital"
-        _adopted = False
-        for prov in rankings:
-            _canon = None if override_today_lock else _get_es(prov.name, _loc, days=30)
-            _cf = "practice" if (_canon or {}).get("weighting_profile", "").startswith("practice_") else "hospital"
-            # Only adopt a canonical score computed under the SAME rubric — the
-            # practice and hospital rubrics reuse the same four slots with different
-            # pillar meanings, so a cross-rubric adoption would mislabel the values.
-            if _canon and _canon.get("pulse_score") is not None and _cf == _run_family:
-                prov.ai_visibility_score = _canon["pulse_score"]
-                for _k, _v in (_canon.get("tier_scores") or {}).items():
-                    if hasattr(prov.tier_scores, _k):
-                        setattr(prov.tier_scores, _k, _v)
-                prov.overall_rating, _ = scoring.grade_from_score(prov.ai_visibility_score)
-                if _canon.get("ai_says"):          # sync the "what AI sees" narrative too
-                    prov.ai_says = _canon["ai_says"]
-                _adopted = True
-            elif prov.ai_visibility_score is not None:
-                _code, _band = scoring.grade_from_score(prov.ai_visibility_score)
-                _put_es(prov.name, _loc, prov.ai_visibility_score,
-                        prov.tier_scores.as_dict(), overall_rating=_code,
-                        band_label=_band, ai_says=getattr(prov, "ai_says", "") or "",
-                        source=_es_src, run_id=run_id, overwrite=override_today_lock,
-                        weighting_profile=getattr(prov, "weighting_profile", None) or run_profile)
-        if _adopted:
-            rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))
-            for _i, prov in enumerate(rankings, start=1):
-                prov.rank = _i
+        _sync_entity_scores(rankings, city, state, run_profile, run_id, override_today_lock,
+                            source="deep_diagnostic" if individual_report else "market")
 
     disclaimer = _FULL_DISCLAIMER   # always hardcoded; LLM-generated disclaimer field ignored
 
@@ -1189,121 +1424,27 @@ def analyze_location(
         rubric_note=rubric_note_text,
         top_recommendation=_clean(structured_data.get("top_recommendation", "")),
         practical_advice=[_clean(a) for a in structured_data.get("practical_advice", []) if isinstance(a, str)],
-        improvement_sections=[
-            ImprovementSection(
-                title=_clean(s.get("title", "")),
-                description=_clean(s.get("description", "")),
-                items=[_clean(i) for i in s.get("items", []) if isinstance(i, str)],
-            )
-            for s in structured_data.get("improvement_sections", [])
-            if isinstance(s, dict) and s.get("title")
-        ],
+        improvement_sections=_improvement_sections(structured_data),
         disclaimer=disclaimer,
         rankings=rankings,
         report_markdown=report_markdown,
     )
 
     # Simplified Patient Pulse: flag the prospect/target so the PDF renders it in
-    # full and obscures every competitor.  Best-effort name match against the
-    # ranked market set (exact first, then substring either direction).
-    if simplified and obscure_competitors and target_entity:
-        # If the target is a hospital service line, compute its EXACT aggregate on
-        # the practice rubric (its own scoped clinic roster) so the ranking shows
-        # the real number, not the market's incidental read of one clinic.
-        _subject_agg = None
-        if service_line and parent_system:
-            try:
-                from .practice_analyzer import analyze_practice as _ap
-                emit({"type": "phase", "name": "subject",
-                      "text": f"Scoring {target_entity} as a {service_line} service line"})
-                _subj = _ap(entity_name=target_entity, city=city, state=state,
-                            specialty=specialty, aggregate=True,
-                            service_line=service_line, parent_system=parent_system,
-                            skip_pdf=True, on_event=emit, brand=brand,
-                            force_rerun=force_rerun, override_today_lock=override_today_lock)
-                _sp = _subj.rankings[0] if _subj.rankings else None
-                if _sp and _sp.ai_visibility_score is not None:
-                    _subject_agg = {
-                        "ai_visibility_score": _sp.ai_visibility_score,
-                        "tier_scores": _sp.tier_scores.as_dict() if hasattr(_sp.tier_scores, "as_dict") else {},
-                        "ai_says": getattr(_sp, "ai_says", "") or "",
-                    }
-            except Exception as _exc:
-                emit({"type": "text", "text": f"Service-line subject scoring failed: {_exc}"})
-        _n_before = len(result.rankings)
-        _ensure_target_present(result, target_entity, subject=_subject_agg)
-        if len(result.rankings) > _n_before:
-            emit({"type": "phase", "name": "target_injected",
-                  "text": f"'{target_entity}' did not surface in AI market answers; "
-                          "included as a minimal-visibility entity."})
-        if _subject_agg:
-            result.rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))
-            for _i, _p in enumerate(result.rankings, start=1):
-                _p.rank = _i
+    # full and obscures every competitor.
+    _apply_simplified_target(
+        result, simplified=simplified, obscure_competitors=obscure_competitors,
+        target_entity=target_entity, service_line=service_line, parent_system=parent_system,
+        city=city, state=state, specialty=specialty, brand=brand, force_rerun=force_rerun,
+        override_today_lock=override_today_lock, emit=emit,
+    )
 
     # ── Practice Composite reputation collection (before PDF so table is included) ──
     if practice_composite and individual_report and entity_name:
-        emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
-        from .practice_reputation import collect_platform_data
-
-        roster = list(practice_roster or [])
-        if not roster:
-            # Auto-discover when no roster provided (comparison path — no UI confirmation step)
-            from .practice_discovery import discover_practices
-            roster = discover_practices(entity_name, city, state, on_event=emit,
-                                        force_rerun=force_rerun)
-
-        # Hospital-anchored table: remove the anchor itself and canonicalize
-        # brand-prefixed sibling names ("Nevada Health Centers - Cambridge Family
-        # Health Center" → "Cambridge Family Health Center") to prevent the same
-        # clinic appearing twice under its long and short form.
-        _anchor_lc = entity_name.strip().lower()
-        _anchor_prefix = entity_name.strip() + " - "
-        _anchor_prefix_lc = _anchor_prefix.lower()
-
-        def _strip_anchor_prefix(name: str) -> str:
-            if name.strip().lower().startswith(_anchor_prefix_lc):
-                return name.strip()[len(_anchor_prefix):]
-            return name.strip()
-
-        _seen_roster_names: set[str] = set()
-        _deduped_roster: list[dict] = []
-        for _r in roster:
-            _canonical = _strip_anchor_prefix(_r.get("name", ""))
-            _cn_lc = _canonical.lower()
-            if _cn_lc == _anchor_lc or _cn_lc in _seen_roster_names:
-                continue
-            _seen_roster_names.add(_cn_lc)
-            _deduped_roster.append(
-                {**_r, "name": _canonical} if _canonical != _r.get("name", "").strip() else _r
-            )
-        roster = _deduped_roster
-
-        result.practice_composite_rows = collect_platform_data(
-            roster, entity_name, city, state, on_event=emit, run_id=result.run_id
+        _collect_hospital_practice_composite(
+            result, entity_name, city, state, practice_roster, physician_composite,
+            physician_roster, emit, force_rerun,
         )
-
-        if physician_composite and result.practice_composite_rows:
-            emit({"type": "phase", "name": "physician_reputation", "text": "Collecting physician reputation"})
-            from .physician_discovery import discover_physicians
-            from .physician_reputation import collect_physician_data
-            confirmed = physician_roster or {}
-            # Flatten confirmed physicians (keyed by org name from the UI)
-            all_confirmed = [ph for v in confirmed.values() for ph in v]
-            # Discover at the organization level once — sub-location names yield 0 results
-            # since NPPES indexes physicians under the parent organization, not specific clinics.
-            target_row = (
-                next((r for r in result.practice_composite_rows if r.get("is_anchor")), None)
-                or next((r for r in result.practice_composite_rows if r.get("entity_type") != "hospital"), None)
-            )
-            if target_row:
-                physicians = all_confirmed or discover_physicians(entity_name, city, state, on_event=emit)
-                if physicians:
-                    ph_results = collect_physician_data(
-                        physicians, entity_name, city, state, on_event=emit
-                    )
-                    target_row["physicians"] = ph_results
-                    result.physician_composite_rows.extend(ph_results)
 
     # Save markdown + PDF
     _type = specialty.replace(" ", "-") if specialty else "Hospitals"
@@ -1367,39 +1508,10 @@ def analyze_location(
         if not result.sources_consulted: result.sources_consulted = pop_last_sources(); result.web_search_used = last_web_search_used() if result.web_search_used is None else result.web_search_used
         _save_to_db(result, market_key=_mkey)
 
-    if result.practice_composite_rows:
-        from .practice_reputation import save_practice_reputation
-        from .physician_reputation import save_physician_reputation
-        rep_run_id = save_practice_reputation(result.run_id, result.practice_composite_rows)
-        if result.physician_composite_rows and rep_run_id:
-            save_physician_reputation(rep_run_id, result.physician_composite_rows)
+    _save_reputation_rows(result)
 
     if briefing_variant and not skip_pdf:
-        result.briefing_variant = briefing_variant
-        try:
-            from .briefing import extract as _briefing_extract, BriefingValidationError
-            from .briefing_pdf import render_briefing_pdf
-            emit({"type": "phase", "name": "briefing", "text": f"Generating Pulse Briefing ({briefing_variant})"})
-            with console.status(f"[bold dark_sea_green4]Generating Pulse Briefing ({briefing_variant})…[/bold dark_sea_green4]"):
-                _br = _briefing_extract(result, briefing_variant)
-                _variant_label = "Sales" if briefing_variant == "sales" else "CS"
-                _briefing_path = output_dir / f"{_stem}_Briefing-{_variant_label}.pdf"
-                render_briefing_pdf(_br, str(_briefing_path))
-            result.briefing_pdf_path = str(_briefing_path)
-            from .db import update_briefing_pdf_path
-            update_briefing_pdf_path(result.run_id, str(_briefing_path))
-            console.print(f"[green]✓[/green] Briefing PDF  → [dim]{_briefing_path}[/dim]")
-            emit({"type": "briefing_ready", "path": str(_briefing_path)})
-        except BriefingValidationError as exc:
-            reason = f"Missing inputs: {', '.join(exc.missing)}"
-            result.briefing_skipped_reason = reason
-            console.print(f"[yellow]⚠[/yellow] Briefing skipped — {reason}")
-            emit({"type": "briefing_skipped", "reason": reason})
-        except Exception as exc:
-            reason = str(exc)
-            result.briefing_skipped_reason = reason
-            console.print(f"[yellow]⚠[/yellow] Briefing generation failed: {reason}")
-            emit({"type": "briefing_skipped", "reason": reason})
+        _run_briefing(result, briefing_variant, output_dir, _stem, emit, console)
 
     emit({"type": "phase", "name": "done_item", "text": "Complete"})
     return result

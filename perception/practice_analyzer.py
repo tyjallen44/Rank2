@@ -704,6 +704,334 @@ def _save_practice_extras(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Phase helpers — shared by analyze_practice and perception.pipeline
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggregate: bool,
+                             confirmed_siblings: Optional[list], service_line: Optional[str],
+                             parent_system: Optional[str], org_name: Optional[str],
+                             emit, force_rerun: bool) -> tuple[Optional[list[str]], Optional[list[dict]], Optional[str]]:
+    """Establish the location roster for an aggregate run.
+
+    Returns (location_roster, aggregate_siblings, org_name). location_roster is
+    the name list for the scoring prompt; aggregate_siblings the sibling dicts
+    ({name, entity_type, city, state}) reused by the composite table (None = no
+    aggregate roster was established)."""
+    _location_roster: list[str] | None = None
+    _aggregate_siblings: list[dict] | None = None
+    if aggregate:
+        if confirmed_siblings is not None:
+            # Pre-confirmed by the user in the initiation screen
+            _aggregate_siblings = list(confirmed_siblings)
+            if confirmed_siblings:
+                _location_roster = [entity_name] + [s["name"] for s in confirmed_siblings]
+                emit({"type": "phase", "name": "discovery",
+                      "text": f"Using confirmed roster: {len(_location_roster)} locations"})
+            else:
+                emit({"type": "phase", "name": "discovery",
+                      "text": f"Single-location run for {entity_name}"})
+        elif service_line and parent_system:
+            # Scope aggregation to a hospital service line (e.g. Duke Health's
+            # orthopedic clinics only) — used by Compare Two / Event Preparation
+            # where there is no roster-confirm UI.
+            from .practice_discovery import discover_service_line_siblings as _disc_sl
+            emit({"type": "phase", "name": "discovery",
+                  "text": f"Discovering {service_line} locations for {parent_system}"})
+            _siblings, _sl_brand = _disc_sl(
+                entity_name, parent_system, service_line, city, state,
+                on_event=emit, force_rerun=force_rerun,
+            )
+            _aggregate_siblings = list(_siblings or [])
+            if _siblings:
+                _location_roster = [entity_name] + [s["name"] for s in _siblings]
+            if not org_name and _sl_brand:
+                org_name = _sl_brand
+        else:
+            from .practice_discovery import discover_practice_siblings as _disc_siblings
+            emit({"type": "phase", "name": "discovery", "text": f"Discovering {entity_name} locations"})
+            _siblings, _discovered_org_name = _disc_siblings(
+                entity_name, city, state, on_event=emit, force_rerun=force_rerun
+            )
+            _aggregate_siblings = list(_siblings or [])
+            if _siblings:
+                _location_roster = [entity_name] + [s["name"] for s in _siblings]
+            # Use discovered org name as fallback when not provided by frontend
+            if not org_name and _discovered_org_name:
+                org_name = _discovered_org_name
+    return _location_roster, _aggregate_siblings, org_name
+
+
+def _roster_google_prepass(entity_name: str, city: str, state: str, *, anchor_listing: Optional[dict],
+                           aggregate_siblings: Optional[list[dict]], emit, console) -> tuple[dict, Optional[dict], str]:
+    """Pin every confirmed location (anchor + siblings) to one Google listing and
+    aggregate their reviews BEFORE the narrative/scoring so Pillar 2, the
+    evidence block and the composite table all use the same numbers.
+
+    Returns (anchor_google, roster_rep, evidence_suffix)."""
+    _anchor_google: dict = {"name": entity_name, "city": city, "state": state, "is_anchor": True}
+    if anchor_listing:
+        for _k in ("place_id", "address", "rating", "review_count", "maps_url"):
+            if anchor_listing.get(_k) is not None:
+                _anchor_google[_k] = anchor_listing[_k]
+    _roster_rep: Optional[dict] = None
+    _suffix = ""
+    if aggregate_siblings is not None or anchor_listing:
+        emit({"type": "phase", "name": "roster_google",
+              "text": f"Verifying Google listings for {1 + len(aggregate_siblings or [])} location(s)"})
+        try:
+            _roster_rep = _resolve_roster_google(
+                _anchor_google, aggregate_siblings or [], city, state, emit=emit)
+        except Exception as _exc:
+            console.print(f"[yellow]⚠[/yellow] Roster Google pass failed ({_exc}); using front door only.")
+            _roster_rep = None
+        if _roster_rep:
+            _suffix = (
+                f"\nRoster Google reviews (all confirmed locations): "
+                f"{_roster_rep['avg_rating']:.1f}★ weighted across "
+                f"{_roster_rep['rated_locations']} of {_roster_rep['locations']} locations, "
+                f"{_roster_rep['total_reviews']} reviews total. Use THIS for Reviews & Reputation."
+            )
+    return _anchor_google, _roster_rep, _suffix
+
+
+def _practice_extraction_prompt(report_markdown: str, location_roster: Optional[list[str]], entity_name: str) -> str:
+    """The full structured-extraction prompt for submit_practice_result."""
+    return (
+        "Extract the structured data from the completed practice AI Visibility report below "
+        "by calling submit_practice_result. Use the full report to populate all fields.\n\n"
+        "FIELD MAPPING for tier_scores:\n"
+        "  clinical_outcomes_safety   = Practitioner Credentials & Clinical Quality score\n"
+        "  credentials_recognition    = Reviews & Reputation score\n"
+        "  patient_experience_reviews = Identity & Machine-Readability score\n"
+        "  access_fit                 = Access & Fit score\n\n"
+        "DERIVED METRICS: Set entity_resolution_pct and linkage_integrity_pct based on "
+        "your analysis of naming/identity risks and physician attribution risks observed. "
+        "Set board_cert_unverifiable=true if ANY sampled physician's ABMS/AOA cert "
+        "could not be confirmed from crawlable sources. "
+        "Set key_person_flag=true for solo or two-physician practices.\n\n"
+        "CEILING NOTE: The system applies the ≤74 ceiling automatically — report "
+        "the raw pillar scores honestly; do NOT pre-apply the ceiling yourself.\n\n"
+        + (
+            "CONSOLIDATED LOCATIONS: This is an aggregate run covering the following confirmed "
+            "locations — populate consolidated_locations with ALL of them. Use the ratings and "
+            "addresses from the report where available; set google_rating=null and "
+            "google_review_count=null for locations not individually rated in the report. "
+            "The anchor/flagship must be the first entry.\n\nConfirmed locations:\n"
+            + "\n".join(f"  - {loc}" for loc in (location_roster or [entity_name]))
+            + "\n\n"
+            if location_roster else
+            "CONSOLIDATED LOCATIONS: Populate consolidated_locations with any locations "
+            "mentioned in the report with their ratings.\n\n"
+        )
+        + "The practice entity must appear as rank=1 in rankings.\n\n"
+        "--- REPORT ---\n"
+        f"{report_markdown}\n--- END REPORT ---"
+    )
+
+
+def _sync_practice_entity_score(rankings: list, city: str, state: str, run_id: str,
+                                override_today_lock: bool, run_profile: str, roster_fp: str) -> None:
+    """Canonical entity-score sync (shared across reports).
+
+    A practice's Deep Diagnostic and its appearance in a Competitors Rankings
+    market share the same practice pillar rubric, so they share one canonical
+    four-pillar score — adopt a fresh one if present, otherwise seed it. Keyed
+    on the anchor practice (rankings[0]) by the name it surfaces under, so it
+    lines up with how the same practice is keyed in the market report."""
+    if not (rankings and rankings[0] is not None):
+        return
+    from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
+    _anchor = rankings[0]
+    _loc = f"{city}, {state}"
+    _canon = None if override_today_lock else _get_es(_anchor.name, _loc, days=30)
+    _cf = "practice" if (_canon or {}).get("weighting_profile", "").startswith("practice_") else "hospital"
+    # Only adopt a canonical computed under the practice rubric (same-rubric)
+    # AND for the same confirmed roster — a cached score for a different set
+    # of locations must not overwrite this run's pillar values.
+    _same_roster = (_canon or {}).get("roster_key", "") == (roster_fp or "")
+    if _canon and _canon.get("pulse_score") is not None and _cf == "practice" and _same_roster:
+        _anchor.ai_visibility_score = _canon["pulse_score"]
+        for _k, _v in (_canon.get("tier_scores") or {}).items():
+            if hasattr(_anchor.tier_scores, _k):
+                setattr(_anchor.tier_scores, _k, _v)
+        _anchor.overall_rating, _ = scoring.grade_from_score(_anchor.ai_visibility_score)
+        if _canon.get("ai_says"):
+            _anchor.ai_says = _canon["ai_says"]
+    elif _anchor.ai_visibility_score is not None:
+        _code, _band = scoring.grade_from_score(_anchor.ai_visibility_score)
+        _put_es(_anchor.name, _loc, _anchor.ai_visibility_score,
+                _anchor.tier_scores.as_dict(), overall_rating=_code,
+                band_label=_band, ai_says=getattr(_anchor, "ai_says", "") or "",
+                source="deep_diagnostic", run_id=run_id, overwrite=override_today_lock,
+                weighting_profile=getattr(_anchor, "weighting_profile", None) or run_profile,
+                roster_key=roster_fp or "")
+
+
+def _collect_practice_composite(result: AnalysisResult, rankings: list, entity_name: str, city: str, state: str, *,
+                                anchor_google: dict, aggregate_siblings: Optional[list[dict]],
+                                practice_roster: Optional[list[dict]], anchor_addr_norm: str,
+                                physician_composite: bool, physician_roster: Optional[dict],
+                                emit, force_rerun: bool) -> None:
+    """Practice Composite reputation collection (before PDF so the table is included)."""
+    emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
+    from .practice_reputation import collect_platform_data
+    from .practice_discovery import discover_practice_siblings
+
+    # Practice-anchored table: the analyzed practice is the anchor row (pinned
+    # first, visually distinguished).  Siblings are discovered separately so the
+    # anchor entity never appears in the discovery list.
+    anchor_entry = {
+        "name": entity_name,
+        "entity_type": "practice",
+        "is_anchor": True,
+        "city": city,
+        "state": state,
+    }
+    # Pin the anchor to the listing resolved in the roster pre-pass (the search
+    # step's choice when provided, else the strict name lookup).
+    for _k in ("place_id", "address", "rating", "review_count", "maps_url"):
+        if anchor_google.get(_k) is not None:
+            anchor_entry[_k] = anchor_google[_k]
+    if aggregate_siblings is not None:
+        # Automatic scoping: reuse the confirmed / service-line location roster
+        # established for the aggregate analysis.  This keeps the reputation
+        # table to (e.g.) the orthopedic clinics only — never a system-wide
+        # practice list that would pull in unrelated imaging / primary care sites.
+        sibling_roster = list(aggregate_siblings)
+        emit({"type": "text",
+              "text": f"Reputation table scoped to the {1 + len(sibling_roster)} "
+                      f"confirmed location(s)"})
+    else:
+        sibling_roster = list(practice_roster or [])
+    if not sibling_roster and aggregate_siblings is None:
+        sibling_roster = discover_practice_siblings(
+            entity_name, city, state,
+            on_event=emit,
+            force_rerun=force_rerun,
+        )
+
+    # Drop siblings that resolve to the anchor entity (prevents duplicate rows in
+    # the composite table when Claude names a location variant of the anchor).
+    # Bidirectional AND: both directions must score "strong" (≥0.6 token overlap)
+    # to drop a sibling.  This correctly catches location-suffix/label variants
+    # ("-  Desert Inn", "(Main Office)") while keeping siblings with a genuinely
+    # distinct location qualifier ("Summerlin", "West Campus").  The check is
+    # unconditional — the anchor name need not contain digits.
+    from .data.places import _name_match as _nmatch
+    _anchor_lc = entity_name.strip().lower()
+
+    # Recognized same-location alias markers stripped from sibling BEFORE token-overlap
+    # check.  Direction rule: the canonical anchor name is never modified; only the
+    # sibling is tested for alias-ness.  This catches "(Main Office)" even when the
+    # anchor name has no address tokens to pad the ratio.
+    _ALIAS_PARENTHETICALS = re.compile(
+        r'\s*\(\s*(main\s+(office|campus)|headquarters|hq'
+        r'|primary\s+(campus|location|office))\s*\)\s*$'
+        r'|\s*[-–—]\s*(main\s+(office|campus)|headquarters|hq)\s*$',
+        re.IGNORECASE,
+    )
+
+    def _is_anchor_duplicate(sibling_name: str, sibling_address: str = "") -> bool:
+        if sibling_name.strip().lower() == _anchor_lc:
+            return True
+        # Strip recognized alias markers from sibling before token-overlap check.
+        # Canonical anchor name is never modified — only the sibling is tested.
+        _stripped = _ALIAS_PARENTHETICALS.sub('', sibling_name).strip()
+        if _stripped.lower() != sibling_name.strip().lower():
+            if _stripped.lower() == _anchor_lc:
+                return True
+            if (
+                _nmatch(entity_name, _stripped) == "strong"
+                and _nmatch(_stripped, entity_name) == "strong"
+            ):
+                return True
+        # Bidirectional name-token AND on original name
+        if (
+            _nmatch(entity_name, sibling_name) == "strong"
+            and _nmatch(sibling_name, entity_name) == "strong"
+        ):
+            return True
+        # Address-based: sibling at same normalized street as anchor is a duplicate
+        # regardless of how the street is abbreviated or formatted.
+        if anchor_addr_norm:
+            if sibling_address and _normalize_street(sibling_address) == anchor_addr_norm:
+                return True
+            # Address embedded in sibling name: strip anchor base prefix, treat remainder
+            sn_lower = sibling_name.lower()
+            if sn_lower.startswith(_anchor_lc):
+                remainder = re.sub(r'^[\s\-,]+', '', sn_lower[len(_anchor_lc):])
+                if remainder and _normalize_street(remainder) == anchor_addr_norm:
+                    return True
+        return False
+
+    # Brand-prefix canonicalization: "AnchorName - X" → "X", so a sibling
+    # named with and without the parent brand prefix deduplicates to one row.
+    _brand_prefix = entity_name.strip() + " - "
+    _brand_prefix_lc = _brand_prefix.lower()
+
+    def _canon_sibling(name: str) -> str:
+        if name.strip().lower().startswith(_brand_prefix_lc):
+            return name.strip()[len(_brand_prefix):]
+        return name.strip()
+
+    deduped: list[dict] = []
+    seen_names: set[str] = set()
+    _anchor_pid = anchor_entry.get("place_id")
+    for s in sibling_roster:
+        sn = s.get("name", "")
+        sa = s.get("address", "")
+        if s.get("_anchor_dup"):
+            continue   # resolved to the anchor's own listing in the pre-pass
+        if s.get("place_id"):
+            # A distinct Google place_id is definitive: same-name clinics at
+            # other streets are real locations, not anchor aliases.
+            if _anchor_pid and s["place_id"] == _anchor_pid:
+                continue
+        elif _is_anchor_duplicate(sn, sa):
+            continue
+        canonical = _canon_sibling(sn)
+        k = canonical.lower()
+        if k not in seen_names:
+            seen_names.add(k)
+            deduped.append({**s, "name": canonical} if canonical != sn else s)
+    sibling_roster = deduped
+
+    roster = [anchor_entry] + sibling_roster
+
+    result.practice_composite_rows = collect_platform_data(
+        roster, entity_name, city, state, on_event=emit, run_id=result.run_id
+    )
+
+    # Bind the anchor row's google_rating to the same Places read used for
+    # the main analysis score so the header star value and composite table
+    # star value are always identical (Item 2).
+    if rankings and result.practice_composite_rows:
+        _fd_rating = rankings[0].google_footprint.front_door.rating
+        _fd_verified = rankings[0].google_footprint.front_door.verified
+        for _cr in result.practice_composite_rows:
+            if _cr.get("is_anchor") and _fd_rating is not None:
+                _cr["google_rating"] = _fd_rating
+                if not _fd_verified:
+                    _cr["google_rating"] = None
+
+    if physician_composite and result.practice_composite_rows:
+        from .analyzer import _collect_physician_composite
+        _collect_physician_composite(result, entity_name, city, state, physician_roster, emit)
+
+
+def _practice_stem(entity_name: str, city: str, state: str, teaser_report: bool) -> str:
+    """Filename stem for a practice Deep Diagnostic (markdown / PDF / briefing)."""
+    _ts   = datetime.utcnow().strftime("%y%m%d-%H%M")
+    _entity_slug = _slug(entity_name)[:40]
+    if teaser_report:
+        _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_Practice-Summary-{_ts}"
+    else:
+        _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_Practice-{_ts}"
+    from .strings import titlecase_filename
+    return titlecase_filename(_stem)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -807,82 +1135,26 @@ def analyze_practice(
     # For aggregate runs, build a stable location roster for the scoring prompt.
     # When confirmed_siblings is provided by the initiation flow, use it directly
     # (skips the Claude discovery call). None means run discovery as usual.
-    _location_roster: list[str] | None = None
     # The same sibling dicts ({name, entity_type, city, state}) are reused as the
     # Practice Composite roster below, so the reputation table is automatically
     # scoped to the confirmed / service-line locations rather than a separate
     # system-wide discovery pass.  None = no aggregate roster was established.
-    _aggregate_siblings: list[dict] | None = None
-    if aggregate:
-        if confirmed_siblings is not None:
-            # Pre-confirmed by the user in the initiation screen
-            _aggregate_siblings = list(confirmed_siblings)
-            if confirmed_siblings:
-                _location_roster = [entity_name] + [s["name"] for s in confirmed_siblings]
-                emit({"type": "phase", "name": "discovery",
-                      "text": f"Using confirmed roster: {len(_location_roster)} locations"})
-            else:
-                emit({"type": "phase", "name": "discovery",
-                      "text": f"Single-location run for {entity_name}"})
-        elif service_line and parent_system:
-            # Scope aggregation to a hospital service line (e.g. Duke Health's
-            # orthopedic clinics only) — used by Compare Two / Event Preparation
-            # where there is no roster-confirm UI.
-            from .practice_discovery import discover_service_line_siblings as _disc_sl
-            emit({"type": "phase", "name": "discovery",
-                  "text": f"Discovering {service_line} locations for {parent_system}"})
-            _siblings, _sl_brand = _disc_sl(
-                entity_name, parent_system, service_line, city, state,
-                on_event=emit, force_rerun=force_rerun,
-            )
-            _aggregate_siblings = list(_siblings or [])
-            if _siblings:
-                _location_roster = [entity_name] + [s["name"] for s in _siblings]
-            if not org_name and _sl_brand:
-                org_name = _sl_brand
-        else:
-            from .practice_discovery import discover_practice_siblings as _disc_siblings
-            emit({"type": "phase", "name": "discovery", "text": f"Discovering {entity_name} locations"})
-            _siblings, _discovered_org_name = _disc_siblings(
-                entity_name, city, state, on_event=emit, force_rerun=force_rerun
-            )
-            _aggregate_siblings = list(_siblings or [])
-            if _siblings:
-                _location_roster = [entity_name] + [s["name"] for s in _siblings]
-            # Use discovered org name as fallback when not provided by frontend
-            if not org_name and _discovered_org_name:
-                org_name = _discovered_org_name
+    _location_roster, _aggregate_siblings, org_name = _resolve_practice_roster(
+        entity_name, city, state, aggregate=aggregate, confirmed_siblings=confirmed_siblings,
+        service_line=service_line, parent_system=parent_system, org_name=org_name,
+        emit=emit, force_rerun=force_rerun,
+    )
 
     # If org_name is set and no custom report_title provided, default title to org_name
     if org_name and not report_title:
         report_title = org_name
 
     # ── Roster Google pre-pass ────────────────────────────────────────────────
-    # Pin every confirmed location (anchor + siblings) to one Google listing and
-    # aggregate their reviews BEFORE the narrative/scoring so Pillar 2, the
-    # evidence block and the composite table all use the same numbers.
-    _anchor_google: dict = {"name": entity_name, "city": city, "state": state, "is_anchor": True}
-    if anchor_listing:
-        for _k in ("place_id", "address", "rating", "review_count", "maps_url"):
-            if anchor_listing.get(_k) is not None:
-                _anchor_google[_k] = anchor_listing[_k]
-    _roster_rep: Optional[dict] = None
-    if _aggregate_siblings is not None or anchor_listing:
-        emit({"type": "phase", "name": "roster_google",
-              "text": f"Verifying Google listings for {1 + len(_aggregate_siblings or [])} location(s)"})
-        try:
-            _roster_rep = _resolve_roster_google(
-                _anchor_google, _aggregate_siblings or [], city, state, emit=emit)
-        except Exception as _exc:
-            console.print(f"[yellow]⚠[/yellow] Roster Google pass failed ({_exc}); using front door only.")
-            _roster_rep = None
-        if _roster_rep:
-            evidence_text += (
-                f"\nRoster Google reviews (all confirmed locations): "
-                f"{_roster_rep['avg_rating']:.1f}★ weighted across "
-                f"{_roster_rep['rated_locations']} of {_roster_rep['locations']} locations, "
-                f"{_roster_rep['total_reviews']} reviews total. Use THIS for Reviews & Reputation."
-            )
+    _anchor_google, _roster_rep, _roster_suffix = _roster_google_prepass(
+        entity_name, city, state, anchor_listing=anchor_listing,
+        aggregate_siblings=_aggregate_siblings, emit=emit, console=console,
+    )
+    evidence_text += _roster_suffix
     _roster_fp = _roster_key(entity_name, _aggregate_siblings) if _aggregate_siblings is not None else ""
 
     system_prompt, user_prompt = build_practice_prompt(
@@ -904,37 +1176,7 @@ def analyze_practice(
     # ── Phase 2: Extract structured data ─────────────────────────────────────
     emit({"type": "phase", "name": "structured", "text": "Extracting structured data"})
 
-    extraction_prompt = (
-        "Extract the structured data from the completed practice AI Visibility report below "
-        "by calling submit_practice_result. Use the full report to populate all fields.\n\n"
-        "FIELD MAPPING for tier_scores:\n"
-        "  clinical_outcomes_safety   = Practitioner Credentials & Clinical Quality score\n"
-        "  credentials_recognition    = Reviews & Reputation score\n"
-        "  patient_experience_reviews = Identity & Machine-Readability score\n"
-        "  access_fit                 = Access & Fit score\n\n"
-        "DERIVED METRICS: Set entity_resolution_pct and linkage_integrity_pct based on "
-        "your analysis of naming/identity risks and physician attribution risks observed. "
-        "Set board_cert_unverifiable=true if ANY sampled physician's ABMS/AOA cert "
-        "could not be confirmed from crawlable sources. "
-        "Set key_person_flag=true for solo or two-physician practices.\n\n"
-        "CEILING NOTE: The system applies the ≤74 ceiling automatically — report "
-        "the raw pillar scores honestly; do NOT pre-apply the ceiling yourself.\n\n"
-        + (
-            "CONSOLIDATED LOCATIONS: This is an aggregate run covering the following confirmed "
-            "locations — populate consolidated_locations with ALL of them. Use the ratings and "
-            "addresses from the report where available; set google_rating=null and "
-            "google_review_count=null for locations not individually rated in the report. "
-            "The anchor/flagship must be the first entry.\n\nConfirmed locations:\n"
-            + "\n".join(f"  - {loc}" for loc in (_location_roster or [entity_name]))
-            + "\n\n"
-            if _location_roster else
-            "CONSOLIDATED LOCATIONS: Populate consolidated_locations with any locations "
-            "mentioned in the report with their ratings.\n\n"
-        )
-        + "The practice entity must appear as rank=1 in rankings.\n\n"
-        "--- REPORT ---\n"
-        f"{report_markdown}\n--- END REPORT ---"
-    )
+    extraction_prompt = _practice_extraction_prompt(report_markdown, _location_roster, entity_name)
 
     structured_data: dict = {}
     with console.status("[bold dark_sea_green4]Extracting practice structured data…[/bold dark_sea_green4]"):
@@ -986,32 +1228,7 @@ def analyze_practice(
     # four-pillar score — adopt a fresh one if present, otherwise seed it. Keyed
     # on the anchor practice (rankings[0]) by the name it surfaces under, so it
     # lines up with how the same practice is keyed in the market report.
-    if rankings and rankings[0] is not None:
-        from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
-        _anchor = rankings[0]
-        _loc = f"{city}, {state}"
-        _canon = None if override_today_lock else _get_es(_anchor.name, _loc, days=30)
-        _cf = "practice" if (_canon or {}).get("weighting_profile", "").startswith("practice_") else "hospital"
-        # Only adopt a canonical computed under the practice rubric (same-rubric)
-        # AND for the same confirmed roster — a cached score for a different set
-        # of locations must not overwrite this run's pillar values.
-        _same_roster = (_canon or {}).get("roster_key", "") == (_roster_fp or "")
-        if _canon and _canon.get("pulse_score") is not None and _cf == "practice" and _same_roster:
-            _anchor.ai_visibility_score = _canon["pulse_score"]
-            for _k, _v in (_canon.get("tier_scores") or {}).items():
-                if hasattr(_anchor.tier_scores, _k):
-                    setattr(_anchor.tier_scores, _k, _v)
-            _anchor.overall_rating, _ = scoring.grade_from_score(_anchor.ai_visibility_score)
-            if _canon.get("ai_says"):
-                _anchor.ai_says = _canon["ai_says"]
-        elif _anchor.ai_visibility_score is not None:
-            _code, _band = scoring.grade_from_score(_anchor.ai_visibility_score)
-            _put_es(_anchor.name, _loc, _anchor.ai_visibility_score,
-                    _anchor.tier_scores.as_dict(), overall_rating=_code,
-                    band_label=_band, ai_says=getattr(_anchor, "ai_says", "") or "",
-                    source="deep_diagnostic", run_id=run_id, overwrite=override_today_lock,
-                    weighting_profile=getattr(_anchor, "weighting_profile", None) or run_profile,
-                    roster_key=_roster_fp or "")
+    _sync_practice_entity_score(rankings, city, state, run_id, override_today_lock, run_profile, _roster_fp)
 
     disclaimer = _FULL_DISCLAIMER   # always hardcoded; LLM-generated disclaimer field ignored
 
@@ -1061,179 +1278,16 @@ def analyze_practice(
 
     # ── Practice Composite reputation collection (before PDF so table is included) ──
     if practice_composite:
-        emit({"type": "phase", "name": "practice_reputation", "text": "Collecting practice reputation"})
-        from .practice_reputation import collect_platform_data
-        from .practice_discovery import discover_practice_siblings
-
-        # Practice-anchored table: the analyzed practice is the anchor row (pinned
-        # first, visually distinguished).  Siblings are discovered separately so the
-        # anchor entity never appears in the discovery list.
-        anchor_entry = {
-            "name": entity_name,
-            "entity_type": "practice",
-            "is_anchor": True,
-            "city": city,
-            "state": state,
-        }
-        # Pin the anchor to the listing resolved in the roster pre-pass (the search
-        # step's choice when provided, else the strict name lookup).
-        for _k in ("place_id", "address", "rating", "review_count", "maps_url"):
-            if _anchor_google.get(_k) is not None:
-                anchor_entry[_k] = _anchor_google[_k]
-        if _aggregate_siblings is not None:
-            # Automatic scoping: reuse the confirmed / service-line location roster
-            # established for the aggregate analysis.  This keeps the reputation
-            # table to (e.g.) the orthopedic clinics only — never a system-wide
-            # practice list that would pull in unrelated imaging / primary care sites.
-            sibling_roster = list(_aggregate_siblings)
-            emit({"type": "text",
-                  "text": f"Reputation table scoped to the {1 + len(sibling_roster)} "
-                          f"confirmed location(s)"})
-        else:
-            sibling_roster = list(practice_roster or [])
-        if not sibling_roster and _aggregate_siblings is None:
-            sibling_roster = discover_practice_siblings(
-                entity_name, city, state,
-                on_event=emit,
-                force_rerun=force_rerun,
-            )
-
-        # Drop siblings that resolve to the anchor entity (prevents duplicate rows in
-        # the composite table when Claude names a location variant of the anchor).
-        # Bidirectional AND: both directions must score "strong" (≥0.6 token overlap)
-        # to drop a sibling.  This correctly catches location-suffix/label variants
-        # ("-  Desert Inn", "(Main Office)") while keeping siblings with a genuinely
-        # distinct location qualifier ("Summerlin", "West Campus").  The check is
-        # unconditional — the anchor name need not contain digits.
-        from .data.places import _name_match as _nmatch
-        _anchor_lc = entity_name.strip().lower()
-
-        # Recognized same-location alias markers stripped from sibling BEFORE token-overlap
-        # check.  Direction rule: the canonical anchor name is never modified; only the
-        # sibling is tested for alias-ness.  This catches "(Main Office)" even when the
-        # anchor name has no address tokens to pad the ratio.
-        _ALIAS_PARENTHETICALS = re.compile(
-            r'\s*\(\s*(main\s+(office|campus)|headquarters|hq'
-            r'|primary\s+(campus|location|office))\s*\)\s*$'
-            r'|\s*[-–—]\s*(main\s+(office|campus)|headquarters|hq)\s*$',
-            re.IGNORECASE,
+        _collect_practice_composite(
+            result, rankings, entity_name, city, state,
+            anchor_google=_anchor_google, aggregate_siblings=_aggregate_siblings,
+            practice_roster=practice_roster, anchor_addr_norm=_anchor_addr_norm,
+            physician_composite=physician_composite, physician_roster=physician_roster,
+            emit=emit, force_rerun=force_rerun,
         )
-
-        def _is_anchor_duplicate(sibling_name: str, sibling_address: str = "") -> bool:
-            if sibling_name.strip().lower() == _anchor_lc:
-                return True
-            # Strip recognized alias markers from sibling before token-overlap check.
-            # Canonical anchor name is never modified — only the sibling is tested.
-            _stripped = _ALIAS_PARENTHETICALS.sub('', sibling_name).strip()
-            if _stripped.lower() != sibling_name.strip().lower():
-                if _stripped.lower() == _anchor_lc:
-                    return True
-                if (
-                    _nmatch(entity_name, _stripped) == "strong"
-                    and _nmatch(_stripped, entity_name) == "strong"
-                ):
-                    return True
-            # Bidirectional name-token AND on original name
-            if (
-                _nmatch(entity_name, sibling_name) == "strong"
-                and _nmatch(sibling_name, entity_name) == "strong"
-            ):
-                return True
-            # Address-based: sibling at same normalized street as anchor is a duplicate
-            # regardless of how the street is abbreviated or formatted.
-            if _anchor_addr_norm:
-                if sibling_address and _normalize_street(sibling_address) == _anchor_addr_norm:
-                    return True
-                # Address embedded in sibling name: strip anchor base prefix, treat remainder
-                sn_lower = sibling_name.lower()
-                if sn_lower.startswith(_anchor_lc):
-                    remainder = re.sub(r'^[\s\-,]+', '', sn_lower[len(_anchor_lc):])
-                    if remainder and _normalize_street(remainder) == _anchor_addr_norm:
-                        return True
-            return False
-
-        # Brand-prefix canonicalization: "AnchorName - X" → "X", so a sibling
-        # named with and without the parent brand prefix deduplicates to one row.
-        _brand_prefix = entity_name.strip() + " - "
-        _brand_prefix_lc = _brand_prefix.lower()
-
-        def _canon_sibling(name: str) -> str:
-            if name.strip().lower().startswith(_brand_prefix_lc):
-                return name.strip()[len(_brand_prefix):]
-            return name.strip()
-
-        deduped: list[dict] = []
-        seen_names: set[str] = set()
-        _anchor_pid = anchor_entry.get("place_id")
-        for s in sibling_roster:
-            sn = s.get("name", "")
-            sa = s.get("address", "")
-            if s.get("_anchor_dup"):
-                continue   # resolved to the anchor's own listing in the pre-pass
-            if s.get("place_id"):
-                # A distinct Google place_id is definitive: same-name clinics at
-                # other streets are real locations, not anchor aliases.
-                if _anchor_pid and s["place_id"] == _anchor_pid:
-                    continue
-            elif _is_anchor_duplicate(sn, sa):
-                continue
-            canonical = _canon_sibling(sn)
-            k = canonical.lower()
-            if k not in seen_names:
-                seen_names.add(k)
-                deduped.append({**s, "name": canonical} if canonical != sn else s)
-        sibling_roster = deduped
-
-        roster = [anchor_entry] + sibling_roster
-
-        result.practice_composite_rows = collect_platform_data(
-            roster, entity_name, city, state, on_event=emit, run_id=result.run_id
-        )
-
-        # Bind the anchor row's google_rating to the same Places read used for
-        # the main analysis score so the header star value and composite table
-        # star value are always identical (Item 2).
-        if rankings and result.practice_composite_rows:
-            _fd_rating = rankings[0].google_footprint.front_door.rating
-            _fd_verified = rankings[0].google_footprint.front_door.verified
-            for _cr in result.practice_composite_rows:
-                if _cr.get("is_anchor") and _fd_rating is not None:
-                    _cr["google_rating"] = _fd_rating
-                    if not _fd_verified:
-                        _cr["google_rating"] = None
-
-        if physician_composite and result.practice_composite_rows:
-            emit({"type": "phase", "name": "physician_reputation", "text": "Collecting physician reputation"})
-            from .physician_discovery import discover_physicians
-            from .physician_reputation import collect_physician_data
-            confirmed = physician_roster or {}
-            # Flatten confirmed physicians (keyed by org name from the UI)
-            all_confirmed = [ph for v in confirmed.values() for ph in v]
-            # Discover at the organization level once — sub-location names yield 0 results
-            # since NPPES indexes physicians under the parent organization, not specific clinics.
-            target_row = (
-                next((r for r in result.practice_composite_rows if r.get("is_anchor")), None)
-                or next((r for r in result.practice_composite_rows if r.get("entity_type") != "hospital"), None)
-            )
-            if target_row:
-                physicians = all_confirmed or discover_physicians(entity_name, city, state, on_event=emit)
-                if physicians:
-                    ph_results = collect_physician_data(
-                        physicians, entity_name, city, state, on_event=emit
-                    )
-                    target_row["physicians"] = ph_results
-                    result.physician_composite_rows.extend(ph_results)
 
     # ── Save markdown ─────────────────────────────────────────────────────────
-    _type = (specialty or "Practice").replace(" ", "-")
-    _ts   = datetime.utcnow().strftime("%y%m%d-%H%M")
-    _entity_slug = _slug(entity_name)[:40]
-    if teaser_report:
-        _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_Practice-Summary-{_ts}"
-    else:
-        _stem = f"{_entity_slug}_{city.replace(' ', '-')}_{state}_Practice-{_ts}"
-    from .strings import titlecase_filename
-    _stem = titlecase_filename(_stem)
+    _stem = _practice_stem(entity_name, city, state, teaser_report)
     report_path = output_dir / f"{_stem}.md"
     report_path.write_text(report_markdown, encoding="utf-8")
     console.print(f"[green]✓[/green] Practice report → [dim]{report_path}[/dim]")
@@ -1284,31 +1338,8 @@ def analyze_practice(
     )
 
     if briefing_variant and not skip_pdf:
-        result.briefing_variant = briefing_variant
-        try:
-            from .briefing import extract as _briefing_extract, BriefingValidationError
-            from .briefing_pdf import render_briefing_pdf
-            emit({"type": "phase", "name": "briefing", "text": f"Generating Pulse Briefing ({briefing_variant})"})
-            with console.status(f"[bold dark_sea_green4]Generating Pulse Briefing ({briefing_variant})…[/bold dark_sea_green4]"):
-                _br = _briefing_extract(result, briefing_variant)
-                _variant_label = "Sales" if briefing_variant == "sales" else "CS"
-                _briefing_path = output_dir / f"{_stem}_Briefing-{_variant_label}.pdf"
-                render_briefing_pdf(_br, str(_briefing_path))
-            result.briefing_pdf_path = str(_briefing_path)
-            from .db import update_briefing_pdf_path
-            update_briefing_pdf_path(result.run_id, str(_briefing_path))
-            console.print(f"[green]✓[/green] Briefing PDF  → [dim]{_briefing_path}[/dim]")
-            emit({"type": "briefing_ready", "path": str(_briefing_path)})
-        except BriefingValidationError as exc:
-            reason = f"Missing inputs: {', '.join(exc.missing)}"
-            result.briefing_skipped_reason = reason
-            console.print(f"[yellow]⚠[/yellow] Briefing skipped — {reason}")
-            emit({"type": "briefing_skipped", "reason": reason})
-        except Exception as exc:
-            reason = str(exc)
-            result.briefing_skipped_reason = reason
-            console.print(f"[yellow]⚠[/yellow] Briefing generation failed: {reason}")
-            emit({"type": "briefing_skipped", "reason": reason})
+        from .analyzer import _run_briefing
+        _run_briefing(result, briefing_variant, output_dir, _stem, emit, console)
 
     emit({"type": "phase", "name": "done_item", "text": "Complete"})
     return result

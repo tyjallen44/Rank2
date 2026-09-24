@@ -434,6 +434,205 @@ def _save_fqhc_extras(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Phase helpers — shared by analyze_fqhc and perception.pipeline
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _lookup_hrsa(entity_name: str, city: str, state: str, emit, console) -> dict:
+    """HRSA directory lookup (fail-soft → {"found": False})."""
+    emit({"type": "phase", "name": "hrsa", "text": "Looking up HRSA directory"})
+    with console.status("[bold dark_sea_green4]Fetching HRSA data…[/bold dark_sea_green4]"):
+        try:
+            hrsa_data = hrsa_mod.lookup(entity_name, city, state)
+        except Exception:
+            hrsa_data = {"found": False}
+    if hrsa_data.get("found"):
+        console.print(f"[green]✓[/green] HRSA match: {hrsa_data.get('health_center_name', entity_name)}")
+    else:
+        console.print(f"[yellow]⚠[/yellow] No HRSA match found — proceeding with public sources")
+    return hrsa_data
+
+
+def _default_intake(hrsa_data: dict) -> dict:
+    """When no intake form was submitted, build a minimal one from facts that apply
+    to every Section 330 grantee by law so Pillar 2 can be assessed rather than
+    defaulting to zero for every entity in batch/events runs."""
+    return {
+        "sliding_fee_scale":  True,
+        "no_one_turned_away": True,
+        "accepts_medicaid":   True,
+        "accepts_medicare":   True,
+        "accepts_uninsured":  True,
+        "is_330":             hrsa_data.get("is_330") if hrsa_data.get("found") else None,
+        "site_names":         hrsa_data.get("site_names", []),
+    }
+
+
+def _fqhc_extraction_prompt(report_markdown: str) -> str:
+    """The full structured-extraction prompt for submit_fqhc_result."""
+    return (
+        "Extract the structured data from the completed Community Health Edition "
+        "AI Visibility report below by calling submit_fqhc_result. "
+        "Use the full report to populate all fields.\n\n"
+        "KEY REQUIREMENTS:\n"
+        "- fqhc_pillar_scores.mqcr_score = null (Round 1, no battery data)\n"
+        "- fqhc_pillar_scores.multilingual_score = null (Round 1, no multilingual battery)\n"
+        "- fqhc_pillar_scores.service_adjacent_score = required (AI-assessed)\n"
+        "- fact_audit_rows: one row per attested fact; any ✗ must be MISSION-CRITICAL; "
+        "points field is REQUIRED — use rubric values: sliding fee=5, NTAFA=4, Medicaid/Medicare/insurance=5 split across rows, free-clinic=4, new-patient=4, framing=3\n"
+        "- missed_queries: up to 8 rows; prioritize eligibility-frame, then service-adjacent\n"
+        "- rankings: single element, rank=1, with the health center\n\n"
+        "--- REPORT ---\n"
+        f"{report_markdown}\n--- END REPORT ---"
+    )
+
+
+def _parse_fqhc_structured(structured_data: dict) -> tuple[FqhcPillarScores, list[dict], list[dict]]:
+    """(pillar_scores, fact_audit_rows, missed_queries) from the tool output."""
+    raw_ps = structured_data.get("fqhc_pillar_scores") or {}
+    pillar_scores = FqhcPillarScores(
+        mqcr_score=raw_ps.get("mqcr_score"),
+        multilingual_score=raw_ps.get("multilingual_score"),
+        service_adjacent_score=raw_ps.get("service_adjacent_score"),
+        eligibility_cost_accuracy=raw_ps.get("eligibility_cost_accuracy"),
+        site_service_completeness=raw_ps.get("site_service_completeness"),
+        experience_reputation=raw_ps.get("experience_reputation"),
+        institutional_signals=raw_ps.get("institutional_signals"),
+    )
+    fact_audit_rows: list[dict] = [
+        {
+            "claim": r.get("claim", ""),
+            "ai_representation": r.get("ai_representation", ""),
+            "flag": r.get("flag", "◐"),
+            "severity": r.get("severity", "minor"),
+            "points": r.get("points"),
+        }
+        for r in structured_data.get("fact_audit_rows", [])
+        if isinstance(r, dict)
+    ]
+    missed_queries: list[dict] = [
+        {
+            "query": q.get("query", ""),
+            "language": q.get("language", "English"),
+            "assistant": q.get("assistant", ""),
+            "category": q.get("category", "general"),
+        }
+        for q in structured_data.get("missed_queries", [])[:8]
+        if isinstance(q, dict)
+    ]
+    return pillar_scores, fact_audit_rows, missed_queries
+
+
+def _supplement_sites(rankings: list, hrsa_data: dict, site_roster: Optional[list[str]]) -> None:
+    """Supplement consolidated_locations with HRSA-known and intake-confirmed sites
+    so the Pillar 3 table reflects the full site roster, not just what the LLM mentioned."""
+    if not rankings:
+        return
+    existing_locs = rankings[0].consolidated_locations
+    known_exact = {loc.name.lower() for loc in existing_locs}
+    # Words from all existing names for fuzzy overlap check
+    _stop_geo = {"health", "center", "centers", "clinic", "clinics", "care",
+                 "medical", "community", "family", "primary", "services",
+                 "service", "outpatient", "behavioral", "dental"}
+
+    def _geo_words(name: str) -> set[str]:
+        """Extract geographic/distinctive words from a site name."""
+        # HRSA names often end in " - City" — prefer words after the last " - "
+        part = name.rsplit(" - ", 1)[-1]
+        words = re.findall(r"[a-z]+", part.lower())
+        return {w for w in words if len(w) >= 4 and w not in _stop_geo}
+
+    existing_geo: set[str] = set()
+    for loc in existing_locs:
+        existing_geo |= _geo_words(loc.name)
+
+    # HRSA site names: dedup against LLM-extracted locations (they're often
+    # reformatted versions of what the LLM found).
+    for site_name in (hrsa_data.get("site_names") or []):
+        if not site_name:
+            continue
+        if site_name.lower() in known_exact:
+            continue
+        candidate_geo = _geo_words(site_name)
+        if candidate_geo and candidate_geo & existing_geo:
+            continue
+        rankings[0].consolidated_locations.append(
+            ConsolidatedLocation(name=site_name)
+        )
+        known_exact.add(site_name.lower())
+        existing_geo |= candidate_geo
+
+    # User-confirmed roster entries: always include (skip only exact duplicates).
+    # The user explicitly approved these sites in the intake form.
+    for site_name in (site_roster or []):
+        if not site_name:
+            continue
+        if site_name.lower() in known_exact:
+            continue
+        rankings[0].consolidated_locations.append(
+            ConsolidatedLocation(name=site_name)
+        )
+        known_exact.add(site_name.lower())
+
+
+def _run_mqcr_battery(result: AnalysisResult, run_id: str, entity_name: str, city: str, state: str,
+                      hrsa_data: dict, emit, console) -> None:
+    """MQCR battery: run it, then rescore the composite with the battery-derived
+    sub-scores. Fail-soft — a battery error leaves the Round-1 score in place."""
+    emit({"type": "phase", "name": "battery", "text": "Running MQCR battery (13 queries: 10 English + 3 Spanish)"})
+    try:
+        from .fqhc_battery import run_battery as _run_battery
+        # Build alias list: HRSA canonical name + known site names so
+        # is_surfaced() recognises any naming variant in AI responses.
+        _aliases: list[str] = []
+        _hrsa_canonical = hrsa_data.get("health_center_name") or ""
+        if _hrsa_canonical and _hrsa_canonical.lower() != entity_name.lower():
+            _aliases.append(_hrsa_canonical)
+        if result.rankings:
+            for _loc in result.rankings[0].consolidated_locations:
+                if _loc.name and _loc.name.lower() != entity_name.lower():
+                    _aliases.append(_loc.name)
+        _battery = _run_battery(
+            fqhc_run_id=run_id,
+            entity_name=entity_name,
+            city=city,
+            state=state,
+            on_event=emit,
+            aliases=_aliases or None,
+        )
+        result.fqhc_mqcr = _battery.mqcr
+        console.print(f"[green]✓[/green] MQCR: {int(round(_battery.mqcr * 100))}% "
+                      f"({_battery.surfaced_count}/{_battery.total})")
+        # Update all battery-derived sub-scores so the composite is correct
+        if result.fqhc_pillar_scores is not None:
+            from .fqhc_scoring import mqcr_to_score as _m2s
+            result.fqhc_pillar_scores.mqcr_score = _m2s(_battery.mqcr)
+            if _battery.multilingual_mqcr is not None:
+                result.fqhc_pillar_scores.multilingual_score = _m2s(_battery.multilingual_mqcr)
+                console.print(
+                    f"[green]✓[/green] Multilingual MQCR: "
+                    f"{int(round(_battery.multilingual_mqcr * 100))}% "
+                    f"({_battery.multilingual_surfaced_count}/{_battery.multilingual_total})"
+                )
+            # Recompute composite with all 7 sub-scores now available
+            from . import fqhc_scoring as _fqhc_scoring
+            new_score = _fqhc_scoring.composite(result.fqhc_pillar_scores.as_dict())
+            if result.rankings and new_score is not None:
+                result.rankings[0].ai_visibility_score = new_score
+                result.rankings[0].overall_rating, _ = scoring.grade_from_score(new_score)
+    except Exception as _bat_exc:
+        console.print(f"[yellow]⚠[/yellow] Battery failed: {_bat_exc}")
+        emit({"type": "text", "text": f"\n⚠ MQCR battery error: {_bat_exc}\n"})
+
+
+def _fqhc_stem(entity_name: str, teaser_report: bool, run_id: str) -> str:
+    """Filename stem for a Community Health report (PDF / briefing)."""
+    from .strings import titlecase_filename
+    slug = _slug(entity_name)
+    _fqhc_infix = "community-health-teaser" if teaser_report else "community-health"
+    return titlecase_filename(f"{slug}-{_fqhc_infix}-{run_id[:8]}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -506,31 +705,12 @@ def analyze_fqhc(
             _indiv_read = None
 
     # HRSA lookup
-    emit({"type": "phase", "name": "hrsa", "text": "Looking up HRSA directory"})
-    with console.status("[bold dark_sea_green4]Fetching HRSA data…[/bold dark_sea_green4]"):
-        try:
-            hrsa_data = hrsa_mod.lookup(entity_name, city, state)
-        except Exception:
-            hrsa_data = {"found": False}
-
-    if hrsa_data.get("found"):
-        console.print(f"[green]✓[/green] HRSA match: {hrsa_data.get('health_center_name', entity_name)}")
-    else:
-        console.print(f"[yellow]⚠[/yellow] No HRSA match found — proceeding with public sources")
+    hrsa_data = _lookup_hrsa(entity_name, city, state, emit, console)
 
     # When no intake form was submitted, build a minimal one from facts that apply
-    # to every Section 330 grantee by law so Pillar 2 can be assessed rather than
-    # defaulting to zero for every entity in batch/events runs.
+    # to every Section 330 grantee by law.
     if fqhc_intake is None:
-        fqhc_intake = {
-            "sliding_fee_scale":  True,
-            "no_one_turned_away": True,
-            "accepts_medicaid":   True,
-            "accepts_medicare":   True,
-            "accepts_uninsured":  True,
-            "is_330":             hrsa_data.get("is_330") if hrsa_data.get("found") else None,
-            "site_names":         hrsa_data.get("site_names", []),
-        }
+        fqhc_intake = _default_intake(hrsa_data)
 
     console.print(f"[green]✓[/green] FQHC evidence: {entity_name}")
 
@@ -552,21 +732,7 @@ def analyze_fqhc(
     # ── Phase 2: Extract structured data ─────────────────────────────────────
     emit({"type": "phase", "name": "structured", "text": "Extracting structured data"})
 
-    extraction_prompt = (
-        "Extract the structured data from the completed Community Health Edition "
-        "AI Visibility report below by calling submit_fqhc_result. "
-        "Use the full report to populate all fields.\n\n"
-        "KEY REQUIREMENTS:\n"
-        "- fqhc_pillar_scores.mqcr_score = null (Round 1, no battery data)\n"
-        "- fqhc_pillar_scores.multilingual_score = null (Round 1, no multilingual battery)\n"
-        "- fqhc_pillar_scores.service_adjacent_score = required (AI-assessed)\n"
-        "- fact_audit_rows: one row per attested fact; any ✗ must be MISSION-CRITICAL; "
-        "points field is REQUIRED — use rubric values: sliding fee=5, NTAFA=4, Medicaid/Medicare/insurance=5 split across rows, free-clinic=4, new-patient=4, framing=3\n"
-        "- missed_queries: up to 8 rows; prioritize eligibility-frame, then service-adjacent\n"
-        "- rankings: single element, rank=1, with the health center\n\n"
-        "--- REPORT ---\n"
-        f"{report_markdown}\n--- END REPORT ---"
-    )
+    extraction_prompt = _fqhc_extraction_prompt(report_markdown)
 
     structured_data: dict = {}
     with console.status("[bold dark_sea_green4]Extracting FQHC structured data…[/bold dark_sea_green4]"):
@@ -586,42 +752,7 @@ def analyze_fqhc(
             structured_data = block.input if isinstance(block.input, dict) else json.loads(block.input)
             break
 
-    # Parse pillar scores
-    raw_ps = structured_data.get("fqhc_pillar_scores") or {}
-    pillar_scores = FqhcPillarScores(
-        mqcr_score=raw_ps.get("mqcr_score"),
-        multilingual_score=raw_ps.get("multilingual_score"),
-        service_adjacent_score=raw_ps.get("service_adjacent_score"),
-        eligibility_cost_accuracy=raw_ps.get("eligibility_cost_accuracy"),
-        site_service_completeness=raw_ps.get("site_service_completeness"),
-        experience_reputation=raw_ps.get("experience_reputation"),
-        institutional_signals=raw_ps.get("institutional_signals"),
-    )
-
-    # Parse fact audit rows
-    fact_audit_rows: list[dict] = [
-        {
-            "claim": r.get("claim", ""),
-            "ai_representation": r.get("ai_representation", ""),
-            "flag": r.get("flag", "◐"),
-            "severity": r.get("severity", "minor"),
-            "points": r.get("points"),
-        }
-        for r in structured_data.get("fact_audit_rows", [])
-        if isinstance(r, dict)
-    ]
-
-    # Parse missed queries
-    missed_queries: list[dict] = [
-        {
-            "query": q.get("query", ""),
-            "language": q.get("language", "English"),
-            "assistant": q.get("assistant", ""),
-            "category": q.get("category", "general"),
-        }
-        for q in structured_data.get("missed_queries", [])[:8]
-        if isinstance(q, dict)
-    ]
+    pillar_scores, fact_audit_rows, missed_queries = _parse_fqhc_structured(structured_data)
 
     rankings = [
         _build_fqhc_provider(r)
@@ -629,53 +760,7 @@ def analyze_fqhc(
     ]
 
     # Supplement consolidated_locations with HRSA-known and intake-confirmed sites
-    # so the Pillar 3 table reflects the full site roster, not just what the LLM mentioned.
-    if rankings:
-        existing_locs = rankings[0].consolidated_locations
-        known_exact = {loc.name.lower() for loc in existing_locs}
-        # Words from all existing names for fuzzy overlap check
-        _stop_geo = {"health", "center", "centers", "clinic", "clinics", "care",
-                     "medical", "community", "family", "primary", "services",
-                     "service", "outpatient", "behavioral", "dental"}
-
-        def _geo_words(name: str) -> set[str]:
-            """Extract geographic/distinctive words from a site name."""
-            # HRSA names often end in " - City" — prefer words after the last " - "
-            part = name.rsplit(" - ", 1)[-1]
-            words = re.findall(r"[a-z]+", part.lower())
-            return {w for w in words if len(w) >= 4 and w not in _stop_geo}
-
-        existing_geo: set[str] = set()
-        for loc in existing_locs:
-            existing_geo |= _geo_words(loc.name)
-
-        # HRSA site names: dedup against LLM-extracted locations (they're often
-        # reformatted versions of what the LLM found).
-        for site_name in (hrsa_data.get("site_names") or []):
-            if not site_name:
-                continue
-            if site_name.lower() in known_exact:
-                continue
-            candidate_geo = _geo_words(site_name)
-            if candidate_geo and candidate_geo & existing_geo:
-                continue
-            rankings[0].consolidated_locations.append(
-                ConsolidatedLocation(name=site_name)
-            )
-            known_exact.add(site_name.lower())
-            existing_geo |= candidate_geo
-
-        # User-confirmed roster entries: always include (skip only exact duplicates).
-        # The user explicitly approved these sites in the intake form.
-        for site_name in (site_roster or []):
-            if not site_name:
-                continue
-            if site_name.lower() in known_exact:
-                continue
-            rankings[0].consolidated_locations.append(
-                ConsolidatedLocation(name=site_name)
-            )
-            known_exact.add(site_name.lower())
+    _supplement_sites(rankings, hrsa_data, site_roster)
 
     # ── Phase 3: Verify Google + score ───────────────────────────────────────
     emit({"type": "phase", "name": "scoring", "text": "Verifying Google + scoring"})
@@ -735,50 +820,7 @@ def analyze_fqhc(
     )
 
     # ── Phase 4: MQCR Battery ────────────────────────────────────────────────
-    emit({"type": "phase", "name": "battery", "text": "Running MQCR battery (13 queries: 10 English + 3 Spanish)"})
-    try:
-        from .fqhc_battery import run_battery as _run_battery
-        # Build alias list: HRSA canonical name + known site names so
-        # is_surfaced() recognises any naming variant in AI responses.
-        _aliases: list[str] = []
-        _hrsa_canonical = hrsa_data.get("health_center_name") or ""
-        if _hrsa_canonical and _hrsa_canonical.lower() != entity_name.lower():
-            _aliases.append(_hrsa_canonical)
-        if rankings:
-            for _loc in rankings[0].consolidated_locations:
-                if _loc.name and _loc.name.lower() != entity_name.lower():
-                    _aliases.append(_loc.name)
-        _battery = _run_battery(
-            fqhc_run_id=run_id,
-            entity_name=entity_name,
-            city=city,
-            state=state,
-            on_event=emit,
-            aliases=_aliases or None,
-        )
-        result.fqhc_mqcr = _battery.mqcr
-        console.print(f"[green]✓[/green] MQCR: {int(round(_battery.mqcr * 100))}% "
-                      f"({_battery.surfaced_count}/{_battery.total})")
-        # Update all battery-derived sub-scores so the composite is correct
-        if result.fqhc_pillar_scores is not None:
-            from .fqhc_scoring import mqcr_to_score as _m2s
-            result.fqhc_pillar_scores.mqcr_score = _m2s(_battery.mqcr)
-            if _battery.multilingual_mqcr is not None:
-                result.fqhc_pillar_scores.multilingual_score = _m2s(_battery.multilingual_mqcr)
-                console.print(
-                    f"[green]✓[/green] Multilingual MQCR: "
-                    f"{int(round(_battery.multilingual_mqcr * 100))}% "
-                    f"({_battery.multilingual_surfaced_count}/{_battery.multilingual_total})"
-                )
-            # Recompute composite with all 7 sub-scores now available
-            from . import fqhc_scoring as _fqhc_scoring
-            new_score = _fqhc_scoring.composite(result.fqhc_pillar_scores.as_dict())
-            if result.rankings and new_score is not None:
-                result.rankings[0].ai_visibility_score = new_score
-                result.rankings[0].overall_rating, _ = scoring.grade_from_score(new_score)
-    except Exception as _bat_exc:
-        console.print(f"[yellow]⚠[/yellow] Battery failed: {_bat_exc}")
-        emit({"type": "text", "text": f"\n⚠ MQCR battery error: {_bat_exc}\n"})
+    _run_mqcr_battery(result, run_id, entity_name, city, state, hrsa_data, emit, console)
 
     # ── Phase 5: Render PDF ───────────────────────────────────────────────────
     from .plain import condense as _condense
@@ -787,10 +829,7 @@ def analyze_fqhc(
         emit({"type": "phase", "name": "pdf", "text": "Rendering Community Health PDF"})
         try:
             from .fqhc_pdf import render_fqhc_pdf
-            from .strings import titlecase_filename
-            slug = _slug(entity_name)
-            _fqhc_infix = "community-health-teaser" if teaser_report else "community-health"
-            pdf_filename = titlecase_filename(f"{slug}-{_fqhc_infix}-{run_id[:8]}") + ".pdf"
+            pdf_filename = _fqhc_stem(entity_name, teaser_report, run_id) + ".pdf"
             pdf_path = output_dir / pdf_filename
             render_fqhc_pdf(result, str(pdf_path), brand=brand)
             result.pdf_path = str(pdf_path)

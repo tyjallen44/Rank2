@@ -1156,11 +1156,30 @@ _INDIVIDUAL_KINDS = {"hospital": "Deep Diagnostic", "service_line": "Deep Diagno
 
 def _run_type_analyzer(etype: str, job: dict, entity_name: str, city: str, state: str,
                        specialty: Optional[str], aggregate: bool, radius_miles: Optional[int], emit):
-    """Dispatch to the type-specific analyzer (unchanged code) and return its AnalysisResult."""
+    """Dispatch the individual report and return its AnalysisResult.
+
+    Default: the unified pipeline (perception.pipeline.run_individual — one phase list,
+    entity type as a parameter). PULSE_PIPELINE=legacy selects the three original
+    analyzers instead; both receive exactly the same job-derived arguments."""
     common = dict(output_dir=REPORTS_DIR, on_event=emit, brand=job.get("brand", "original"),
                   skip_pdf=job.get("skip_pdf", False), force_rerun=job.get("force_rerun", False),
                   override_today_lock=job.get("override_today_lock", False),
                   briefing_variant=job.get("briefing_variant"), report_title=job.get("report_title"))
+    if os.environ.get("PULSE_PIPELINE", "unified") != "legacy":
+        from perception.pipeline import run_individual
+        return run_individual(
+            etype, entity_name, city, state, specialty=specialty, aggregate=aggregate, teaser_report=False,
+            radius_miles=radius_miles, zip_code=job.get("zip_code"),
+            patient_perspective=job.get("patient_perspective", False),
+            simplified=job.get("simplified_patient", False),
+            obscure_competitors=job.get("obscure_competitors", True), target_entity=job.get("target_entity"),
+            practice_composite=job.get("practice_composite", False), practice_roster=job.get("practice_roster") or [],
+            physician_composite=job.get("physician_composite", False), physician_roster=job.get("physician_roster") or {},
+            service_line=job.get("service_line"), parent_system=job.get("parent_system"),
+            practice_profile=job.get("practice_profile"), confirmed_siblings=job.get("confirmed_siblings"),
+            org_name=job.get("org_name"), anchor_listing=job.get("anchor_listing"),
+            extra_evidence=_facts_evidence(job.get("practice_facts")),
+            fqhc_intake=job.get("fqhc_intake"), site_roster=job.get("site_roster") or [], **common)
     if etype == "community_health":
         from perception.fqhc_analyzer import analyze_fqhc
         return analyze_fqhc(entity_name=entity_name, city=city, state=state, fqhc_intake=job.get("fqhc_intake"),
