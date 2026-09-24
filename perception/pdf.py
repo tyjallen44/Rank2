@@ -526,18 +526,21 @@ def _ai_access_alert_html(result) -> str:
             f'{(" (HTTP " + str(r["status"]) + ")") if r.get("status") else ""}</span>'
             for r in pr["results"])
         probe_html = f'<div style="margin-top:6px;padding-top:6px;border-top:1px solid {col}33">We requested your homepage as each reader: {cells}</div>'
+    first_step = ""
+    if result.__class__.__name__ == "NetworkResult":     # network reports have no "What to Do First" list — say the step here
+        first_step = f'<div style="font-size:9pt;margin-top:6px"><strong style="color:{col}">First step:</strong> {_e(a["first_move"])}</div>'
     return (f'<div style="margin:10px 0 18px;padding:12px 16px;background:{bg};border-left:6px solid {col};border-radius:0 6px 6px 0;break-inside:avoid">'
             f'<div style="font-size:11pt;font-weight:800;color:{col};letter-spacing:.02em;margin-bottom:4px">{_e(a["title"])}</div>'
             f'<div style="font-size:9pt;line-height:1.45;color:#1c1c1e">{_e(a["body"])}</div>'
-            f'{probe_html}'
+            f'{probe_html}{first_step}'
             f'<div style="font-size:8pt;font-weight:700;color:{col};margin-top:6px">{_ai_access_pointer(result)}</div></div>')
 
 
 def _ai_access_pointer(result) -> str:
     """Where the reader finds the fix — differs by report type."""
     if result.__class__.__name__ == "NetworkResult":
-        return ('The fix is Recommendation 1 under Strategic Recommendations, and the finding "Your website blocks AI crawlers" '
-                'in the Content Improvement Keys — with its remediation plan in the Full Detail report.')
+        return ('See the finding "Your website blocks AI crawlers" under Content Improvement Keys below — '
+                'its full remediation plan is in the Full Detail report.')
     return 'See "What to Do First" and the website findings below for details.'
 
 
