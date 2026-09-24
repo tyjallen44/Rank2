@@ -3245,3 +3245,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2** A readable site that nonetheless challenges the named AI crawlers (firewall "block AI bots" toggle): the alert fires with only the blocked names listed; readers that were allowed show in green. [pdf]
 - **T3** An open site (South Shore Hospital, Desert Orthopaedic): no alert; nothing changes. [pdf]
 - **R1** The probe is six quick homepage requests per run; it never blocks a run (errors show as "no answer"). [ops]
+
+## FIX-NETWORK-FULL-DETAIL + ONE-WEBSITE-FIELD
+
+**Context:** since the 19:35 UTC rollout (73bec69) every Hospital Network run silently lost its content analysis and Full Detail file: the confirmed-website wiring referenced a variable outside the finalize function's scope, the NameError was swallowed as "(content summary skipped)", and only the standard + teaser files were produced. Fixed; the failure path is now logged. The Network page's Advanced "Website URL (optional)" field is removed — the confirmed System website is the one field and is also used as the content-analysis source. Not deployed.
+
+- **T1** Hospital Network run (USA Health): History row shows Downloads for standard, teaser AND Full Detail; the Full Detail file has the Content Analysis findings, Current/Expected/Remediation sections and the drafted plans after the Facility Detail. The standard report's page-1 alert "See What to Do First and the website findings below" now has those findings to point to in the Full Detail file. [pdf][ui]
+- **T2** Advanced options on the Network page no longer show "Website URL (optional)"; the only website field is "System website — confirm or correct" in the roster step. Reset clears it. [ui]
+- **T3** Cloud Run logs: no "[network] content findings failed" lines on a healthy run; if one appears it carries a traceback. [ops]
+- **R1** Trends network snapshots and Create full report unchanged. [ui]

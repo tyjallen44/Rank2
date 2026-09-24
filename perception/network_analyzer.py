@@ -205,7 +205,7 @@ def analyze_network(
                 cached_result, network_name=network_name, hq_location=hq_location,
                 source_url=source_url, brand=brand, teaser=teaser, full_detail=full_detail,
                 content_summary=content_summary, service_line_audit=service_line_audit,
-                ignore_cache=ignore_cache, emit=emit)
+                ignore_cache=ignore_cache, emit=emit, website=website)
 
     run_id = str(uuid.uuid4())
 
@@ -360,7 +360,7 @@ def analyze_network(
     # ── Content findings, service-line, drafting, and all report renders ─────
     return _finalize_network(
         result, network_name=network_name, hq_location=hq_location,
-        source_url=source_url, brand=brand, teaser=teaser, full_detail=full_detail,
+        source_url=source_url, brand=brand, teaser=teaser, full_detail=full_detail, website=website,
         content_summary=content_summary, service_line_audit=service_line_audit,
         ignore_cache=ignore_cache, emit=emit)
 
@@ -512,7 +512,7 @@ def _build_service_line_payload(result, network_name, hq_location, source_url, i
 
 def _finalize_network(result, *, network_name, hq_location, source_url, brand,
                       teaser, full_detail, content_summary, service_line_audit,
-                      ignore_cache, emit):
+                      ignore_cache, emit, website=""):
     """Ensure content findings, service-line data, drafts (for full detail), and
     render the base / teaser / full-detail PDFs. Shared by the fresh and cached
     paths so all content and caching stay in sync."""
@@ -526,6 +526,8 @@ def _finalize_network(result, *, network_name, hq_location, source_url, brand,
         try:
             content_findings = _compute_content_findings(result, network_name, hq_location, source_url or website, emit)
         except Exception as _ce:
+            import traceback as _tb
+            print(f"[network] content findings failed for {network_name}: {type(_ce).__name__}: {_ce}\n{_tb.format_exc()}", flush=True)
             emit({"type": "text", "text": f"\n(content summary skipped: {type(_ce).__name__})"})
             content_findings = None
 
@@ -574,6 +576,8 @@ def _finalize_network(result, *, network_name, hq_location, source_url, brand,
                                        service_line=sl_payload, brand=brand)
             result.full_detail_pdf_path = str(fd_path)
     except Exception as exc:
+        import traceback as _tb
+        print(f"[network] PDF render failed for {network_name}: {type(exc).__name__}: {exc}\n{_tb.format_exc()}", flush=True)
         emit({"type": "text", "text": f"\n⚠ PDF render failed: {exc}\n"})
 
     # 5. Persist.

@@ -1971,10 +1971,6 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <option value="other">Other Healthcare Network</option>
           </select>
         </div>
-        <div class="fg" style="margin-bottom:16px">
-          <label class="fl">Website URL <span style="font-weight:400;color:var(--muted)">(optional — helps AI find recently added locations)</span></label>
-          <input id="np-url" class="fi" type="url" placeholder="https://example.com/locations">
-        </div>
         <label class="aggregate-toggle mt10" style="display:none" id="np-override-lock-label" title="Admin only: ignore the 30-day canonical score and today's same-day lock and recompute from live sources. Costs a full run; the fresh score is reused by other reports for 30 days. Click ⓘ for details.">
           <input type="checkbox" id="np-ignore-cache">
           <span class="agg-label">Refresh from scratch &mdash; ignore cached results <span style="font-size:11px;color:#888">(Admin only)</span></span><a href="#" class="help-link" onclick="showHelp('cache',event);return false">ⓘ What is this?</a>
@@ -4725,11 +4721,11 @@ function npReset() {
   const nameEl  = document.getElementById('np-name');
   const cityEl  = document.getElementById('np-city');
   const stateEl = document.getElementById('np-state');
-  const urlEl   = document.getElementById('np-url');
   if (nameEl)  nameEl.value  = '';
   if (cityEl)  cityEl.value  = '';
   if (stateEl) stateEl.value = '';
-  if (urlEl)   urlEl.value   = '';
+  const wEl = document.getElementById('np-website'); if (wEl) wEl.value = '';
+  const wOk = document.getElementById('np-website-ok'); if (wOk) wOk.checked = false;
   _npRoster = [];
   document.getElementById('np-step2').classList.add('hidden');
   document.getElementById('np-step1').classList.remove('hidden');
@@ -4902,7 +4898,7 @@ function npShowRoster(facilities, networkName, confidenceNote, cfg) {
 async function npRunAnalysis() {
   const name  = document.getElementById('np-name').value.trim();
   const hq    = _npHq();
-  const url   = document.getElementById('np-url').value.trim();
+  const url   = (document.getElementById('np-website')?.value || '').trim();   // the confirmed system website (one field now)
   const errEl = document.getElementById('np-step2-err');
   errEl.classList.add('hidden');
   if (!_npWebsiteConfirmed()) {
