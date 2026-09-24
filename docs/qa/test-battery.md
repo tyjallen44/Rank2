@@ -3254,3 +3254,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2** Advanced options on the Network page no longer show "Website URL (optional)"; the only website field is "System website — confirm or correct" in the roster step. Reset clears it. [ui]
 - **T3** Cloud Run logs: no "[network] content findings failed" lines on a healthy run; if one appears it carries a traceback. [ops]
 - **R1** Trends network snapshots and Create full report unchanged. [ui]
+
+## AI-ACCESS-FINDING — the alert's pointer now lands on real content in every report type
+
+**Context:** the network Full Detail report showed the page-1 alert but nothing below about it: the content analysis crawls with a headless browser that can pass a bot wall AI crawlers cannot, so it reported the site as readable. The content analysis now runs the same named-crawler probe and, when every AI crawler is turned away, records a verified HIGH finding "Your website blocks AI crawlers" with the per-crawler evidence. Network reports lead Strategic Recommendations with the fix, and the alert's pointer names the right sections per report type. Not deployed.
+
+- **T1 Hospital Network (USA Health).** Page 1 alert ends "The fix is Recommendation 1 under Strategic Recommendations, and the finding 'Your website blocks AI crawlers' in the Content Improvement Keys — with its remediation plan in the Full Detail report." Standard report: Recommendation 1 is "Let AI assistants read your website…"; the Content Improvement Keys list includes the HIGH finding. Full Detail: that finding has Current state (crawlers named, HTTP 403, firewall not robots.txt), Expected state and Remediation. [pdf]
+- **T2 Deep Diagnostic:** pointer unchanged ("See What to Do First and the website findings below"); the practice/hospital content findings include the same HIGH finding when the site blocks crawlers. [pdf]
+- **T3** Open site (South Shore, Desert Ortho): no finding, no Recommendation 1 insertion. [pdf]

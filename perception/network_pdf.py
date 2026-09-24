@@ -1017,7 +1017,11 @@ def _facility_scorecard_block(
 
 def _recommendations_block(result: NetworkResult, primary: str, accent: str,
                            teaser: bool = False) -> str:
-    recs = result.strategic_recommendations
+    recs = list(result.strategic_recommendations or [])
+    from .data.website_facts import ai_access_problem
+    _a = ai_access_problem(getattr(result, "website_facts", None))
+    if _a:
+        recs = [("Let AI assistants read your website. " + _a["first_move"])] + recs
     if not recs:
         return ""
 

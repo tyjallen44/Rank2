@@ -777,6 +777,29 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
                     raw += _check_website(snaps, entity_kind)
                 except Exception:
                     partial = True
+                # Named-crawler probe: a site our headless browser can read may still turn away
+                # GPTBot / ClaudeBot / PerplexityBot at the firewall. That is the finding that matters.
+                try:
+                    from .data.website_facts import probe_ai_crawlers
+                    pr = probe_ai_crawlers(urls[0])
+                    snapshot["crawler_probe"] = {k: pr.get(k) for k in ("blocked", "allowed", "browser_blocked")}
+                    if pr.get("blocked") and not pr.get("allowed") and not any(
+                            f.get("platform") == "website" and "blocks" in (f.get("teaser_summary") or "") for f in raw):
+                        who = ", ".join(pr["blocked"])
+                        raw.append(dict(
+                            platform="website", category="risk", severity="high", status="verified",
+                            teaser_summary="Your website blocks AI crawlers — AI assistants cannot read what you publish.",
+                            current_state=(f"We requested the homepage as {who}"
+                                           f"{' and as a normal browser' if pr.get('browser_blocked') else ''}; every request was "
+                                           "turned away (HTTP 403 / bot challenge). robots.txt is not the cause — the block is a "
+                                           "firewall or bot-management rule. Assistants describe you from other people's pages."),
+                            expected_state=("Public, non-sensitive pages reachable by the known AI crawlers (GPTBot, ChatGPT-User, "
+                                            "ClaudeBot, PerplexityBot, Google-Extended) — allowed through the firewall / bot-management "
+                                            "rules while portals and patient data stay protected."),
+                            remediation_type="website_fix",
+                            evidence=[f"{r['name']}: {r['outcome']}" + (f" (HTTP {r['status']})" if r.get('status') else "") for r in pr.get("results") or []]))
+                except Exception:
+                    pass
             # Wikidata
             try:
                 wd, qid = _check_wikidata(client, entity_name, urls[0] if urls else "", entity_kind)

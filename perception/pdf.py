@@ -530,7 +530,15 @@ def _ai_access_alert_html(result) -> str:
             f'<div style="font-size:11pt;font-weight:800;color:{col};letter-spacing:.02em;margin-bottom:4px">{_e(a["title"])}</div>'
             f'<div style="font-size:9pt;line-height:1.45;color:#1c1c1e">{_e(a["body"])}</div>'
             f'{probe_html}'
-            f'<div style="font-size:8pt;font-weight:700;color:{col};margin-top:6px">See "What to Do First" and the website findings below for details.</div></div>')
+            f'<div style="font-size:8pt;font-weight:700;color:{col};margin-top:6px">{_ai_access_pointer(result)}</div></div>')
+
+
+def _ai_access_pointer(result) -> str:
+    """Where the reader finds the fix — differs by report type."""
+    if result.__class__.__name__ == "NetworkResult":
+        return ('The fix is Recommendation 1 under Strategic Recommendations, and the finding "Your website blocks AI crawlers" '
+                'in the Content Improvement Keys — with its remediation plan in the Full Detail report.')
+    return 'See "What to Do First" and the website findings below for details.'
 
 
 def _assessment_body_html(text: str | None, footnote: bool = False, result=None) -> str:
