@@ -499,7 +499,7 @@ def search_entity_candidates(
                 "X-Goog-Api-Key": key,
                 "X-Goog-FieldMask": (
                     "places.id,places.displayName,places.formattedAddress,"
-                    "places.rating,places.userRatingCount,places.googleMapsUri"
+                    "places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri"
                 ),
             },
             json={"textQuery": query, "pageSize": min(max_results, 20)},
@@ -523,9 +523,23 @@ def search_entity_candidates(
             "resolved_state": _state_from_address(p.get("formattedAddress", "")),
             "place_id": p.get("id"),
             "maps_url": p.get("googleMapsUri"),
+            "website": clean_website(p.get("websiteUri")),
         }
         for p in raw
     ]
+
+
+def clean_website(url):
+    """Google listings often carry tracking parameters (utm_*); show the plain site address."""
+    if not url:
+        return None
+    try:
+        from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+        p = urlsplit(url)
+        q = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if not k.lower().startswith(("utm_", "gclid", "fbclid", "mc_"))]
+        return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), "")) or url
+    except Exception:
+        return url
 
 
 def fetch_footprint(

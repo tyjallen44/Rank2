@@ -3227,3 +3227,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T1** Home, Trends, History, Network, Compare, Learn: content starts at the left edge of the main area (36 px padding) on a wide monitor, not at the far right. [ui]
 - **T2** Pinned History/Trends filter strips still stick (they need to be inside the scrolling main area). [ui]
 - **R1** Deep Diagnostic Advanced options render as before (Known facts block, spot-check checkbox). [ui]
+
+## WEBSITE-CONFIRM + FIX-NETWORK-PAGEBREAK
+
+**Not deployed.**
+
+- **T1 Deep Diagnostic.** Pick a listing. Under the selected organization a "Website — confirm or correct (required)" box appears, prefilled from the Google listing (tracking parameters stripped) or the confirmed roster, with a note saying where it came from. **Run Diagnostic is disabled** until "This is their website" is ticked. Editing the address clears the tick. Typing `none` and ticking is accepted for an organization with no site. [ui]
+- **T2 The confirmed address is what the run uses:** the crawl (Website facts / AI-access alert), the content analysis and the citation check all use it; History's stored website reflects it. [pdf]
+- **T3 Hospital Network.** After discovery, the roster step shows "System website — confirm or correct (required)" prefilled from the system's Google listing; Run Hospital Network is disabled until ticked. The network report's system-level crawl and content analysis use the confirmed site. [ui][pdf]
+- **T4 No website found:** the box says so and asks for it; the run stays blocked until an address is entered and ticked. [ui]
+- **T5 Page break.** Hospital Network report: the "Facility Detail" heading, its intro and the Strong/Gap Markets callouts stay together (no heading or callout titles orphaned at the foot of a page); the facility table may start on the next page. [pdf]
+- **R1** Trends "Create full report" and API callers that send no website behave as before (Google listing's site). The old "Website URL" field under Advanced options still overrides the content-analysis URL when set. [ui]

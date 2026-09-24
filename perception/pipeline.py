@@ -85,7 +85,7 @@ class _Ctx:
 def _website_facts(ctx: "_Ctx", kind: str) -> Optional[dict]:
     """Crawl the listed website (fail-soft) and fold the facts into the evidence block."""
     try:
-        url = getattr(ctx.read, "website", None) if ctx.read is not None else None
+        url = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)
         if not url:
             return None
         from .data import website_facts as _wf
@@ -595,6 +595,8 @@ def run_individual(
     site_roster: Optional[list] = None,
     # headless bulk scoring: compute, don't persist a History row
     skip_db_save: bool = False,
+    # the organization's website as confirmed on the form (wins over the Google listing's)
+    website: Optional[str] = None,
 ) -> AnalysisResult:
     """Run one individual report (Deep Diagnostic / Community Health) for `entity_type`
     in {hospital, practice, service_line, community_health}."""
@@ -644,6 +646,7 @@ def run_individual(
         service_line=service_line, parent_system=parent_system, practice_profile=practice_profile,
         confirmed_siblings=confirmed_siblings, org_name=org_name, anchor_listing=anchor_listing,
         extra_evidence=extra_evidence, fqhc_intake=fqhc_intake, site_roster=site_roster,
+        website=website,
     )
 
     # ── 3. evidence ───────────────────────────────────────────────────────────

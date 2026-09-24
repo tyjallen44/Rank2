@@ -1179,7 +1179,8 @@ def _run_type_analyzer(etype: str, job: dict, entity_name: str, city: str, state
             practice_profile=job.get("practice_profile"), confirmed_siblings=job.get("confirmed_siblings"),
             org_name=job.get("org_name"), anchor_listing=job.get("anchor_listing"),
             extra_evidence=_facts_evidence(job.get("practice_facts")),
-            fqhc_intake=job.get("fqhc_intake"), site_roster=job.get("site_roster") or [], **common)
+            fqhc_intake=job.get("fqhc_intake"), site_roster=job.get("site_roster") or [],
+            website=job.get("website"), **common)
     if etype == "community_health":
         from perception.fqhc_analyzer import analyze_fqhc
         return analyze_fqhc(entity_name=entity_name, city=city, state=state, fqhc_intake=job.get("fqhc_intake"),
@@ -1627,6 +1628,7 @@ class AnalyzeRequest(BaseModel):
     individual_report: bool = False
     skip_pdf: bool = False
     content_urls: List[str] = []            # user-supplied website URL(s) for the content analysis
+    website: Optional[str] = None           # the organization's website as confirmed by the user on the form
     entity_type: Optional[str] = None       # "practice" routes to practice_analyzer
     practice_profile: Optional[str] = None  # override auto-classified profile
     practice_composite: bool = False        # append practice reputation table
@@ -1743,6 +1745,12 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["content_urls"] = [
         (u.strip() if u.strip().lower().startswith(("http://", "https://")) else "https://" + u.strip())
         for u in (req.content_urls or []) if (u or "").strip()]
+    _w = (req.website or "").strip()
+    if _w:
+        _w = _w if _w.lower().startswith(("http://", "https://")) else "https://" + _w
+        _jobs[job_id]["website"] = _w
+        if not _jobs[job_id]["content_urls"]:
+            _jobs[job_id]["content_urls"] = [_w]
 
     if req.entity_type == "community_health" and entity_name:
         _jobs[job_id]["fqhc_intake"] = req.fqhc_intake
@@ -2498,6 +2506,7 @@ class NetworkAnalyzeRequest(BaseModel):
     network_name: str
     hq_location: str = ""
     source_url: str = ""
+    website: str = ""            # the system's website as confirmed by the user on the form
     facilities: list[dict]
     facility_type: str = "hospital"
     brand: str = "original"
@@ -2516,7 +2525,7 @@ async def network_analyze(req: NetworkAnalyzeRequest, payload: dict = Depends(ge
     job_id = _new_job(role, brand, payload.get("email"))
     _pool.submit(_job_network_analyze, job_id, req.network_name, req.hq_location,
                  req.source_url, req.facilities, req.facility_type, brand, ignore_cache,
-                 req.teaser, req.service_line_audit, req.full_detail)
+                 req.teaser, req.service_line_audit, req.full_detail, (req.website or "").strip())
     return {"job_id": job_id}
 
 
@@ -2527,7 +2536,8 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
                           ignore_cache: bool = False,
                           teaser: bool = False,
                           service_line_audit: bool = False,
-                          full_detail: bool = False) -> None:
+                          full_detail: bool = False,
+                          website: str = "") -> None:
     job = _jobs[job_id]
     _cost.begin(job_id, job.get("kind") or "")
     job["kind"] = "Hospital Network"
@@ -2542,7 +2552,7 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
             network_name=network_name,
             hq_location=hq_location,
             source_url=source_url,
-            facilities=facilities,
+            facilities=facilities, website=website,
             facility_type=facility_type,
             brand=brand,
             on_event=emit,
@@ -5420,6 +5430,29 @@ def _graph_write(fn, *a, **kw):
     except Exception as exc:
         print(f"[graph] {getattr(fn, '__name__', 'write')} failed: {type(exc).__name__}: {exc}", flush=True)
         return None
+
+
+@app.get("/api/org/website")
+async def org_website(name: str, city: str = "", state: str = "", payload: dict = Depends(get_current_user_payload)):
+    """Best-effort website for an organization (Google listing first, then the entity graph)."""
+    from perception.data.places import fetch_provider
+    from perception.graph import get_org
+    def _go():
+        try:
+            read, _ = fetch_provider(_normalize_input(name), _normalize_input(city), (state or "").upper().strip())
+            if read is not None and getattr(read, "website", None):
+                from perception.data.places import clean_website
+                return {"found": True, "website": clean_website(read.website), "source": "google", "listing": read.matched_name}
+        except Exception:
+            pass
+        try:
+            g = get_org(_normalize_input(name), _normalize_input(city), (state or "").upper().strip())
+            if g and g.get("website"):
+                return {"found": True, "website": g["website"], "source": "confirmed roster"}
+        except Exception:
+            pass
+        return {"found": False}
+    return await asyncio.get_running_loop().run_in_executor(None, _go)
 
 
 @app.get("/api/org/roster")

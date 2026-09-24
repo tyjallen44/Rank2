@@ -167,6 +167,7 @@ def analyze_network(
     content_summary: bool = False,
     service_line_audit: bool = False,
     full_detail: bool = False,
+    website: str = "",
 ) -> NetworkResult:
     """Run a Network AI Visibility analysis for a multi-state healthcare network.
 
@@ -277,6 +278,7 @@ def analyze_network(
         # standalone analysis_run to History — the network run is the History entry.
         # (Without this, every network report left a phantom 1-provider "Hospitals"
         # row at the HQ city.)
+        _entity_pulse_score.website_override = (website or "").strip() or None
         pulse, tier_scores, ai_says, weighting_profile = _entity_pulse_score(
             network_name, hq_location, brand=brand, emit=emit, force=ignore_cache,
             headless=True,
@@ -522,7 +524,7 @@ def _finalize_network(result, *, network_name, hq_location, source_url, brand,
     content_findings = _load_content_findings(result)
     if content_findings is None and (content_summary or full_detail):
         try:
-            content_findings = _compute_content_findings(result, network_name, hq_location, source_url, emit)
+            content_findings = _compute_content_findings(result, network_name, hq_location, source_url or website, emit)
         except Exception as _ce:
             emit({"type": "text", "text": f"\n(content summary skipped: {type(_ce).__name__})"})
             content_findings = None
@@ -623,10 +625,11 @@ def _entity_pulse_score(entity_name: str, location: str, brand: str = "original"
     tiers = prov.tier_scores.as_dict() if hasattr(prov.tier_scores, "as_dict") else {}
     # Website facts for the system's site (AI-access alert on the network report's first page).
     _wf = getattr(res, "website_facts", None)
-    if not _wf and getattr(prov, "website_url", None):
+    _site = getattr(_entity_pulse_score, "website_override", None) or getattr(prov, "website_url", None)
+    if (not _wf or getattr(_entity_pulse_score, "website_override", None)) and _site:
         try:
             from .data.website_facts import fetch_website_facts
-            _wf = fetch_website_facts(prov.website_url)
+            _wf = fetch_website_facts(_site)
         except Exception:
             _wf = None
     _entity_pulse_score.last_website_facts = _wf

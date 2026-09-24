@@ -558,6 +558,7 @@ p {{ margin-bottom: 10px; line-height: 1.55; }}
   display: flex;
   gap: 16px;
   margin: 12px 0 16px;
+  break-inside: avoid; page-break-inside: avoid;
 }}
 .market-callout {{
   flex: 1;
@@ -1003,12 +1004,14 @@ def _facility_scorecard_block(
 </table>"""
 
     return f"""
+<div style="break-inside:avoid;page-break-inside:avoid">
 <h2>Facility Detail</h2>
 <p style="font-size:9pt;color:#4a5a6a">
   {len(result.facilities)} {plural} in the network — individual facility detail for reference.
   Per-facility AI scores are not shown; the system-level Pulse Score above reflects the network as a whole.
 </p>
 {callouts}
+</div>
 {table_html}"""
 
 
