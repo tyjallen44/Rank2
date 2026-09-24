@@ -3238,3 +3238,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T4 No website found:** the box says so and asks for it; the run stays blocked until an address is entered and ticked. [ui]
 - **T5 Page break.** Hospital Network report: the "Facility Detail" heading, its intro and the Strong/Gap Markets callouts stay together (no heading or callout titles orphaned at the foot of a page); the facility table may start on the next page. [pdf]
 - **R1** Trends "Create full report" and API callers that send no website behave as before (Google listing's site). The old "Website URL" field under Advanced options still overrides the content-analysis URL when set. [ui]
+
+## AI-ACCESS-PROBE — the alert names the crawlers that were turned away and says the block is at the firewall
+
+- **T1** Deep Diagnostic / Hospital Network on an organization whose site walls off crawlers (USA Health). The page-1 alert now reads "We asked for your homepage as GPTBot, ChatGPT-User, ClaudeBot, PerplexityBot, Google-Extended and each was turned away — a normal browser too", explains that a person in a browser (or an assistant fetching one page for them) may still get through while the automated readers do not, and says robots.txt is not the cause: look at the firewall / bot-management rule. Under the body, a line lists each reader with "turned away (HTTP 403)" in red or "allowed" in green. The first move under What to Do First names the firewall and says it is not a robots.txt change. [pdf]
+- **T2** A readable site that nonetheless challenges the named AI crawlers (firewall "block AI bots" toggle): the alert fires with only the blocked names listed; readers that were allowed show in green. [pdf]
+- **T3** An open site (South Shore Hospital, Desert Orthopaedic): no alert; nothing changes. [pdf]
+- **R1** The probe is six quick homepage requests per run; it never blocks a run (errors show as "no answer"). [ops]

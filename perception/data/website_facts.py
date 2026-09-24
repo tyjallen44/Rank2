@@ -21,6 +21,50 @@ ORG_SCHEMA = {"MedicalOrganization", "MedicalClinic", "MedicalBusiness", "LocalB
 BAND = {"org_schema": 6, "physician_schema": 4, "physician_pages": 5, "sitemap": 2, "llms_txt": 2, "robots_allows_ai": 1}
 MODEL_ASSUMED_DEFAULT = 10      # used when the model did not state the sub-score it assumed
 
+# The readers that build AI answers, asked for the homepage by name. A site that challenges these
+# is closed to AI assistants regardless of what its robots.txt says.
+AI_CRAWLERS = [
+    ("GPTBot", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)"),
+    ("ChatGPT-User", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot"),
+    ("ClaudeBot", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)"),
+    ("PerplexityBot", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)"),
+    ("Google-Extended", "Mozilla/5.0 (compatible; Google-Extended)"),
+]
+_BLOCK_CODES = {401, 403, 405, 406, 429, 503}
+
+
+def probe_ai_crawlers(url: str, timeout: float = 15.0) -> dict:
+    """Request the homepage as each AI crawler and as a plain browser. Returns
+    {"results": [{"name", "status", "outcome"}], "blocked": [names], "allowed": [names],
+     "browser_blocked": bool, "where": "firewall" | "robots" | "open"}.
+    outcome: allowed | blocked | error. Fail-soft: never raises."""
+    import httpx
+    out = {"results": [], "blocked": [], "allowed": [], "browser_blocked": False, "where": "open"}
+    if not (url or "").strip():
+        return out
+    u = url if "://" in url else "https://" + url
+    agents = AI_CRAWLERS + [("Browser", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36")]
+    for name, ua in agents:
+        try:
+            with httpx.Client(timeout=timeout, follow_redirects=True, headers={"User-Agent": ua, "Accept": "text/html,*/*"}) as c:
+                r = c.get(u)
+            body = (r.text or "")[:4000].lower()
+            challenged = r.status_code in _BLOCK_CODES or any(k in body for k in ("verify you are human", "just a moment", "attention required", "cf-browser-verification", "access denied"))
+            outcome = "blocked" if challenged else ("allowed" if r.status_code < 400 else "error")
+            out["results"].append({"name": name, "status": r.status_code, "outcome": outcome})
+        except Exception as exc:
+            out["results"].append({"name": name, "status": None, "outcome": "error", "note": type(exc).__name__})
+            outcome = "error"
+        if name == "Browser":
+            out["browser_blocked"] = outcome == "blocked"
+        elif outcome == "blocked":
+            out["blocked"].append(name)
+        elif outcome == "allowed":
+            out["allowed"].append(name)
+    if out["blocked"]:
+        out["where"] = "firewall"
+    return out
+
 
 def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
     """Crawl the site (reusing the content analyzer's crawler) and return the facts.
@@ -43,6 +87,7 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
         if snap.get("fetch_status") == "blocked":
             f = {"status": "blocked", "url": url, "pages": 0, "points": 0, "breakdown": {},
                  "note": "site returns a bot wall to non-browser clients — AI crawlers are turned away the same way"}
+            f["crawler_probe"] = probe_ai_crawlers(url)
             return f
         return {"status": "unreachable", "url": url, "note": "site could not be reached (DNS / timeout / connection)"}
     types = set(snap.get("schema_types") or set())
@@ -68,6 +113,13 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
         "robots_allows_ai": BAND["robots_allows_ai"] if facts["robots_allows_ai"] else 0,
     }
     facts["points"] = sum(facts["breakdown"].values())
+    # Even a readable site may challenge the named AI crawlers at the firewall; ask as each of them.
+    facts["crawler_probe"] = probe_ai_crawlers(url)
+    if facts["crawler_probe"]["blocked"] and not facts["crawler_probe"]["allowed"]:
+        facts["status"] = "blocked"
+        facts["note"] = "the site challenges every AI crawler by name (firewall / bot-management rule)"
+        facts["points"] = 0
+        facts["breakdown"] = {k: 0 for k in facts["breakdown"]}
     return facts
 
 
@@ -112,9 +164,16 @@ def evidence_lines(f: dict, kind: str = "practice") -> str:
         lines.append(f"Website {f.get('url')}: could not be reached ({f.get('note')}). Treat machine-readability as UNVERIFIED; do not assume.")
         return "\n".join(lines) + "\n"
     if f.get("status") == "blocked":
-        lines.append(f"Website {f.get('url')}: serves a bot wall to non-browser clients. AI crawlers are turned away the same way "
-                     "(verified). Website machine-readability sub-score = 0/20.")
+        pr = f.get("crawler_probe") or {}
+        who = ", ".join(pr.get("blocked") or []) or "automated readers"
+        lines.append(f"Website {f.get('url')}: turns away AI crawlers at the firewall (verified by requesting the homepage as {who}"
+                     f"{'; a normal browser request was challenged too' if pr.get('browser_blocked') else ''}). robots.txt is not the cause. "
+                     "Website machine-readability sub-score = 0/20. Say plainly that AI assistants cannot read the site.")
         return "\n".join(lines) + "\n"
+    pr = f.get("crawler_probe") or {}
+    if pr.get("blocked"):
+        lines.append(f"Firewall check: the site challenges {', '.join(pr['blocked'])} by name but admits {', '.join(pr.get('allowed') or []) or 'no other AI crawler'}; "
+                     "mention which assistants are shut out.")
     yn = lambda b: "yes" if b else "no"
     lines.append(f"Website {f.get('url')} ({f.get('pages')} pages read): organization schema {yn(f.get('org_schema'))}; "
                  f"Physician schema {yn(f.get('physician_schema'))}; crawlable physician/provider pages {f.get('physician_pages')}; "
@@ -158,17 +217,26 @@ def ai_access_problem(f: Optional[dict]) -> Optional[dict]:
     Returns {"level": "critical"|"warning", "title", "body", "first_move"} or None."""
     f = f or {}
     if f.get("status") == "blocked":
+        pr = f.get("crawler_probe") or {}
+        blocked = pr.get("blocked") or []
+        evidence = (f" We asked for your homepage as {', '.join(blocked)} and each was turned away"
+                    f"{' — a normal browser too' if pr.get('browser_blocked') else ''}.") if blocked else ""
+        where = (" Your robots.txt is not the cause; the block is a firewall or bot-management rule (for example a CDN's "
+                 "\"block AI bots\" setting), so that is where your web team should look.")
         return {
             "level": "critical",
             "title": "URGENT: AI assistants cannot read your website",
-            "body": ("Your website turns away automated readers, and that includes the crawlers behind ChatGPT, Claude, "
-                     "Gemini and Perplexity. Nothing you publish — services, physicians, credentials, hours, insurance, awards — "
-                     "reaches the answers patients are getting. AI assistants describe you from other people's pages, and your "
-                     "competitors' content fills the gap. This is usually a bot-protection setting on your website, not a rebuild, "
-                     "and it should be fixed before anything else in this report. Get this page to whoever runs your website today."),
-            "first_move": ("Allow AI crawlers through your website's bot protection (GPTBot, ClaudeBot, PerplexityBot, "
-                           "Google-Extended) on public pages, keeping portals and patient data protected. Until this is done, "
-                           "AI assistants cannot read anything you publish, so every other website fix below has no effect."),
+            "body": ("Your website turns away the crawlers behind ChatGPT, Claude, Gemini and Perplexity." + evidence +
+                     " Nothing you publish — services, physicians, credentials, hours, insurance, awards — reaches the answers "
+                     "patients are getting. AI assistants describe you from other people's pages, and your competitors' content "
+                     "fills the gap. A person opening your site in a browser, or an assistant fetching one page on that person's "
+                     "behalf, may still get through; the automated readers that build everyday answers do not." + where +
+                     " This is a configuration change, not a rebuild, and it should be fixed before anything else in this report. "
+                     "Get this page to whoever runs your website today."),
+            "first_move": ("Allow the AI crawlers through your website's firewall or bot-management rules (GPTBot, ChatGPT-User, "
+                           "ClaudeBot, PerplexityBot, Google-Extended) on public pages, keeping portals and patient data protected — "
+                           "this is not a robots.txt change. Until this is done, AI assistants cannot read anything you publish, so "
+                           "every other website fix below has no effect."),
         }
     if f.get("status") == "measured" and f.get("robots_allows_ai") is False:
         return {
