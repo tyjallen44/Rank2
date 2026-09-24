@@ -179,11 +179,26 @@ def run_gemini(query: str) -> Optional[dict]:
     cites = []
     gm = cand.get("groundingMetadata") or {}
     for ch in gm.get("groundingChunks") or []:
-        u = (ch.get("web") or {}).get("uri")
+        u = _gemini_cite(ch)
         if u:
             cites.append(u)
     _cost.record_gemini_grounding(_GEMINI_MODEL)
     return {"assistant": "Gemini", "text": text, "citations": _dedupe(cites)}
+
+
+def _gemini_cite(chunk: dict) -> Optional[str]:
+    """Gemini grounding chunks carry an opaque vertexaisearch.cloud.google.com redirect as the
+    URI and the real source domain in `title`. Report the real domain so citation counts and
+    the 'pages cited' lists name healthgrades.com, not the redirect host."""
+    web = chunk.get("web") or {}
+    u, title = web.get("uri") or "", (web.get("title") or "").strip()
+    try:
+        host = urlparse(u).netloc.lower()
+    except Exception:
+        host = ""
+    if "vertexaisearch.cloud.google.com" in host and re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", title.lower()):
+        return "https://" + title.lower()
+    return u or None
 
 
 def _dedupe(urls: list) -> list:
