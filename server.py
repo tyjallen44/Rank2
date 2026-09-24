@@ -395,6 +395,7 @@ _MAINT_TASKS = {
     "retrack-practices": "Tracked entities that have a specialty but are typed Hospital → type Specialty Practice so the next snapshot uses the practice rubric.",
     "apply-learn-content": "Sync the live Learn / Methodology articles to the reviewed seed (perception/learn_seed.py); custom articles are left alone.",
     "backfill-tracked-ran-by": "History rows with no 'Run by' that are Trends snapshots → attribute them to whoever set up that tracked entity.",
+    "seed-org-graph": "Entity graph: seed organizations + confirmed locations from every tracked entity's fixed roster (practice, service line, community health).",
 }
 
 
@@ -485,6 +486,24 @@ async def admin_maintenance(task: str, apply: bool = False, _: dict = Depends(re
                         if apply:
                             update_learn_article(row["id"], title=new_title, category=art["category"], body=art["body"])
                 lines.append(f"{'Applied' if apply else 'Would update'}: {changed} article(s).")
+            elif task == "seed-org-graph":
+                from perception.graph import upsert_org as _g_upsert, stats as _g_stats
+                rows = con.execute("SELECT entity_name, city, state, entity_type, specialty, confirmed_roster, anchor_listing, created_by, created_at "
+                                   "FROM tracked_entities WHERE COALESCE(entity_type,'hospital') IN ('practice','service_line','community_health') "
+                                   "AND COALESCE(confirmed_roster,'') <> '' ORDER BY created_at ASC").fetchall()
+                n = 0
+                for nm, city, st, et, spec, roster, anchor, who, created in rows:
+                    try:
+                        locs = json.loads(roster) if roster else []
+                        locs = [({"name": x} if isinstance(x, str) else x) for x in locs]
+                        anc = json.loads(anchor) if anchor else None
+                    except Exception:
+                        continue
+                    lines.append(f"{'SEED' if apply else 'would seed'} {nm} ({city}, {st}) — {len(locs)} location(s), confirmed by {who} on {str(created)[:10]}")
+                    if apply:
+                        _g_upsert(nm, city, st, et, specialty=spec, anchor=anc, locations=locs, source="trends", by=who)
+                    n += 1
+                lines.append(f"{'Seeded' if apply else 'Would seed'} {n} organization(s)." + (f" Graph now: {_g_stats()}" if apply else ""))
             elif task == "backfill-tracked-ran-by":
                 # Trends snapshots used to be created without the user's email, so History showed
                 # "—" for them. Attribute each unattributed run whose name matches a tracked entity
@@ -734,6 +753,12 @@ def _job_run_single(
         if job.get("individual_report"):
             _plain_ensure(result, job)          # cached results too; before the teaser is built
             _ensure_individual_teaser(result, job)
+            if result.rankings and job.get("entity_name"):
+                from perception.graph import upsert_org as _g_upsert
+                _p = result.rankings[0]
+                _graph_write(_g_upsert, job["entity_name"], city, state, entity_type or "hospital", website=_p.website_url,
+                             locations=[{"name": l.name, "address": l.address, "rating": l.google_rating, "review_count": l.google_review_count}
+                                        for l in (_p.consolidated_locations or [])], source="analysis")
         else:
             _backfill_teaser_pdf(result, job)
         set_run_role(result.run_id, job["role"], _job_ran_by(job))
@@ -1145,6 +1170,14 @@ def _job_run_practice(
         result.owner_facts = job.get("practice_facts") or None
         _plain_ensure(result, job)              # cached results too; the combined render below reuses the text
         _profile_audit(result, job, emit)
+        if result.profile_audit and result.profile_audit.get("profiles"):
+            from perception.graph import upsert_org as _g_upsert
+            _graph_write(_g_upsert, entity_name, city, state, "service_line" if job.get("service_line") else "practice",
+                         website=(result.rankings[0].website_url if result.rankings else None),
+                         locations=[{"name": p["name"], "city": p.get("city"), "place_id": p.get("place_id"), "website": p.get("website")}
+                                    for p in result.profile_audit["profiles"] if p.get("place_id")], source="analysis")
+        if job.get("roster_from_graph") and emit:
+            emit({"type": "text", "text": "\nLocations taken from your confirmed roster (entity graph) — no discovery needed."})
 
         set_run_role(result.run_id, job["role"], _job_ran_by(job))
 
@@ -1638,6 +1671,19 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["org_name"] = _normalize_input(req.org_name) if req.org_name else None
     _jobs[job_id]["confirmed_siblings"] = req.confirmed_siblings  # None or list
     _jobs[job_id]["anchor_listing"] = req.anchor_listing
+    if entity_name and req.entity_type in ("practice", "service_line") or (entity_name and req.confirmed_siblings is not None):
+        from perception.graph import upsert_org as _g_upsert, get_org as _g_get
+        _etype = "service_line" if req.service_line else (req.entity_type or "practice")
+        if req.confirmed_siblings is not None:
+            _graph_write(_g_upsert, entity_name, city, state, _etype, specialty=specialty, anchor=req.anchor_listing,
+                         locations=req.confirmed_siblings, physicians=[p for ps in (req.physician_roster or {}).values() for p in ps],
+                         source="deep_diagnostic", by=_jobs[job_id].get("email") or role, replace_locations=True)
+        else:
+            _g = _graph_write(_g_get, entity_name, city, state)
+            if _g and _g.get("locations"):
+                _jobs[job_id]["confirmed_siblings"] = _g["locations"]
+                _jobs[job_id]["anchor_listing"] = _jobs[job_id]["anchor_listing"] or _g.get("anchor")
+                _jobs[job_id]["roster_from_graph"] = True
     _jobs[job_id]["practice_facts"] = req.practice_facts
     _jobs[job_id]["spotcheck"] = bool(req.spotcheck)
     _jobs[job_id]["content_urls"] = [
@@ -1647,6 +1693,10 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     if req.entity_type == "community_health" and entity_name:
         _jobs[job_id]["fqhc_intake"] = req.fqhc_intake
         _jobs[job_id]["site_roster"] = req.fqhc_site_roster or []
+        if req.fqhc_site_roster:
+            from perception.graph import upsert_org as _g_upsert
+            _graph_write(_g_upsert, entity_name, city, state, "community_health", locations=[{"name": s} for s in req.fqhc_site_roster],
+                         source="deep_diagnostic", by=_jobs[job_id].get("email") or role, replace_locations=True)
         _pool.submit(_job_run_fqhc, job_id, entity_name, city, state, req.aggregate)
     elif req.entity_type == "practice" and entity_name:
         _pool.submit(_job_run_practice, job_id, entity_name, city, state, specialty, req.aggregate, radius)
@@ -2259,6 +2309,9 @@ async def track_roster_add(entity_id: str, req: "RosterAdditionRequest", payload
             add_roster_addition(ent["entity_name"], name, city, state, req.beds, req.place_id, added_by=who)
         except Exception:
             pass
+    else:
+        from perception.graph import upsert_org as _g_upsert
+        _graph_write(_g_upsert, ent["entity_name"], ent.get("city") or "", ent.get("state") or "", etype, locations=[item], source="roster_edit", by=who)
     return {"ok": True, "facilities": len(roster), "note": note, "roster": roster}
 
 
@@ -2294,6 +2347,9 @@ async def track_roster_remove(entity_id: str, req: RosterRemovalRequest, payload
     word = _roster_note_word(ent)
     note = f"Roster changed: removed {gname}{(' (' + gone['city'] + ')') if gone.get('city') else ''} — now {len(roster)} {word}. Snapshots before this date measured {len(roster) + 1}."
     add_annotation(entity_id, _date.today(), note, who)
+    if etype != "hospital_network":
+        from perception.graph import remove_location as _g_remove
+        _graph_write(_g_remove, ent["entity_name"], ent.get("city") or "", ent.get("state") or "", gone, by=who)
     return {"ok": True, "facilities": len(roster), "note": note, "roster": roster}
 
 
@@ -4831,6 +4887,10 @@ async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_curr
         from perception.db import update_tracked_entity as _upd
         _upd(entity["id"], facility_type=(req.facility_type or "hospital"), source_url=(req.source_url or None))
         entity["facility_type"] = req.facility_type or "hospital"; entity["source_url"] = req.source_url or None
+    if req.confirmed_roster is not None and req.entity_type in ("practice", "service_line", "community_health"):
+        from perception.graph import upsert_org as _g_upsert
+        _graph_write(_g_upsert, entity["entity_name"], entity["city"], entity["state"], req.entity_type, specialty=entity.get("specialty"),
+                     anchor=req.anchor_listing, locations=req.confirmed_roster, source="trends", by=created_by, replace_locations=True)
     # Fire initial collection run immediately so the first data point is captured now.
     job_id = _launch_tracked_run(entity, payload.get("brand", "original"), payload.get("email"),
                                  owner_key=_owner_key(payload.get("email"), payload.get("role")))
@@ -5297,6 +5357,25 @@ async def track_scheduled(request: Request):
 
 
 # ── Practice Composite discovery endpoint ────────────────────────────────────
+
+def _graph_write(fn, *a, **kw):
+    """Entity-graph writes never block a request or a run."""
+    try:
+        return fn(*a, **kw)
+    except Exception as exc:
+        print(f"[graph] {getattr(fn, '__name__', 'write')} failed: {type(exc).__name__}: {exc}", flush=True)
+        return None
+
+
+@app.get("/api/org/roster")
+async def org_roster(name: str, city: str = "", state: str = "", payload: dict = Depends(get_current_user_payload)):
+    """The organization's stored, confirmed roster (entity graph) — served before any discovery."""
+    from perception.graph import get_org
+    org = await asyncio.get_running_loop().run_in_executor(None, lambda: get_org(_normalize_input(name), _normalize_input(city), (state or "").upper().strip()))
+    if not org or not org.get("locations"):
+        return {"found": False}
+    return {"found": True, **org}
+
 
 class PracticeDiscoverRequest(BaseModel):
     entity_name: str

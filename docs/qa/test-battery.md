@@ -3118,3 +3118,17 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2** Run with the box unchecked: no "Observed check" lines in the progress stream, no "What AI assistants actually said" section in the PDF, no per-category table, no "Why this matters" citation lines; Operations shows no ChatGPT/Gemini spend for the run. [pdf][ops]
 - **T3** Run with the box checked: full observed panel as in SPOTCHECK-BANK. [pdf]
 - **R1** Trends "Create full report" and tracked snapshots do not run the check. Compare Two / Rankings / Event Prep unchanged. [ui]
+
+## ENTITY-GRAPH-1 — confirmed rosters stored once per organization and reused (heart-surgery item 5, first increment)
+
+**Not deployed.** After rollout run the **seed-org-graph** maintenance task (dry run, then apply) to load every tracked practice / service line / community health roster into the graph. Tables: org_graph, org_locations, org_physicians (created on first use).
+
+- **T1 Confirm then reuse (Deep Diagnostic).** Run a practice Deep Diagnostic, confirming the locations as usual. Start a new Deep Diagnostic for the same organization and pick the same listing. **Expect:** the Locations list appears at once (no "Discovering locations…" wait) headed "From your confirmed roster — N locations confirmed on <date> by <user>", with the same locations checked; the run's progress stream says "Locations taken from your confirmed roster" only when the roster was supplied by the server (API callers); the report's Locations match. [ui][pdf]
+- **T2 Re-discover.** On that list click "re-discover locations": discovery runs as before and the note disappears; confirming the new result replaces the stored roster (T1 again shows the new set). [ui]
+- **T3 Uncheck.** Uncheck one stored location and run: the next Deep Diagnostic for that organization no longer lists it (the confirmation replaced the roster). [ui]
+- **T4 Trends add.** Trends → Add entity → the same practice: the Locations step shows "From your confirmed roster … Re-discover" instantly with the stored locations; Add to Trends works. [ui]
+- **T5 Manage roster ↔ graph.** In Trends Details → Manage roster, add a location (verified) and remove another. Start a Deep Diagnostic for that organization: the stored roster reflects both changes. [ui]
+- **T6 Seed task.** Admin → Operations → Maintenance → seed-org-graph: dry run lists each tracked practice/service-line/community-health entity with its location count and owner; Apply reports "Seeded N organization(s). Graph now: {…}". Re-running lists the same entities (idempotent). [ops]
+- **T7 Analyses never add locations.** After T1, a finished run updates each stored location's website link (visible later via Manage roster / the graph) but does not add locations the analysis found on its own. Hospitals: related campuses found by analysis are stored unconfirmed and are never served to the forms. [ops]
+- **T8 Help.** The ⓘ beside the note opens "Your confirmed roster (entity graph)". [ui]
+- **R1** Organizations never confirmed behave exactly as before (discovery runs). Service-line runs always discover (scoped to the system). Hospital Network rosters are unaffected. Graph failures never block a run (logged as [graph] …). [ui][ops]
