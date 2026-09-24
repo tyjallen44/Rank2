@@ -480,12 +480,39 @@ def _first_moves_title(result, default: str) -> str:
     return "What to Do First" if is_bullets(getattr(result, "top_recommendation", "")) else default
 
 
-def _assessment_body_html(text: str | None, footnote: bool = False) -> str:
+def _ai_access_alert_html(result) -> str:
+    """Front-page alert under the Pulse Verdict when the crawl found the site unreadable by AI
+    assistants (bot wall → red; robots.txt disallows AI crawlers → amber)."""
+    from .data.website_facts import ai_access_problem
+    a = ai_access_problem(getattr(result, "website_facts", None))
+    if not a:
+        return ""
+    col, bg = (_RED_BAD, "#FDECEA") if a["level"] == "critical" else (_AMBER_WARN, "#FFF4E0")
+    return (f'<div style="margin:10px 0 18px;padding:12px 16px;background:{bg};border-left:6px solid {col};border-radius:0 6px 6px 0;break-inside:avoid">'
+            f'<div style="font-size:11pt;font-weight:800;color:{col};letter-spacing:.02em;margin-bottom:4px">{_e(a["title"])}</div>'
+            f'<div style="font-size:9pt;line-height:1.45;color:#1c1c1e">{_e(a["body"])}</div>'
+            f'<div style="font-size:8pt;font-weight:700;color:{col};margin-top:6px">See "What to Do First" and the website findings below for details.</div></div>')
+
+
+def _assessment_body_html(text: str | None, footnote: bool = False, result=None) -> str:
     """The assessment paragraph, or — when condensed — a short bullet list plus a pointer
-    to the technical roadmap for the web/marketing team."""
+    to the technical roadmap for the web/marketing team. When the site cannot be read by AI
+    assistants, the fix is placed first — every other website fix depends on it."""
     from .plain import is_bullets
+    from .data.website_facts import ai_access_problem
+    a = ai_access_problem(getattr(result, "website_facts", None)) if result is not None else None
+    if a and not is_bullets(text):
+        text = "• " + a["first_move"] + ("\n• " + (text or "").strip() if (text or "").strip() else "")
     if is_bullets(text):
         items = [ln.lstrip("• ").strip() for ln in (text or "").splitlines() if ln.strip()]
+        if a and not any("crawler" in i.lower() and ("allow" in i.lower() or "robots" in i.lower()) for i in items):
+            items = [a["first_move"]] + items
+        if a:
+            col = _RED_BAD if a["level"] == "critical" else _AMBER_WARN
+            first = f'<li style="font-weight:700;color:{col}">{_e(items[0])}</li>'
+            lis = first + "".join(f"<li>{_e(_strip_md(i))}</li>" for i in items[1:])
+            note = ('<div class="first-moves-note">The detailed roadmap for your web and marketing teams follows.</div>' if footnote else "")
+            return f'<ul class="first-moves">{lis}</ul>{note}'
         lis = "".join(f"<li>{_e(_strip_md(i))}</li>" for i in items)
         note = ('<div class="first-moves-note">The detailed roadmap for your web and marketing teams follows.</div>'
                 if footnote else "")
@@ -718,6 +745,12 @@ def _spotcheck_section(result: AnalysisResult) -> str:
     sc = getattr(result, "spotcheck", None)
     if not sc or not sc.get("asked"):
         return ""
+    from .data.website_facts import ai_access_problem
+    _a = ai_access_problem(getattr(result, "website_facts", None))
+    if _a and (sc.get("sourcing") or {}).get("sentence") and "could not" not in sc["sourcing"]["sentence"]:
+        sc = {**sc, "sourcing": {**sc["sourcing"], "sentence": sc["sourcing"]["sentence"] + (
+            " They could not have used it: the site turns away automated readers." if _a["level"] == "critical"
+            else " Your robots.txt tells their crawlers to skip it.")}}
     rows = "".join(
         f'<tr><td style="font-weight:600">{_e(a["assistant"])}</td>'
         f'<td style="text-align:center">{_sc_named_cell(a)}{_sc_range_note(a)}</td>'
@@ -1640,6 +1673,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
             f'<div class="verdict"><div class="section-title" style="margin-bottom:8px;">{SECTION_VERDICT}</div>'
             + _paras(result.ai_visibility_verdict) + "</div>"
         )
+    verdict_html += _ai_access_alert_html(result)
 
     # The simplified summary view omits the methodology appendix.
     if result.simplified:
@@ -2428,7 +2462,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
 
   <div class="recommendation">
     <div class="section-title" style="margin-bottom:10px;">{_first_moves_title(result, recommendation_title)}</div>
-    {_assessment_body_html(result.top_recommendation, footnote=result.individual_report)}
+    {_assessment_body_html(result.top_recommendation, footnote=result.individual_report, result=result)}
   </div>
 
   {_advice_or_content_block}
@@ -2596,7 +2630,7 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
     assessment_html = f"""
   <div class="recommendation" style="margin-top:20px">
     <div class="section-title" style="margin-bottom:10px">{_first_moves_title(result, SECTION_ASSESSMENT)}</div>
-    {_assessment_body_html(result.top_recommendation, footnote=include_roadmap)}
+    {_assessment_body_html(result.top_recommendation, footnote=include_roadmap, result=result)}
   </div>"""
 
     improvement_html = ""

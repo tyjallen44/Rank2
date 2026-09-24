@@ -153,6 +153,36 @@ def summary(f: dict, kind: str = "practice") -> Optional[str]:
     return "website quality claims checked by crawl"
 
 
+def ai_access_problem(f: Optional[dict]) -> Optional[dict]:
+    """The executive-facing alert when the site cannot be read by AI assistants.
+    Returns {"level": "critical"|"warning", "title", "body", "first_move"} or None."""
+    f = f or {}
+    if f.get("status") == "blocked":
+        return {
+            "level": "critical",
+            "title": "URGENT: AI assistants cannot read your website",
+            "body": ("Your website turns away automated readers, and that includes the crawlers behind ChatGPT, Claude, "
+                     "Gemini and Perplexity. Nothing you publish — services, physicians, credentials, hours, insurance, awards — "
+                     "reaches the answers patients are getting. AI assistants describe you from other people's pages, and your "
+                     "competitors' content fills the gap. This is usually a bot-protection setting on your website, not a rebuild, "
+                     "and it should be fixed before anything else in this report. Get this page to whoever runs your website today."),
+            "first_move": ("Allow AI crawlers through your website's bot protection (GPTBot, ClaudeBot, PerplexityBot, "
+                           "Google-Extended) on public pages, keeping portals and patient data protected. Until this is done, "
+                           "AI assistants cannot read anything you publish, so every other website fix below has no effect."),
+        }
+    if f.get("status") == "measured" and f.get("robots_allows_ai") is False:
+        return {
+            "level": "warning",
+            "title": "Your website tells AI assistants to stay out",
+            "body": ("Your robots.txt file instructs AI crawlers (such as GPTBot and ClaudeBot) not to read your pages, so what you "
+                     "publish is left out of the answers patients are getting and assistants describe you from other people's "
+                     "pages. This is a one-line configuration change. Get this page to whoever runs your website."),
+            "first_move": ("Remove the robots.txt rules that disallow AI crawlers (GPTBot, ClaudeBot, PerplexityBot, "
+                           "Google-Extended) on public pages so assistants can read what you publish."),
+        }
+    return None
+
+
 def claim_mismatch(f: dict, quality: Optional[dict]) -> Optional[str]:
     """A sentence when the site's Leapfrog / CMS claim disagrees with the verified value."""
     c = (f or {}).get("claims") or {}

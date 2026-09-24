@@ -3187,3 +3187,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T4 No website on the listing:** nothing added; report as before. [pdf]
 - **T5 Hospital claims.** Hospital Deep Diagnostic on South Shore Hospital: evidence/narrative notes the site references Magnet and Joint Commission; Score Evidence says "website quality claims checked by crawl". A hospital whose site states a Leapfrog grade different from hospitalsafetygrade.org gets "site quality claim disagrees with the verified value" and the narrative flags it. [pdf]
 - **R1** Reviews & Reputation, Practitioner Credentials and Access & Fit unchanged; ceiling rule unchanged; Community Health unaffected; content analysis findings unchanged (the crawler gained fields only). [pdf]
+
+## AI-ACCESS-ALERT — front-page alert when the website cannot be read by AI assistants
+
+**Context:** a walled-off site means nothing the organization publishes reaches AI answers; assistants describe it from other people's pages. The report now says so where an executive looks. Wording lives in one place (`website_facts.ai_access_problem`) so the PDF, the completion screen, help and Learn agree. Not deployed.
+
+- **T1 Bot wall (red).** Deep Diagnostic on an organization whose site turns away non-browser clients (e.g. a USA Health clinic → usahealthsystem.com). **Expect:** on page 1, directly under the Pulse Verdict, a red-edged box "URGENT: AI assistants cannot read your website" with the plain explanation, ending "See 'What to Do First' and the website findings below for details." The teaser carries the same box. Under What to Do First the first bullet, in red, is the bot-protection allow rule for AI crawlers; the model's bullets follow. The spot-check takeaway ends "They could not have used it: the site turns away automated readers." The completion screen shows the same red box above the spot-check summary. [pdf][ui]
+- **T2 robots.txt (amber).** A site whose robots.txt disallows GPTBot/ClaudeBot: amber box "Your website tells AI assistants to stay out"; first move in amber is the robots.txt change; takeaway ends "Your robots.txt tells their crawlers to skip it." [pdf][ui]
+- **T3 Readable site:** no box, What to Do First unchanged, takeaway unchanged. [pdf]
+- **T4** Help topic "Sources consulted and live web search" and the Learn Deep Diagnostic article carry the "If your website cannot be read" explanation (Learn after apply-learn-content). [ui]
+- **R1** Community Health reports (no crawl) unchanged. Hospital reports get the box on the same conditions. [pdf]

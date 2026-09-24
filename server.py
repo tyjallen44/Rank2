@@ -1294,6 +1294,7 @@ def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
             "rubric_note": getattr(result, "rubric_note", "") or None,
             "spotcheck": _spotcheck_brief(result),
             "mqcr": getattr(result, "fqhc_mqcr", None) if is_fqhc else None,
+            "ai_access": __import__("perception.data.website_facts", fromlist=["ai_access_problem"]).ai_access_problem(getattr(result, "website_facts", None)),
         }
         if not job.get("skip_pdf"):
             _notify_run_complete(job, "Community Health report" if is_fqhc else "Deep Diagnostic",
@@ -1559,7 +1560,8 @@ def _spotcheck_brief(result) -> Optional[dict]:
             "per_assistant": sc.get("per_assistant"), "top_competitors": sc.get("top_competitors"),
             "our_domain_cited": sc.get("our_domain_cited"), "summary": summary_sentence(sc),
             "sourcing": (sc.get("sourcing") or {}).get("sentence") or "",
-            "passes": sc.get("passes"), "queries": sc.get("queries"), "rate_range": sc.get("rate_range")}
+            "passes": sc.get("passes"), "queries": sc.get("queries"), "rate_range": sc.get("rate_range"),
+            "ai_access": __import__("perception.data.website_facts", fromlist=["ai_access_problem"]).ai_access_problem(getattr(result, "website_facts", None))}
 
 
 def _notify_run_complete(job: dict, kind: str, title: str, files: list) -> None:
