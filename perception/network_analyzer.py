@@ -341,6 +341,7 @@ def analyze_network(
         tier_scores=tier_scores,
         weighting_profile=weighting_profile,
         ai_says=ai_says,
+        website_facts=getattr(_entity_pulse_score, "last_website_facts", None),
         executive_summary=raw.get("executive_summary", ""),
         brand_visibility_narrative=raw.get("brand_visibility_narrative", ""),
         market_coverage_narrative=raw.get("market_coverage_narrative", ""),
@@ -594,6 +595,7 @@ def _entity_pulse_score(entity_name: str, location: str, brand: str = "original"
     headless=True skips the analysis_runs/History save (used by bulk scoring) —
     the canonical entity-score cache is still seeded so re-runs stay fast."""
     from .analyzer import analyze_location
+    _entity_pulse_score.last_website_facts = None
     city, state = _split_location(location)
     try:
         res = analyze_location(
@@ -612,6 +614,15 @@ def _entity_pulse_score(entity_name: str, location: str, brand: str = "original"
     if prov is None:
         return None, {}, "", "procedural"
     tiers = prov.tier_scores.as_dict() if hasattr(prov.tier_scores, "as_dict") else {}
+    # Website facts for the system's site (AI-access alert on the network report's first page).
+    _wf = getattr(res, "website_facts", None)
+    if not _wf and getattr(prov, "website_url", None):
+        try:
+            from .data.website_facts import fetch_website_facts
+            _wf = fetch_website_facts(prov.website_url)
+        except Exception:
+            _wf = None
+    _entity_pulse_score.last_website_facts = _wf
     return (prov.ai_visibility_score, tiers,
             getattr(prov, "ai_says", "") or "", res.weighting_profile or "procedural")
 

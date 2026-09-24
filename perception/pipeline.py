@@ -481,6 +481,8 @@ class CommunityHealthAdapter(_Adapter):
         if ctx.fqhc_intake is None:
             ctx.fqhc_intake = _fqhc._default_intake(ctx.hrsa_data)
         console.print(f"[green]✓[/green] FQHC evidence: {ctx.entity_name}")
+        # Website facts (AI-access alert + quality claims; no scoring band for this edition).
+        ctx.website_facts = _website_facts(ctx, "community_health")
 
     def prompt(self, ctx: _Ctx) -> tuple[str, str]:
         from .fqhc_prompts import build_fqhc_prompt

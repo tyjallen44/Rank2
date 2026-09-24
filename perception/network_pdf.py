@@ -13,7 +13,7 @@ from typing import Optional
 
 from .models import NetworkResult, NetworkFacility
 from .network_scoring import grade_band as _grade_band
-from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label, _score_bar_color
+from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label, _score_bar_color, _ai_access_alert_html
 from .scoring import grade_from_score as _grade_from_score
 from .strings import rebrand_result as _rebrand_for_display
 
@@ -879,7 +879,8 @@ def _score_breakdown_block(
   &nbsp;·&nbsp; {_e(_quartile_label(quartile))} ({_e(q_band)})
 </p>
 </div>
-{ai_says_html}"""
+{ai_says_html}
+{_ai_access_alert_html(result)}"""
 
 
 def _facility_scorecard_block(

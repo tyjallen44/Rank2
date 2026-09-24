@@ -18,7 +18,7 @@ from .fqhc_scoring import (
 )
 from .scoring import grade_from_score
 # Reuse brand configs and low-level helpers from pdf.py
-from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label
+from .pdf import _BRAND_CONFIGS, _e, _strip_md, _TEASER_PHONE, _TEASER_DEMO_URL, _quartile_label, _ai_access_alert_html
 from .strings import rebrand_result as _rebrand_for_display
 
 _BLUR_CTA_FQHC = (
@@ -104,7 +104,7 @@ def _build_fqhc_html(result: AnalysisResult, brand_cfg: dict) -> str:
     cover = _cover_block(entity, location, generated, score, grade, band, result, primary, pale, accent)
     scorecard = _pillar_scorecard(ps, primary, pale)
     mqcr_block = _mqcr_block(result, primary, accent)
-    verdict = _verdict_block(result)
+    verdict = _verdict_block(result) + _ai_access_alert_html(result)
     pillar1 = _pillar1_block(result, ps, primary)
     missed_queries = _query_results_block(result, battery_rows, primary)
     pillar2 = _pillar2_block(result, ps, primary)

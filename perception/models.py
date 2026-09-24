@@ -364,6 +364,7 @@ class NetworkResult(BaseModel):
     tier_scores: Optional[dict] = None          # {clinical_outcomes_safety, credentials_recognition, patient_experience_reviews, access_fit}
     weighting_profile: Optional[str] = None     # drives pillar labels in the PDF
     ai_says: str = ""                           # "What AI assistants currently see" for the network entity
+    website_facts: Optional[dict] = None        # crawl-verified facts for the system's website (AI-access alert on page 1)
     # Narrative (written for C-suite)
     executive_summary: str = ""
     brand_visibility_narrative: str = ""

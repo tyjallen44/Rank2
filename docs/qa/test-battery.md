@@ -3197,3 +3197,9 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T3 Readable site:** no box, What to Do First unchanged, takeaway unchanged. [pdf]
 - **T4** Help topic "Sources consulted and live web search" and the Learn Deep Diagnostic article carry the "If your website cannot be read" explanation (Learn after apply-learn-content). [ui]
 - **R1** Community Health reports (no crawl) unchanged. Hospital reports get the box on the same conditions. [pdf]
+
+## AI-ACCESS-ALERT-NETWORK-FQHC — the alert also on Hospital Network and Community Health reports
+
+- **T1 Hospital Network.** Run a network whose system website walls off crawlers (USA Health). **Expect:** on page 1, inside the System-Level AI Reputation section right after "What AI assistants currently see", the red "URGENT: AI assistants cannot read your website" box with "See below for details"; present in the standard, teaser and Full Detail files; the completion screen shows the same box. A system with a readable site shows nothing. [pdf][ui]
+- **T2 Community Health.** A center whose site blocks crawlers or disallows AI in robots.txt: the box appears directly under the Pulse Verdict; Score Evidence says "website quality claims checked by crawl" / "website blocks AI crawlers (verified)". [pdf]
+- **R1** Network system scores, facility scorecards, MQCR and pillars unchanged; only the alert and the crawl-verified facts were added. Tracked network snapshots record the facts but produce no PDF. [ui]
