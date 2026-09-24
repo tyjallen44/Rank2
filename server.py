@@ -710,6 +710,11 @@ def _job_run_single(
     entity_type: Optional[str] = None,
 ) -> None:
     job = _jobs[job_id]
+    if job.get("individual_report") and job.get("entity_name"):
+        # Every individual report (hospital / service line / practice / community health) runs
+        # through ONE job so the post-run hooks live in one place (see _job_run_individual).
+        return _job_run_individual(job_id, job["entity_name"], city, state, specialty, aggregate,
+                                   radius_miles, entity_type or "hospital")
     _cost.begin(job_id, job.get("kind") or "")
     job["kind"] = "Deep Diagnostic" if job.get("individual_report") else "Competitors Rankings"
     job.setdefault("label", job.get("entity_name") or f"{city}, {state}")
@@ -1126,162 +1131,153 @@ def _job_run_practice(
     specialty: Optional[str] = None, aggregate: bool = False,
     radius_miles: Optional[int] = None,
 ) -> None:
-    job = _jobs[job_id]
-    _cost.begin(job_id, job.get("kind") or "")
-    job["kind"] = "Deep Diagnostic"
-    job.setdefault("label", entity_name)
-    loop, queue = job["loop"], job["queue"]
-    emit = lambda e: _put(loop, queue, e)
-
-    try:
-        from perception.db import init_db, set_run_role
-        from perception.practice_analyzer import analyze_practice
-
-        init_db()
-        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-
-        result = analyze_practice(
-            entity_name=entity_name,
-            city=city,
-            state=state,
-            specialty=specialty,
-            aggregate=aggregate,
-            practice_profile=job.get("practice_profile"),
-            teaser_report=False,   # combined flow handles the teaser itself (below)
-            output_dir=REPORTS_DIR,
-            on_event=emit,
-            brand=job.get("brand", "original"),
-            skip_pdf=job.get("skip_pdf", False),
-            practice_composite=job.get("practice_composite", False),
-            practice_roster=job.get("practice_roster") or [],
-            physician_composite=job.get("physician_composite", False),
-            physician_roster=job.get("physician_roster") or {},
-            force_rerun=job.get("force_rerun", False),
-            override_today_lock=job.get("override_today_lock", False),
-            briefing_variant=job.get("briefing_variant"),
-            report_title=job.get("report_title"),
-            confirmed_siblings=job.get("confirmed_siblings"),
-            org_name=job.get("org_name"),
-            service_line=job.get("service_line"),
-            parent_system=job.get("parent_system"),
-            anchor_listing=job.get("anchor_listing"),
-            extra_evidence=_facts_evidence(job.get("practice_facts")),
-        )
-        result.owner_facts = job.get("practice_facts") or None
-        _plain_ensure(result, job)              # cached results too; the combined render below reuses the text
-        _profile_audit(result, job, emit)
-        if result.profile_audit and result.profile_audit.get("profiles"):
-            from perception.graph import upsert_org as _g_upsert
-            _graph_write(_g_upsert, entity_name, city, state, "service_line" if job.get("service_line") else "practice",
-                         website=(result.rankings[0].website_url if result.rankings else None),
-                         locations=[{"name": p["name"], "city": p.get("city"), "place_id": p.get("place_id"), "website": p.get("website")}
-                                    for p in result.profile_audit["profiles"] if p.get("place_id")], source="analysis")
-        if job.get("roster_from_graph") and emit:
-            emit({"type": "text", "text": "\nLocations taken from your confirmed roster (entity graph) — no discovery needed."})
-
-        set_run_role(result.run_id, job["role"], _job_ran_by(job))
-
-        # Practice combined report: content analysis + prescription + findings-citing
-        # Diagnostic Assessment, merged into the report (replaces the Roadmap). A
-        # teaser (blurred content) is produced too when the toggle is set.
-        # Fail-soft — a content/render failure leaves the base four-pillar report.
-        if not job.get("skip_pdf"):
-            if job.get("spotcheck"):
-                _run_spotcheck(result, entity_name, city, state, specialty, "service_line" if job.get("service_line") else "practice", emit)
-            try:
-                _finalize_practice_combined(result, entity_name, city, state,
-                                            job.get("brand", "original"), job, emit)
-            except Exception as _ce:
-                emit({"type": "text", "text": f"\n(content analysis skipped: {type(_ce).__name__})"})
-        try:
-            from perception.analyzer import _save_to_db as _resave
-            _resave(result)          # persist audit / facts / spotcheck / sources into result_json
-        except Exception as _se:
-            print(f"[practice] result re-save failed: {_se}")
-
-        job["status"] = "done"
-        job["result"] = {
-            "run_id": result.run_id,
-            "location": result.location,
-            "specialty": result.specialty,
-            "provider_count": len(result.rankings),
-            "pdf_path": result.pdf_path,
-            "teaser_pdf_path": result.teaser_pdf_path,
-            "briefing_pdf_path": result.briefing_pdf_path,
-            "briefing_skipped_reason": result.briefing_skipped_reason,
-            "entity_name": entity_name,
-            "entity_type": "service_line" if job.get("service_line") else "practice",
-            "service_line": job.get("service_line"), "parent_system": job.get("parent_system"),
-            "city": city, "state": state, "individual_report": True,
-            "confidence": _run_confidence(result),
-            "spotcheck": _spotcheck_brief(result),
-        }
-        if not job.get("skip_pdf"):
-            _notify_run_complete(job, "Deep Diagnostic", result.report_title or entity_name,
-                                 [result.pdf_path, result.teaser_pdf_path, result.briefing_pdf_path])
-    except Exception as exc:
-        job["status"] = "error"
-        job["error"] = _job_error(exc)
-    finally:
-        _finish_cost(job_id)
-        _put(loop, queue, None)
+    """Kept for callers; every individual report runs through _job_run_individual."""
+    _job_run_individual(job_id, entity_name, city, state, specialty, aggregate, radius_miles,
+                        "service_line" if _jobs[job_id].get("service_line") else "practice")
 
 
 def _job_run_fqhc(
     job_id: str, entity_name: str, city: str, state: str,
     aggregate: bool = False,
 ) -> None:
+    """Kept for callers; every individual report runs through _job_run_individual."""
+    _job_run_individual(job_id, entity_name, city, state, None, aggregate, None, "community_health")
+
+
+# ── ONE job for every individual report (heart-surgery item 6, increment A) ──────────────
+# The model step still goes to the type-specific analyzer; everything around it — cost
+# metering, plain-language pass, teaser, attribution, profile audit, entity-graph write,
+# observed spot-check, content analysis, re-save, result dict, completion email — is
+# defined ONCE here and gated by entity type. New hooks are added in one place.
+
+_INDIVIDUAL_KINDS = {"hospital": "Deep Diagnostic", "service_line": "Deep Diagnostic",
+                     "practice": "Deep Diagnostic", "community_health": "Community Health"}
+
+
+def _run_type_analyzer(etype: str, job: dict, entity_name: str, city: str, state: str,
+                       specialty: Optional[str], aggregate: bool, radius_miles: Optional[int], emit):
+    """Dispatch to the type-specific analyzer (unchanged code) and return its AnalysisResult."""
+    common = dict(output_dir=REPORTS_DIR, on_event=emit, brand=job.get("brand", "original"),
+                  skip_pdf=job.get("skip_pdf", False), force_rerun=job.get("force_rerun", False),
+                  override_today_lock=job.get("override_today_lock", False),
+                  briefing_variant=job.get("briefing_variant"), report_title=job.get("report_title"))
+    if etype == "community_health":
+        from perception.fqhc_analyzer import analyze_fqhc
+        return analyze_fqhc(entity_name=entity_name, city=city, state=state, fqhc_intake=job.get("fqhc_intake"),
+                            aggregate=aggregate, site_roster=job.get("site_roster") or [],
+                            teaser_report=False, **common)
+    if etype in ("practice", "service_line"):
+        from perception.practice_analyzer import analyze_practice
+        return analyze_practice(entity_name=entity_name, city=city, state=state, specialty=specialty, aggregate=aggregate,
+                                practice_profile=job.get("practice_profile"), teaser_report=False,
+                                practice_composite=job.get("practice_composite", False),
+                                practice_roster=job.get("practice_roster") or [],
+                                physician_composite=job.get("physician_composite", False),
+                                physician_roster=job.get("physician_roster") or {},
+                                confirmed_siblings=job.get("confirmed_siblings"), org_name=job.get("org_name"),
+                                service_line=job.get("service_line"), parent_system=job.get("parent_system"),
+                                anchor_listing=job.get("anchor_listing"),
+                                extra_evidence=_facts_evidence(job.get("practice_facts")), **common)
+    from perception.analyzer import analyze_location
+    return analyze_location(city=city, state=state, specialty=specialty, aggregate=aggregate,
+                            radius_miles=radius_miles, zip_code=job.get("zip_code"),
+                            patient_perspective=job.get("patient_perspective", False),
+                            teaser_report=False,            # main PDF is the full report; the teaser is a separate file
+                            simplified=job.get("simplified_patient", False),
+                            obscure_competitors=job.get("obscure_competitors", True),
+                            target_entity=job.get("target_entity"), entity_name=entity_name, individual_report=True,
+                            practice_composite=job.get("practice_composite", False),
+                            practice_roster=job.get("practice_roster") or [],
+                            physician_composite=job.get("physician_composite", False),
+                            physician_roster=job.get("physician_roster") or {},
+                            entity_type=etype, service_line=job.get("service_line"),
+                            parent_system=job.get("parent_system"), **common)
+
+
+def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
+                        specialty: Optional[str], aggregate: bool, radius_miles: Optional[int],
+                        etype: str) -> None:
     job = _jobs[job_id]
+    etype = etype if etype in _INDIVIDUAL_KINDS else "hospital"
+    is_practice = etype in ("practice", "service_line")
+    is_fqhc = etype == "community_health"
     _cost.begin(job_id, job.get("kind") or "")
-    job["kind"] = "Community Health"
+    job["kind"] = _INDIVIDUAL_KINDS[etype]
     job.setdefault("label", entity_name)
+    job["entity_type"] = etype
     loop, queue = job["loop"], job["queue"]
     emit = lambda e: _put(loop, queue, e)
 
     try:
         from perception.db import init_db, set_run_role
-        from perception.fqhc_analyzer import analyze_fqhc
-
         init_db()
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-        result = analyze_fqhc(
-            entity_name=entity_name,
-            city=city,
-            state=state,
-            fqhc_intake=job.get("fqhc_intake"),
-            aggregate=aggregate,
-            site_roster=job.get("site_roster") or [],
-            teaser_report=False,               # main PDF is the full report; teaser is a separate file
-            output_dir=REPORTS_DIR,
-            on_event=emit,
-            brand=job.get("brand", "original"),
-            skip_pdf=job.get("skip_pdf", False),
-            force_rerun=job.get("force_rerun", False),
-            override_today_lock=job.get("override_today_lock", False),
-            briefing_variant=job.get("briefing_variant"),
-            report_title=job.get("report_title"),
-        )
-        _plain_ensure(result, job)              # cached results too; before the teaser is built
-        _ensure_individual_teaser(result, job)
+        result = _run_type_analyzer(etype, job, entity_name, city, state, specialty, aggregate, radius_miles, emit)
+
+        # ── post-run hooks, in one order for every type ──
+        if is_practice:
+            result.owner_facts = job.get("practice_facts") or None
+        _plain_ensure(result, job)                      # cached results too; before any re-render
+        if is_practice:
+            _profile_audit(result, job, emit)            # Place Details per confirmed profile
+        if not is_practice:
+            _ensure_individual_teaser(result, job)       # practice teaser comes from the combined render below
+        # entity graph: practices refresh location details from the audit; hospitals store the
+        # related campuses the analysis found (unconfirmed candidates); FQHC sites came in via the form
+        try:
+            from perception.graph import upsert_org as _g_upsert
+            if is_practice and result.profile_audit and result.profile_audit.get("profiles"):
+                _graph_write(_g_upsert, entity_name, city, state, etype,
+                             website=(result.rankings[0].website_url if result.rankings else None),
+                             locations=[{"name": p["name"], "city": p.get("city"), "place_id": p.get("place_id"), "website": p.get("website")}
+                                        for p in result.profile_audit["profiles"] if p.get("place_id")], source="analysis")
+            elif etype == "hospital" and result.rankings:
+                _p = result.rankings[0]
+                _graph_write(_g_upsert, entity_name, city, state, "hospital", website=_p.website_url,
+                             locations=[{"name": l.name, "address": l.address, "rating": l.google_rating, "review_count": l.google_review_count}
+                                        for l in (_p.consolidated_locations or [])], source="analysis")
+        except Exception as _gx:
+            print(f"[graph] post-run write failed: {type(_gx).__name__}: {_gx}", flush=True)
+        if job.get("roster_from_graph"):
+            emit({"type": "text", "text": "\nLocations taken from your confirmed roster (entity graph) — no discovery needed."})
+
         set_run_role(result.run_id, job["role"], _job_ran_by(job))
+
+        if not job.get("skip_pdf"):
+            if job.get("spotcheck") and not is_fqhc:
+                _run_spotcheck(result, entity_name, city, state, specialty if is_practice else None, etype, emit)
+            try:
+                if is_practice:
+                    _finalize_practice_combined(result, entity_name, city, state, job.get("brand", "original"), job, emit)
+                elif etype == "hospital":
+                    _finalize_hospital_combined(result, entity_name, city, state, job.get("brand", "original"), job, emit)
+            except Exception as _cexc:
+                emit({"type": "text", "text": f"\n⚠ Content analysis failed ({type(_cexc).__name__}: {_cexc}) — base report kept"})
+        try:
+            from perception.analyzer import _save_to_db as _resave
+            _resave(result)          # persist audit / facts / spotcheck / sources / plain text into result_json
+        except Exception as _se:
+            print(f"[{etype}] result re-save failed: {_se}", flush=True)
+
         job["status"] = "done"
         job["result"] = {
-            "run_id": result.run_id,
-            "location": result.location,
-            "specialty": result.specialty,
-            "provider_count": 1,  # FQHC is always a single-entity report
-            "entity_type": "community_health",
-            "mqcr": result.fqhc_mqcr,
-            "pdf_path": result.pdf_path,
-            "briefing_pdf_path": result.briefing_pdf_path,
-            "briefing_skipped_reason": result.briefing_skipped_reason,
-            "entity_name": job.get("entity_name"), "city": city, "state": state, "individual_report": True,
+            "run_id": result.run_id, "location": result.location, "specialty": result.specialty,
+            "provider_count": len(result.rankings) or (1 if is_fqhc else 0),
+            "pdf_path": result.pdf_path, "teaser_pdf_path": result.teaser_pdf_path,
+            "briefing_pdf_path": result.briefing_pdf_path, "briefing_skipped_reason": result.briefing_skipped_reason,
+            "entity_name": entity_name, "entity_type": etype,
+            "service_line": job.get("service_line"), "parent_system": job.get("parent_system"),
+            "city": city, "state": state, "individual_report": True,
             "confidence": _run_confidence(result),
+            "rubric_note": getattr(result, "rubric_note", "") or None,
+            "spotcheck": _spotcheck_brief(result),
+            "mqcr": getattr(result, "fqhc_mqcr", None) if is_fqhc else None,
         }
         if not job.get("skip_pdf"):
-            _notify_run_complete(job, "Community Health report", job.get("entity_name") or result.location,
-                                 [result.pdf_path, result.briefing_pdf_path])
+            _notify_run_complete(job, "Community Health report" if is_fqhc else "Deep Diagnostic",
+                                 result.report_title or entity_name,
+                                 [result.pdf_path, result.teaser_pdf_path, result.briefing_pdf_path])
     except Exception as exc:
         job["status"] = "error"
         job["error"] = _job_error(exc)

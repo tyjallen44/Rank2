@@ -3132,3 +3132,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T7 Analyses never add locations.** After T1, a finished run updates each stored location's website link (visible later via Manage roster / the graph) but does not add locations the analysis found on its own. Hospitals: related campuses found by analysis are stored unconfirmed and are never served to the forms. [ops]
 - **T8 Help.** The ⓘ beside the note opens "Your confirmed roster (entity graph)". [ui]
 - **R1** Organizations never confirmed behave exactly as before (discovery runs). Service-line runs always discover (scoped to the system). Hospital Network rosters are unaffected. Graph failures never block a run (logged as [graph] …). [ui][ops]
+
+## ONE-JOB-INDIVIDUAL — every individual report runs through one server job (heart-surgery item 6, increment A)
+
+**Context:** the hospital, practice and community-health jobs each carried their own copy of the post-run hooks and disagreed on what they ran and returned (a community-health teaser was never emailed; result dicts differed). `_job_run_individual` now holds the analyzer dispatch, ONE ordered hook list gated by type, ONE result dict and ONE completion email; the old three functions are thin wrappers. The analyzers themselves are unchanged, so scores and PDFs are unaffected. Not deployed.
+
+- **T1 Hospital Deep Diagnostic** (fresh): completes; PDF, teaser and (if chosen) briefing present; completion panel shows Score Evidence, spot-check (if ticked), rubric note when applicable; Operations shows the cost row; Ready email lists PDF + teaser + briefing. [ui][email]
+- **T2 Practice / service line**: completes with the combined report; profile audit table present; entity graph updated (Manage roster / next Deep Diagnostic shows refreshed website links); result carries teaser_pdf_path, service_line, parent_system. [pdf][ui]
+- **T3 Community Health**: completes; teaser file produced AND included in the Ready email (new); completion panel shows Score Evidence and MQCR; spot-check never runs for this type even if the box were somehow set. [pdf][email]
+- **T4 Cached results** (same organization within 30 days): every type returns quickly with the plain-language pass applied and the stored PDF re-rendered when needed. [ui]
+- **T5 Trends snapshots**: Run now on a hospital, a practice and a community-health entity each produce a data point (skip_pdf path) with no PDF and no email. [ui]
+- **T6 Failure path**: a run that errors shows the error on the completion panel and its cost row is still recorded (sentinel/finish in one place). [ui][ops]
+- **R1 Market runs** (Competitors Rankings) are untouched — they still go through `_job_run_single`'s market path with the teaser backfill. Compare Two / Event Prep / Network unchanged. [ui]
