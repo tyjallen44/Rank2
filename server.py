@@ -1458,8 +1458,12 @@ def _plain_ensure(result, job: dict) -> None:
     from the same-day lock or the 30-day cache, whose stored text and PDF pre-date the pass.
     When anything changed and a main PDF exists, re-render it in place and re-save. Fail-soft."""
     try:
-        from perception.plain import condense
-        if not getattr(result, "individual_report", False) or not condense(result):
+        from perception.plain import condense, structure_ai_says
+        if not getattr(result, "individual_report", False):
+            return
+        _changed = condense(result)
+        _changed = structure_ai_says(result) or _changed     # cached results from before the box was structured
+        if not _changed:
             return
         if result.pdf_path and not job.get("skip_pdf"):
             try:

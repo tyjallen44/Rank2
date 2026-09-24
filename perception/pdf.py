@@ -642,8 +642,17 @@ def _ai_says_block(p: RankedProvider) -> str:
         <span style="font-size:6pt;font-weight:400;color:#7a9095;font-style:italic;margin-left:6px">
           &mdash; from training memory &amp; live retrieval &middot; Claude, ChatGPT, Gemini</span>
       </div>
-      <div class="ai-says-text">{_e(_strip_md(p.ai_says))}</div>
+      <div class="ai-says-text">{_ai_says_body(p)}</div>
     </div>"""
+
+
+def _ai_says_body(p: RankedProvider) -> str:
+    st = getattr(p, "ai_says_structured", None) or {}
+    if st.get("headline"):
+        lis = "".join(f'<li style="margin:0 0 3px">{_e(_strip_md(b))}</li>' for b in (st.get("bullets") or []))
+        return (f'<div style="font-weight:700;margin:0 0 5px">{_e(_strip_md(st["headline"]))}</div>'
+                + (f'<ul style="margin:0;padding-left:16px">{lis}</ul>' if lis else ""))
+    return _e(_strip_md(p.ai_says))
 
 
 def _tier_row(label: str, value: int | None) -> str:

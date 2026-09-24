@@ -3212,3 +3212,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T2 Methodology box (every report type).** The appendix box at the end of Deep Diagnostic (hospital and practice), Hospital Network and Community Health reports now has labelled paragraphs: What the score is; Verified from the source (edition-specific: CMS/Leapfrog for hospitals; Google profile facts + website machine-readability for practices; HRSA + MQCR for community health); Where the model is used; Score Evidence; What AI assistants actually said (optional); If the website cannot be read; Rosters; link to careclimb.com/methodology. [pdf]
 - **T3 Learn /methodology.** "Where the signals come from" gains the website-crawl bullet; "How the score is produced" states what is measured vs judged. [ui]
 - **R1** Deep Diagnostic executive sections unchanged (already condensed). Scores unchanged. [pdf]
+
+## DD-AI-SAYS-STRUCTURE — Deep Diagnostic "What AI assistants currently see" as a headline + bullets
+
+- **T1** Any Deep Diagnostic (hospital, practice, service line, community health): the page-one box now opens with a bold one-sentence headline on how assistants see the organization, followed by 3–5 short bullets. Every fact in the bullets appears in the run's narrative; nothing is invented. [pdf]
+- **T2** Cached organizations: re-running (or re-downloading after a re-render) an organization analyzed before this rollout shows the box structured too (structured once on the next request, then stored). [pdf]
+- **T3** If the structuring model call fails, the box still shows the first sentence as the headline and the remaining sentences as bullets. [pdf]
+- **R1** Teaser and combined practice report show the same box; scores unchanged. [pdf]

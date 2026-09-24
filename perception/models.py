@@ -167,6 +167,7 @@ class RankedProvider(BaseModel):
     cms_star_rating: Optional[int] = None          # CMS Overall Hospital Quality Star Rating 1–5
     us_news_rankings: list[UsNewsRanking] = Field(default_factory=list)
     ai_says: str = ""                              # how AI assistants currently describe this provider
+    ai_says_structured: Optional[dict] = None   # {'headline','bullets'} — page-one box rendered as headline + bullets (perception.plain)
     trauma_level: Optional[str] = None            # "Level I" / "Level II" / "Level III"
     teaching_status: Optional[str] = None         # "major" / "minor" / "not_teaching"
     # "hospital" (default) or "practice" — gates hospital-only signal injection in PDF

@@ -155,6 +155,15 @@ def structure_prose(text: str, *, label: str = "section", console=None) -> Optio
         return fallback if fallback["bullets"] else {"headline": fallback["headline"], "bullets": []}
 
 
+def structure_ai_says(result, console=None) -> bool:
+    """Deep Diagnostic page-one box: 'What AI assistants currently see' → headline + bullets on rankings[0]."""
+    p = next(iter(getattr(result, "rankings", None) or []), None)
+    if p is None or not getattr(p, "ai_says", "") or getattr(p, "ai_says_structured", None):
+        return False
+    p.ai_says_structured = structure_prose(p.ai_says, label="what AI assistants currently see", console=console)
+    return bool(p.ai_says_structured)
+
+
 def condense_network(result, console=None) -> bool:
     """Hospital Network: executive summary and 'What AI assistants currently see' → headline + bullets."""
     changed = False
@@ -229,12 +238,14 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
             result.ai_visibility_verdict = _sentences(vd, VERDICT_SENTENCES)
         result.top_recommendation = bullets_to_text(moves[:BULLETS_MAX])
         result.plain_language = True
+        structure_ai_says(result, console=console)
         _log(f"condensed run={getattr(result, 'run_id', '?')} ({'assessment only' if only_assessment else 'all sections'})", console)
         return True
     except Exception as exc:
         _log(f"model pass failed run={getattr(result, 'run_id', '?')} ({type(exc).__name__}: {str(exc)[:160]}); trimming instead.", console)
         if not only_assessment:
             _fallback(result)           # readable now; plain_language stays False so the next request retries
+            structure_ai_says(result, console=console)
             return True
         if result.top_recommendation:
             result.top_recommendation = _sentence_bullets(result.top_recommendation)
