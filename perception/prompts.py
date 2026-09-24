@@ -106,10 +106,11 @@ sentiment data limited — insufficient public review volume." NEVER fabricate \
 specific review quotes.
 
 **Quality & Accreditation signals (required per provider).**
-- **Leapfrog Hospital Safety Grade:** A/B/C/D/F from leapfroggroup.org. Write \
-  "not rated" if not in the Leapfrog Hospital Survey (most specialty facilities \
-  and practices). For specialty practices, note the affiliated hospital's grade \
-  if relevant.
+- **Leapfrog Hospital Safety Grade:** A/B/C/D/F from hospitalsafetygrade.org. When the \
+  evidence block carries a verified grade, USE IT VERBATIM. Write "not graded this cycle" \
+  only when the evidence block says so, and "not found" when the lookup found nothing. The \
+  Safety Grade is assigned from public data whether or not a hospital answers the Leapfrog \
+  Survey — NEVER claim a hospital declined or withheld the survey unless a source says so.
 - **Accreditations:** Joint Commission accreditation status (qualitycheck.org), \
   Magnet nursing designation (nursingworld.org), DNV accreditation, NCQA \
   recognition, specialty-specific certifications. Write "none confirmed" if none \
