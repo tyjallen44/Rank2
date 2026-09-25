@@ -1756,10 +1756,6 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
                 <div><div class="fl">Locations the practice operates</div><input id="ir-fact-locations" class="fi" type="number" min="1" max="500" placeholder="e.g. 9" style="padding:7px 10px;font-size:13px"></div>
               </div>
             </div>
-            <div class="fg" style="margin-top:12px;margin-bottom:0">
-              <label class="fl">Website URL <span style="font-size:11px;color:#888">(optional — overrides the auto-detected site for the content analysis)</span></label>
-              <input id="ir-content-url" class="fi" type="url" placeholder="e.g. https://doclv.com">
-            </div>
             <label class="aggregate-toggle" style="margin-top:10px;display:none" id="ir-skip-pdf-label" title="Admin only: collect and store analysis data without generating a PDF.">
               <input type="checkbox" id="ir-skip-pdf-toggle">
               <span class="agg-label">Skip PDF — collect data only <span style="font-size:11px;color:#888">(Admin only)</span></span>
@@ -6705,8 +6701,7 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
     teaser_report,
     skip_pdf,
     website: _irWebsiteValue() || null,
-    content_urls: (document.getElementById('ir-content-url')?.value || '').trim()
-      ? [(document.getElementById('ir-content-url').value || '').trim()] : (_irWebsiteValue() ? [_irWebsiteValue()] : []),
+    content_urls: _irWebsiteValue() ? [_irWebsiteValue()] : [],   // the confirmed website is the content-analysis source
     entity_type: _irIsPractice() ? 'practice'
                : _irType === 'community_health' ? 'community_health'
                : null,

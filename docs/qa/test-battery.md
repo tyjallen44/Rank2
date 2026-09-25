@@ -3272,3 +3272,8 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 - **T3** Ambiguous registry matches and physicians the registry cannot find are shown as such and excluded from the percentage; a practice with no findable physicians skips the section with no error. [pdf]
 - **T4** The ceiling ("Score capped at 74 — board certification unverifiable") still follows the model's judgment as before; the table's certification column is informational. [pdf]
 - **R1** Hospitals and community health: no physician section. Practice runs add roughly one to two minutes for the registry lookups. [ui]
+
+## ONE-WEBSITE-FIELD-DD — Deep Diagnostic's Advanced "Website URL (optional)" field removed
+
+- **T1** Deep Diagnostic → Advanced options: no "Website URL (optional — overrides…)" field. The only website field is "Website — confirm or correct (required)" under the report title; it drives the crawl, the AI-access check and the content analysis. [ui]
+- **R1** Runs still produce the content analysis and prescription against the confirmed site. [pdf]
