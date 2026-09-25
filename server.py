@@ -404,6 +404,171 @@ async def admin_maintenance_list(_: dict = Depends(require_admin)):
     return [{"task": k, "description": v} for k, v in _MAINT_TASKS.items()]
 
 
+# ── AI Access Scan (admin only) ───────────────────────────────────────────────────────────
+# Upload an Event Report CSV (or any CSV with name / city / state / url columns) and test every
+# organization's website the way the reports do on page 1: request the homepage as each named AI
+# crawler and as a browser, then read robots.txt. Result: what share of the list is hidden from AI.
+
+def _aas_parse_csv(raw: bytes) -> list[dict]:
+    import csv as _csv
+    import io as _io
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252", errors="replace")
+    reader = list(_csv.reader(_io.StringIO(text)))
+    if not reader:
+        return []
+    header = reader[0]
+    low = [(h or "").strip().lower() for h in header]
+    name_i, city_i, state_i = _detect_network_cols(header)
+    url_i = next((i for i, h in enumerate(low) if h in ("url", "website", "web site", "input_url", "site") or "website" in h), None)
+    rows = []
+    for r in reader[1:]:
+        if not any((c or "").strip() for c in r):
+            continue
+        get = lambda i: (r[i] if i is not None and i < len(r) else "").strip()
+        name = get(name_i)
+        if not name:
+            continue
+        rows.append({"name": name, "city": get(city_i), "state": get(state_i).upper(), "url": get(url_i)})
+    return rows
+
+
+def _aas_lookup_website(name: str, city: str, state: str) -> str:
+    """Rows without a URL: the Google listing, then the entity graph (same as the form lookup)."""
+    try:
+        from perception.data.places import fetch_provider, clean_website
+        read, _ = fetch_provider(_normalize_input(name), _normalize_input(city), (state or "").upper().strip())
+        if read is not None and getattr(read, "website", None):
+            return clean_website(read.website)
+    except Exception:
+        pass
+    try:
+        from perception.graph import get_org
+        g = get_org(_normalize_input(name), _normalize_input(city), (state or "").upper().strip())
+        if g and g.get("website"):
+            return g["website"]
+    except Exception:
+        pass
+    return ""
+
+
+def _run_ai_access_scan_job(job_id: str, scan_id: str, rows: list[dict]) -> None:
+    job = _jobs[job_id]
+    loop, queue = job["loop"], job["queue"]
+    emit = lambda e: _put(loop, queue, e)
+    try:
+        from perception.data.ai_access_scan import scan_list, summarize
+        from perception.db import bump_ai_access_scan, finalize_ai_access_scan
+        missing = [r for r in rows if not r.get("url")]
+        if missing:
+            emit({"type": "phase", "text": f"Looking up {len(missing)} website{'s' if len(missing) != 1 else ''} from Google listings"})
+            for r in missing:
+                r["url"] = _aas_lookup_website(r["name"], r.get("city", ""), r.get("state", ""))
+                r["url_source"] = "google" if r["url"] else ""
+        total = len(rows)
+        emit({"type": "phase", "text": f"Testing {total} website{'s' if total != 1 else ''} as GPTBot, ChatGPT-User, ClaudeBot, PerplexityBot, Google-Extended and a browser"})
+        _last = [0.0]
+
+        def _progress(done: int, rec: dict):
+            b = rec.get("bucket")
+            mark = {"blocked": "✗", "robots": "△", "open": "✓", "unreachable": "?", "no_website": "–"}.get(b, "·")
+            emit({"type": "text", "text": f"{mark} {rec.get('name')} — {b}{(' (' + ', '.join(rec.get('blocked') or []) + ')') if rec.get('blocked') else ''}"})
+            emit({"type": "progress", "done": done, "total": total})
+            now = time.time()
+            if now - _last[0] > 2:
+                _last[0] = now
+                try:
+                    bump_ai_access_scan(scan_id, done)
+                except Exception:
+                    pass
+
+        results = scan_list(rows, progress=_progress, workers=6)
+        summary = summarize(results)
+        finalize_ai_access_scan(scan_id, summary, results)
+        job["result"] = {"scan_id": scan_id, "summary": summary}
+        job["status"] = "done"
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        try:
+            from perception.db import finalize_ai_access_scan
+            finalize_ai_access_scan(scan_id, {"error": str(exc)}, [], status="failed")
+        except Exception:
+            pass
+        job["status"] = "error"
+        job["error"] = _job_error(exc)
+    finally:
+        _put(loop, queue, None)
+
+
+@app.post("/api/admin/ai-access-scan")
+async def admin_ai_access_scan_start(file: UploadFile = File(...), label: str = Form(""),
+                                     payload: dict = Depends(require_admin)):
+    raw = await file.read()
+    rows = _aas_parse_csv(raw)
+    if not rows:
+        raise HTTPException(400, "No rows with a name column found in that file.")
+    from perception.db import init_db, create_ai_access_scan
+    init_db()
+    scan_id = uuid.uuid4().hex[:12]
+    create_ai_access_scan(scan_id, (label or "").strip() or (file.filename or "list.csv"), len(rows),
+                          payload.get("email") or payload.get("role") or "admin")
+    job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
+    _jobs[job_id]["kind"] = "ai_access_scan"
+    _jobs[job_id]["label"] = f"AI Access Scan: {(label or file.filename or 'list')}"
+    _pool.submit(_run_ai_access_scan_job, job_id, scan_id, rows)
+    return {"job_id": job_id, "scan_id": scan_id, "total": len(rows),
+            "without_url": sum(1 for r in rows if not r.get("url"))}
+
+
+@app.get("/api/admin/ai-access-scans")
+async def admin_ai_access_scans(_: dict = Depends(require_admin)):
+    from perception.db import init_db, list_ai_access_scans
+    init_db()
+    return list_ai_access_scans()
+
+
+@app.get("/api/admin/ai-access-scans/{scan_id}")
+async def admin_ai_access_scan_get(scan_id: str, _: dict = Depends(require_admin)):
+    from perception.db import get_ai_access_scan
+    rec = get_ai_access_scan(scan_id)
+    if not rec:
+        raise HTTPException(404, "Scan not found")
+    return rec
+
+
+@app.get("/api/admin/ai-access-scans/{scan_id}.csv")
+async def admin_ai_access_scan_csv(scan_id: str, _: dict = Depends(require_admin)):
+    import csv as _csv
+    import io as _io
+    from fastapi.responses import Response
+    from perception.db import get_ai_access_scan
+    from perception.data.ai_access_scan import BUCKET_LABEL
+    rec = get_ai_access_scan(scan_id)
+    if not rec:
+        raise HTTPException(404, "Scan not found")
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["name", "city", "state", "website", "result", "result_label", "crawlers_blocked", "robots_blocks", "browser_status", "gptbot", "chatgpt_user", "claudebot", "perplexitybot", "google_extended"])
+    for r in rec.get("results") or []:
+        st = r.get("statuses") or {}
+        w.writerow([r.get("name"), r.get("city"), r.get("state"), r.get("url"), r.get("bucket"), BUCKET_LABEL.get(r.get("bucket"), ""),
+                    ", ".join(r.get("blocked") or []), ", ".join(r.get("robots_blocks") or []), r.get("browser_status"),
+                    st.get("GPTBot"), st.get("ChatGPT-User"), st.get("ClaudeBot"), st.get("PerplexityBot"), st.get("Google-Extended")])
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "-", (rec.get("label") or "scan"))[:40]
+    return Response(content="\ufeff" + buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{safe}_ai-access-scan.csv"'})
+
+
+@app.delete("/api/admin/ai-access-scans/{scan_id}")
+async def admin_ai_access_scan_delete(scan_id: str, _: dict = Depends(require_admin)):
+    from perception.db import delete_ai_access_scan
+    delete_ai_access_scan(scan_id)
+    return {"ok": True}
+
+
 @app.post("/api/admin/maintenance/{task}")
 async def admin_maintenance(task: str, apply: bool = False, _: dict = Depends(require_admin)):
     """One-off data cleanups, run where the database and the reports volume are both

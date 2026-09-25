@@ -57,6 +57,11 @@ def probe_ai_crawlers(url: str, timeout: float = 15.0) -> dict:
             outcome = "error"
         if name == "Browser":
             out["browser_blocked"] = outcome == "blocked"
+        elif name == "Google-Extended":
+            # Google-Extended is a robots.txt product token, not a crawler user agent (Google's
+            # own docs: it has no separate request UA). A 403 on that string is generic
+            # non-browser filtering, so it is recorded but never decides "blocked".
+            continue
         elif outcome == "blocked":
             out["blocked"].append(name)
         elif outcome == "allowed":

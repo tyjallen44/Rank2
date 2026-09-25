@@ -860,6 +860,19 @@ def _init_db_impl() -> None:
         if _c not in _er_cols:
             con.execute(f"ALTER TABLE event_runs ADD COLUMN {_c} BOOLEAN DEFAULT FALSE")
     con.execute("""
+        CREATE TABLE IF NOT EXISTS ai_access_scans (
+            id         VARCHAR PRIMARY KEY,
+            label      VARCHAR,
+            total      INTEGER DEFAULT 0,
+            done_count INTEGER DEFAULT 0,
+            status     VARCHAR DEFAULT 'running',
+            summary    TEXT,
+            results    TEXT,
+            created_by VARCHAR,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    con.execute("""
         CREATE TABLE IF NOT EXISTS network_bulk_runs (
             id         VARCHAR PRIMARY KEY,
             label      VARCHAR,
@@ -3192,4 +3205,64 @@ def add_roster_addition(network_name: str, name: str, city: str, state: str, bed
 def delete_roster_addition(aid: str) -> None:
     con = get_connection()
     con.execute("DELETE FROM network_roster_additions WHERE id = ?", [aid])
+    con.close()
+
+
+# ── AI Access Scan (admin): batch check of whether websites let AI crawlers in ────────────
+_AAS_COLS = ["id", "label", "total", "done_count", "status", "summary", "results", "created_by", "created_at"]
+
+
+def create_ai_access_scan(scan_id: str, label: str, total: int, created_by: str) -> None:
+    con = get_connection()
+    con.execute("INSERT INTO ai_access_scans (id, label, total, status, created_by) VALUES (?, ?, ?, 'running', ?)",
+                [scan_id, label, total, created_by])
+    con.close()
+
+
+def bump_ai_access_scan(scan_id: str, done: int) -> None:
+    con = get_connection()
+    con.execute("UPDATE ai_access_scans SET done_count = ? WHERE id = ?", [done, scan_id])
+    con.close()
+
+
+def finalize_ai_access_scan(scan_id: str, summary: dict, results: list, status: str = "done") -> None:
+    import json as _json
+    con = get_connection()
+    con.execute("UPDATE ai_access_scans SET status = ?, summary = ?, results = ?, done_count = ? WHERE id = ?",
+                [status, _json.dumps(summary), _json.dumps(results), len(results), scan_id])
+    con.close()
+
+
+def list_ai_access_scans() -> list:
+    con = get_connection()
+    rows = con.execute("SELECT id, label, total, done_count, status, summary, created_by, created_at "
+                       "FROM ai_access_scans ORDER BY created_at DESC").fetchall()
+    con.close()
+    import json as _json
+    out = []
+    for r in rows:
+        rec = dict(zip(["id", "label", "total", "done_count", "status", "summary", "created_by", "created_at"], r))
+        rec["summary"] = _json.loads(rec["summary"]) if rec.get("summary") else None
+        rec["created_at"] = str(rec["created_at"]) if rec.get("created_at") else None
+        out.append(rec)
+    return out
+
+
+def get_ai_access_scan(scan_id: str) -> Optional[dict]:
+    import json as _json
+    con = get_connection()
+    r = con.execute(f"SELECT {', '.join(_AAS_COLS)} FROM ai_access_scans WHERE id = ?", [scan_id]).fetchone()
+    con.close()
+    if not r:
+        return None
+    rec = dict(zip(_AAS_COLS, r))
+    rec["summary"] = _json.loads(rec["summary"]) if rec.get("summary") else None
+    rec["results"] = _json.loads(rec["results"]) if rec.get("results") else []
+    rec["created_at"] = str(rec["created_at"]) if rec.get("created_at") else None
+    return rec
+
+
+def delete_ai_access_scan(scan_id: str) -> None:
+    con = get_connection()
+    con.execute("DELETE FROM ai_access_scans WHERE id = ?", [scan_id])
     con.close()

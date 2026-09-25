@@ -3336,3 +3336,21 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | R1 | Regression | Paste "Name, Address" lines and plain CSVs with a name column still import exactly as before; Cancel restores the link; existing roster entries are skipped. |
 
 [code] `_locImportOpen` (mode cards), `_locImportMode`, `_locImportFile(containerId, file, pane)` (UTF-8 → windows-1252 retry, signature detection), `_csvTable`, `_scIsExport`, `_scIsPhysician`, `_scAddrKey`, `_scDerive`, `_scLoad`, `_locImportRun` (sc rows from ticked preview).
+
+## AI-ACCESS-SCAN — admin batch test: what share of a list's websites are hidden from AI (2026-09-25)
+
+**Scope:** new `perception/data/ai_access_scan.py`; `perception/db.py` table `ai_access_scans`; `server.py` routes `POST /api/admin/ai-access-scan` (multipart file + label), `GET /api/admin/ai-access-scans`, `GET /api/admin/ai-access-scans/{id}`, `GET /api/admin/ai-access-scans/{id}.csv`, `DELETE …/{id}` (all `require_admin`); `web/index.html` Admin → **AI Access Scan** tab; help topic *When AI assistants cannot read a website* gains an admin paragraph. `tests/test_ai_access_scan.py` (3 offline tests). NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Sign in as admin → Admin → AI Access Scan tab | Tab visible for admin only (hidden for integrations_admin); panel explains the test and links the ⓘ help. |
+| T2 | Upload `SHSMD-2026_EventReport-with-URLs.csv` (154 rows, all with url) + label, Scan websites → | Progress bar with "n of 154", phase line names the six readers, log line per site (✗ blocked / △ robots / ✓ open / ? unreachable / – no website). Finishes in a few minutes; results render automatically. |
+| T3 | Results | Headline percentage "of the N websites we could test are hidden from AI assistants (hidden of tested)"; counts for blocked / robots / open / unreachable / no website; stacked bar + legend; "Crawlers turned away most often"; table sorted blocked → robots → unreachable → no website → open with website link, result, crawlers turned away (HTTP code), robots.txt agents, browser status. |
+| T4 | Download CSV | File `<label>_ai-access-scan.csv` with name, city, state, website, result, result_label, crawlers_blocked, robots_blocks, browser_status and one column per crawler status. |
+| T5 | Upload an Event Report CSV whose url column is blank | Start response reports "without a website — looking those up"; those rows get the Google-listing website (or land in "No website to test"). |
+| T6 | Previous scans | Dropdown lists every scan with date and headline; choosing one re-renders; Delete removes it. Reloading the tab after a server restart still shows finished scans (stored in Postgres). |
+| T7 | Non-admin calls the routes | 403. |
+| R1 | Classification | Browser challenged too → "unreachable", never "blocked" (conservative). Only a robots.txt group with `Disallow: /` for a named AI agent counts as robots; `Disallow: /portal/` does not. Unit tests pass. |
+| R2 | Regression | Other admin tabs unchanged; report pipeline untouched (`probe_ai_crawlers` reused read-only). pytest: 352 pass, same 15 pre-existing failures. |
+
+[code] `ai_access_scan.scan_site/scan_list/classify/read_robots/blocks_from_robots/summarize`; `server._aas_parse_csv/_aas_lookup_website/_run_ai_access_scan_job`; `web aasStart/aasRefreshList/aasLoad/aasDelete`, `_AAS_BUCKETS`.
