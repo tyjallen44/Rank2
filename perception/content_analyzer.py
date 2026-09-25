@@ -307,7 +307,8 @@ def _crawl_site(client: httpx.Client, url: str, page_budget: int,
             except Exception:
                 _t = ""
             snap["key_pages"].append({"url": href, "text_len": len(_t), "physician_schema": "Physician" in _st,
-                                      "provider_page": any(k in href.lower() for k in ("provider", "physician", "doctor", "team", "staff", "find-a"))})
+                                      "provider_page": any(k in href.lower() for k in ("provider", "physician", "doctor", "team", "staff", "find-a")),
+                                      "text": _t[:30000]})
             if len(snap["text_sample"]) < 60000:
                 snap["text_sample"] += " " + _t[:12000]
 

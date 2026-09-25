@@ -771,6 +771,34 @@ def _sources_box_html(result: AnalysisResult) -> str:
   </div>"""
 
 
+def _physician_facts_section(result: AnalysisResult) -> str:
+    pf = getattr(result, "physician_facts", None) or {}
+    rows = pf.get("rows") or []
+    if pf.get("status") != "measured" or not rows:
+        return ""
+    ok, bad, na = _GREEN_OK, _RED_BAD, "#7a9095"
+    def cell(v, yes="✓", no="✗"):
+        return (f'<span style="color:{ok};font-weight:700">{yes}</span>' if v is True else
+                f'<span style="color:{bad};font-weight:700">{no}</span>' if v is False else f'<span style="color:{na}">—</span>')
+    def reg(r):
+        st = r.get("registry")
+        return cell(True, "found") if st == "found" else (f'<span style="color:{na}">{_e(st or "—")}</span>')
+    trs = "".join(
+        f'<tr><td style="padding:3px 6px">{_e(r["name"])}</td><td style="padding:3px 6px;text-align:center">{reg(r)}</td>'
+        f'<td style="padding:3px 6px;text-align:center">{cell(r.get("linked"))}</td>'
+        f'<td style="padding:3px 6px;text-align:center">{cell(r.get("cert_stated"))}</td></tr>' for r in rows)
+    lp = f"{pf['linkage_pct']}% ({pf['linked']} of {pf['checked']})" if pf.get("linkage_pct") is not None else "not measurable"
+    cs = f"{pf['cert_stated']} of {pf['cert_checked']}" if pf.get("cert_checked") else "no pages read"
+    return f"""
+  <div style="margin-top:18px;padding:12px 16px;border:1px solid #d0e4e8;border-radius:8px;page-break-inside:avoid">
+    <div class="section-title" style="margin-bottom:4px">Physicians Checked</div>
+    <div style="font-size:8.5pt;color:#5a7075;margin-bottom:8px">{len(rows)} physicians checked against the NPI registry{" and " + str(pf.get("bio_pages_read")) + " of the practice's own bio pages" if pf.get("bio_pages_read") else ""}. Linked to a confirmed location: <strong>{_e(lp)}</strong> — this measured value sets physician↔practice linkage in Identity &amp; Machine-Readability. Certification stated on the pages read: <strong>{_e(cs)}</strong> (informational; AI assistants can only cite a certification the site states).</div>
+    <table style="width:100%;border-collapse:collapse;font-size:8pt">
+      <thead><tr style="background:#eef4f5;color:#0F4146"><th style="text-align:left;padding:4px 6px">Physician</th><th style="padding:4px 6px">NPI registry</th><th style="padding:4px 6px">Linked to a confirmed location</th><th style="padding:4px 6px">Certification stated on site</th></tr></thead>
+      <tbody>{trs}</tbody></table>
+  </div>"""
+
+
 def _profile_audit_section(result: AnalysisResult) -> str:
     """'Google Business Profiles checked' — what is actually on each confirmed profile."""
     au = getattr(result, "profile_audit", None)
@@ -1567,7 +1595,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
         rankings_html = _individual_teaser_section(all_ranked)
     elif result.individual_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
-        rankings_html = _individual_rankings_section(all_ranked) + _spotcheck_section(result) + _profile_audit_section(result)
+        rankings_html = _individual_rankings_section(all_ranked) + _spotcheck_section(result) + _profile_audit_section(result) + _physician_facts_section(result)
     elif result.teaser_report:
         # Teaser: summary-only cards, flat rank order
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)

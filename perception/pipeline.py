@@ -34,6 +34,7 @@ Reconciliations versus the legacy functions (deliberate):
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import date
 from pathlib import Path
@@ -105,6 +106,43 @@ def _website_facts(ctx: "_Ctx", kind: str) -> Optional[dict]:
     except Exception as exc:
         ctx.console.print(f"[yellow]⚠[/yellow] Website facts failed ({type(exc).__name__}: {exc}); proceeding without.")
         return {"status": "unreachable", "url": None, "note": f"{type(exc).__name__}"}
+
+
+def _physician_facts(ctx: "_Ctx") -> Optional[dict]:
+    """NPI-registry linkage + certification statements for the practice's physicians (fail-soft)."""
+    try:
+        from .data import physician_facts as _pf
+        phys = []
+        for lst in (ctx.physician_roster or {}).values():
+            phys += [p for p in (lst or []) if isinstance(p, dict) and p.get("name")]
+        if not phys:
+            try:
+                from .graph import get_org
+                g = get_org(ctx.entity_name, ctx.city, ctx.state)
+                phys = list((g or {}).get("physicians") or [])
+            except Exception:
+                phys = []
+        if not phys:
+            try:
+                from .physician_discovery import _nppes_lookup
+                phys = [{"name": r.get("name"), "npi": r.get("npi")} for r in _nppes_lookup(ctx.entity_name, ctx.city, ctx.state)][:_pf._SAMPLE]
+            except Exception:
+                phys = []
+        if not phys:
+            return {"status": "skipped", "note": "no physicians found for this practice"}
+        locs = list(ctx.aggregate_siblings or []) + ([{"address": getattr(ctx.read, "formatted_address", "")}] if ctx.read is not None else [])
+        pages = (getattr(ctx, "website_facts", None) or {}).get("site_pages") or []
+        ctx.emit({"type": "phase", "name": "physicians", "text": f"Checking {min(len(phys), _pf._SAMPLE)} physicians against the NPI registry and the website"})
+        _site = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)
+        f = _pf.verify_physicians(phys, locs, ctx.state, pages, site_url=_site)
+        ctx.evidence_text += _pf.evidence_lines(f)
+        s = _pf.summary(f)
+        if s:
+            ctx.emit({"type": "text", "text": "\n" + s[0].upper() + s[1:] + "."})
+        return f
+    except Exception as exc:
+        ctx.console.print(f"[yellow]⚠[/yellow] Physician facts failed ({type(exc).__name__}: {exc}); proceeding without.")
+        return {"status": "error", "note": type(exc).__name__}
 
 
 def _confirm_city(read, city: str, emit) -> None:
@@ -361,6 +399,8 @@ class PracticeAdapter(_Adapter):
                          if ctx.aggregate_siblings is not None else "")
         # Website facts verified by crawl (identity sub-score + quality claims).
         ctx.website_facts = _website_facts(ctx, "practice")
+        # Physician facts: NPI-registry linkage + certification statements on the site.
+        ctx.physician_facts = _physician_facts(ctx)
 
     def prompt(self, ctx: _Ctx) -> tuple[str, str]:
         from .practice_prompts import build_practice_prompt
@@ -384,6 +424,18 @@ class PracticeAdapter(_Adapter):
         ctx.linkage_integrity_pct = structured.get("linkage_integrity_pct")
         ctx.physician_capture_rate = None   # not AI-generated; computed from battery logs when available
         ctx.board_cert_unverifiable = bool(structured.get("board_cert_unverifiable", False))
+        pf = getattr(ctx, "physician_facts", None) or {}
+        if pf.get("status") == "measured":
+            _ov = {}
+            if pf.get("linkage_pct") is not None:
+                _ov["linkage"] = (ctx.linkage_integrity_pct, pf["linkage_pct"]); ctx.linkage_integrity_pct = pf["linkage_pct"]
+            # Certification statements: measured and shown in the report, but NOT applied to the ceiling
+            # until bio-page selection is proven on more practices (PULSE_CERT_OVERRIDE=1 enables it).
+            if pf.get("board_cert_unverifiable") is not None and os.environ.get("PULSE_CERT_OVERRIDE") == "1":
+                _ov["cert"] = (ctx.board_cert_unverifiable, pf["board_cert_unverifiable"]); ctx.board_cert_unverifiable = pf["board_cert_unverifiable"]
+            if _ov:
+                emit({"type": "text", "text": "\nPhysician facts applied: " + "; ".join(
+                    (f"linkage {a} → {b}%" if k == "linkage" else f"board cert unverifiable {a} → {b}") for k, (a, b) in _ov.items()) + "."})
         ctx.key_person_flag = bool(structured.get("key_person_flag", False))
 
         rankings = [_prac._build_practice_provider(r, run_profile) for r in structured.get("rankings", [])]
@@ -696,8 +748,10 @@ def run_individual(
         report_markdown=ctx.report_markdown,
     )
     result = AnalysisResult(**{**common, **adapter.extra_fields(ctx)})
+    if getattr(ctx, "physician_facts", None):
+        result.physician_facts = ctx.physician_facts
     if getattr(ctx, "website_facts", None):
-        result.website_facts = ctx.website_facts
+        result.website_facts = {k: v for k, v in ctx.website_facts.items() if k != "site_pages"}
         if getattr(ctx, "identity_override", None):
             result.website_facts = {**result.website_facts, "identity_override": ctx.identity_override}
     adapter.post_assemble(ctx, result)        # composites / MQCR battery (may rescore)

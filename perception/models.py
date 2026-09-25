@@ -321,6 +321,7 @@ class AnalysisResult(BaseModel):
     web_search_used: Optional[bool] = None          # False when the narrative was written without live search (fallback path)
     verified_quality: Optional[dict] = None         # CMS star / Leapfrog grade fetched in code (perception/data/quality.py)
     website_facts: Optional[dict] = None            # crawl-verified website facts + quality claims (perception/data/website_facts.py)
+    physician_facts: Optional[dict] = None          # NPI-registry linkage + certification statements (perception/data/physician_facts.py)
     owner_facts: Optional[dict] = None              # practice-attested facts (profiles claimed, review program, location count)
     profile_audit: Optional[dict] = None            # Google Business Profile completeness per confirmed location (Place Details)
 

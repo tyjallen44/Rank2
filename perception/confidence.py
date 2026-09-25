@@ -59,6 +59,9 @@ def score_confidence(result) -> Optional[dict]:
         reasons.append("no live web search (written from model knowledge)"); penalties += 2
     if getattr(result, "rubric_note", ""):
         reasons.append("hospital rubric enforced (analysis read the organization as a practice/clinic network — consider re-running as a practice or community health center)"); penalties += 1
+    pf = getattr(result, "physician_facts", None) or {}
+    if pf.get("status") == "measured":
+        reasons.append("physician facts verified from NPI registry + site")
     wf = getattr(result, "website_facts", None) or {}
     if wf.get("status") == "unreachable":
         reasons.append("website unreachable — machine-readability unverified"); penalties += 1

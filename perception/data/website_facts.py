@@ -103,6 +103,7 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
         "robots_allows_ai": not (snap.get("robots_blocks_ai") or snap.get("robots_blocks_all")),
         "schema_types": sorted(types)[:12],
         "claims": scan_claims(snap.get("text_sample") or ""),
+        "site_pages": [{"url": p.get("url"), "text": p.get("text") or ""} for p in kp if p.get("text")] + [{"url": url, "text": snap.get("text_sample") or ""}],
     }
     facts["breakdown"] = {
         "org_schema": BAND["org_schema"] if facts["org_schema"] else 0,
@@ -113,6 +114,18 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
         "robots_allows_ai": BAND["robots_allows_ai"] if facts["robots_allows_ai"] else 0,
     }
     facts["points"] = sum(facts["breakdown"].values())
+    # Physician bio pages: the hint crawl rarely reaches them; follow the provider directory one hop.
+    try:
+        bios = _fetch_bio_pages(url, [p.get("url") for p in kp if p.get("provider_page")])
+        if bios:
+            facts["site_pages"] = facts["site_pages"] + bios
+            facts["bio_pages"] = len(bios)
+            if not facts["physician_pages"]:
+                facts["physician_pages"] = len(bios)
+                facts["breakdown"]["physician_pages"] = BAND["physician_pages"]
+                facts["points"] = sum(facts["breakdown"].values())
+    except Exception:
+        pass
     # Even a readable site may challenge the named AI crawlers at the firewall; ask as each of them.
     facts["crawler_probe"] = probe_ai_crawlers(url)
     if facts["crawler_probe"]["blocked"] and not facts["crawler_probe"]["allowed"]:
@@ -121,6 +134,87 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
         facts["points"] = 0
         facts["breakdown"] = {k: 0 for k in facts["breakdown"]}
     return facts
+
+
+_DIRECTORY_PATHS = ("/doctors", "/providers", "/physicians", "/our-providers", "/our-doctors", "/our-team", "/team",
+                    "/find-a-doctor", "/find-a-provider", "/meet-our-team", "/meet-the-team", "/staff", "/surgeons")
+_CRED_TOKEN = re.compile(r"(^|[-/_])(md|do|dpm|pa|pa-c|np|dds|dmd|phd|dr)($|[-/_.])", re.I)
+_BIO_PATH = re.compile(r"(/dr-|/team/|/staff/|/physician[s]?/|/provider[s]?/|/doctor[s]?/|/bio[s]?/|/people/)", re.I)
+
+
+def _last_token(path: str) -> str:
+    return (path.rstrip("/").rsplit("/", 1)[-1] or "").lower()
+
+
+def _fetch_bio_pages(site_url: str, directory_urls: list, *, max_bios: int = 12, physician_names: list | None = None) -> list:
+    """Find the provider directory (known key pages first, then common paths; headless browser when
+    the listing is script-rendered) and read physician bio pages linked from it. Links are ranked:
+    (1) path or link text contains a known physician's last name, (2) path carries a credential
+    token (-md, -do, -dpm, -pa…) or a bio-style path, (3) nothing else. Returns [{url, text}]."""
+    from urllib.parse import urljoin, urlparse
+    from bs4 import BeautifulSoup
+    from ..content_analyzer import _client, _origin, _norm_url, _BrowserFetcher
+    origin = _origin(site_url)
+    lasts = sorted({(n or "").strip().split()[-1].lower() for n in (physician_names or []) if (n or "").strip()}, key=len, reverse=True)
+    out, seen = [], set()
+    with _client() as client:
+        candidates = [u for u in (directory_urls or []) if u] + [origin + p for p in _DIRECTORY_PATHS]
+        dir_html, dir_url = None, None
+        for u in candidates:
+            try:
+                r = client.get(u)
+                if r.status_code == 200 and "text/html" in r.headers.get("content-type", "") and len(r.text) > 2000:
+                    dir_html, dir_url = r.text, str(r.url); seen.add(_norm_url(u)); seen.add(_norm_url(dir_url)); break
+            except Exception:
+                continue
+        if not dir_html:
+            return out
+
+        def _rank_links(html):
+            soup = BeautifulSoup(html, "html.parser")
+            ranked = []
+            for a in soup.find_all("a", href=True):
+                href = urljoin(origin, a["href"])
+                if urlparse(href).netloc != urlparse(origin).netloc or _norm_url(href) in seen:
+                    continue
+                path = urlparse(href).path
+                if not path or path.rstrip("/").endswith(tuple(_DIRECTORY_PATHS)):
+                    continue
+                tok, text = _last_token(path), (a.get_text(" ", strip=True) or "").lower()
+                score = 0
+                if lasts and any(re.search(r"(^|[-_/ ])" + re.escape(l) + r"($|[-_/ .,])", tok) or (l in text and len(text) < 60) for l in lasts):
+                    score = 3
+                elif _CRED_TOKEN.search(tok) or _BIO_PATH.search(path):
+                    score = 2
+                if score:
+                    seen.add(_norm_url(href)); ranked.append((score, href))
+            ranked.sort(key=lambda x: -x[0])
+            return [h for _, h in ranked]
+
+        links = _rank_links(dir_html)
+        if not links:                                   # script-rendered listing → render it
+            b = _BrowserFetcher()
+            try:
+                html, _st = b.fetch_html(dir_url or candidates[0])
+                if html:
+                    links = _rank_links(html)
+            except Exception:
+                pass
+            finally:
+                try:
+                    b.close()
+                except Exception:
+                    pass
+        for href in links[:max_bios]:
+            try:
+                r = client.get(href)
+                if r.status_code == 200 and "text/html" in r.headers.get("content-type", ""):
+                    t = BeautifulSoup(r.text, "html.parser").get_text(" ", strip=True)
+                    if len(t) > 300:
+                        out.append({"url": href, "text": t[:20000]})
+            except Exception:
+                continue
+    return out
 
 
 _GRADE = r"(?:grade|graded|rated)\s*(?:of\s*)?[\"'\u201c\u2018]?([A-F])[\"'\u201d\u2019]?\b|\b(?:an?\s+)?[\"'\u201c\u2018]?([A-F])[\"'\u201d\u2019]?\s+(?:hospital\s+)?safety\s+grade"
