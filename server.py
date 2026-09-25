@@ -1265,6 +1265,8 @@ def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
         set_run_role(result.run_id, job["role"], _job_ran_by(job))
         if job.get("tracked_entity_id") and etype == "hospital":
             _note_method_change(job["tracked_entity_id"], result)
+        if job.get("tracked_entity_id") and is_practice:
+            _note_method_change_practice(job["tracked_entity_id"], result)
 
         if not job.get("skip_pdf"):
             if job.get("spotcheck") and not is_fqhc:
@@ -1511,6 +1513,42 @@ def _note_method_change(entity_id: str, result) -> None:
         add_annotation(entity_id, _date.today(), note, "system")
     except Exception as exc:
         print(f"[trend-note] method-change note failed entity={entity_id}: {type(exc).__name__}: {exc}", flush=True)
+
+
+def _note_method_change_practice(entity_id: str, result) -> None:
+    """Tracked practices / service lines: the first snapshot whose Identity pillar rests on measured
+    website facts (crawl) and/or NPI-registry physician linkage gets a dated 'Method changed' note,
+    so a step in Identity & Machine-Readability is explained. Idempotent, fail-soft, skipped on a
+    first snapshot."""
+    try:
+        wf = getattr(result, "website_facts", None) or {}
+        pf = getattr(result, "physician_facts", None) or {}
+        w_ok = wf.get("status") in ("measured", "blocked")
+        p_ok = pf.get("status") == "measured" and pf.get("linkage_pct") is not None
+        if not (w_ok or p_ok):
+            return
+        from datetime import date as _date
+        from perception.db import get_tracked_entity, get_entity_trend, list_annotations, add_annotation
+        ent = get_tracked_entity(entity_id)
+        if not ent:
+            return
+        if any("Method changed (identity)" in (a.get("note") or "") for a in list_annotations(entity_id)):
+            return
+        prior = [p for p in get_entity_trend(ent["entity_name"]) if p.get("run_id") != result.run_id]
+        if not prior:
+            return
+        bits = []
+        if w_ok:
+            bits.append("the website's machine-readability is measured by crawling it"
+                        + (f" ({wf.get('points')}/20 verified)" if wf.get("status") == "measured" else " (the site blocks AI crawlers: 0/20)"))
+        if p_ok:
+            bits.append(f"physician-to-practice linkage is read from the NPI registry ({pf['linkage_pct']}% of {pf.get('checked')} physicians linked)")
+        note = ("Method changed (identity): from this snapshot, " + " and ".join(bits) +
+                " instead of the model's estimate. A step in Identity & Machine-Readability on this date reflects the measurement, "
+                "not a change at the practice.")
+        add_annotation(entity_id, _date.today(), note, "system")
+    except Exception as exc:
+        print(f"[trend-note] identity method-change note failed entity={entity_id}: {type(exc).__name__}: {exc}", flush=True)
 
 
 def _run_confidence(result) -> Optional[dict]:
@@ -2330,8 +2368,33 @@ async def network_resolve_facility(req: FacilityResolveRequest, _: dict = Depend
     return await asyncio.get_running_loop().run_in_executor(None, _go)
 
 
+class RosterAdditionRequest(BaseModel):
+    network_name: str = ""
+    name: str
+    city: str = ""
+    state: str = ""
+    beds: Optional[int] = None
+    place_id: Optional[str] = None
+    address: str = ""                       # practice / community health locations
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+
+
+class RosterRemovalRequest(BaseModel):
+    name: str = ""
+    city: str = ""
+    place_id: Optional[str] = None
+
+
+_ROLLUP_TYPES = ("hospital_network", "practice", "service_line", "community_health")
+
+
+def _roster_note_word(ent: dict) -> str:
+    return "facilities" if (ent.get("entity_type") or "hospital") == "hospital_network" else "locations"
+
+
 @app.post("/api/track/entities/{entity_id}/roster/add")
-async def track_roster_add(entity_id: str, req: "RosterAdditionRequest", payload: dict = Depends(get_current_user_payload)):
+async def track_roster_add(entity_id: str, req: RosterAdditionRequest, payload: dict = Depends(get_current_user_payload)):
     """Add a hospital the AI missed to a tracked Hospital Network's fixed roster. The change is
     recorded as a dated trend note ("Roster changed: …") so the step is visible on the chart and
     in the Trend Report, and the addition is remembered for future discoveries of the system."""
@@ -2447,31 +2510,6 @@ async def practice_resolve_location(req: LocationResolveRequest, _: dict = Depen
                 "rating": best.get("rating"), "review_count": best.get("review_count"), "maps_url": best.get("maps_url"),
                 "business_status": best.get("business_status")}
     return await asyncio.get_running_loop().run_in_executor(None, _go)
-
-
-class RosterAdditionRequest(BaseModel):
-    network_name: str = ""
-    name: str
-    city: str = ""
-    state: str = ""
-    beds: Optional[int] = None
-    place_id: Optional[str] = None
-    address: str = ""                       # practice / community health locations
-    rating: Optional[float] = None
-    review_count: Optional[int] = None
-
-
-class RosterRemovalRequest(BaseModel):
-    name: str = ""
-    city: str = ""
-    place_id: Optional[str] = None
-
-
-_ROLLUP_TYPES = ("hospital_network", "practice", "service_line", "community_health")
-
-
-def _roster_note_word(ent: dict) -> str:
-    return "facilities" if (ent.get("entity_type") or "hospital") == "hospital_network" else "locations"
 
 
 @app.post("/api/network/additions")

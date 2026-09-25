@@ -3277,3 +3277,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 
 - **T1** Deep Diagnostic → Advanced options: no "Website URL (optional — overrides…)" field. The only website field is "Website — confirm or correct (required)" under the report title; it drives the crawl, the AI-access check and the content analysis. [ui]
 - **R1** Runs still produce the content analysis and prescription against the confirmed site. [pdf]
+
+## FIX-ROSTER-REMOVE + TREND-METHOD-NOTE-PRACTICE
+
+**Context:** the Manage roster "Remove" button (and its endpoint) has returned HTTP 422 since it shipped on 2026-09-22 — the request model was declared below the route, so the body was read as a missing query parameter. Both roster request models now sit above their routes. Also: tracked practices / service lines get a dated "Method changed (identity)" note on the first snapshot whose Identity pillar rests on measured website facts and/or NPI-registry physician linkage. Not deployed.
+
+- **T1** Trends → Details → Manage roster → Remove on a location: the row disappears, the count drops, a dated "Roster changed: removed…" note is recorded (no error). Add still works. [ui]
+- **T2** Trends → Run now on a practice tracked before this rollout: a note "Method changed (identity): from this snapshot, the website's machine-readability is measured by crawling it (N/20 verified) and physician-to-practice linkage is read from the NPI registry (X% of N physicians linked) instead of the model's estimate…" appears once; a second run adds no second note; a practice's first-ever snapshot gets none. Hospitals keep the existing quality note only. [ui][pdf]
