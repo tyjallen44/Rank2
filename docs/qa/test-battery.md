@@ -3284,3 +3284,23 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 
 - **T1** Trends → Details → Manage roster → Remove on a location: the row disappears, the count drops, a dated "Roster changed: removed…" note is recorded (no error). Add still works. [ui]
 - **T2** Trends → Run now on a practice tracked before this rollout: a note "Method changed (identity): from this snapshot, the website's machine-readability is measured by crawling it (N/20 verified) and physician-to-practice linkage is read from the NPI registry (X% of N physicians linked) instead of the model's estimate…" appears once; a second run adds no second note; a practice's first-ever snapshot gets none. Hospitals keep the existing quality note only. [ui][pdf]
+
+## DOCS-AI-ACCESS — help topics, Learn and Release Notes cover the website-hidden-from-AI work (2026-09-25)
+
+**Scope:** documentation only (`web/index.html` help topics + release notes, `perception/learn_seed.py`). No pipeline change. NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic form → "Website — confirm or correct (required)" heading | An "ⓘ Why?" link is present; clicking opens the *Confirm the website* help; its crawl bullet links to *When AI assistants cannot read a website*. |
+| T2 | Hospital Network form → "System website — confirm or correct (required)" | Same "ⓘ Why?" link and help. |
+| T3 | Help → *When AI assistants cannot read a website* (`ai-access`) | Names GPTBot, ChatGPT-User, ClaudeBot, PerplexityBot, Google-Extended + browser; explains a browser still gets in; says firewall/bot-management, not robots.txt; lists where the notice appears (page 1 red/amber, DD What to Do First, Network HIGH finding + Full Detail, Score Evidence, completion screen). |
+| T4 | Completion panel after a run whose site blocks AI crawlers | The red notice's footer carries a link "What this means and how to explain it" that opens the `ai-access` help. |
+| T5 | Help → *Score Evidence* | Lists "Website unreachable", "Website facts verified by crawl (N/20)", "Website blocks AI crawlers (verified)", "Physician facts verified from NPI registry + site", "Website quality claims checked by crawl"; two inline help links work. |
+| T6 | Help → *Practice composite* | Ends with a link to *Physicians Checked (NPI registry)*; that topic explains linked = registry location matches a confirmed location, sample of 12, ambiguous/not found excluded, certification column informational, "Method changed (identity)" note. |
+| T7 | Help → *Sources* | Leapfrog bullet now describes hospitalsafetygrade.org city listing, monthly cache, graded / not graded this cycle / not found / unavailable, and no "declined the survey" inference; "If your website cannot be read" links to `ai-access`. |
+| T8 | Help → Trends *Notes* and *Needs attention* | System notes (Method changed, Method changed (identity), Roster changed) described; attention topic says a fall coinciding with a Method changed note is the measurement, not the organization. |
+| T9 | Release Notes page + sidebar | "Pulse Version 1.10", entry "Released September 25, 2026" above the untouched 1.09 entry; new features: AI-access notice, website facts measured, Physicians Checked, confirm the website; improvements: Leapfrog lookup, Trends method notes, executive sections; fixes list. `GET /api/version` reports 1.10. |
+| T10 | Learn (after `apply-learn-content` on prod) | Deep Diagnostic article: named crawlers + firewall bullet, Physicians Checked bullet, confirm-the-website bullet. Hospital Network: "Confirm the system website" paragraph. Where the signals come from: Leapfrog city-listing bullet, NPPES linkage sentence, crawl bullet names the crawlers. Trends: system notes sentence. How to run: "confirm the listing, the website and the locations". |
+| R1 | Regression | All other help topics unchanged; DD and Network forms still gate Run on the website tick; `node` parse of every inline script passes; pytest unchanged (same 15 pre-existing failures, 349 pass). |
+
+[code] `web/index.html` `_HELP_TOPICS` (`ai-access`, `physician-facts` new; `website-confirm`, `sources`, `score-evidence`, `practice-composite`, `trend-notes`, `trend-attention` edited); `server._APP_VERSION = "1.10"`; `perception/learn_seed.py` six articles.

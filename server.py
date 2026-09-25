@@ -241,7 +241,7 @@ async def me(payload: dict = Depends(get_current_user_payload)):
     }
 
 
-_APP_VERSION = "1.09"
+_APP_VERSION = "1.10"
 _SERVER_STARTED = time.time()
 _SERVER_START = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
