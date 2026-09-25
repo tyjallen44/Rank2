@@ -6,7 +6,8 @@ def test_linkage_and_cert_from_stubbed_registry(monkeypatch):
         rec = lambda npi, z: {"number": npi, "addresses": [{"address_purpose": "LOCATION", "postal_code": z}]}
         return {"Ann Linked": [rec("1", "89121")], "Bob Elsewhere": [rec("2", "10001")], "Cy Ambiguous": [rec("3", "89121"), rec("4", "89121")], "Dee Missing": []}[name]
     monkeypatch.setattr(pf, "_nppes_lookup_physician", fake_lookup)
-    pages = [{"url": "x", "text": "Dr. Ann Linked is board certified by the American Board of Orthopaedic Surgery. Bob Elsewhere joined in 2019."}]
+    filler = " Our clinic offers comprehensive orthopaedic care across the valley." * 8
+    pages = [{"url": "x", "text": "Dr. Ann Linked is board certified by the American Board of Orthopaedic Surgery." + filler + " Bob Elsewhere joined in 2019 and sees patients on Tuesdays."}]
     f = pf.verify_physicians([{"name": n} for n in ("Ann Linked", "Bob Elsewhere", "Cy Ambiguous", "Dee Missing")],
                              [{"address": "2800 E Desert Inn Rd, Las Vegas, NV 89121"}], "NV", pages)
     assert f["status"] == "measured" and f["checked"] == 2 and f["linked"] == 1 and f["linkage_pct"] == 50

@@ -86,8 +86,10 @@ def verify_physicians(physicians: list, roster_locations: list, state: str, site
         # certification statement on the practice's own pages, near the physician's last name
         last = name.split()[-1]
         if page_text and last:
+            # Only the sentence run around each mention counts (≈250 chars), so one certified
+            # colleague's statement on a shared directory page is not credited to a neighbour.
             near = [m.start() for m in re.finditer(re.escape(last), page_text, re.I)]
-            row["cert_stated"] = any(_CERT_RE.search(page_text[max(0, i - 600): i + 600]) for i in near[:20]) if near else False
+            row["cert_stated"] = any(_CERT_RE.search(page_text[max(0, i - 250): i + 250]) for i in near[:20]) if near else False
         rows.append(row)
     checked = [r for r in rows if r["linked"] is not None]
     linked = sum(1 for r in checked if r["linked"])
