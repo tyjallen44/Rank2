@@ -3304,3 +3304,18 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | R1 | Regression | All other help topics unchanged; DD and Network forms still gate Run on the website tick; `node` parse of every inline script passes; pytest unchanged (same 15 pre-existing failures, 349 pass). |
 
 [code] `web/index.html` `_HELP_TOPICS` (`ai-access`, `physician-facts` new; `website-confirm`, `sources`, `score-evidence`, `practice-composite`, `trend-notes`, `trend-attention` edited); `server._APP_VERSION = "1.10"`; `perception/learn_seed.py` six articles.
+
+## WEBSITE-GATE-VISIBLE — the required website confirmation cannot be missed (2026-09-25)
+
+**Scope:** `web/index.html` only (Deep Diagnostic step 3 and Hospital Network roster step). NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic → pick an organization → step 3 | The Website box is an amber panel with a badge "STEP REQUIRED BEFORE YOU RUN", a large checkbox in its own outlined pill labelled "Yes, this is their website". |
+| T2 | Scroll to Run Diagnostic without ticking | The button is dimmed but clickable; beside it an amber hint "⚠ Confirm the website first — take me there". Clicking the hint link or the button scrolls the page to the box, which pulses twice, and focuses the checkbox (or the address field if empty). The error line under Run also names the tick. |
+| T3 | Tick the box | Panel turns pale teal, badge reads "✓ Website confirmed", hint disappears, Run is full-strength. Editing the address unticks and returns to amber. |
+| T4 | Hospital Network → Find → roster step | Same amber panel ("System website") above the roster; same hint beside Run Hospital Network (which sits below the roster list). Same jump-and-pulse on click. |
+| T5 | Community Health / no-website org | Enter `none` on a Deep Diagnostic and tick — gate clears as before. |
+| R1 | Regression | While a run is starting ("Starting…" / "Discovering locations…") the button is truly disabled and the hint is hidden; after a failed start or after discovery finishes, the gate repaints correctly. Duplicate-run guard, Force re-run and spot-check checkbox unaffected. Help topic *Confirm the website* text refers to "Yes, this is their website". |
+
+[code] CSS `.web-confirm/.done/.attn/.wc-badge`, `.btn-gated`, `.run-gate-hint`; JS `_websiteGatePaint(prefix, confirmed, busy)`, `_websiteGateAttention(prefix)`; `_npWebsiteChanged`, `_irRefreshRunGate`, `runIndividual`, `npRunAnalysis`, `npReset` call them.

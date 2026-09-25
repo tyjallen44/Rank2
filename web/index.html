@@ -316,6 +316,21 @@ input[type="url"]::placeholder, textarea::placeholder {
 }
 .btn:active { opacity: 0.82; transform: scale(0.98); }
 .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+/* Website confirmation gate: the box is an amber "step required" panel until ticked; the Run button stays clickable but dimmed so a click can point back at the box */
+.web-confirm { margin-top:10px; padding:12px 14px; border-radius:8px; border:2px solid #d9a000; background:#fff8e6; transition:background .2s,border-color .2s; }
+.web-confirm.done { border-color:var(--teal); background:#f2faf7; }
+.web-confirm .wc-badge { display:inline-block; font-size:10.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; padding:2px 8px; border-radius:10px; background:#d9a000; color:#fff; margin-right:8px; vertical-align:middle; }
+.web-confirm.done .wc-badge { background:var(--teal); }
+.web-confirm .aggregate-toggle { padding:6px 10px; border:1.5px solid #d9a000; border-radius:6px; background:#fff; }
+.web-confirm.done .aggregate-toggle { border-color:var(--teal); }
+.web-confirm .aggregate-toggle input[type=checkbox] { width:20px; height:20px; }
+.web-confirm .agg-label { color:var(--text); font-weight:600; }
+.web-confirm.done .agg-label { color:var(--teal); }
+.web-confirm.attn { animation: wc-attn 0.9s ease-out 2; }
+@keyframes wc-attn { 0%{box-shadow:0 0 0 0 rgba(217,160,0,0.7)} 60%{box-shadow:0 0 0 10px rgba(217,160,0,0)} 100%{box-shadow:0 0 0 0 rgba(217,160,0,0)} }
+.btn-gated { opacity:0.45; cursor:pointer; transform:none; box-shadow:none; }
+.run-gate-hint { font-size:12.5px; color:#8a5a00; font-weight:600; }
+.run-gate-hint a { color:#8a5a00; text-decoration:underline; }
 .btn-primary  { background: var(--teal);    color: #fff; }
 .btn-primary:hover:not(:disabled)  { background: var(--teal-mid); }
 .btn-gold     { background: var(--seafoam); color: var(--teal); font-weight: 700; }
@@ -1684,11 +1699,11 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <input type="text" id="ir-custom-title" class="hidden" placeholder="Report title…" oninput="onIrTitleInput(this.value)" onblur="irHideTitleEdit()" onkeydown="if(event.key==='Enter'||event.key==='Escape')this.blur()"
             style="width:100%;box-sizing:border-box;font-size:15px;font-weight:700;color:var(--teal);padding:9px 12px;border:1.5px solid var(--border);border-radius:6px;outline:none;background:#fff">
           <div id="ir-selected-display" style="font-size:12px;color:var(--text);margin-top:6px"></div>
-          <div id="ir-website-wrap" style="margin-top:10px;padding:10px 12px;background:#fff;border:1.5px solid var(--border);border-radius:8px">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:4px">Website <span style="font-weight:400;text-transform:none;letter-spacing:0">— confirm or correct <span style="color:#b42318">(required)</span></span> <a href="#" class="help-link" onclick="showHelp('website-confirm',event);return false">ⓘ Why?</a></div>
+          <div id="ir-website-wrap" class="web-confirm">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px"><span class="wc-badge" id="ir-website-badge">Step required before you run</span>Website <span style="font-weight:400;text-transform:none;letter-spacing:0">— confirm or correct</span> <a href="#" class="help-link" onclick="showHelp('website-confirm',event);return false">ⓘ Why?</a></div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <input id="ir-website" class="fi" type="url" placeholder="https://www.example.org" style="flex:1;min-width:260px;padding:8px 10px;font-size:13px" oninput="_irWebsiteEdited()">
-              <label class="aggregate-toggle" style="margin:0" title="Confirm this is the organization's own website. It is crawled for the report and used for the content analysis."><input type="checkbox" id="ir-website-ok" onchange="_irWebsiteChanged()"><span class="agg-label">This is their website</span></label>
+              <label class="aggregate-toggle" style="margin:0" title="Confirm this is the organization's own website. It is crawled for the report and used for the content analysis."><input type="checkbox" id="ir-website-ok" onchange="_irWebsiteChanged()"><span class="agg-label">Yes, this is their website</span></label>
             </div>
             <div id="ir-website-note" style="font-size:11.5px;color:var(--muted);margin-top:4px">Looking up the website…</div>
           </div>
@@ -1799,6 +1814,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <button class="btn btn-primary" id="ir-run-btn" onclick="runIndividual()">
             Run Diagnostic →
           </button>
+          <span class="run-gate-hint" id="ir-run-gate-hint">⚠ Confirm the website first — <a href="#" onclick="_websiteGateAttention('ir');return false">take me there</a></span>
           <span style="font-size:12px;color:var(--muted)">Produces the report (with content analysis and a drafted prescription) and a teaser<span id="ir-auto-composite-note" class="hidden">, plus the per-location reputation table</span>.</span>
         </div>
       </div>
@@ -1988,20 +2004,21 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           All facilities found are included. Run now, or review the roster to exclude any.
         </p>
         <div id="np-roster-summary" style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:12px"></div>
-        <div id="np-website-wrap" style="margin:0 0 12px;padding:10px 12px;background:#fff;border:1.5px solid var(--border);border-radius:8px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:4px">System website <span style="font-weight:400;text-transform:none;letter-spacing:0">— confirm or correct <span style="color:#b42318">(required)</span></span> <a href="#" class="help-link" onclick="showHelp('website-confirm',event);return false">ⓘ Why?</a></div>
+        <div id="np-website-wrap" class="web-confirm" style="margin:0 0 12px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:6px"><span class="wc-badge" id="np-website-badge">Step required before you run</span>System website <span style="font-weight:400;text-transform:none;letter-spacing:0">— confirm or correct</span> <a href="#" class="help-link" onclick="showHelp('website-confirm',event);return false">ⓘ Why?</a></div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <input id="np-website" class="fi" type="url" placeholder="https://www.healthsystem.org" style="flex:1;min-width:260px;padding:8px 10px;font-size:13px" oninput="_npWebsiteEdited()">
-            <label class="aggregate-toggle" style="margin:0" title="Confirm this is the health system's own website. It is crawled for the report and used for the content analysis."><input type="checkbox" id="np-website-ok" onchange="_npWebsiteChanged()"><span class="agg-label">This is their website</span></label>
+            <label class="aggregate-toggle" style="margin:0" title="Confirm this is the health system's own website. It is crawled for the report and used for the content analysis."><input type="checkbox" id="np-website-ok" onchange="_npWebsiteChanged()"><span class="agg-label">Yes, this is their website</span></label>
           </div>
           <div id="np-website-note" style="font-size:11.5px;color:var(--muted);margin-top:4px">Looking up the website…</div>
         </div>
         <div id="np-roster-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
         <div id="np-roster-add" style="margin-top:8px"></div>
         <div id="np-step2-err" class="err hidden mt8"></div>
-        <div style="display:flex;gap:10px;margin-top:16px">
+        <div style="display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap">
           <button class="btn btn-secondary" onclick="npReset()">← Back</button>
           <button class="btn btn-primary" id="np-run-btn" onclick="npRunAnalysis()">Run Hospital Network →</button>
+          <span class="run-gate-hint" id="np-run-gate-hint">⚠ Confirm the system website above first — <a href="#" onclick="_websiteGateAttention('np');return false">take me there</a></span>
         </div>
       </div>
     </div>
@@ -4786,7 +4803,7 @@ function npReset() {
   const findBtn = document.getElementById('np-find-btn');
   if (findBtn) { findBtn.disabled = false; findBtn.textContent = cfg.findBtn; }
   const runBtn = document.getElementById('np-run-btn');
-  if (runBtn)  { runBtn.disabled  = false; runBtn.textContent  = 'Run Hospital Network →'; }
+  if (runBtn)  { runBtn.disabled  = false; runBtn.textContent  = 'Run Hospital Network →'; _npWebsiteChanged(); }
 }
 
 async function npFindFacilities() {
@@ -4882,10 +4899,30 @@ async function _npWebsiteLookup(networkName) {
   } catch (_) { note.textContent = 'Could not look up the website — enter it and tick the box.'; }
 }
 function _npWebsiteEdited() { const ok = document.getElementById('np-website-ok'); if (ok) ok.checked = false; _npWebsiteChanged(); }
+// Website gate (shared by Deep Diagnostic 'ir' and Hospital Network 'np'): paints the confirm box amber/teal,
+// swaps the badge, shows the hint beside Run, and dims (but does not disable) the Run button so a click can
+// scroll back to the box instead of doing nothing.
+function _websiteGatePaint(prefix, confirmed, busy) {
+  const wrap = document.getElementById(prefix + '-website-wrap'), badge = document.getElementById(prefix + '-website-badge'),
+        hint = document.getElementById(prefix + '-run-gate-hint'), btn = document.getElementById(prefix + '-run-btn');
+  if (wrap) wrap.classList.toggle('done', !!confirmed);
+  if (badge) badge.textContent = confirmed ? '✓ Website confirmed' : 'Step required before you run';
+  if (hint) hint.classList.toggle('hidden', !!confirmed || !!busy);
+  if (btn && !busy) {
+    btn.classList.toggle('btn-gated', !confirmed); btn.setAttribute('aria-disabled', confirmed ? 'false' : 'true');
+    btn.title = confirmed ? '' : 'Confirm the website first (tick the box next to it)';
+  }
+}
+function _websiteGateAttention(prefix) {
+  const wrap = document.getElementById(prefix + '-website-wrap'); if (!wrap) return;
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  wrap.classList.remove('attn'); void wrap.offsetWidth; wrap.classList.add('attn');
+  setTimeout(() => { const ok = document.getElementById(prefix + '-website-ok'); const inp = document.getElementById(prefix + '-website');
+    if (inp && !(inp.value || '').trim()) inp.focus(); else if (ok) ok.focus(); }, 450);
+}
 function _npWebsiteChanged() {
-  const ok = document.getElementById('np-website-ok'), wrap = document.getElementById('np-website-wrap'), btn = document.getElementById('np-run-btn');
-  if (wrap) wrap.style.borderColor = (ok && ok.checked) ? 'var(--teal)' : 'var(--border)';
-  if (btn && !btn.textContent.includes('Starting')) { btn.disabled = !_npWebsiteConfirmed(); btn.title = _npWebsiteConfirmed() ? '' : 'Confirm the system\'s website first (tick the box next to it)'; }
+  const btn = document.getElementById('np-run-btn');
+  _websiteGatePaint('np', _npWebsiteConfirmed(), !!(btn && btn.textContent.includes('Starting')));
 }
 function _npWebsiteConfirmed() {
   const v = (document.getElementById('np-website')?.value || '').trim();
@@ -4951,8 +4988,8 @@ async function npRunAnalysis() {
   const errEl = document.getElementById('np-step2-err');
   errEl.classList.add('hidden');
   if (!_npWebsiteConfirmed()) {
-    errEl.textContent = 'Confirm the system\'s website first: check the address shown (or enter the right one) and tick "This is their website".';
-    errEl.classList.remove('hidden'); document.getElementById('np-website')?.focus(); return;
+    errEl.textContent = 'Confirm the system\'s website first: check the address shown above (or enter the right one) and tick "Yes, this is their website".';
+    errEl.classList.remove('hidden'); _websiteGateAttention('np'); return;
   }
 
   // Collect checked facilities
@@ -5002,6 +5039,7 @@ async function npRunAnalysis() {
     errEl.classList.remove('hidden');
     btn.disabled = false;
     btn.textContent = 'Run Hospital Network →';
+    _npWebsiteChanged();
   }
 }
 
@@ -6628,11 +6666,7 @@ async function _irWebsiteLookup() {
   } catch (_) { note.textContent = 'Could not look up the website — enter it and tick the box.'; }
 }
 function _irWebsiteEdited() { const ok = document.getElementById('ir-website-ok'); if (ok) { ok.checked = false; } _irWebsiteChanged(); }
-function _irWebsiteChanged() {
-  const ok = document.getElementById('ir-website-ok'), wrap = document.getElementById('ir-website-wrap');
-  if (wrap) wrap.style.borderColor = (ok && ok.checked) ? 'var(--teal)' : 'var(--border)';
-  _irRefreshRunGate();
-}
+function _irWebsiteChanged() { _irRefreshRunGate(); }
 function _irWebsiteValue() {
   const v = (document.getElementById('ir-website')?.value || '').trim();
   return v.toLowerCase() === 'none' ? '' : v;
@@ -6642,17 +6676,16 @@ function _irWebsiteConfirmed() {
   return !!document.getElementById('ir-website-ok')?.checked && (v.toLowerCase() === 'none' || /^(https?:\/\/)?[a-z0-9.-]+\.[a-z]{2,}/i.test(v));
 }
 function _irRefreshRunGate() {
-  const btn = document.getElementById('ir-run-btn'); if (!btn || btn.innerHTML.includes('spinner')) return;
-  const okW = _irWebsiteConfirmed();
-  btn.disabled = !okW; btn.title = okW ? '' : 'Confirm the organization\'s website first (tick the box next to it)';
+  const btn = document.getElementById('ir-run-btn');
+  _websiteGatePaint('ir', _irWebsiteConfirmed(), !!(btn && btn.innerHTML.includes('spinner')));
 }
 
 async function runIndividual() {
   if (!_irSelected) return;
   if (!_irWebsiteConfirmed()) {
     const errEl = document.getElementById('ir-run-err');
-    errEl.textContent = 'Confirm the organization\'s website first: check the address shown (or enter the right one) and tick "This is their website".';
-    errEl.classList.remove('hidden'); document.getElementById('ir-website')?.focus(); return;
+    errEl.textContent = 'Confirm the organization\'s website first: check the address shown above (or enter the right one) and tick "Yes, this is their website".';
+    errEl.classList.remove('hidden'); _websiteGateAttention('ir'); return;
   }
   if (!document.getElementById('ir-force-rerun')?.checked
       && await _dupGate('analysis', { name: _irSelected.name, city: _irResolvedCity || '' }, 'ir-run-err', runIndividual)) return;
@@ -6992,7 +7025,7 @@ async function runManual() {
     _lastPage = 'new';
     startProgress(job_id, label, false);
   } catch(e) { showErr(errEl, e.message); }
-  finally { btn.disabled = false; btn.innerHTML = 'Run Diagnostic →'; }
+  finally { btn.disabled = false; btn.innerHTML = 'Run Diagnostic →'; _irRefreshRunGate(); }
 }
 
 // ── CSV upload ────────────────────────────────────────────────────────────
