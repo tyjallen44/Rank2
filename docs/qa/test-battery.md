@@ -3319,3 +3319,20 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | R1 | Regression | While a run is starting ("Starting…" / "Discovering locations…") the button is truly disabled and the hint is hidden; after a failed start or after discovery finishes, the gate repaints correctly. Duplicate-run guard, Force re-run and spot-check checkbox unaffected. Help topic *Confirm the website* text refers to "Yes, this is their website". |
 
 [code] CSS `.web-confirm/.done/.attn/.wc-badge`, `.btn-gated`, `.run-gate-hint`; JS `_websiteGatePaint(prefix, confirmed, busy)`, `_websiteGateAttention(prefix)`; `_npWebsiteChanged`, `_irRefreshRunGate`, `runIndividual`, `npRunAnalysis`, `npReset` call them.
+
+## LOC-IMPORT-SOCIALCLIMB — "Add locations from your own list" takes the SocialClimb Google Profiles export as-is (2026-09-25)
+
+**Scope:** `web/index.html` (importer used on the Deep Diagnostic Locations step and the Trends add-entity flow), help topic *Add locations from your own list*, Learn Deep Diagnostic sentence. Sample file: a SocialClimb "Google Profiles (…).csv" (columns id, name, Address, Business Group, score, count, average, invites, website, phones, views, Google Profile id, url; one row per profile; street address only; Windows-1252 encoded). NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic (practice) → Locations → "＋ Add locations from your own list" | Panel opens with two option cards; **Upload the SocialClimb export** is first and selected; a dashed teal drop zone says "Choose the SocialClimb file (Google Profiles ….csv) or drop it here" with the "Google Profiles → Export" hint. |
+| T2 | Choose (or drag in) the Optim SocialClimb file | Summary "116 profiles → 18 office locations · 100 physician profiles folded into their offices · 1 profile in another business group left unticked (Will Dent) · 1 without a usable address skipped." Preview lists offices ticked; "Optim Orthopedics: Brunswick" (filed under Will Dent but at a main address) is ticked; "Premier Private Jets" is unticked and labelled "other business group"; four rows named "Optim Orthopedics" carry "(office named from its physician profiles)". En dashes in names render correctly (encoding retry). |
+| T3 | Match to Google listings → | Each ticked row resolves via `/api/practice/resolve-location` with the form's state; the roster gains the offices with Google names, ratings and counts; the two spellings of 101 W Mulberry Blvd collapse to one listing; toast reports added / not found. |
+| T4 | Upload a non-SocialClimb CSV in the SocialClimb card | Switches to **Any other list** with the message "not a SocialClimb Google Profiles export … treating it as a plain list"; text lands in the textarea. |
+| T5 | Upload the SocialClimb file through **Any other list → Upload CSV** | Recognised by its headers and handled as in T2 (card switches to SocialClimb). |
+| T6 | Trends → Track new entity (practice) → same link | Identical behaviour. |
+| T7 | Help ⓘ How this works | First bullet describes the SocialClimb export and how physicians are folded / addresses merged / other groups left unticked. |
+| R1 | Regression | Paste "Name, Address" lines and plain CSVs with a name column still import exactly as before; Cancel restores the link; existing roster entries are skipped. |
+
+[code] `_locImportOpen` (mode cards), `_locImportMode`, `_locImportFile(containerId, file, pane)` (UTF-8 → windows-1252 retry, signature detection), `_csvTable`, `_scIsExport`, `_scIsPhysician`, `_scAddrKey`, `_scDerive`, `_scLoad`, `_locImportRun` (sc rows from ticked preview).
