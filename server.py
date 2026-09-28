@@ -503,35 +503,41 @@ def _run_ai_access_scan_job(job_id: str, scan_id: str, rows: list[dict]) -> None
         _put(loop, queue, None)
 
 
-@app.post("/api/admin/ai-access-scan")
-async def admin_ai_access_scan_start(file: UploadFile = File(...), label: str = Form(""),
-                                     payload: dict = Depends(require_admin)):
-    raw = await file.read()
-    rows = _aas_parse_csv(raw)
-    if not rows:
-        raise HTTPException(400, "No rows with a name column found in that file.")
+def _start_ai_access_scan(rows: list[dict], label: str, payload: dict) -> dict:
+    """Create the scan record + background job. Shared by the upload route and the
+    automatic scan that follows every finished Event Prep run."""
     from perception.db import init_db, create_ai_access_scan
     init_db()
     scan_id = uuid.uuid4().hex[:12]
-    create_ai_access_scan(scan_id, (label or "").strip() or (file.filename or "list.csv"), len(rows),
-                          payload.get("email") or payload.get("role") or "admin")
+    create_ai_access_scan(scan_id, label, len(rows), payload.get("email") or payload.get("role") or "user")
     job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
     _jobs[job_id]["kind"] = "ai_access_scan"
-    _jobs[job_id]["label"] = f"AI Access Scan: {(label or file.filename or 'list')}"
+    _jobs[job_id]["label"] = f"AI Website Access Scan: {label}"
     _pool.submit(_run_ai_access_scan_job, job_id, scan_id, rows)
     return {"job_id": job_id, "scan_id": scan_id, "total": len(rows),
             "without_url": sum(1 for r in rows if not r.get("url"))}
 
 
-@app.get("/api/admin/ai-access-scans")
-async def admin_ai_access_scans(_: dict = Depends(require_admin)):
+@app.post("/api/ai-access-scan")
+async def ai_access_scan_start(file: UploadFile = File(...), label: str = Form(""),
+                               payload: dict = Depends(get_current_user_payload)):
+    """Any signed-in user: upload a list and test every website for AI-crawler access."""
+    raw = await file.read()
+    rows = _aas_parse_csv(raw)
+    if not rows:
+        raise HTTPException(400, "No rows with a name column found in that file.")
+    return _start_ai_access_scan(rows, (label or "").strip() or (file.filename or "list.csv"), payload)
+
+
+@app.get("/api/ai-access-scans")
+async def ai_access_scans(_: dict = Depends(get_current_user_payload)):
     from perception.db import init_db, list_ai_access_scans
     init_db()
     return list_ai_access_scans()
 
 
-@app.get("/api/admin/ai-access-scans/{scan_id}")
-async def admin_ai_access_scan_get(scan_id: str, _: dict = Depends(require_admin)):
+@app.get("/api/ai-access-scans/{scan_id}")
+async def ai_access_scan_get(scan_id: str, _: dict = Depends(get_current_user_payload)):
     from perception.db import get_ai_access_scan
     rec = get_ai_access_scan(scan_id)
     if not rec:
@@ -539,8 +545,8 @@ async def admin_ai_access_scan_get(scan_id: str, _: dict = Depends(require_admin
     return rec
 
 
-@app.get("/api/admin/ai-access-scans/{scan_id}.csv")
-async def admin_ai_access_scan_csv(scan_id: str, _: dict = Depends(require_admin)):
+@app.get("/api/ai-access-scans/{scan_id}.csv")
+async def ai_access_scan_csv(scan_id: str, _: dict = Depends(get_current_user_payload)):
     import csv as _csv
     import io as _io
     from fastapi.responses import Response
@@ -562,8 +568,8 @@ async def admin_ai_access_scan_csv(scan_id: str, _: dict = Depends(require_admin
                     headers={"Content-Disposition": f'attachment; filename="{safe}_ai-access-scan.csv"'})
 
 
-@app.delete("/api/admin/ai-access-scans/{scan_id}")
-async def admin_ai_access_scan_delete(scan_id: str, _: dict = Depends(require_admin)):
+@app.delete("/api/ai-access-scans/{scan_id}")
+async def ai_access_scan_delete(scan_id: str, _: dict = Depends(require_admin)):
     from perception.db import delete_ai_access_scan
     delete_ai_access_scan(scan_id)
     return {"ok": True}
@@ -6357,8 +6363,24 @@ def _run_event_job(
             zf.write(csv_path, csv_name)   # include the CSV in the ZIP too
 
         finalize_event_run(event_id, str(csv_path), str(zip_path))
+
+        # ── Automatic AI Website Access Scan on the event's CSV ─────────────
+        # Every attendee's website is tested for AI-crawler access; the result joins the
+        # scans list on History (labelled with the event name). Fail-soft.
+        _scan_info = None
+        try:
+            _scan_rows = _aas_parse_csv(csv_path.read_bytes())
+            if _scan_rows:
+                _scan_info = _start_ai_access_scan(
+                    _scan_rows, f"{ev['event_name'] or 'Event'} (Event Prep {ts[:6]})",
+                    {"role": role, "brand": brand, "email": job.get("email")})
+                emit({"type": "log", "text": f"AI Website Access Scan started on the event CSV ({len(_scan_rows)} organizations) — see History → Batch analysis runs"})
+        except Exception as _sx:
+            print(f"[event] auto AI access scan failed: {type(_sx).__name__}: {_sx}", flush=True)
+
         job["status"] = "done"
-        job["result"] = {"event_id": event_id, "csv_filename": csv_name, "zip_filename": zip_name}
+        job["result"] = {"event_id": event_id, "csv_filename": csv_name, "zip_filename": zip_name,
+                         "ai_access_scan_id": (_scan_info or {}).get("scan_id")}
         _notify_run_complete(job, "Event Preparation batch", job.get("label") or f"Event {event_id[:8]}", [])
 
     except Exception as exc:

@@ -3370,3 +3370,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | R1 | Regression | CSV + ZIP unchanged; retry passes still work; History rows tagged with the event; result_json now contains website_facts / physician_facts / plain_language (re-saved after the combined step). pytest unchanged (352 pass / same 15 pre-existing). |
 
 [code] `server._run_event_job` (dispatch block, `_plain_ensure`, `_profile_audit`, `_aas_lookup_website`, re-save), `_run_type_analyzer(output_dir=)`.
+
+## AAS-HISTORY-AUTO — AI Website Access Scan moved to History, open to all users, automatic after Event Prep (2026-09-28)
+
+**Scope:** routes renamed `POST /api/ai-access-scan`, `GET /api/ai-access-scans[/{id}[.csv]]` (any signed-in user), `DELETE /api/ai-access-scans/{id}` (admin); `server._start_ai_access_scan` shared helper; `_run_event_job` starts a scan on the event CSV after `finalize_event_run` (label "<event name> (Event Prep yymmdd)"); Admin tab/panel removed; History → Batch analysis runs opens with a collapsible **AI Website Access Scan** section above Event Prep; help topic + Learn (Event Preparation) updated. NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Any role → History → Batch analysis runs | First section "AI Website Access Scan" (collapsed) with the count of scans; Show reveals upload + label + Scan, and the Results dropdown listing every scan (incl. the SHSMD one already on prod). Admin tab "AI Access Scan" is gone. |
+| T2 | Non-admin uploads a CSV and scans | Runs with progress; result appears in the dropdown; no Delete button (admin sees one). |
+| T3 | Run a small Event Prep | Event log ends with "AI Website Access Scan started on the event CSV (N organizations)"; within a minute the scan named "<event name> (Event Prep …)" is in the dropdown with the percentage; the event itself still completes/zips as before. |
+| T4 | Re-render History (search/filter/sort) while the panel is open | Panel stays open and reloads its list; a scan in progress keeps streaming in the open panel. |
+| R1 | Regression | Old `/api/admin/ai-access-*` paths return 404 (removed); saved scans unaffected; batch area labels read "AI Website Access Scan · Event Prep · Bulk lists · Student Health". pytest unchanged. |
