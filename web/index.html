@@ -2309,6 +2309,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <button class="admin-tab" id="atab-requests" onclick="switchAdminTab('requests')">Access Requests</button>
           <button class="admin-tab" id="atab-integrations" onclick="switchAdminTab('integrations')">Integrations</button>
           <button class="admin-tab" id="atab-ops" onclick="switchAdminTab('ops')">Operations</button>
+          <button class="admin-tab" id="atab-producers" onclick="switchAdminTab('producers')">Report Producers</button>
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn" id="admin-clear-sl-btn" onclick="adminClearServiceLineCache()" title="Clear all cached service-line audits so the next network analysis run recomputes fresh." style="padding:7px 14px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--teal)">&#128465; Clear Service-Line Cache</button>
@@ -2343,6 +2344,23 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div style="font-size:12px;color:var(--muted);margin-bottom:12px">One-off data cleanups run on the server (database + reports volume). Dry run shows what would change; Apply writes.</div>
           <div id="admin-maint-list"><div class="empty" style="padding:12px 0"><div>Loading…</div></div></div>
           <pre id="admin-maint-out" style="display:none;margin-top:12px;background:#f6f8f7;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;white-space:pre-wrap;max-height:320px;overflow:auto"></pre>
+        </div>
+      </div>
+
+      <!-- Report Producers panel: every account ranked by reports run -->
+      <div id="admin-producers-panel" style="display:none">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+            <div style="font-weight:600;font-size:15px">Who is producing reports</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="rp-days" class="fi" style="width:auto;padding:6px 10px;font-size:12px" onchange="loadReportProducers()"><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 12 months</option><option value="0">All time</option></select>
+              <a class="btn btn-ghost btn-sm" id="rp-csv" href="#">Download CSV</a>
+              <button class="btn btn-ghost btn-sm" onclick="loadReportProducers()">↻</button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Every account, ranked by reports run in the window (all-time total beside it). A report is one Deep Diagnostic, Hospital Network, Competitors Rankings, Compare Two or Event Prep attendee report; scheduled Trends snapshots count for the person tracking the entity. Spend is the metered API cost of those runs. Accounts with no reports stay in the list so idle seats are visible.</div>
+          <div id="rp-summary" style="font-size:13px;margin-bottom:10px"></div>
+          <div id="admin-producers-table"><div class="empty" style="padding:24px 0"><div>Loading…</div></div></div>
         </div>
       </div>
 
@@ -9680,7 +9698,7 @@ async function learnTogglePreview(){
 }
 
 function switchAdminTab(tab) {
-  ['users','requests','integrations','ops'].forEach(t => {
+  ['users','requests','integrations','ops','producers'].forEach(t => {
     const btn = document.getElementById('atab-' + t);
     const panel = document.getElementById('admin-' + t + '-panel');
     if (btn)   btn.classList.toggle('active', t === tab);
@@ -9690,6 +9708,32 @@ function switchAdminTab(tab) {
   else if (tab === 'requests')     loadAdminRequests();
   else if (tab === 'integrations') loadIntegrations();
   else if (tab === 'ops')          loadAdminOps();
+  else if (tab === 'producers')    loadReportProducers();
+}
+
+async function loadReportProducers() {
+  const host = document.getElementById('admin-producers-table'), sum = document.getElementById('rp-summary'); if (!host) return;
+  const days = document.getElementById('rp-days')?.value || '30';
+  const csv = document.getElementById('rp-csv'); if (csv) csv.href = `/api/admin/report-producers.csv?days=${days}&token=${encodeURIComponent(_token)}`;
+  try {
+    const r = await api(`/api/admin/report-producers?days=${days}`); if (!r.ok) throw new Error(await errDetail(r, 'Failed'));
+    const d = await r.json(); const T = d.totals; const win = +days ? `last ${days} days` : 'all time';
+    sum.innerHTML = `<strong>${T.window}</strong> report${T.window === 1 ? '' : 's'} ${win} · <strong>${T.producing}</strong> of <strong>${T.accounts}</strong> accounts produced at least one · <strong>$${(T.cost_window || 0).toFixed(2)}</strong> metered spend · <strong>${T.all}</strong> all time`;
+    const max = Math.max(1, ...d.rows.map(x => x.window));
+    const K = [['diagnostic', 'Deep Diagnostic', 'var(--teal)'], ['network', 'Hospital Network', '#2f6f8f'], ['rankings', 'Competitors Rankings', '#7a5cc4'], ['compare', 'Compare Two', '#b0741e'], ['event', 'Event attendee', '#8a8f98']];
+    const fmt = t => t ? _learnEsc(String(t).replace('T', ' ').slice(0, 16)) : '<span style="color:var(--muted)">—</span>';
+    host.innerHTML = `<table class="admin-tbl"><thead><tr><th>#</th><th>Person</th><th>Role</th><th style="min-width:220px">Reports (${_learnEsc(win)})</th><th>All time</th><th>By type</th><th>Spend</th><th>Last report</th><th>Last login</th></tr></thead><tbody>` +
+      d.rows.map((x, i) => {
+        const chips = K.filter(([k]) => x.kinds[k]).map(([k, lab, col]) => `<span title="${lab}" style="display:inline-block;padding:1px 7px;border-radius:9px;background:${col};color:#fff;font-size:11px;margin:1px 3px 1px 0">${lab.split(' ')[0]} ${x.kinds[k]}</span>`).join('') || '<span style="color:var(--muted)">—</span>';
+        const who = x.account
+          ? `<div style="font-weight:600">${_learnEsc(x.name || x.email)}</div><div style="font-size:11.5px;color:var(--muted)">${_learnEsc(x.email)}${x.is_active === false ? ' · <span style="color:#b42318">deactivated</span>' : ''}</div>`
+          : `<div style="font-weight:600;color:var(--muted)">${_learnEsc(x.label)}</div>${x.email ? `<div style="font-size:11.5px;color:var(--muted)">${_learnEsc(x.email)} · no account</div>` : ''}`;
+        return `<tr${x.window ? '' : ' style="opacity:.6"'}><td>${x.window ? i + 1 : ''}</td><td>${who}</td><td>${_learnEsc(x.role || '')}</td>
+          <td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:10px;background:var(--pale);border-radius:5px;overflow:hidden"><div style="width:${Math.round(100 * x.window / max)}%;height:100%;background:var(--teal)"></div></div><strong style="min-width:28px;text-align:right">${x.window}</strong></div></td>
+          <td>${x.total}</td><td>${chips}</td><td>${x.cost_window ? '$' + x.cost_window.toFixed(2) : '<span style="color:var(--muted)">—</span>'}${x.cost && x.cost !== x.cost_window ? `<div style="font-size:11px;color:var(--muted)">$${x.cost.toFixed(2)} all time</div>` : ''}</td>
+          <td>${fmt(x.last)}</td><td>${fmt(x.last_login)}</td></tr>`;
+      }).join('') + '</tbody></table>';
+  } catch (e) { host.innerHTML = `<div class="empty"><div>${_learnEsc(e.message || 'Failed')}</div></div>`; }
 }
 
 // ── AI Access Scan (admin): upload a list → test every website for AI-crawler access ──
@@ -9851,7 +9895,7 @@ async function loadAdminOps() {
 async function loadAdminPage() {
   // Integrations Admins get a scoped view: only the Integrations tab, no user mgmt.
   const superAdmin = (_role === 'admin');
-  ['atab-users','atab-requests','atab-ops','admin-test-email-btn'].forEach(id => {
+  ['atab-users','atab-requests','atab-ops','atab-producers','admin-test-email-btn'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = superAdmin ? '' : 'none';
   });
   const sub = document.querySelector('#page-admin .page-sub');

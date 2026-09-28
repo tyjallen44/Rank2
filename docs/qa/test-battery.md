@@ -3382,3 +3382,16 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Run a small Event Prep | Event log ends with "AI Website Access Scan started on the event CSV (N organizations)"; within a minute the scan named "<event name> (Event Prep …)" is in the dropdown with the percentage; the event itself still completes/zips as before. |
 | T4 | Re-render History (search/filter/sort) while the panel is open | Panel stays open and reloads its list; a scan in progress keeps streaming in the open panel. |
 | R1 | Regression | Old `/api/admin/ai-access-*` paths return 404 (removed); saved scans unaffected; batch area labels read "AI Website Access Scan · Event Prep · Bulk lists · Student Health". pytest unchanged. |
+
+## ADMIN-REPORT-PRODUCERS — Admin tab ranking accounts by reports produced (2026-09-28)
+
+**Scope:** `GET /api/admin/report-producers?days=30|90|365|0` and `.csv` (admin); `server._report_producers`; Admin → **Report Producers** tab (`loadReportProducers`). Event Prep attendee reports now record `ran_by` = the launcher (`set_run_role(..., _job_ran_by(job))`) — earlier events stay attributed to the role only. NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Admin → Report Producers | Summary line (reports in window · producing/accounts · spend · all time). Table ranked by reports in the window (bar + count), all-time column, type chips (Deep / Hospital / Competitors / Compare / Event), spend (window, all-time beneath), last report, last login. Accounts with zero reports at the bottom, dimmed, unranked. |
+| T2 | Window selector | 30 / 90 / 12 months / All time re-rank the list; CSV link carries the same window. |
+| T3 | Unattributed rows | Runs whose ran_by matches no account appear as "Unattributed — <role> password session" (or the email with "no account"), never hidden. |
+| T4 | Download CSV | Columns rank, name, email, role, account, active, reports window/all-time, five type counts, spend window/all-time, first/last report, last login. |
+| T5 | Run an Event Prep, then reload the tab | The launcher's Event count grows by the attendee count. |
+| R1 | Regression | Other admin tabs unchanged; integrations_admin does not see the tab; non-admin gets 403 on the route. pytest unchanged. |

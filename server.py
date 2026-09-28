@@ -4349,6 +4349,93 @@ async def admin_list_users(_: dict = Depends(require_admin)):
     return [_fmt_user(u) for u in list_users()]
 
 
+def _report_producers(days: int) -> dict:
+    """Who produces reports: every account, ranked by reports run in the window (default 30
+    days), with the all-time total, a breakdown by report type, metered spend and last activity.
+    Attribution is the ran_by column on analysis_runs / network_runs / comparison_runs; rows
+    without a matching account (legacy password sessions, unattributed runs) are grouped at the
+    bottom by role so nothing is hidden."""
+    from datetime import datetime as _dt, timedelta as _td
+    from perception.auth import list_users
+    from perception.db import get_connection
+    since = _dt.utcnow() - _td(days=days) if days > 0 else None
+    con = get_connection()
+    rows = []
+    for r in con.execute("SELECT ran_by, user_role, created_at, individual_report, event_id, cost_usd FROM analysis_runs").fetchall():
+        kind = "event" if r[4] else ("diagnostic" if r[3] else "rankings")
+        rows.append((r[0], r[1], r[2], kind, r[5]))
+    for r in con.execute("SELECT ran_by, user_role, created_at, cost_usd FROM network_runs").fetchall():
+        rows.append((r[0], r[1], r[2], "network", r[3]))
+    for r in con.execute("SELECT ran_by, user_role, created_at, cost_usd FROM comparison_runs").fetchall():
+        rows.append((r[0], r[1], r[2], "compare", r[3]))
+    con.close()
+    KINDS = ["diagnostic", "network", "rankings", "compare", "event"]
+    def _blank(key, label, email, name, role, account):
+        return {"key": key, "label": label, "email": email, "name": name, "role": role, "account": account,
+                "is_active": None, "last_login": None, "total": 0, "window": 0, "kinds": {k: 0 for k in KINDS},
+                "cost": 0.0, "cost_window": 0.0, "first": None, "last": None}
+    users = {}
+    for u in list_users():
+        e = (u.get("email") or "").lower()
+        rec = _blank(e, u.get("name") or e, e, u.get("name"), u.get("role"), True)
+        rec["is_active"] = bool(u.get("is_active")); rec["last_login"] = str(u["last_login"]) if u.get("last_login") else None
+        users[e] = rec
+    others = {}
+    for ran_by, role, created, kind, cost in rows:
+        key = (ran_by or "").lower().strip()
+        if key in users:
+            rec = users[key]
+        else:
+            okey = key if key and "@" in key else f"role:{role or 'unknown'}"
+            if okey not in others:
+                others[okey] = _blank(okey, (key if "@" in key else f"Unattributed — {role or 'unknown'} password session"), key if "@" in key else "", None, role, False)
+            rec = others[okey]
+        rec["total"] += 1; rec["kinds"][kind] = rec["kinds"].get(kind, 0) + 1
+        c = float(cost or 0); rec["cost"] += c
+        ts = created if isinstance(created, _dt) else None
+        if ts is not None:
+            if since is None or ts >= since:
+                rec["window"] += 1; rec["cost_window"] += c
+            if rec["first"] is None or ts < rec["first"]: rec["first"] = ts
+            if rec["last"] is None or ts > rec["last"]: rec["last"] = ts
+    out = list(users.values()) + list(others.values())
+    for rec in out:
+        rec["first"] = rec["first"].isoformat(timespec="minutes") if rec["first"] else None
+        rec["last"] = rec["last"].isoformat(timespec="minutes") if rec["last"] else None
+        rec["cost"] = round(rec["cost"], 2); rec["cost_window"] = round(rec["cost_window"], 2)
+    out.sort(key=lambda r: (-r["window"], -r["total"], r["label"].lower()))
+    total_window = sum(r["window"] for r in out); total_all = sum(r["total"] for r in out)
+    return {"days": days, "rows": out, "totals": {"window": total_window, "all": total_all,
+            "accounts": len(users), "producing": sum(1 for r in users.values() if r["window"]),
+            "cost_window": round(sum(r["cost_window"] for r in out), 2)}}
+
+
+@app.get("/api/admin/report-producers")
+async def admin_report_producers(days: int = 30, _: dict = Depends(require_admin)):
+    from perception.db import init_db
+    init_db()
+    return await asyncio.get_running_loop().run_in_executor(None, _report_producers, days)
+
+
+@app.get("/api/admin/report-producers.csv")
+async def admin_report_producers_csv(days: int = 30, _: dict = Depends(require_admin)):
+    import csv as _csv
+    import io as _io
+    from fastapi.responses import Response
+    d = await asyncio.get_running_loop().run_in_executor(None, _report_producers, days)
+    buf = _io.StringIO(); w = _csv.writer(buf)
+    w.writerow(["rank", "name", "email", "role", "account", "active", f"reports_last_{days}_days" if days else "reports", "reports_all_time",
+                "deep_diagnostics", "hospital_network", "competitors_rankings", "compare_two", "event_attendee_reports",
+                f"spend_usd_last_{days}_days" if days else "spend_usd", "spend_usd_all_time", "first_report", "last_report", "last_login"])
+    for i, r in enumerate(d["rows"], 1):
+        k = r["kinds"]
+        w.writerow([i, r["name"] or "", r["email"], r["role"] or "", "yes" if r["account"] else "no", "" if r["is_active"] is None else ("yes" if r["is_active"] else "no"),
+                    r["window"], r["total"], k["diagnostic"], k["network"], k["rankings"], k["compare"], k["event"],
+                    r["cost_window"], r["cost"], r["first"] or "", r["last"] or "", r["last_login"] or ""])
+    return Response(content="\ufeff" + buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="report-producers-{days or "all"}d.csv"'})
+
+
 @app.get("/api/admin/requests")
 async def admin_list_requests(_: dict = Depends(require_admin)):
     from perception.db import init_db
@@ -6159,7 +6246,7 @@ def _run_event_job(
                             override_today_lock=override_cache,
                         ), resolved_name, base_wait=base_wait)
 
-                    set_run_role(result.run_id, role)
+                    set_run_role(result.run_id, role, _job_ran_by(job))
 
                     # Practice combined report (opt-in per event): content analysis +
                     # drafted prescription + findings-citing Assessment, replacing the
