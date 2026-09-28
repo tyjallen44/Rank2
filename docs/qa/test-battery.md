@@ -3354,3 +3354,19 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | R2 | Regression | Other admin tabs unchanged; report pipeline untouched (`probe_ai_crawlers` reused read-only). pytest: 352 pass, same 15 pre-existing failures. |
 
 [code] `ai_access_scan.scan_site/scan_list/classify/read_robots/parse_robots/summarize`; `website_facts.probe_ai_crawlers` (Google-Extended informational); `server._aas_parse_csv/_aas_lookup_website/_run_ai_access_scan_job`; `web aasStart/aasRefreshList/aasLoad/aasDelete`, `_AAS_BUCKETS`.
+
+## EVENT-UNIFIED-PIPELINE — Event Prep attendees get the same report as a Deep Diagnostic (2026-09-28)
+
+**Scope:** `server._run_event_job._run_one` now dispatches through `_run_type_analyzer` (unified pipeline) instead of the three legacy analyzers; `_run_type_analyzer` gains `output_dir`. Env `PULSE_EVENT_PIPELINE=legacy` (or `PULSE_PIPELINE=legacy`) restores the old path. No UI change. NEEDS BROWSER TESTING (run a small event).
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Event Prep → hospital list (2–3 rows incl. one known bot-walled site, e.g. Northwell or AdventHealth) → Run | Each EventReport PDF has: red AI-access notice under the Pulse Verdict naming the crawlers turned away; Score Evidence "website blocks AI crawlers (verified)"; Leapfrog line from the city lookup; condensed headline+bullets executive sections; methodology box. Progress log shows "…: website hidden from AI (critical) — notice on page 1" for that row. |
+| T2 | Practice list, URL column blank | Website taken from the Google listing (log/PDF show the crawled site); Physicians Checked table present; combined content analysis (default on) uses the same site; Identity pillar carries measured website_readability. |
+| T3 | Practice row that is a service line (e.g. "Duke Orthopedics") | Auto-detected as before; report is the service-line edition. |
+| T4 | Community Health list | Community edition PDF with the alert block after the verdict when applicable. |
+| T5 | Teaser on | Teaser files still produced under the event naming (`…_EventReport…_Teaser.pdf`). |
+| T6 | `PULSE_EVENT_PIPELINE=legacy` | Old analyzers used; no website facts. |
+| R1 | Regression | CSV + ZIP unchanged; retry passes still work; History rows tagged with the event; result_json now contains website_facts / physician_facts / plain_language (re-saved after the combined step). pytest unchanged (352 pass / same 15 pre-existing). |
+
+[code] `server._run_event_job` (dispatch block, `_plain_ensure`, `_profile_audit`, `_aas_lookup_website`, re-save), `_run_type_analyzer(output_dir=)`.

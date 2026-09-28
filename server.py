@@ -1320,13 +1320,14 @@ _INDIVIDUAL_KINDS = {"hospital": "Deep Diagnostic", "service_line": "Deep Diagno
 
 
 def _run_type_analyzer(etype: str, job: dict, entity_name: str, city: str, state: str,
-                       specialty: Optional[str], aggregate: bool, radius_miles: Optional[int], emit):
+                       specialty: Optional[str], aggregate: bool, radius_miles: Optional[int], emit,
+                       output_dir: Optional[Path] = None):
     """Dispatch the individual report and return its AnalysisResult.
 
     Default: the unified pipeline (perception.pipeline.run_individual — one phase list,
     entity type as a parameter). PULSE_PIPELINE=legacy selects the three original
     analyzers instead; both receive exactly the same job-derived arguments."""
-    common = dict(output_dir=REPORTS_DIR, on_event=emit, brand=job.get("brand", "original"),
+    common = dict(output_dir=output_dir or REPORTS_DIR, on_event=emit, brand=job.get("brand", "original"),
                   skip_pdf=job.get("skip_pdf", False), force_rerun=job.get("force_rerun", False),
                   override_today_lock=job.get("override_today_lock", False),
                   briefing_variant=job.get("briefing_variant"), report_title=job.get("report_title"))
@@ -6053,7 +6054,61 @@ def _run_event_job(
                 emit({"type": "entity_start", "entity_id": entity_id,
                       "name": resolved_name, "retry": is_retry})
                 try:
-                    if entity_type == "fqhc":
+                    # Auto-detect (no confirm — batch) whether a practice attendee is a
+                    # hospital service line; if so, aggregate that service line.
+                    _sl = {}
+                    if entity_type == "practice":
+                        try:
+                            from perception.practice_discovery import detect_service_line
+                            _sl = detect_service_line(
+                                resolved_name, city, state,
+                                specialty_hint=(entity.get("input_specialty") or ""))
+                        except Exception:
+                            _sl = {}
+                    _legacy = os.environ.get("PULSE_EVENT_PIPELINE", os.environ.get("PULSE_PIPELINE", "unified")) == "legacy"
+                    if not _legacy:
+                        # Same dispatch as a single Deep Diagnostic (unified pipeline): website
+                        # facts + AI-access notice, physician linkage, Leapfrog lookup, plain-
+                        # language executive sections, methodology box. The website comes from
+                        # the attendee list's URL column, else the Google listing.
+                        _etype = ("community_health" if entity_type == "fqhc"
+                                  else ("service_line" if _sl.get("is_service_line") else "practice") if entity_type == "practice"
+                                  else "hospital")
+                        _site = (entity.get("input_url") or "").strip()
+                        if not _site:
+                            _site = _aas_lookup_website(resolved_name, city, state)
+                        _ejob = {
+                            "brand": brand, "force_rerun": override_cache, "override_today_lock": override_cache,
+                            "website": _site or None, "city": city,
+                            "service_line": _sl.get("service_line"), "parent_system": _sl.get("parent_system"),
+                            "confirmed_siblings": None if _sl.get("is_service_line") else ([] if entity_type == "practice" else None),
+                            "practice_composite": False,
+                        }
+                        _agg = auto_practice_composite if entity_type == "fqhc" else True
+                        _quiet = lambda _e: None
+                        result = _analyze_with_retry(
+                            _run_type_analyzer,
+                            dict(etype=_etype, job=_ejob, entity_name=resolved_name, city=city, state=state,
+                                 specialty=None, aggregate=_agg, radius_miles=None, emit=_quiet, output_dir=event_dir),
+                            resolved_name, base_wait=base_wait)
+                        try:
+                            _plain_ensure(result, _ejob)
+                        except Exception as _px:
+                            emit({"type": "log", "text": f"⚠ Plain-language pass failed for {resolved_name} ({type(_px).__name__})"})
+                        if _etype in ("practice", "service_line"):
+                            try:
+                                _profile_audit(result, _ejob, _quiet)
+                            except Exception:
+                                pass
+                        try:
+                            _wf = getattr(result, "website_facts", None) or {}
+                            from perception.data.website_facts import ai_access_problem as _aap
+                            _prob = _aap(_wf)
+                            if _prob:
+                                emit({"type": "log", "text": f"  {resolved_name}: website hidden from AI ({_prob.get('level', 'critical')}) — notice on page 1"})
+                        except Exception:
+                            pass
+                    elif entity_type == "fqhc":
                         from perception.fqhc_analyzer import analyze_fqhc
                         result = _analyze_with_retry(analyze_fqhc, dict(
                             entity_name=resolved_name,
@@ -6067,16 +6122,6 @@ def _run_event_job(
                         ), resolved_name, base_wait=base_wait)
                     elif entity_type == "practice":
                         from perception.practice_analyzer import analyze_practice
-                        # Auto-detect (no confirm — batch) whether this attendee is a
-                        # hospital service line; if so, aggregate that service line.
-                        _sl = {}
-                        try:
-                            from perception.practice_discovery import detect_service_line
-                            _sl = detect_service_line(
-                                resolved_name, city, state,
-                                specialty_hint=(entity.get("input_specialty") or ""))
-                        except Exception:
-                            _sl = {}
                         _pkwargs = dict(
                             entity_name=resolved_name,
                             city=city, state=state,
@@ -6118,7 +6163,7 @@ def _run_event_job(
                     if practice_content and entity_type == "practice":
                         _ca_job = {
                             "teaser_report": include_teaser,
-                            "content_urls": [entity.get("input_url")] if (entity.get("input_url") or "").strip() else [],
+                            "content_urls": [entity.get("input_url")] if (entity.get("input_url") or "").strip() else ([_site] if (not _legacy and _site) else []),
                         }
                         def _ca_emit(ev, _n=resolved_name):
                             if ev.get("type") == "phase":
@@ -6131,6 +6176,13 @@ def _run_event_job(
                         except Exception as _ce:
                             emit({"type": "log", "text":
                                   f"⚠ Content analysis failed for {resolved_name} ({type(_ce).__name__}); base report kept"})
+
+                    if not _legacy:
+                        try:
+                            from perception.analyzer import _save_to_db as _resave_ev
+                            _resave_ev(result)      # website / physician facts + plain text into result_json
+                        except Exception:
+                            pass
 
                     # Tag the run with this event; make it visible to all users
                     with get_connection() as _con:
