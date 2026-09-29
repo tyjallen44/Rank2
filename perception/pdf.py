@@ -731,12 +731,12 @@ def _aivs_block(p: RankedProvider, methodology_note: bool = True, confidence: di
         {nat_q_html}
         <div class="profile-chip">{profile_label}</div>
         {f'<div class="ceiling-note">Score capped at 74 — {_e(p.score_ceiling_reason)}. The cap lifts once these are verifiable.</div>' if p.score_ceiling_applied and p.score_ceiling_reason else ""}
-        {_confidence_line(confidence)}
       </div>
       <div class="tier-bars">{rows}
         {'<div style="font-size:6pt;color:#aabcc0;margin-top:3px;font-style:italic">Scored per Appendix A methodology</div>' if methodology_note else ''}
       </div>
-    </div>"""
+    </div>
+    {_confidence_line(confidence)}"""
 
 
 _GREEN_OK = "#1a7a4a"
@@ -960,7 +960,7 @@ def _confidence_line(conf: dict = None) -> str:
     if not conf:
         return ""
     color = {"high": "#1a7a4a", "medium": "#b8860b", "low": "#b42318"}.get(conf.get("level"), "#7a9095")
-    return (f'<div style="font-size:6.5pt;color:#5a7075;margin-top:5px;line-height:1.3">'
+    return (f'<div style="font-size:6.5pt;color:#5a7075;margin:-6px 0 8px;line-height:1.3">'
             f'Evidence: <strong style="color:{color}">{_e(conf.get("label", ""))}</strong>'
             f' &middot; {_e(conf.get("note", ""))}</div>')
 
@@ -2263,6 +2263,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
 
     /* ── AI Reputation score + tier bars ────────────── */
     .aivs {{ display: flex; align-items: center; gap: 14px; margin: 2px 0 10px; }}
+    .aivs > div:first-child {{ flex: 0 1 auto; max-width: 52%; }}   /* the pillar bars must keep their room */
     .aivs-score {{
       font-size: 22pt; font-weight: 800; line-height: 1; color: {_TEAL};
       min-width: 64px; text-align: center;

@@ -3421,3 +3421,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | R1 | Regression | Fresh runs unchanged apart from location; individual (Deep Diagnostic) files already used REPORTS_DIR; pytest unchanged. |
 
 **Known gap:** the run's brand is not stored on network_runs, so a regenerated file uses the default brand.
+
+## FIX-PDF-PILLAR-BARS — pillar bars vanished from the score card after the Evidence line landed (2026-09-29)
+
+**Scope:** `perception/pdf.py::_aivs_block` — the "Evidence: …" line (commit e11108f, deployed 2026-09-29 15:02 UTC) sat inside the score card's left flex column; a long reason widened that column until the bar track had zero width (numbers stayed, bars gone) on every Deep Diagnostic PDF rendered since. The line now renders full-width **below** the card, and the left column is capped at 52%. NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Re-run (Force) a practice Deep Diagnostic with a long evidence reason (e.g. OrthoSouth, Memphis: "4,993 reviews across 3 locations; physician facts verified from NPI registry + site; website facts verified by crawl (14/20)") → page 2 | Four pillar bars visible with values; cap note (if any) then the Evidence line beneath the score block, full width. |
+| T2 | Hospital Deep Diagnostic + teaser | Same. |
+| R1 | Regression | Compare Two cards unchanged; pytest unchanged. |
