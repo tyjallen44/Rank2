@@ -1320,10 +1320,21 @@ def _individual_teaser_card(p: RankedProvider) -> str:
     </div>"""
 
 
-def _individual_rankings_section(providers: list[RankedProvider]) -> str:
+def _individual_rankings_section(providers: list[RankedProvider], result=None) -> str:
+    """Entity card(s) for an individual report. The Score Evidence line needs the whole
+    result (reviews, verified quality, website / physician facts), so it is computed here
+    and passed to the first (target) card — the Compare Two path does the same in
+    _entity_deep_dive."""
     if not providers:
         return ""
-    return "\n".join(_individual_entity_card(p) for p in providers)
+    conf = None
+    if result is not None:
+        try:
+            from .confidence import score_confidence
+            conf = score_confidence(result)
+        except Exception:
+            conf = None
+    return "\n".join(_individual_entity_card(p, confidence=conf if i == 0 else None) for i, p in enumerate(providers))
 
 
 def _individual_teaser_section(providers: list[RankedProvider]) -> str:
@@ -1595,7 +1606,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
         rankings_html = _individual_teaser_section(all_ranked)
     elif result.individual_report:
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
-        rankings_html = _individual_rankings_section(all_ranked) + _spotcheck_section(result) + _profile_audit_section(result) + _physician_facts_section(result)
+        rankings_html = _individual_rankings_section(all_ranked, result) + _spotcheck_section(result) + _profile_audit_section(result) + _physician_facts_section(result)
     elif result.teaser_report:
         # Teaser: summary-only cards, flat rank order
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)

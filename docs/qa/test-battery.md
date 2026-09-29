@@ -3395,3 +3395,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Download CSV | Columns rank, name, email, role, account, active, reports window/all-time, five type counts, spend window/all-time, first/last report, last login. |
 | T5 | Run an Event Prep, then reload the tab | The launcher's Event count grows by the attendee count. |
 | R1 | Regression | Other admin tabs unchanged; integrations_admin does not see the tab; non-admin gets 403 on the route. pytest unchanged. |
+
+## FIX-PDF-EVIDENCE-LINE — Score Evidence line missing from single-entity PDFs (2026-09-29)
+
+**Scope:** `perception/pdf.py::_individual_rankings_section(providers, result)` now computes `score_confidence(result)` and passes it to the target card. Previously only the Compare Two path (`_entity_deep_dive`) passed it, so Deep Diagnostic PDFs (hospital, practice, service line; full + teaser) never showed the "Evidence: High · …" line under the score even though History and the completion screen showed the chip. NEEDS BROWSER TESTING (re-render one report).
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Run (or re-run with Force) a practice Deep Diagnostic, open the PDF page 2 | Under the Pulse Score block, after the profile chip / cap note: "Evidence: High|Medium|Low · <reason>" in green/amber/red; wording matches the History chip tooltip for the same run. |
+| T2 | Hospital Deep Diagnostic + teaser | Same line in both files. |
+| T3 | Compare Two | Unchanged (already had it). |
+| R1 | Regression | Card layout otherwise identical; aggregate/market rankings PDFs unaffected (they use the ranked card, not this section). pytest unchanged. |
