@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import date, datetime
+import os
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -551,7 +552,10 @@ def _finalize_network(result, *, network_name, hq_location, source_url, brand,
     # 4. Renders.
     emit({"type": "phase", "name": "pdf", "text": "Rendering Hospital Network report"})
     try:
-        output_dir = Path("reports")
+        # The mounted reports volume (REPORTS_DIR=/data/reports on Cloud Run). A relative
+        # "reports" is the container's local disk, and every network PDF written there was
+        # lost on instance recycle (History then silently regenerated a stripped copy).
+        output_dir = Path(os.environ.get("REPORTS_DIR") or "reports")
         output_dir.mkdir(parents=True, exist_ok=True)
         slug = _slug(network_name)
         _ts = datetime.utcnow().strftime("%y%m%d-%H%M")

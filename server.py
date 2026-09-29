@@ -2803,99 +2803,77 @@ def _job_network_analyze(job_id: str, network_name: str, hq_location: str,
         _put(loop, queue, None)
 
 
-@app.get("/api/network/{run_id}/pdf")
-async def network_pdf(run_id: str, _: str = Depends(require_auth)):
-    """Download a Network Pulse PDF by run_id.
-
-    If the PDF file no longer exists on disk (e.g. after a Cloud Run container
-    restart), it is regenerated from the stored result_json before being served.
-    """
+def _network_file(run_id: str, kind: str) -> Path:
+    """Path to a Hospital Network report file (kind: base | teaser | full_detail). If the file is
+    missing from disk — every network PDF was written to the container's local disk until
+    2026-09-29, so older runs lost their files on instance recycle — it is regenerated from
+    the stored result WITH its content findings (Content Improvement Keys) and, for the Full
+    Detail file, the drafted plans, into REPORTS_DIR, and the path is saved back. Raises 404
+    when nothing can be served."""
     import re as _re
     from datetime import datetime as _dt
     from perception.db import get_connection
+    col = {"base": "pdf_path", "teaser": "teaser_pdf_path", "full_detail": "full_detail_pdf_path"}[kind]
     with get_connection() as con:
-        row = con.execute(
-            "SELECT pdf_path, network_name, result_json FROM network_runs WHERE run_id = ?",
-            [run_id],
-        ).fetchone()
+        row = con.execute(f"SELECT {col}, network_name, result_json FROM network_runs WHERE run_id = ?", [run_id]).fetchone()
     if not row:
         raise HTTPException(404, "Hospital Network run not found")
+    p = Path(row[0]) if row[0] else None
+    if p and p.exists():
+        return p
+    if not row[2]:
+        raise HTTPException(404, "Report file is no longer available and there is no stored result to regenerate it from")
+    from perception.models import NetworkResult
+    from perception.network_pdf import render_network_pdf, render_network_full_detail
+    from perception.network_analyzer import _load_content_findings, _ensure_drafts
+    from perception.strings import titlecase_filename
+    result = NetworkResult.model_validate_json(row[2])
+    findings = None
+    try:
+        findings = _load_content_findings(result)
+    except Exception as exc:
+        print(f"[network] regen: findings unavailable for {run_id[:8]}: {type(exc).__name__}: {exc}", flush=True)
+    if kind == "full_detail":
+        if not findings or not findings.findings:
+            raise HTTPException(404, "Full Detail report was not produced for this run (no content findings)")
+        findings = _ensure_drafts(result, findings, row[1] or result.network_name, lambda _e: None)
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    slug = _re.sub(r"[^a-z0-9]+", "-", (row[1] or result.network_name or "network").lower()).strip("-")
+    _ts = _dt.utcnow().strftime("%y%m%d-%H%M")
+    suffix = {"base": "", "teaser": "-teaser", "full_detail": "-full-detail"}[kind]
+    p = REPORTS_DIR / (titlecase_filename(f"{slug}-hospital-network{suffix}-{_ts}") + ".pdf")
+    try:
+        if kind == "full_detail":
+            render_network_full_detail(result, str(p), findings)
+        else:
+            render_network_pdf(result, str(p), teaser=(kind == "teaser"), findings=findings)
+    except Exception as exc:
+        raise HTTPException(500, f"PDF regeneration failed: {type(exc).__name__}: {exc}")
+    with get_connection() as con:
+        con.execute(f"UPDATE network_runs SET {col} = ? WHERE run_id = ?", [str(p), run_id])
+    print(f"[network] regenerated {kind} PDF for {run_id[:8]} → {p.name}", flush=True)
+    return p
 
-    pdf_path = Path(row[0]) if row[0] else None
 
-    if not pdf_path or not pdf_path.exists():
-        # PDF missing from disk — regenerate from stored result_json
-        result_json = row[2]
-        if not result_json:
-            raise HTTPException(404, "Hospital Network PDF missing and no stored result to regenerate from")
-        try:
-            from perception.models import NetworkResult
-            from perception.network_pdf import render_network_pdf
-            result = NetworkResult.model_validate_json(result_json)
-            output_dir = Path("reports")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            slug = _re.sub(r"[^a-z0-9]+", "-", (result.network_name or "network").lower()).strip("-")
-            _ts = _dt.utcnow().strftime("%y%m%d-%H%M")
-            pdf_filename = f"{slug}-network-pulse-{_ts}.pdf"
-            pdf_path = output_dir / pdf_filename
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, render_network_pdf, result, str(pdf_path))
-            # Persist regenerated path so next download skips regeneration
-            with get_connection() as con:
-                con.execute(
-                    "UPDATE network_runs SET pdf_path = ? WHERE run_id = ?",
-                    [str(pdf_path), run_id],
-                )
-        except Exception as exc:
-            raise HTTPException(500, f"PDF regeneration failed: {type(exc).__name__}: {exc}")
-
-    return FileResponse(
-        str(pdf_path),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{pdf_path.name}"'},
-    )
+@app.get("/api/network/{run_id}/pdf")
+async def network_pdf(run_id: str, _: str = Depends(require_auth)):
+    """Download a Hospital Network PDF (regenerated with its findings if the file is gone)."""
+    p = await asyncio.get_running_loop().run_in_executor(None, _network_file, run_id, "base")
+    return FileResponse(str(p), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{p.name}"'})
 
 
 @app.get("/api/network/{run_id}/teaser-pdf")
 async def network_teaser_pdf(run_id: str, _: str = Depends(require_auth)):
-    """Download the teaser Network Pulse PDF by run_id."""
-    from perception.db import get_connection
-    with get_connection() as con:
-        row = con.execute(
-            "SELECT teaser_pdf_path FROM network_runs WHERE run_id = ?",
-            [run_id],
-        ).fetchone()
-    if not row or not row[0]:
-        raise HTTPException(404, "Teaser PDF not found for this run")
-    pdf_path = Path(row[0])
-    if not pdf_path.exists():
-        raise HTTPException(404, "Teaser PDF file missing from disk")
-    return FileResponse(
-        str(pdf_path),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{pdf_path.name}"'},
-    )
+    """Download the teaser Hospital Network PDF (regenerated if the file is gone)."""
+    p = await asyncio.get_running_loop().run_in_executor(None, _network_file, run_id, "teaser")
+    return FileResponse(str(p), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{p.name}"'})
 
 
 @app.get("/api/network/{run_id}/full-detail-pdf")
 async def network_full_detail_pdf(run_id: str, _: str = Depends(require_auth)):
-    """Download the Hospital Network Full Detail PDF by run_id."""
-    from perception.db import get_connection
-    with get_connection() as con:
-        row = con.execute(
-            "SELECT full_detail_pdf_path FROM network_runs WHERE run_id = ?",
-            [run_id],
-        ).fetchone()
-    if not row or not row[0]:
-        raise HTTPException(404, "Full Detail PDF not found for this run")
-    pdf_path = Path(row[0])
-    if not pdf_path.exists():
-        raise HTTPException(404, "Full Detail PDF file missing from disk")
-    return FileResponse(
-        str(pdf_path),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{pdf_path.name}"'},
-    )
+    """Download the Hospital Network Full Detail PDF (regenerated, drafts included, if the file is gone)."""
+    p = await asyncio.get_running_loop().run_in_executor(None, _network_file, run_id, "full_detail")
+    return FileResponse(str(p), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{p.name}"'})
 
 
 # ── Hospital Network — bulk (headless) scoring from an uploaded list ──────────
@@ -4034,34 +4012,7 @@ async def public_report_download(token: str):
         if _dt.now(_tz.utc) - created > _td(days=_PUBLIC_LINK_TTL_DAYS):
             raise HTTPException(410, "This link has expired.")
 
-    with get_connection() as con:
-        row = con.execute(
-            "SELECT pdf_path, result_json FROM network_runs WHERE run_id = ?",
-            [rec["run_id"]],
-        ).fetchone()
-    if not row:
-        raise HTTPException(404, "Report not found.")
-    pdf_path = Path(row[0]) if row[0] else None
-    if not pdf_path or not pdf_path.exists():
-        if not row[1]:
-            raise HTTPException(404, "Report file is no longer available.")
-        from perception.models import NetworkResult, ContentFindings
-        from perception.network_pdf import render_network_pdf
-        result = NetworkResult.model_validate_json(row[1])
-        _findings = None
-        if result.content_findings_json:
-            try:
-                _findings = ContentFindings.model_validate_json(result.content_findings_json)
-            except Exception:
-                _findings = None
-        out_dir = Path("reports"); out_dir.mkdir(parents=True, exist_ok=True)
-        slug = _re.sub(r"[^a-z0-9]+", "-", (result.network_name or "network").lower()).strip("-")
-        pdf_path = out_dir / f"{slug}-network-pulse-{_dt.utcnow().strftime('%y%m%d-%H%M')}.pdf"
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: render_network_pdf(result, str(pdf_path), findings=_findings))
-        with get_connection() as con:
-            con.execute("UPDATE network_runs SET pdf_path = ? WHERE run_id = ?",
-                        [str(pdf_path), rec["run_id"]])
+    pdf_path = await asyncio.get_running_loop().run_in_executor(None, _network_file, rec["run_id"], "base")
     return FileResponse(str(pdf_path), media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{pdf_path.name}"'})
 

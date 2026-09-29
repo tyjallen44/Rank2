@@ -3406,3 +3406,18 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Hospital Deep Diagnostic + teaser | Same line in both files. |
 | T3 | Compare Two | Unchanged (already had it). |
 | R1 | Regression | Card layout otherwise identical; aggregate/market rankings PDFs unaffected (they use the ranked card, not this section). pytest unchanged. |
+
+## FIX-NETWORK-PDF-VOLUME — Hospital Network PDFs were written to the container's local disk and lost; History downloads regenerated a stripped copy (2026-09-29)
+
+**Scope:** `perception/network_analyzer.py::_finalize_network` writes to `REPORTS_DIR` (the mounted `/data/reports`) instead of a relative `reports/`; `server._network_file(run_id, kind)` is the single loader for base / teaser / Full Detail downloads and the public link: if the file is missing it regenerates from the stored result **with** its content findings (Content Improvement Keys), drafts for Full Detail, into `REPORTS_DIR`, and saves the path. Previously the base regen dropped findings and brand, and teaser / Full Detail simply 404'd. NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Run a Hospital Network report; on Cloud Run check the three files land under `/data/reports` (`Title-Case-Hospital-Network-…`, `…-Teaser-…`, `…-Full-Detail-…`) | Present after a new revision / instance restart; downloads serve the originals (filename unchanged). |
+| T2 | History → an older network run whose files were lost (e.g. UMass Memorial Health f03119c8 or fdda3f53) → Standard PDF | Regenerated file named `…-Hospital-Network-<now>.pdf` that includes the Content Improvement Keys section (when findings exist in `content_findings`), AI-access notice and methodology; not the stripped `…-network-pulse-…` copy. |
+| T3 | Same run → Teaser | Regenerated (blurred gated region, CTA) instead of 404. |
+| T4 | Same run → Full Detail | Regenerated with drafted plans (may take ~1–2 min the first time: drafts are produced and cached); 404 only when the run has no content findings. |
+| T5 | Public request link (`/api/public/report/{token}`) after files are lost | Serves the regenerated base report with findings. |
+| R1 | Regression | Fresh runs unchanged apart from location; individual (Deep Diagnostic) files already used REPORTS_DIR; pytest unchanged. |
+
+**Known gap:** the run's brand is not stored on network_runs, so a regenerated file uses the default brand.
