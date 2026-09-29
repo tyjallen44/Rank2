@@ -518,21 +518,39 @@ def _ai_access_alert_html(result) -> str:
     col, bg = (_RED_BAD, "#FDECEA") if a["level"] == "critical" else (_AMBER_WARN, "#FFF4E0")
     pr = (getattr(result, "website_facts", None) or {}).get("crawler_probe") or {}
     probe_html = ""
+    points = list(a.get("points") or [])
     if pr.get("results"):
-        cells = "".join(
-            f'<span style="display:inline-block;margin:2px 8px 2px 0;font-size:7.5pt"><strong>{_e(r["name"])}</strong>: '
-            f'<span style="color:{_RED_BAD if r["outcome"] == "blocked" else (_GREEN_OK if r["outcome"] == "allowed" else "#7a9095")};font-weight:700">'
-            f'{"turned away" if r["outcome"] == "blocked" else ("allowed" if r["outcome"] == "allowed" else "no answer")}</span>'
-            f'{(" (HTTP " + str(r["status"]) + ")") if r.get("status") else ""}</span>'
-            for r in pr["results"])
-        probe_html = f'<div style="margin-top:6px;padding-top:6px;border-top:1px solid {col}33">We requested your homepage as each reader: {cells}</div>'
+        # One line per outcome ("Turned away (HTTP 403): GPTBot, ClaudeBot, …") instead of a chip per reader;
+        # it replaces the "What we found" bullet, which would repeat the same names.
+        points = [p for p in points if not p.startswith("What we found:")]
+        groups: dict[tuple[str, str], list[str]] = {}
+        for r in pr["results"]:
+            key = (r["outcome"], str(r.get("status") or ""))
+            groups.setdefault(key, []).append(r["name"])
+        order = {"blocked": 0, "allowed": 1}
+        rows = []
+        for (outcome, status), names in sorted(groups.items(), key=lambda kv: (order.get(kv[0][0], 2), kv[0][1])):
+            label = {"blocked": "Turned away", "allowed": "Allowed"}.get(outcome, "No answer")
+            colour = {"blocked": _RED_BAD, "allowed": _GREEN_OK}.get(outcome, "#7a9095")
+            rows.append(f'<div style="margin-top:2px"><strong style="color:{colour}">{label}'
+                        f'{(" (HTTP " + status + ")") if status else ""}:</strong> {_e(", ".join(names))}</div>')
+        probe_html = (f'<div style="margin-top:6px;padding-top:6px;border-top:1px solid {col}33;font-size:8pt">'
+                      f'<div style="font-weight:700;color:#1c1c1e">We requested your homepage as each reader</div>{"".join(rows)}</div>')
+
+    def _point(p: str) -> str:
+        label, _, rest = p.partition(":")
+        if rest:
+            return f"<li><strong>{_e(label.strip())}:</strong> {_e(rest.strip())}</li>"
+        return f"<li>{_e(p)}</li>"
+    points_html = (f'<ul style="margin:4px 0 0;padding-left:16px;font-size:8.5pt;line-height:1.4;color:#1c1c1e">'
+                   f'{"".join(_point(p) for p in points)}</ul>') if points else ""
     first_step = ""
     if result.__class__.__name__ == "NetworkResult":     # network reports have no "What to Do First" list — say the step here
         first_step = f'<div style="font-size:9pt;margin-top:6px"><strong style="color:{col}">First step:</strong> {_e(a["first_move"])}</div>'
     return (f'<div style="margin:10px 0 18px;padding:12px 16px;background:{bg};border-left:6px solid {col};border-radius:0 6px 6px 0;break-inside:avoid">'
             f'<div style="font-size:11pt;font-weight:800;color:{col};letter-spacing:.02em;margin-bottom:4px">{_e(a["title"])}</div>'
             f'<div style="font-size:9pt;line-height:1.45;color:#1c1c1e">{_e(a["body"])}</div>'
-            f'{probe_html}{first_step}'
+            f'{points_html}{probe_html}{first_step}'
             f'<div style="font-size:8pt;font-weight:700;color:{col};margin-top:6px">{_ai_access_pointer(result)}</div></div>')
 
 

@@ -3431,3 +3431,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Re-run (Force) a practice Deep Diagnostic with a long evidence reason (e.g. OrthoSouth, Memphis: "4,993 reviews across 3 locations; physician facts verified from NPI registry + site; website facts verified by crawl (14/20)") → page 2 | Four pillar bars visible with values; cap note (if any) then the Evidence line beneath the score block, full width. |
 | T2 | Hospital Deep Diagnostic + teaser | Same. |
 | R1 | Regression | Compare Two cards unchanged; pytest unchanged. |
+
+## AI-ACCESS-ALERT-BULLETS — the "cannot read your website" box condensed to a lead + bullets (2026-09-29)
+
+**Context:** the front-page alert was one dense paragraph plus a chip per crawler. It is now a one-sentence lead, four labelled bullets (What it means / Where the block is / Why it comes first / Who), and the probe results grouped by outcome on one line. Wording still lives in one place (`website_facts.ai_access_problem`, now returning `points`); PDF and completion screen render it the same way.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Hospital Network (base, teaser, Full Detail) on a system whose site walls off crawlers (Concord Hospital Health System, NH; USA Health) → the red box | Title, one lead sentence, four bold-label bullets, then "We requested your homepage as each reader" with a single line "Turned away (HTTP 403): GPTBot, ChatGPT-User, ClaudeBot, PerplexityBot, Google-Extended, Browser", then "First step:" and the Content Improvement Keys pointer. No paragraph, no repeated chips. [pdf] |
+| T2 | Deep Diagnostic (hospital or practice) on a walled-off site → page 1 box | Same layout without the "First step" line; What to Do First still opens with the red allow-rule bullet. [pdf] |
+| T3 | A site whose robots.txt disallows AI crawlers | Amber box with lead + three bullets (What it means / Where the block is / Who). [pdf][ui] |
+| T4 | Completion screen for T1/T2 | The red/amber box shows the lead sentence and the same bullets under it. [ui] |
+| R1 | Regression | Readable site: no box. Score, pillars, Score Evidence unchanged. pytest unchanged. |

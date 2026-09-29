@@ -313,37 +313,46 @@ def summary(f: dict, kind: str = "practice") -> Optional[str]:
 
 def ai_access_problem(f: Optional[dict]) -> Optional[dict]:
     """The executive-facing alert when the site cannot be read by AI assistants.
-    Returns {"level": "critical"|"warning", "title", "body", "first_move"} or None."""
+    Returns {"level": "critical"|"warning", "title", "body", "points", "first_move"} or None.
+    `body` is a one-sentence lead; `points` are short bullets (each "Label: sentence")."""
     f = f or {}
     if f.get("status") == "blocked":
         pr = f.get("crawler_probe") or {}
         blocked = pr.get("blocked") or []
-        evidence = (f" We asked for your homepage as {', '.join(blocked)} and each was turned away"
-                    f"{' — a normal browser too' if pr.get('browser_blocked') else ''}.") if blocked else ""
-        where = (" Your robots.txt is not the cause; the block is a firewall or bot-management rule (for example a CDN's "
-                 "\"block AI bots\" setting), so that is where your web team should look.")
+        points = []
+        if blocked:
+            points.append(f"What we found: we asked for your homepage as {', '.join(blocked)} and each was turned away"
+                          f"{', as was a normal browser' if pr.get('browser_blocked') else ''}.")
+        points += [
+            "What it means: AI assistants describe you from other people's pages and your competitors' content fills the gap. "
+            "Your services, physicians, credentials, hours, insurance and awards never reach them.",
+            "Where the block is: not robots.txt. It is a firewall or bot-management rule, for example a CDN's \"block AI bots\" "
+            "setting, so that is where your web team should look.",
+            "Why it comes first: until this is fixed, every other website fix in this report has no effect. "
+            "It is a configuration change, not a rebuild.",
+            "Who: get this page to whoever runs your website today.",
+        ]
         return {
             "level": "critical",
             "title": "URGENT: AI assistants cannot read your website",
-            "body": ("Your website turns away the crawlers behind ChatGPT, Claude, Gemini and Perplexity." + evidence +
-                     " Nothing you publish — services, physicians, credentials, hours, insurance, awards — reaches the answers "
-                     "patients are getting. AI assistants describe you from other people's pages, and your competitors' content "
-                     "fills the gap. A person opening your site in a browser, or an assistant fetching one page on that person's "
-                     "behalf, may still get through; the automated readers that build everyday answers do not." + where +
-                     " This is a configuration change, not a rebuild, and it should be fixed before anything else in this report. "
-                     "Get this page to whoever runs your website today."),
+            "body": ("Your website turns away the crawlers behind ChatGPT, Claude, Gemini and Perplexity, so nothing you "
+                     "publish reaches the answers patients are getting."),
+            "points": points,
             "first_move": ("Allow the AI crawlers through your website's firewall or bot-management rules (GPTBot, ChatGPT-User, "
                            "ClaudeBot, PerplexityBot, Google-Extended) on public pages, keeping portals and patient data protected — "
-                           "this is not a robots.txt change. Until this is done, AI assistants cannot read anything you publish, so "
-                           "every other website fix below has no effect."),
+                           "this is not a robots.txt change. Every other website fix depends on it."),
         }
     if f.get("status") == "measured" and f.get("robots_allows_ai") is False:
         return {
             "level": "warning",
             "title": "Your website tells AI assistants to stay out",
-            "body": ("Your robots.txt file instructs AI crawlers (such as GPTBot and ClaudeBot) not to read your pages, so what you "
-                     "publish is left out of the answers patients are getting and assistants describe you from other people's "
-                     "pages. This is a one-line configuration change. Get this page to whoever runs your website."),
+            "body": ("Your robots.txt file instructs AI crawlers such as GPTBot and ClaudeBot not to read your pages, so what "
+                     "you publish is left out of the answers patients are getting."),
+            "points": [
+                "What it means: AI assistants describe you from other people's pages instead of your own.",
+                "Where the block is: robots.txt. This is a one-line configuration change.",
+                "Who: get this page to whoever runs your website.",
+            ],
             "first_move": ("Remove the robots.txt rules that disallow AI crawlers (GPTBot, ClaudeBot, PerplexityBot, "
                            "Google-Extended) on public pages so assistants can read what you publish."),
         }

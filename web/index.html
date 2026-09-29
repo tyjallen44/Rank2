@@ -7699,6 +7699,7 @@ function showSingleDone(r) {
   const aaBox = aa ? `<div style="margin-top:12px;padding:12px 14px;background:${aa.level === 'critical' ? '#FDECEA' : '#FFF4E0'};border-left:6px solid ${aa.level === 'critical' ? '#b42318' : '#b8860b'};border-radius:0 8px 8px 0;text-align:left">
         <div style="font-weight:800;color:${aa.level === 'critical' ? '#b42318' : '#8a6508'};margin-bottom:4px">${_learnEsc(aa.title)}</div>
         <div style="font-size:13px;line-height:1.45">${_learnEsc(aa.body)}</div>
+        ${(aa.points || []).length ? `<ul style="margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.4">${aa.points.map(p => { const i = p.indexOf(':'); return i > 0 ? `<li><strong>${_learnEsc(p.slice(0, i))}:</strong> ${_learnEsc(p.slice(i + 1).trim())}</li>` : `<li>${_learnEsc(p)}</li>`; }).join('')}</ul>` : ''}
         <div style="font-size:12px;color:var(--muted);margin-top:4px">The report's first page carries this notice with the readers that were turned away. ${_helpLinkHtml('ai-access', 'What this means and how to explain it')}</div></div>` : '';
   // Observed check (Deep Diagnostic): did real assistants name this organization?
   const sc = r.spotcheck;
