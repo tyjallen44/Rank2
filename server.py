@@ -40,7 +40,7 @@ try:
 except ImportError:
     pass
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
 _PRESERVE_UPPERCASE: frozenset[str] = frozenset({
@@ -527,6 +527,20 @@ async def ai_access_scan_start(file: UploadFile = File(...), label: str = Form("
     if not rows:
         raise HTTPException(400, "No rows with a name column found in that file.")
     return _start_ai_access_scan(rows, (label or "").strip() or (file.filename or "list.csv"), payload)
+
+
+@app.post("/api/ai-access-scan/single")
+async def ai_access_scan_single(body: dict = Body(...), payload: dict = Depends(get_current_user_payload)):
+    """Any signed-in user: test one organization's website without uploading a list.
+    Body: {name, city?, state?, url?, label?}. Without a url the site is looked up from the Google listing."""
+    name = str(body.get("name") or "").strip()
+    url = str(body.get("url") or "").strip()
+    if not name and not url:
+        raise HTTPException(400, "Enter an organization name or a website address.")
+    row = {"name": name or url, "city": str(body.get("city") or "").strip(),
+           "state": str(body.get("state") or "").strip().upper(), "url": url}
+    label = str(body.get("label") or "").strip() or row["name"]
+    return _start_ai_access_scan([row], label, payload)
 
 
 @app.get("/api/ai-access-scans")

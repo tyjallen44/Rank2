@@ -3443,3 +3443,16 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | A site whose robots.txt disallows AI crawlers | Amber box with lead + three bullets (What it means / Where the block is / Who). [pdf][ui] |
 | T4 | Completion screen for T1/T2 | The red/amber box shows the lead sentence and the same bullets under it. [ui] |
 | R1 | Regression | Readable site: no box. Score, pillars, Score Evidence unchanged. pytest unchanged. |
+
+## AAS-SINGLE-SITE — AI Website Access Scan on one organization without a CSV (2026-10-01)
+
+**Context:** the scan panel (History → Batch analysis runs → AI Website Access Scan) only accepted a CSV upload. A second row, "Or test a single site", takes an organization name, city, state and an optional website, and posts to a new `/api/ai-access-scan/single` route that starts the same background job, so the result joins the same results dropdown and CSV export. Any signed-in user. No AI spend.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Open the panel, enter "Concord Hospital", Concord, NH, leave Website blank, click "Scan this site →" | Phase line "Scanning 1 website (looking it up from the Google listing first)…", progress to Done, the results dropdown gains an entry labelled "Concord Hospital" with one row and its bucket (blocked / robots / open / unreachable). [ui] |
+| T2 | Same with Website = `concordhospital.org` (no scheme) | Phase line "Scanning 1 website…"; URL shown as https://concordhospital.org in the result. [ui] |
+| T3 | Website only, name blank | Accepted; the row and label use the domain. [ui] |
+| T4 | Both blank → click | Inline error "Enter an organization name or a website address."; no job started. [ui] |
+| T5 | CSV upload row | Unchanged: "Choose a CSV first." when empty; multi-row scan as before; button label restores after the run. [ui] |
+| R1 | Regression | Event Prep auto-scan unchanged; Download CSV and admin Delete work on single-site results; Learn (Event Preparation) mentions the single-organization option after apply-learn-content. |

@@ -9283,7 +9283,7 @@ function _aasSectionHtml() {
       <summary style="cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:14px;padding:14px 18px">
         <span style="font-size:22px;color:var(--teal-mid);line-height:1">⛨</span>
         <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--body)">Which websites on a list are hidden from AI assistants? <span id="aas-count-lbl" style="font-weight:500;color:var(--muted);font-size:13px"></span></div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">Runs automatically on every finished Event Prep list, or upload any CSV. No AI spend.</div></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Runs automatically on every finished Event Prep list; upload any CSV or test a single site. No AI spend.</div></div>
         <span style="font-size:12px;color:var(--teal);font-weight:600">${_aasOpen ? 'Hide ▲' : 'Show ▼'}</span>
       </summary>
       <div style="padding:0 18px 18px">
@@ -9292,6 +9292,14 @@ function _aasSectionHtml() {
           <div><div class="fl">CSV file</div><input id="aas-file" class="fi" type="file" accept=".csv,text/csv" style="padding:7px 10px;font-size:13px"></div>
           <div style="flex:1;min-width:200px"><div class="fl">Label (optional)</div><input id="aas-label" class="fi" placeholder="e.g. SHSMD 2026 attendees" style="padding:8px 10px;font-size:13px"></div>
           <button class="btn btn-primary" id="aas-go" onclick="aasStart()">Scan websites →</button>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 6px">Or test a single site</div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px"><div class="fl">Organization</div><input id="aas-one-name" class="fi" placeholder="e.g. Concord Hospital" style="padding:8px 10px;font-size:13px"></div>
+          <div style="min-width:130px"><div class="fl">City</div><input id="aas-one-city" class="fi" placeholder="Concord" style="padding:8px 10px;font-size:13px"></div>
+          <div style="width:70px"><div class="fl">State</div><input id="aas-one-state" class="fi" placeholder="NH" maxlength="2" style="padding:8px 10px;font-size:13px;text-transform:uppercase"></div>
+          <div style="flex:1;min-width:200px"><div class="fl">Website (optional)</div><input id="aas-one-url" class="fi" placeholder="concordhospital.org — looked up if blank" style="padding:8px 10px;font-size:13px"></div>
+          <button class="btn btn-primary" id="aas-one-go" onclick="aasStart(true)">Scan this site →</button>
         </div>
         <div id="aas-err" class="err hidden mt8"></div>
         <div id="aas-progress" class="hidden" style="margin-top:14px">
@@ -9746,25 +9754,39 @@ const _AAS_BUCKETS = [
   ['no_website',  'No website to test',                        '#c4c8cf'],
 ];
 let _aasEs = null;
-async function aasStart() {
-  const f = document.getElementById('aas-file').files[0], err = document.getElementById('aas-err'), go = document.getElementById('aas-go');
+async function aasStart(single) {
+  // single=true: the "Or test a single site" row; otherwise the CSV upload. Same job, same results list.
+  const err = document.getElementById('aas-err'), go = document.getElementById(single ? 'aas-one-go' : 'aas-go');
+  const goLabel = single ? 'Scan this site →' : 'Scan websites →';
   err.classList.add('hidden');
-  if (!f) { err.textContent = 'Choose a CSV first.'; err.classList.remove('hidden'); return; }
-  const fd = new FormData(); fd.append('file', f); fd.append('label', document.getElementById('aas-label').value.trim());
+  let req;
+  if (single) {
+    const v = id => document.getElementById(id).value.trim();
+    const body = { name: v('aas-one-name'), city: v('aas-one-city'), state: v('aas-one-state').toUpperCase(), url: v('aas-one-url') };
+    if (!body.name && !body.url) { err.textContent = 'Enter an organization name or a website address.'; err.classList.remove('hidden'); return; }
+    req = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  } else {
+    const f = document.getElementById('aas-file').files[0];
+    if (!f) { err.textContent = 'Choose a CSV first.'; err.classList.remove('hidden'); return; }
+    const fd = new FormData(); fd.append('file', f); fd.append('label', document.getElementById('aas-label').value.trim());
+    req = { method: 'POST', body: fd };
+  }
   go.disabled = true; go.innerHTML = '<span class="spinner"></span> Starting…';
   const prog = document.getElementById('aas-progress'), log = document.getElementById('aas-log'), bar = document.getElementById('aas-bar');
   prog.classList.remove('hidden'); log.innerHTML = ''; bar.style.width = '0'; document.getElementById('aas-count').textContent = '';
-  document.getElementById('aas-phase').textContent = 'Uploading…';
+  document.getElementById('aas-phase').textContent = single ? 'Starting…' : 'Uploading…';
   let d;
   try {
-    const r = await api('/api/ai-access-scan', { method: 'POST', body: fd });
+    const r = await api(single ? '/api/ai-access-scan/single' : '/api/ai-access-scan', req);
     if (!r.ok) throw new Error(await errDetail(r, 'Could not start the scan'));
     d = await r.json();
-  } catch (e) { err.textContent = e.message || String(e); err.classList.remove('hidden'); go.disabled = false; go.textContent = 'Scan websites →'; prog.classList.add('hidden'); return; }
-  document.getElementById('aas-phase').textContent = `Scanning ${d.total} organizations${d.without_url ? ` (${d.without_url} without a website in the file — looking those up)` : ''}…`;
+  } catch (e) { err.textContent = e.message || String(e); err.classList.remove('hidden'); go.disabled = false; go.textContent = goLabel; prog.classList.add('hidden'); return; }
+  document.getElementById('aas-phase').textContent = d.total === 1
+    ? `Scanning 1 website${d.without_url ? ' (looking it up from the Google listing first)' : ''}…`
+    : `Scanning ${d.total} organizations${d.without_url ? ` (${d.without_url} without a website in the file — looking those up)` : ''}…`;
   if (_aasEs) { try { _aasEs.close(); } catch (_) {} }
   const es = _aasEs = new EventSource(`/api/jobs/${d.job_id}/stream?token=${encodeURIComponent(_token)}`);
-  const finish = () => { es.close(); go.disabled = false; go.textContent = 'Scan websites →'; };
+  const finish = () => { es.close(); go.disabled = false; go.textContent = goLabel; };
   es.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.type === 'phase') document.getElementById('aas-phase').textContent = m.text || '';

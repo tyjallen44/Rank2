@@ -171,7 +171,7 @@ STARTER_ARTICLES: list[dict] = [
             '\n'
             '- A report PDF for each organization, delivered together in a ZIP\n'
             "- Your list back as an **enriched CSV** with each attendee's Pulse Score, quartile, and letter grade for quick review\n"
-            '- An **AI Website Access Scan** of the whole list, run automatically when the event finishes: every attendee\'s website is tested as GPTBot, ChatGPT-User, ClaudeBot, PerplexityBot and a browser, and the share hidden from AI assistants is shown under History → Batch analysis runs (also runnable on any uploaded CSV)\n'
+            '- An **AI Website Access Scan** of the whole list, run automatically when the event finishes: every attendee\'s website is tested as GPTBot, ChatGPT-User, ClaudeBot, PerplexityBot and a browser, and the share hidden from AI assistants is shown under History → Batch analysis runs (also runnable on any uploaded CSV or a single organization typed into the form)\n'
             '- For specialty-practice attendees, the full combined report with the content analysis and drafted prescription\n'
             '- Optionally (Advanced options), a Teaser version of each report\n'
             '\n'
