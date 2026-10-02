@@ -116,7 +116,6 @@ def update_user_access(user_id: str, preset: Optional[str], indicators_json: Opt
     """Assign an access preset and/or per-user report indicators (NULL = unrestricted / use preset)."""
     con = get_connection()
     con.execute("UPDATE users SET preset=?, indicators_json=? WHERE id=?", [preset or None, indicators_json or None, user_id])
-    con.commit()
     con.close()
 
 

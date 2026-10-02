@@ -1038,6 +1038,33 @@ def _job_run_single(
         _put(loop, queue, None)  # sentinel → closes SSE stream
 
 
+_ANON_PDF_RX = re.compile(r"^content_[0-9a-f]{6,}_report(\d)(?:[-_].*)?\.pdf$", re.I)
+
+
+def _descriptive_pdf_name(run: dict, key: str = "pdf_path") -> str:
+    """The file name a History row downloads as. Rows written before 2026-10-02 by the
+    hospital-type Deep Diagnostic + keys path are content_<id>_report1.pdf on disk; serve
+    those under the same descriptive name every other report carries."""
+    raw = Path(run.get(key) or "").name
+    if not raw or not _ANON_PDF_RX.match(raw):
+        return raw
+    from perception.analyzer import _slug
+    from perception.strings import titlecase_filename
+    name = _slug(str(run.get("entity_name") or run.get("location") or "report"))[:40]
+    loc = str(run.get("location") or "")
+    city, _, state = loc.partition(",")
+    city = city.strip().replace(" ", "-"); state = state.strip()[:2].upper()
+    kind = "Practice" if (run.get("entity_type") in ("practice", "service_line") or run.get("specialty")) else "Deep-Diagnostic"
+    suffix = "_Content-Analysis" if _ANON_PDF_RX.match(raw).group(1) == "2" else ""
+    ts = ""
+    try:
+        from datetime import datetime as _dt
+        ts = "-" + _dt.fromisoformat(str(run.get("created_at")).replace("Z", "")).strftime("%y%m%d-%H%M")
+    except Exception:
+        pass
+    return titlecase_filename(f"{name}_{city}_{state}_{kind}{ts}") + f"{suffix}.pdf"
+
+
 def _content_report_paths(result, ca_id: str) -> tuple[Path, Path]:
     """Where the Content Improvement Keys reports go. Report 1 (the Deep Diagnostic with the
     keys section) replaces the base PDF under the base report's own descriptive name, exactly
@@ -2386,6 +2413,7 @@ async def get_history(payload: dict = Depends(get_current_user_payload), days: i
         bp = r.get("briefing_pdf_path")
         result.append({
             **r,
+            "file_name": _descriptive_pdf_name(r),
             "generated_at": str(r["generated_at"]),
             "created_at": str(r["created_at"]) if r.get("created_at") else None,
             "has_pdf": has_pdf,
@@ -2429,7 +2457,7 @@ async def download_pdf(run_id: str, payload: dict = Depends(get_current_user_pay
     pdf = Path(run["pdf_path"])
     if not pdf.exists():
         raise HTTPException(404, "PDF file not found on disk")
-    return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
+    return FileResponse(str(pdf), media_type="application/pdf", filename=_descriptive_pdf_name(run))
 
 
 @app.get("/api/reports/{run_id}/teaser-pdf")

@@ -3548,3 +3548,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T5 | History as the association account vs. as an unrestricted user | Association account sees only runs by accounts on its preset plus its own (downloads of other runs 404); unrestricted users see everything as before. [ui] |
 | T6 | Switch the account back to "Unrestricted" | Full sidebar and all types/options return after a reload. [ui] |
 | R1 | Regression | Partner password sessions and every existing email account are unrestricted and behave exactly as before; Admin role gating unchanged; pytest: tests/test_presets.py passes, the 15 stale failures only. |
+
+## FIX-ACCESS-UPDATE + OLD-REPORT-NAMES (2026-10-02)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Admin → Users → Access select: Unrestricted → Association — Hospital Network | Saves ("Preset assigned"), no "Could not update access" alert; reload shows the preset. (Cause: the Postgres wrapper has no commit(); removed.) [ui] |
+| T2 | History rows whose file on disk is `content_<id>_report1.pdf` (Olympia Orthopaedic Associates, Opaortho) | Listed and downloaded as `<Name>_<City>_<ST>_Deep-Diagnostic-<yymmdd-HHMM>.pdf`; files on disk untouched. [ui] |
+| T3 | Re-run one of those organizations (served from the 30-day cache) | The new row's PDF is named by the normal practice/hospital convention, never `content_…`. [ui] |

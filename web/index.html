@@ -8747,7 +8747,7 @@ function historySearch(v) {
 }
 
 function _historyFilename(r) {
-  return (r.pdf_path || '').split('/').pop().replace(/\.pdf$/i, '') || '—';
+  return (r.file_name || (r.pdf_path || '').split('/').pop()).replace(/\.pdf$/i, '') || '—';
 }
 
 function _fmtRunDate(run) {

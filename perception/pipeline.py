@@ -137,11 +137,18 @@ def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: 
 
     if not skip_pdf:
         ts = _dt.utcnow().strftime("%y%m%d-%H%M")
-        if res.pdf_path:
-            stem = _re.sub(r"-\d{6}-\d{4}(_[A-Za-z]+)?$", "", Path(res.pdf_path).stem) or res.run_id
+        old_stem = Path(res.pdf_path).stem if res.pdf_path else ""
+        city, _, state = (res.location or "").partition(",")
+        if res.pdf_path and not _re.match(r"^content_[0-9a-f]{6,}_report\d", old_stem, _re.I):
+            stem = _re.sub(r"-\d{6}-\d{4}(_[A-Za-z]+)?$", "", old_stem) or res.run_id
+            pdf_path = Path(output_dir) / f"{stem}-{ts}.pdf"
+        elif adapter.type_key == "practice":
+            pdf_path = Path(output_dir) / f"{_prac._practice_stem(res.entity_name or 'practice', city.strip(), state.strip(), False)}.pdf"
+        elif adapter.type_key == "hospital":
+            pdf_path = Path(output_dir) / f"{_hosp._individual_stem(res.entity_name or 'hospital', city.strip(), state.strip(), False)}.pdf"
         else:
             stem = _re.sub(r"[^A-Za-z0-9]+", "-", res.entity_name or res.location or "report").strip("-")
-        pdf_path = Path(output_dir) / f"{stem}-{ts}.pdf"
+            pdf_path = Path(output_dir) / f"{stem}-{ts}.pdf"
         emit({"type": "phase", "name": "pdf", "text": "Rendering PDF"})
         try:
             if adapter.type_key == "community_health":
