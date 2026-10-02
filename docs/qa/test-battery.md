@@ -3600,3 +3600,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | A site that admits a browser but turns away GPTBot/ClaudeBot by name | Still "blocked": red box, Identity cap 45, checklist ✗ Fix. [pdf] |
 | T3 | AI Website Access Scan (History) on dmos.com | Bucket "Unreachable from our servers" (unchanged behaviour). [ui] |
 | R1 | Regression | Measured sites unchanged; unreachable (DNS/timeout) unchanged; pytest: tests/test_website_refused.py passes, the 15 stale failures only. |
+
+## FIX-HOME-SUGGEST-DMOS — cache re-runs saved without a type; admins never narrowed (2026-10-02)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Admin → Operations → Maintenance → `backfill-run-types` (preview, then apply) | Lists today's republished rows (e.g. DMOS 20:58 UTC) and sets their type; afterwards Home → type "DMOS" suggests the 2026-10-02 run as a Specialty Practice; History type filter "Specialty Practice" includes it. [ui] |
+| T2 | Re-run any cached practice | The new History row carries entity_type / service line / parent system from the start (History type badge correct, suggestion kind correct). [ui] |
+| T3 | Set a preset on an admin account by mistake | The admin stays unrestricted (full sidebar, all suggestions); presets only narrow non-admin accounts. [ui] |

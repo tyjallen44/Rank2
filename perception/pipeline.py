@@ -169,6 +169,14 @@ def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: 
         except Exception as exc:
             console.print(f"[yellow]⚠[/yellow] PDF re-render of cached result failed ({type(exc).__name__}: {exc}); keeping the stored file.")
     _save_to_db(res)
+    try:   # the type columns a fresh run writes in save_extras (History type, cache key, suggestions)
+        from .db import get_connection as _gc
+        con = _gc()
+        con.execute("UPDATE analysis_runs SET entity_type=?, rubric_version=?, practice_profile=?, service_line=?, parent_system=? WHERE run_id=?",
+                    [res.entity_type or adapter.type_key, res.rubric_version, res.practice_profile, res.service_line, res.parent_system, res.run_id])
+        con.close()
+    except Exception as exc:
+        console.print(f"[yellow]⚠[/yellow] Could not persist run type on the republished row ({type(exc).__name__}).")
     return res
 
 

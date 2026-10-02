@@ -233,6 +233,8 @@ def _caps_for_payload(payload: dict) -> dict:
     """The account's access (perception/presets.py). Password sessions and accounts with no
     preset / indicators are unrestricted."""
     from perception.presets import capabilities
+    if payload.get("role") == "admin":
+        return capabilities(None)          # administrators are never narrowed, whatever is set on the row
     uid = payload.get("uid")
     user = None
     if uid:
@@ -448,6 +450,7 @@ _MAINT_TASKS = {
     "retrack-practices": "Tracked entities that have a specialty but are typed Hospital → type Specialty Practice so the next snapshot uses the practice rubric.",
     "apply-learn-content": "Sync the live Learn / Methodology articles to the reviewed seed (perception/learn_seed.py); custom articles are left alone.",
     "backfill-tracked-ran-by": "History rows with no 'Run by' that are Trends snapshots → attribute them to whoever set up that tracked entity.",
+    "backfill-run-types": "Deep Diagnostic rows saved without a type (cache re-runs on 2026-10-02) → set entity_type / service line / parent system / rubric from the stored result so History, suggestions and the cache key see them correctly.",
     "seed-org-graph": "Entity graph: seed organizations + confirmed locations from every tracked entity's fixed roster (practice, service line, community health).",
 }
 
@@ -744,6 +747,23 @@ async def admin_maintenance(task: str, apply: bool = False, _: dict = Depends(re
                         _g_upsert(nm, city, st, et, specialty=spec, anchor=anc, locations=locs, source="trends", by=who)
                     n += 1
                 lines.append(f"{'Seeded' if apply else 'Would seed'} {n} organization(s)." + (f" Graph now: {_g_stats()}" if apply else ""))
+            elif task == "backfill-run-types":
+                rows = con.execute(
+                    "SELECT run_id, result_json FROM analysis_runs WHERE individual_report = TRUE AND entity_type IS NULL "
+                    "AND result_json IS NOT NULL").fetchall()
+                fixed = 0
+                for rid, js in rows:
+                    try:
+                        d = json.loads(js)
+                    except Exception:
+                        continue
+                    et = d.get("entity_type") or "hospital"
+                    lines.append(f"{'SET' if apply else 'would set'} {rid[:8]} → {et}{(' / ' + d['service_line']) if d.get('service_line') else ''}")
+                    if apply:
+                        con.execute("UPDATE analysis_runs SET entity_type=?, rubric_version=?, practice_profile=?, service_line=?, parent_system=? WHERE run_id=?",
+                                    [et, d.get("rubric_version"), d.get("practice_profile"), d.get("service_line"), d.get("parent_system"), rid])
+                        fixed += 1
+                lines.append(f"rows {'updated' if apply else 'pending'}: {fixed if apply else len(rows)}")
             elif task == "backfill-tracked-ran-by":
                 # Trends snapshots used to be created without the user's email, so History showed
                 # "—" for them. Attribute each unattributed run whose name matches a tracked entity
