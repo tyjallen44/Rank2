@@ -250,9 +250,45 @@ def _reputation_section(result: AnalysisResult, p: Optional[RankedProvider], ed:
 <div class="score-breakdown">
 {_bars_html(_pillars(p, result))}
 <p style="font-size:8.5pt;color:#8a9aaa;margin-top:8px">Pulse Score: <strong style="color:{primary}">{composite}/100</strong> &nbsp;·&nbsp; {_e(_quartile_label(quartile))} ({_e(q_band)}){ev}</p>
+{_pillar_notes_html(result)}
 </div>
 {ai_says_html}
 {_ai_access_alert_html(result)}"""
+
+
+def _pillar_notes_html(result: AnalysisResult) -> str:
+    """One plain sentence per pillar, right under the bars."""
+    from .checklist import pillar_blurbs
+    items = [(l, b) for l, b in pillar_blurbs(result) if b]
+    if not items:
+        return ""
+    return ('<div class="pillar-notes">' + "".join(f'<div><strong>{_e(l)}.</strong> {_e(b)}</div>' for l, b in items) + "</div>")
+
+
+_CHECK_STYLE = {"pass": ("✓ Pass", _GREEN_OK), "fail": ("✗ Fix", _RED_BAD), "partial": ("◐ Partial", "#b8860b"), "na": ("— Not checked", "#8a9aaa")}
+
+
+def _checklist_section(result: AnalysisResult, findings=None) -> str:
+    """AI Readiness Checklist — the same ten measured checks on every report."""
+    from .checklist import build_checklist, summarize
+    rows = build_checklist(result, findings)
+    sm = summarize(rows)
+    trs = ""
+    for r in rows:
+        lbl, col = _CHECK_STYLE[r["status"]]
+        ref = f' <span style="font-family:monospace;font-size:7.5pt;color:#5a6a7a">{_e(r["finding"])}</span>' if r.get("finding") else ""
+        trs += (f'<tr><td style="font-weight:600">{_e(r["label"])}</td>'
+                f'<td style="white-space:nowrap;font-weight:700;color:{col}">{lbl}</td>'
+                f'<td style="font-size:8.5pt;color:#3a4a5a">{_e(r["detail"])}{ref}</td>'
+                f'<td style="font-size:8pt;color:#5a6a7a">{_e(r["feeds"])}</td></tr>')
+    intro = (f"The same ten checks on every report, each read from the source (website crawl, AI-crawler probe, Google profiles, "
+             f"review counts, Wikidata and Wikipedia). This report: <strong>{sm['pass']} pass</strong>, <strong style=\"color:{_RED_BAD}\">{sm['fail']} to fix</strong>"
+             + (f", {sm['partial']} partial" if sm['partial'] else "") + (f", {sm['na']} not checked" if sm['na'] else "")
+             + ". A finding id points to the fix in the content analysis.")
+    return (f'<div style="break-inside:avoid;page-break-inside:avoid"><h2>AI Readiness Checklist</h2>'
+            f'<p style="font-size:9pt;color:#4a5a6a">{intro}</p>'
+            f'<table class="facility-table deep-table"><thead><tr><th>Check</th><th>Result</th><th>What we found</th><th>Feeds</th></tr></thead>'
+            f'<tbody>{trs}</tbody></table></div>')
 
 
 def _first_moves_section(result: AnalysisResult) -> str:
@@ -670,6 +706,9 @@ def _deep_extra_css(primary: str, accent: str, pale: str) -> str:
 .deep-table th {{ font-size: 8pt; }}
 .deep-table td {{ padding: 6px 8px; }}
 .evidence {{ margin: 8px 0 16px; }}
+.pillar-notes {{ margin-top: 10px; font-size: 8.5pt; color: #4a5a6a; line-height: 1.5; columns: 2; column-gap: 24px; }}
+.pillar-notes div {{ break-inside: avoid; margin-bottom: 3px; }}
+.pillar-notes strong {{ color: {primary}; }}
 .ev-label {{ font-size: 8pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #5a6a7a; margin: 12px 0 4px; }}
 .ev-list {{ margin: 0 0 4px 18px; padding: 0; }}
 .ev-list li {{ font-size: 9pt; line-height: 1.5; margin-bottom: 3px; }}
@@ -773,7 +812,8 @@ def build_deep_html(result: AnalysisResult, brand_cfg: dict, content_findings=No
     appendix = _sources_box_html(result) + _methodology_box_html(
         [_e(l) for l, _ in _pillars(p, result)], edition="practice" if ed["rubric"] == "practice" else "hospital")
 
-    gated = f"{first_moves}{locations}{physicians}{spot}{evidence}{tail}"
+    checklist = _checklist_section(result, content_findings if content_findings is not None else content_keys)
+    gated = f"{first_moves}{locations}{physicians}{spot}{evidence}{checklist}{tail}"
     if teaser:
         detail = f'{_teaser_gate(primary)}<div class="net-teaser-blur-content">{gated}</div>'
     else:

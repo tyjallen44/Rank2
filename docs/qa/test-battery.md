@@ -3565,3 +3565,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Same account with Event Preparation ticked | Chooser shows "A physician practice or group" and "A list of organizations" only; goals reduced to "Diagnose it and get the fixes". [ui] |
 | T3 | Unrestricted account | Home unchanged: full chooser, all pick-card buttons, suggestions across everything. [ui] |
 | T4 | `GET /api/entities/suggest?q=…` as the association account | Returns only kinds the account may run and only organizations run by accounts on its preset. [api] |
+
+## AI-READINESS-CHECKLIST + PILLAR-NOTES — the same ten checks on every Deep Diagnostic; one sentence per pillar (2026-10-02)
+
+**Context (association consistency, items 1 and 2):** reports listed only failed content checks, so two practices got different-length lists and nobody saw what passed. Every Deep Diagnostic (hospital, practice, service line; teaser gated) now carries an **AI Readiness Checklist** after Evidence Behind the Score: ten fixed rows — AI assistants can read your website · robots.txt allows AI crawlers · Organization schema · Physician schema · Crawlable physician bio pages · XML sitemap · llms.txt · Google Business Profiles complete and linked · Review volume · Wikidata item and Wikipedia article — each ✓ Pass / ✗ Fix / ◐ Partial / — Not checked, with what was found, the finding id (CIK-00x) when a fix exists in the content analysis, and the pillar it feeds (practice: Identity & Machine-Readability / Reviews & Reputation; hospital: Experience & Reviews / Credentials & Recognition / "Content visibility (not scored)"). Nothing is modelled; nothing changes the score. Under the pillar bars, one plain sentence per pillar of the entity's own rubric.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Specialty Practice Deep Diagnostic (combined report) | Page 2: four one-line pillar notes in two columns under the bars (practice labels). After Evidence: "AI Readiness Checklist" table with exactly ten rows in the fixed order, intro "This report: N pass, N to fix…", fails carrying the matching CIK id. [pdf] |
+| T2 | Hospital Deep Diagnostic | Hospital pillar notes (Outcomes & Safety…); Physician schema and bio-page rows read "Practice reports only"; web rows feed "Content visibility (not scored)". [pdf] |
+| T3 | Walled-off site | Row 1 ✗ Fix "Turned away: GPTBot, …"; robots row "Not readable while the firewall blocks crawlers". [pdf] |
+| T4 | Run without content analysis / profile audit | Rows still present, marked "— Not checked"; table never shorter than ten rows. [pdf] |
+| R1 | Regression | Scores, pillars, evidence, content findings unchanged; Compare Two and Network unaffected; pytest: tests/test_checklist.py passes, the 15 stale failures only. |
