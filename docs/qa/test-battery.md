@@ -3512,3 +3512,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T5 | Footer, every page, every report type | "Prepared by Pulse \| RLDatix — Confidential" left, "Data mm/dd/yyyy" centre, "Page x of y" right. [pdf] |
 | T6 | Hospital Network Full Detail + standalone content report | Same compact findings + drafts appendix; the Full Detail still starts the content section on a new page. [pdf] |
 | R1 | Regression | Finding text, drafts and page-map two-pass numbering unchanged in content; teaser blur unchanged; pytest: the 15 stale failures only. |
+
+## FIX-CONTENT-REPORT-FILENAMES — hospital-type Deep Diagnostic + keys reports named like every other report (2026-10-02)
+
+**Context:** the hospital-type Deep Diagnostic (which also runs for an orthopedic group entered as a Hospital) wrote its final PDF as `content_<id>_report1.pdf` and the detailed content report as `content_<id>_report2.pdf`. Both now use the base report's descriptive name: Report 1 replaces the base PDF under its own name (as the practice combined report already did), and Report 2 sits beside it as `<base stem>_Content-Analysis.pdf`. The anonymous names remain only for runs that produced no base PDF. Redrafts rewrite the stored Report 2 path.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Hospital-type Deep Diagnostic (e.g. Olympia Orthopaedic Associates, Seattle, run as Hospital) | History download name is like `Olympia-Orthopaedic-Associates_Seattle_WA_Deep-Diagnostic-261002-1347.pdf`; the Downloads menu's content report is `…_Content-Analysis.pdf`. No `content_…_report1.pdf`. [ui] |
+| T2 | Content Analysis redraft (Admin) | Rewrites the same `…_Content-Analysis.pdf`. [ui] |
+| R1 | Regression | Practice combined report names unchanged; History Downloads (1)/(2) counts unchanged; skip-PDF data pulls unaffected. |

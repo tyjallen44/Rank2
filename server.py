@@ -996,6 +996,18 @@ def _job_run_single(
         _put(loop, queue, None)  # sentinel → closes SSE stream
 
 
+def _content_report_paths(result, ca_id: str) -> tuple[Path, Path]:
+    """Where the Content Improvement Keys reports go. Report 1 (the Deep Diagnostic with the
+    keys section) replaces the base PDF under the base report's own descriptive name, exactly
+    as the practice combined report does; Report 2 (the detailed content report) sits beside
+    it as <base stem>_Content-Analysis.pdf. The anonymous content_<id>_report*.pdf names are
+    only used when the run produced no base PDF."""
+    if getattr(result, "pdf_path", None):
+        base = Path(result.pdf_path)
+        return base, base.with_name(f"{base.stem}_Content-Analysis.pdf")
+    return REPORTS_DIR / f"content_{ca_id}_report1.pdf", REPORTS_DIR / f"content_{ca_id}_report2.pdf"
+
+
 def _finalize_hospital_combined(result, entity_name: str, city: str, state: str,
                                 brand: str, job: dict, emit) -> None:
     """Fold the content analysis into a single-hospital Deep Diagnostic run:
@@ -1076,7 +1088,7 @@ def _finalize_hospital_combined(result, entity_name: str, city: str, state: str,
     report1 = ""
     try:
         from perception.pdf import render_content_deep_dive
-        _r1 = REPORTS_DIR / f"content_{ca_id}_report1.pdf"
+        _r1, _ = _content_report_paths(result, ca_id)
         render_content_deep_dive(result, _r1, findings, brand=brand)
         report1 = str(_r1)
     except Exception as _pe:
@@ -1085,7 +1097,7 @@ def _finalize_hospital_combined(result, entity_name: str, city: str, state: str,
     report2 = ""
     try:
         from perception.content_report_pdf import render_content_report_pdf
-        _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
+        _, _r2 = _content_report_paths(result, ca_id)
         render_content_report_pdf(entity_name, loc, findings, str(_r2),
                                   report_title=result.report_title or entity_name)
         report2 = str(_r2)
@@ -3541,7 +3553,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
         report1 = ""
         try:
             from perception.pdf import render_content_deep_dive
-            _r1 = REPORTS_DIR / f"content_{ca_id}_report1.pdf"
+            _r1, _ = _content_report_paths(result, ca_id)
             render_content_deep_dive(result, _r1, findings, brand=brand)
             report1 = str(_r1)
         except Exception as _pe:
@@ -3552,7 +3564,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
         report2 = ""
         try:
             from perception.content_report_pdf import render_content_report_pdf
-            _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
+            _, _r2 = _content_report_paths(result, ca_id)
             loc = ", ".join([p for p in [city, state] if p])
             render_content_report_pdf(entity_name, loc, findings, str(_r2),
                                       report_title=req.get("report_title") or entity_name)
@@ -3772,7 +3784,7 @@ def _job_content_draft(job_id: str, ca_id: str) -> None:
                                ServiceLineScorecardSet(**_d["cards"]).scorecards)
         except Exception:
             _sl_payload = None
-        _r2 = REPORTS_DIR / f"content_{ca_id}_report2.pdf"
+        _r2 = Path(rec["report2_path"]) if rec.get("report2_path") else REPORTS_DIR / f"content_{ca_id}_report2.pdf"
         render_content_report_pdf(rec["entity_name"], rec.get("location", ""), model,
                                   str(_r2), report_title=rec.get("report_title") or rec["entity_name"],
                                   service_line=_sl_payload)
