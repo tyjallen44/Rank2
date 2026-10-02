@@ -3608,3 +3608,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Admin → Operations → Maintenance → `backfill-run-types` (preview, then apply) | Lists today's republished rows (e.g. DMOS 20:58 UTC) and sets their type; afterwards Home → type "DMOS" suggests the 2026-10-02 run as a Specialty Practice; History type filter "Specialty Practice" includes it. [ui] |
 | T2 | Re-run any cached practice | The new History row carries entity_type / service line / parent system from the start (History type badge correct, suggestion kind correct). [ui] |
 | T3 | Set a preset on an admin account by mistake | The admin stays unrestricted (full sidebar, all suggestions); presets only narrow non-admin accounts. [ui] |
+
+## FIX-CACHE-HIT-COMPOSITE — a cached practice re-run still collects the Practice / physician composite when asked (2026-10-02)
+
+**Context:** the Practice Composite (locations + confirmed physicians, Google via Places + Healthgrades/Vitals/WebMD via the identity-checked search pass) is collected inside the analysis, so a run served from the 30-day cache skipped it even though the form had confirmed physicians. Now a cache hit runs the collection when the form asked for the composite and the stored result has no composite rows, or the confirmed physicians are not all in it; the rows are saved with the republished run. Spot check and content analysis already ran on cache hits.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Re-run DMOS Orthopaedic Centers (cached today), confirm physicians in Stage 2, Run Diagnostic | Progress shows "Returning today's cached result" then "Collecting practice reputation" with the physician lookups; the PDF's Physicians table lists the confirmed physicians with ratings / reviews / platforms; History row dated today. [ui][pdf] |
+| T2 | Re-run with the same physicians already in the cached composite | No second collection (table reused). [ui] |
+| R1 | Regression | Fresh runs unchanged; hospital cache hits unchanged; pytest: the 15 stale failures only. |

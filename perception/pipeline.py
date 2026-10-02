@@ -109,7 +109,7 @@ def _website_facts(ctx: "_Ctx", kind: str) -> Optional[dict]:
 
 
 def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: str, skip_pdf: bool,
-                      emit, console) -> AnalysisResult:
+                      emit, console, composite: Optional[dict] = None) -> AnalysisResult:
     """Serve a cached analysis as today's report: new run_id + History row, generated today
     (data date = the original analysis), fresh PDF in `output_dir`, teaser dropped (opt-in,
     the server rebuilds it when asked). Cached results from before the website crawl get
@@ -135,6 +135,29 @@ def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: 
             res.website_facts = {k: v for k, v in (f or {}).items() if k != "site_pages"}
         except Exception as exc:
             console.print(f"[yellow]⚠[/yellow] Website facts failed on cached result ({type(exc).__name__}); proceeding without.")
+
+    # The Practice Composite (locations + confirmed physicians, Google + Healthgrades/Vitals/WebMD)
+    # is collected inside the analysis, so a cache hit used to skip it even when the form asked
+    # for it. Run it now when requested and the cached result lacks it (or lacks these physicians).
+    comp = composite or {}
+    if adapter.type_key == "practice" and res.rankings and comp.get("practice_composite"):
+        _wanted = {str(n).strip().lower() for v in (comp.get("physician_roster") or {}).values() for n in
+                   ([x.get("name") if isinstance(x, dict) else x for x in v] if isinstance(v, list) else [])}
+        _have = {str(ph.get("physician_name") or "").lower().replace("dr. ", "").strip()
+                 for cr in (res.practice_composite_rows or []) for ph in (cr.get("physicians") or [])}
+        _missing = bool(_wanted) and not (_wanted <= _have)
+        if not res.practice_composite_rows or (comp.get("physician_composite") and _missing):
+            try:
+                city, _, state = (res.location or "").partition(",")
+                _prac._collect_practice_composite(
+                    res, res.rankings, res.entity_name or "", city.strip(), state.strip(),
+                    anchor_google=comp.get("anchor_listing") or {}, aggregate_siblings=comp.get("confirmed_siblings"),
+                    practice_roster=comp.get("practice_roster"), anchor_addr_norm="",
+                    physician_composite=bool(comp.get("physician_composite")), physician_roster=comp.get("physician_roster"),
+                    emit=emit, force_rerun=bool(comp.get("force_rerun")))
+                res.physician_composite_rows = [ph for cr in (res.practice_composite_rows or []) for ph in (cr.get("physicians") or [])]
+            except Exception as exc:
+                console.print(f"[yellow]⚠[/yellow] Practice Composite on cached result failed ({type(exc).__name__}: {exc}); keeping the stored table.")
 
     if adapter.type_key == "practice" and res.rankings and res.website_facts and not (res.website_facts or {}).get("identity_cap"):
         from .data.website_facts import apply_identity_cap
@@ -169,6 +192,10 @@ def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: 
         except Exception as exc:
             console.print(f"[yellow]⚠[/yellow] PDF re-render of cached result failed ({type(exc).__name__}: {exc}); keeping the stored file.")
     _save_to_db(res)
+    try:
+        _hosp._save_reputation_rows(res)
+    except Exception:
+        pass
     try:   # the type columns a fresh run writes in save_extras (History type, cache key, suggestions)
         from .db import get_connection as _gc
         con = _gc()
@@ -765,19 +792,24 @@ def run_individual(
     # A cache hit is still a report the user ran today: it is republished as a NEW History
     # row (new run_id, today's date, the requester as "Run by", a fresh PDF in this job's
     # output folder) while the score and data date stay those of the cached analysis.
+    _composite_req = dict(practice_composite=practice_composite, practice_roster=practice_roster,
+                          physician_composite=physician_composite, physician_roster=physician_roster,
+                          confirmed_siblings=confirmed_siblings, anchor_listing=anchor_listing, force_rerun=force_rerun)
     if not override_today_lock:
         from .db import get_recent_run
         _today = get_recent_run(entity_name, _loc_key, days=0, entity_type=adapter.type_key, aggregate=aggregate)
         if _today:
             emit({"type": "phase", "name": "cached", "text": f"Returning today's cached result for {entity_name}"})
             return _republish_cached(AnalysisResult.model_validate_json(_today["result_json"]), adapter,
-                                     output_dir=output_dir, brand=brand, skip_pdf=skip_pdf, emit=emit, console=console)
+                                     output_dir=output_dir, brand=brand, skip_pdf=skip_pdf, emit=emit, console=console,
+                                     composite=_composite_req)
         if not force_rerun:
             _cached = get_recent_run(entity_name, _loc_key, days=30, entity_type=adapter.type_key, aggregate=aggregate)
             if _cached:
                 emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
                 return _republish_cached(AnalysisResult.model_validate_json(_cached["result_json"]), adapter,
-                                         output_dir=output_dir, brand=brand, skip_pdf=skip_pdf, emit=emit, console=console)
+                                         output_dir=output_dir, brand=brand, skip_pdf=skip_pdf, emit=emit, console=console,
+                                         composite=_composite_req)
 
     client = _get_client()
     run_id = str(uuid.uuid4())
