@@ -432,7 +432,8 @@ def _methodology_box_html(pillars: list[str], n_label: str = "four pillars", edi
         verified = ("Google Business Profile ratings, review counts and profile details for every confirmed location are read "
                     "directly from Google. The organization&rsquo;s website is crawled for schema markup, physician pages, a sitemap, "
                     "llms.txt and whether AI crawlers are allowed; that measured result sets the website part of Identity &amp; "
-                    "Machine-Readability, replacing the model&rsquo;s estimate. Quality claims made on the site are checked.")
+                    "Machine-Readability, replacing the model&rsquo;s estimate, and when AI crawlers are turned away at the firewall "
+                    "the pillar is capped at 45 (robots.txt disallow: 55) until the site is readable. Quality claims made on the site are checked.")
     elif edition == "community":
         verified = ("Google Business Profile ratings and review counts for every confirmed site are read directly from Google, "
                     "the HRSA Find-a-Health-Center record is fetched, and a query battery measures how often the center is surfaced "

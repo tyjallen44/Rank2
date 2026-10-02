@@ -247,6 +247,52 @@ def scan_claims(text: str) -> dict:
     return claims
 
 
+# Identity & Machine-Readability ceilings when the site cannot be read by AI assistants.
+# A walled-off site makes physician linkage and roster currency unverifiable, not just the
+# website sub-score, so the pillar cannot sit in its top half. Deterministic, applied in code.
+IDENTITY_CAPS = {"blocked": (45, "AI crawlers are turned away at the firewall"),
+                 "robots":  (55, "robots.txt disallows AI crawlers")}
+
+
+def identity_cap(f: Optional[dict]) -> Optional[tuple[int, str]]:
+    f = f or {}
+    if f.get("status") == "blocked":
+        return IDENTITY_CAPS["blocked"]
+    if f.get("status") == "measured" and f.get("robots_allows_ai") is False:
+        return IDENTITY_CAPS["robots"]
+    return None
+
+
+def apply_identity_cap(provider, f: Optional[dict], profile: Optional[str]) -> Optional[dict]:
+    """Cap the provider's Identity & Machine-Readability pillar per identity_cap() and recompute
+    the practice composite (same formula and 74-ceiling as the original scoring). Returns
+    {"cap", "reason", "pillar_before", "score_before", "score_after"} when something changed."""
+    cap = identity_cap(f)
+    if provider is None or cap is None:
+        return None
+    limit, reason = cap
+    ts = provider.tier_scores
+    before = ts.patient_experience_reviews
+    if before is None or before <= limit:
+        return None
+    from ..practice_scoring import composite as _composite
+    from .. import scoring as _scoring
+    ts.patient_experience_reviews = limit
+    score_before = provider.ai_visibility_score
+    prof = profile or getattr(provider, "weighting_profile", None) or "practice_procedural"
+    bcu = "board certification" in (getattr(provider, "score_ceiling_reason", "") or "")
+    new_score, ceiling, ceiling_reason = _composite(
+        ts.as_dict(), prof, getattr(provider, "entity_resolution_pct", None),
+        getattr(provider, "linkage_integrity_pct", None), bcu)
+    if new_score is not None:
+        provider.ai_visibility_score = new_score
+        provider.score_ceiling_applied = ceiling
+        provider.score_ceiling_reason = ceiling_reason or None
+        provider.overall_rating, _ = _scoring.grade_from_score(new_score)
+    return {"cap": limit, "reason": reason, "pillar_before": before,
+            "score_before": score_before, "score_after": provider.ai_visibility_score}
+
+
 def apply_identity_override(tier: Optional[int], model_pts: Optional[int], measured_pts: int) -> Optional[int]:
     """Replace the model's assumed website sub-score with the measured one inside the pillar total."""
     if tier is None:

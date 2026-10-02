@@ -135,6 +135,13 @@ def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: 
         except Exception as exc:
             console.print(f"[yellow]⚠[/yellow] Website facts failed on cached result ({type(exc).__name__}); proceeding without.")
 
+    if adapter.type_key == "practice" and res.rankings and res.website_facts and not (res.website_facts or {}).get("identity_cap"):
+        from .data.website_facts import apply_identity_cap
+        _cap = apply_identity_cap(res.rankings[0], res.website_facts, res.weighting_profile)
+        if _cap:
+            res.website_facts = {**res.website_facts, "identity_cap": _cap}
+            emit({"type": "text", "text": f"\nIdentity & Machine-Readability capped at {_cap['cap']} ({_cap['reason']}): Pulse Score {_cap['score_before']} → {_cap['score_after']}."})
+
     if not skip_pdf:
         ts = _dt.utcnow().strftime("%y%m%d-%H%M")
         old_stem = Path(res.pdf_path).stem if res.pdf_path else ""
@@ -533,6 +540,16 @@ class PracticeAdapter(_Adapter):
         # rankings[0] sync with the roster_key gate.
         _prac._sync_practice_entity_score(rankings, ctx.city, ctx.state, ctx.run_id,
                                           ctx.override_today_lock, run_profile, ctx.roster_fp or "")
+        # Identity ceiling when AI assistants cannot read the site (after the canonical sync so
+        # an adopted uncapped score is capped too; the canonical copy is then overwritten).
+        from .data.website_facts import apply_identity_cap
+        ctx.identity_cap = apply_identity_cap(rankings[0] if rankings else None,
+                                              getattr(ctx, "website_facts", None), run_profile)
+        if ctx.identity_cap:
+            _c = ctx.identity_cap
+            emit({"type": "text", "text": f"\nIdentity & Machine-Readability capped at {_c['cap']} ({_c['reason']}): "
+                                          f"pillar {_c['pillar_before']} → {_c['cap']}, Pulse Score {_c['score_before']} → {_c['score_after']}."})
+            _prac._sync_practice_entity_score(rankings, ctx.city, ctx.state, ctx.run_id, True, run_profile, ctx.roster_fp or "")
         return rankings
 
     def coverage_note(self, ctx: _Ctx) -> str:
@@ -823,6 +840,8 @@ def run_individual(
         result.website_facts = {k: v for k, v in ctx.website_facts.items() if k != "site_pages"}
         if getattr(ctx, "identity_override", None):
             result.website_facts = {**result.website_facts, "identity_override": ctx.identity_override}
+        if getattr(ctx, "identity_cap", None):
+            result.website_facts = {**result.website_facts, "identity_cap": ctx.identity_cap}
     adapter.post_assemble(ctx, result)        # composites / MQCR battery (may rescore)
 
     # ── 9. markdown ───────────────────────────────────────────────────────────

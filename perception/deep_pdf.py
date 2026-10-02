@@ -250,10 +250,19 @@ def _reputation_section(result: AnalysisResult, p: Optional[RankedProvider], ed:
 <div class="score-breakdown">
 {_bars_html(_pillars(p, result))}
 <p style="font-size:8.5pt;color:#8a9aaa;margin-top:8px">Pulse Score: <strong style="color:{primary}">{composite}/100</strong> &nbsp;·&nbsp; {_e(_quartile_label(quartile))} ({_e(q_band)}){ev}</p>
+{_identity_cap_note(result)}
 {_pillar_notes_html(result)}
 </div>
 {ai_says_html}
 {_ai_access_alert_html(result)}"""
+
+
+def _identity_cap_note(result: AnalysisResult) -> str:
+    c = (getattr(result, "website_facts", None) or {}).get("identity_cap")
+    if not c:
+        return ""
+    return (f'<p style="font-size:8.5pt;color:{_RED_BAD};margin:4px 0 0"><strong>Identity &amp; Machine-Readability capped at {c["cap"]}</strong> &mdash; '
+            f'{_e(c["reason"])} (was {c["pillar_before"]}; Pulse Score {c["score_before"]} &rarr; {c["score_after"]}). The cap lifts once the site is readable.</p>')
 
 
 def _pillar_notes_html(result: AnalysisResult) -> str:

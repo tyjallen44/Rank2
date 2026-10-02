@@ -3577,3 +3577,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Walled-off site | Row 1 ✗ Fix "Turned away: GPTBot, …"; robots row "Not readable while the firewall blocks crawlers". [pdf] |
 | T4 | Run without content analysis / profile audit | Rows still present, marked "— Not checked"; table never shorter than ten rows. [pdf] |
 | R1 | Regression | Scores, pillars, evidence, content findings unchanged; Compare Two and Network unaffected; pytest: tests/test_checklist.py passes, the 15 stale failures only. |
+
+## IDENTITY-CAP — Identity & Machine-Readability ceiling when AI assistants cannot read the site (2026-10-02)
+
+**Context:** the website sub-score is 20 of the pillar's 100 points, so a fully walled-off site (DMOS Orthopaedic Centers: every crawler turned away, pillar 72, score 74) only lost those 20. Physician linkage and roster currency are unverifiable without a readable site, so the pillar is now capped in code: **45** when AI crawlers are turned away at the firewall, **55** when robots.txt disallows them; unreachable sites stay uncapped/unverified. The composite is recomputed with the same formula and 74-ceiling; the canonical shared score is overwritten with the capped values. Applies to live practice / service-line runs and to cached re-runs (after their website facts are fetched). Under the bars: "Identity & Machine-Readability capped at 45 — AI crawlers are turned away at the firewall (was 72; Pulse Score 74 → 67). The cap lifts once the site is readable." Methodology box + Learn updated.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Re-run DMOS Orthopaedic Centers (Des Moines, IA), Specialty Practice | Identity & Machine-Readability bar 45 (red), red cap note under the score line, Pulse Score ≈ 67 (3rd quartile); the URGENT box and the checklist row 1 "✗ Fix" agree with it; progress log shows "capped at 45". [ui][pdf] |
+| T2 | A practice whose robots.txt disallows AI crawlers (UNC Orthopaedics) | Pillar ≤ 55 with the robots.txt note. [pdf] |
+| T3 | A practice with a readable site, or whose pillar is already below the cap | No note, no change. [pdf] |
+| T4 | Competitors Rankings including a capped practice within 30 days | Shows the capped score (canonical sync overwritten). [pdf] |
+| R1 | Regression | Hospital reports unchanged (no Identity pillar); the 74 board-cert/entity-resolution ceiling still applies on top; pytest: tests/test_identity_cap.py passes, the 15 stale failures only. |
