@@ -4728,6 +4728,8 @@ async function loadHome() {
   const _hs = document.getElementById('home-hero-video'); if (_hs) _hs.innerHTML = '';
   loadHomeRuns();
   renderChooser();
+  const hs = document.getElementById('home-search-input');
+  if (hs && _caps && !_caps.unrestricted) hs.placeholder = 'Start typing an organization your team has already analyzed…';
   try {
     const r = await fetch('/api/learn?page=home');
     const arts = r.ok ? await r.json() : [];
@@ -7445,7 +7447,7 @@ function _initSuggest() {
   _attachSuggest('te-name',    it => { if (it.kind === 'network') { setTeType('network'); document.getElementById('te-name').value = it.name; document.getElementById('te-city').value = it.city || ''; document.getElementById('te-state').value = it.state || ''; teDiscoverNetwork(it.name, it.city || '', it.state || ''); } else _tePickSuggest(it); }, { kinds: 'hospital,service_line,specialty,community_health,network' });
   _attachSuggest('pp-target',  _ppPickSuggest, { kinds: 'hospital,specialty' });
   _attachSuggest('np-name',    _npPickSuggest, { kinds: 'network' });
-  _attachSuggest('home-search-input', _homePickSuggest, { onNew: q => { navigate('individual'); setIrType('hospital'); const el = document.getElementById('ir-name'); if (el) { el.value = q; el.focus(); } } });
+  _attachSuggest('home-search-input', _homePickSuggest, { onNew: q => { navigate('individual'); setIrType(['hospital','service_line','specialty','community_health'].find(_irTypeAllowed) || 'hospital'); const el = document.getElementById('ir-name'); if (el) { el.value = q; el.focus(); } } });
 }
 
 // ── Home: "Find an organization" ─────────────────────────────────────────────
@@ -7457,12 +7459,13 @@ function _homePickSuggest(it) {
                 type: _sgType(it, true), specialty: it.kind === 'service_line' ? (it.service_line || it.specialty || '') : (it.specialty || '') };
   window._homeCtx = ctx;
   const isNet = it.kind === 'network';
+  const deepOk = isNet ? Object.values(_WHAT_DEEP).some(_capReport) : _capReport(_WHAT_DEEP[it.kind] || 'deep_hospital');
   box.innerHTML = `<div><div class="n">${_learnEsc(it.name)}</div><div class="m">${_learnEsc(_sgMeta(it))}</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
-      ${isNet ? `<button class="btn btn-primary btn-sm" onclick="navigate('network'); _npPickSuggest(window._homePicked)">🖧 Hospital Network</button>` : ''}
-      <button class="btn ${isNet ? 'btn-ghost' : 'btn-primary'} btn-sm" onclick="navigate('individual'); _irPickSuggest(window._homePicked)">◎ Deep Diagnostic</button>
-      <button class="btn btn-ghost btn-sm" onclick="handoffCompare(window._homeCtx)">⇄ Compare against…</button>
-      <button class="btn btn-ghost btn-sm" onclick="handoffTrack(window._homeCtx)">📈 Track in Trends</button>
+      ${isNet && _capReport('network') ? `<button class="btn btn-primary btn-sm" onclick="navigate('network'); _npPickSuggest(window._homePicked)">🖧 Hospital Network</button>` : ''}
+      ${deepOk ? `<button class="btn ${isNet ? 'btn-ghost' : 'btn-primary'} btn-sm" onclick="navigate('individual'); _irPickSuggest(window._homePicked)">◎ Deep Diagnostic</button>` : ''}
+      ${_capReport('compare') ? `<button class="btn btn-ghost btn-sm" onclick="handoffCompare(window._homeCtx)">⇄ Compare against…</button>` : ''}
+      ${_capReport('trends') ? `<button class="btn btn-ghost btn-sm" onclick="handoffTrack(window._homeCtx)">📈 Track in Trends</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="navigate('history'); historySearch(${_jsq(it.name)})">◷ History</button>
     </div>`;
   box.style.display = '';
@@ -7473,6 +7476,31 @@ function _homePickSuggest(it) {
 const _chooser = { what: null, goal: null };
 const _CHOOSER_WHAT = [['system','A whole health system'],['hospital','One hospital'],['service_line','A hospital service line'],['specialty','A physician practice or group'],['community_health','A community health center'],['list','A list of organizations']];
 const _CHOOSER_GOAL = [['diagnose','Diagnose it and get the fixes'],['rank','See how it ranks in its market'],['compare','Compare it with one competitor'],['track','Track it over time']];
+const _WHAT_DEEP = { hospital: 'deep_hospital', service_line: 'deep_service_line', specialty: 'deep_practice', community_health: 'deep_community' };
+function _whatAllowed(w) {
+  if (w === 'system') return _capReport('network') || _capReport('compare') || _capReport('trends');
+  if (w === 'list') return _capReport('events');
+  return _capReport(_WHAT_DEEP[w]) || ((w === 'hospital' || w === 'specialty') && _capReport('rankings')) || _capReport('compare') || _capReport('trends');
+}
+function _goalAllowed(w, g) {
+  if (g === 'diagnose') return w === 'system' ? _capReport('network') : _capReport(_WHAT_DEEP[w]);
+  if (g === 'rank') return (w === 'hospital' || w === 'specialty') && _capReport('rankings');
+  if (g === 'compare') return _capReport('compare');
+  if (g === 'track') return _capReport('trends');
+  return true;
+}
+function _chooserWhat() { return _CHOOSER_WHAT.filter(([v]) => _whatAllowed(v)); }
+function _chooserGoal() { return _CHOOSER_GOAL.filter(([v]) => !_chooser.what || _chooser.what === 'list' || _goalAllowed(_chooser.what, v)); }
+// The single destination an account can reach, or null when it has a real choice.
+function _soleDestination() {
+  const whats = _chooserWhat(); if (whats.length !== 1) return null;
+  const w = whats[0][0];
+  if (w === 'list') return { page: 'event' };
+  const goals = _CHOOSER_GOAL.filter(([g]) => _goalAllowed(w, g));
+  if (goals.length !== 1) return null;
+  _chooser.what = w; _chooser.goal = goals[0][0];
+  return _chooserRec();
+}
 function chooserPick(k, v) { _chooser[k] = v; renderChooser(); }
 function chooserReset() { _chooser.what = null; _chooser.goal = null; renderChooser(); }
 function _chooserRec() {
@@ -7496,6 +7524,8 @@ function _chooserRec() {
 function openChooser(presetWhat, ev) {
   if (ev) { ev.preventDefault(); ev.stopPropagation(); }
   _chooser.what = presetWhat || null; _chooser.goal = null;
+  const sole = _soleDestination();
+  if (sole) { chooserGo(); return; }     // one report on the account: go straight there
   renderChooser();
   document.getElementById('chooser-modal').classList.add('open');
 }
@@ -7507,13 +7537,17 @@ function renderChooser() {
 function _renderChooserInto(host) {
   const pills = (k, opts) => `<div class="hc-pills">${opts.map(([v, l]) => `<button class="hc-pill ${_chooser[k] === v ? 'on' : ''}" onclick="chooserPick('${k}','${v}')">${l}</button>`).join('')}</div>`;
   const rec = _chooserRec();
+  const sole = _soleDestination();
+  const homeCard = document.getElementById('home-chooser');
+  if (homeCard && host.id === 'home-chooser-body') homeCard.style.display = sole ? 'none' : '';
+  if (sole) { host.innerHTML = `<div class="hc-rec"><div><div class="t">→ ${sole.title || 'Event Preparation'}</div></div><button class="btn btn-primary btn-sm" onclick="chooserGo()">Open →</button></div>`; return; }
   host.innerHTML = `
-    <div class="hc-q">I'm looking at…</div>${pills('what', _CHOOSER_WHAT)}
-    ${_chooser.what && _chooser.what !== 'list' ? `<div class="hc-q">I want to…</div>${pills('goal', _CHOOSER_GOAL)}` : ''}
+    <div class="hc-q">I'm looking at…</div>${pills('what', _chooserWhat())}
+    ${_chooser.what && _chooser.what !== 'list' ? `<div class="hc-q">I want to…</div>${pills('goal', _chooserGoal())}` : ''}
     ${rec ? `<div class="hc-rec"><div><div class="t">→ ${rec.title}</div></div><div class="w">${rec.why}</div><button class="btn btn-primary btn-sm" onclick="chooserGo()">Open ${rec.title} →</button></div>` : ''}`;
 }
 function chooserGo() {
-  const rec = _chooserRec(); if (!rec) return;
+  const rec = _chooserRec() || _soleDestination(); if (!rec) return;
   closeChooser();
   navigate(rec.page);
   try {

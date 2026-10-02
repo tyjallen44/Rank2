@@ -377,8 +377,21 @@ async def entities_suggest(q: str = "", limit: int = 8, kinds: str = "",
     from perception.db import init_db, suggest_entities
     init_db()
     ks = [k.strip() for k in (kinds or "").split(",") if k.strip()]
-    return await asyncio.get_running_loop().run_in_executor(
-        None, lambda: suggest_entities(q, role=payload.get("role"), limit=max(1, min(int(limit or 8), 15)), kinds=ks))
+    caps = _caps_for_payload(payload)
+    if not caps.get("unrestricted"):
+        # Only kinds the account may run; association accounts only see what their own accounts ran.
+        from perception.presets import report_allowed
+        kind_cap = {"hospital": "deep_hospital", "service_line": "deep_service_line", "specialty": "deep_practice",
+                    "community_health": "deep_community", "network": "network"}
+        allowed_kinds = [k for k, c in kind_cap.items() if report_allowed(caps, c)]
+        ks = [k for k in ks if k in allowed_kinds] if ks else allowed_kinds
+        if not ks:
+            return []
+    rows = await asyncio.get_running_loop().run_in_executor(
+        None, lambda: suggest_entities(q, role=payload.get("role"), limit=max(1, min(int(limit or 8), 15)) * (3 if not caps.get("unrestricted") else 1), kinds=ks))
+    if not caps.get("unrestricted"):
+        rows = _scope_history_rows(rows, payload)
+    return rows[:max(1, min(int(limit or 8), 15))]
 
 
 class RecentMatchRequest(BaseModel):

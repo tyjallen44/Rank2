@@ -3556,3 +3556,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Admin → Users → Access select: Unrestricted → Association — Hospital Network | Saves ("Preset assigned"), no "Could not update access" alert; reload shows the preset. (Cause: the Postgres wrapper has no commit(); removed.) [ui] |
 | T2 | History rows whose file on disk is `content_<id>_report1.pdf` (Olympia Orthopaedic Associates, Opaortho) | Listed and downloaded as `<Name>_<City>_<ST>_Deep-Diagnostic-<yymmdd-HHMM>.pdf`; files on disk untouched. [ui] |
 | T3 | Re-run one of those organizations (served from the 30-day cache) | The new row's PDF is named by the normal practice/hospital convention, never `content_…`. [ui] |
+
+## HOME-CAPS — the homepage only offers what the account can run (2026-10-02)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Sign in as an account on "Association — Specialty Practice" (no Event Prep) → Home | "Start a report →" opens the Specialty Practice Deep Diagnostic directly (no chooser); the "Which report do I need?" card is hidden; the search field reads "Start typing an organization your team has already analyzed…" and only suggests practices run by accounts on that preset; picking one shows ◎ Deep Diagnostic and ◷ History only; typing a new name opens the Specialty Practice form. [ui] |
+| T2 | Same account with Event Preparation ticked | Chooser shows "A physician practice or group" and "A list of organizations" only; goals reduced to "Diagnose it and get the fixes". [ui] |
+| T3 | Unrestricted account | Home unchanged: full chooser, all pick-card buttons, suggestions across everything. [ui] |
+| T4 | `GET /api/entities/suggest?q=…` as the association account | Returns only kinds the account may run and only organizations run by accounts on its preset. [api] |
