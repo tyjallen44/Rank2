@@ -6728,6 +6728,7 @@ async function runIndividual() {
     errEl.textContent = 'Confirm the organization\'s website first: check the address shown above (or enter the right one) and tick "Yes, this is their website".';
     errEl.classList.remove('hidden'); _websiteGateAttention('ir'); return;
   }
+  if (_typeGate(_irSelected, 'ir-run-err', runIndividual)) return;
   if (!document.getElementById('ir-force-rerun')?.checked
       && await _dupGate('analysis', { name: _irSelected.name, city: _irResolvedCity || '' }, 'ir-run-err', runIndividual)) return;
   const errEl = document.getElementById('ir-run-err');
@@ -7431,6 +7432,57 @@ function chooserGo() {
 
 // ── Duplicate-run warning: same organization already run in the last 14 days ──
 const _dupAck = {};
+// ── Entity-type guard: a practice-shaped listing run as a Hospital ─────────────
+// The Hospital type scores on the hospital rubric (Outcomes & Safety = Leapfrog + CMS) and
+// skips the physician checks, so an orthopedic group entered as a Hospital gets "Leapfrog /
+// CMS not published" gaps it can never close. Warn once per listing; the user can switch
+// to Specialty Practice in one click or run as a Hospital anyway.
+const _PRACTICE_TYPES = new Set(['doctor', 'physiotherapist', 'dentist', 'dental_clinic', 'chiropractor', 'medical_clinic',
+                                 'physical_therapist', 'orthodontist', 'dermatologist', 'skin_care_clinic', 'wellness_center']);
+const _PRACTICE_NAME_RX = /\b(orthop(a)?edics?|ortho\b|clinic|associates|physicians?|medical group|surgeons?|surgery center|dermatology|cardiology|urology|neurology|oncology|gastro\w*|pediatrics|family medicine|primary care|sports medicine|spine|pain management|podiatry|dental|dentistry|eye (care|center)|vision|ent\b|ear,? nose|obgyn|ob\/gyn|women'?s health|physical therapy|chiropractic)\b/i;
+const _HOSPITAL_NAME_RX = /\b(hospital|medical center|health system|health network|regional medical|infirmary)\b/i;
+const _typeAck = {};
+function _looksLikePractice(c) {
+  if (!c) return null;
+  const types = (c.types || []).map(t => String(t).toLowerCase());
+  if (types.includes('hospital')) return null;
+  const name = String(c.name || '');
+  if (_HOSPITAL_NAME_RX.test(name)) return null;
+  const byType = types.find(t => _PRACTICE_TYPES.has(t)) || (c.primary_type && _PRACTICE_TYPES.has(String(c.primary_type).toLowerCase()) ? c.primary_type : null);
+  const byName = (name.match(_PRACTICE_NAME_RX) || [])[0];
+  if (!byType && !byName) return null;
+  const why = [];
+  if (byType) why.push(`Google lists it as "${String(byType).replace(/_/g, ' ')}"`);
+  if (byName) why.push(`the name says "${byName}"`);
+  return why.join(' and ');
+}
+function _typeGate(c, errElId, retryFn) {
+  const old = document.getElementById(errElId + '-type'); if (old) old.remove();
+  if (_irType !== 'hospital' || !c) return false;
+  const key = String(c.place_id || c.name || '').toLowerCase();
+  if (_typeAck[key]) return false;
+  const why = _looksLikePractice(c);
+  if (!why) return false;
+  const errEl = document.getElementById(errElId); if (!errEl) return false;
+  const box = document.createElement('div');
+  box.id = errElId + '-type'; box.className = 'dup-notice';
+  box.innerHTML = `<span style="font-size:16px">⚠</span><div class="d"><strong>${_learnEsc(c.name)}</strong> looks like a specialty practice — ${_learnEsc(why)}.
+      Run as a <strong>Hospital</strong> it is scored on the hospital rubric (Outcomes &amp; Safety = Leapfrog + CMS, which practices never publish) and skips the physician checks.</div>
+    <button class="btn btn-primary btn-sm" id="${errElId}-type-switch">Switch to Specialty Practice</button>
+    <button class="btn btn-ghost btn-sm" id="${errElId}-type-go">Run as Hospital anyway →</button>`;
+  errEl.parentNode.insertBefore(box, errEl);
+  document.getElementById(errElId + '-type-switch').onclick = () => {
+    box.remove(); _typeAck[key] = true;
+    const keep = Object.assign({}, c);
+    setIrType('specialty');
+    _flash('Switched to Specialty Practice — confirm the listing and enter the specialty, then Run Diagnostic.');
+    try { _irPickSuggest({ kind: 'specialty', name: keep.name, city: _irResolvedCity, state: _irResolvedState }); } catch (e) {}
+  };
+  document.getElementById(errElId + '-type-go').onclick = () => { _typeAck[key] = true; box.remove(); retryFn(); };
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return true;
+}
+
 async function _dupGate(kind, params, errElId, retryFn) {
   const key = kind + '|' + JSON.stringify(params).toLowerCase();
   const old = document.getElementById(errElId + '-dup'); if (old) old.remove();

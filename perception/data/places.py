@@ -499,7 +499,8 @@ def search_entity_candidates(
                 "X-Goog-Api-Key": key,
                 "X-Goog-FieldMask": (
                     "places.id,places.displayName,places.formattedAddress,"
-                    "places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri"
+                    "places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri,"
+                    "places.types,places.primaryType"
                 ),
             },
             json={"textQuery": query, "pageSize": min(max_results, 20)},
@@ -524,6 +525,8 @@ def search_entity_candidates(
             "place_id": p.get("id"),
             "maps_url": p.get("googleMapsUri"),
             "website": clean_website(p.get("websiteUri")),
+            "types": p.get("types") or [],              # Places types — the Deep Diagnostic form warns when a
+            "primary_type": p.get("primaryType"),       # practice-shaped listing is run as a Hospital
         }
         for p in raw
     ]

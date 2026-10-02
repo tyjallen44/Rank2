@@ -3522,3 +3522,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Hospital-type Deep Diagnostic (e.g. Olympia Orthopaedic Associates, Seattle, run as Hospital) | History download name is like `Olympia-Orthopaedic-Associates_Seattle_WA_Deep-Diagnostic-261002-1347.pdf`; the Downloads menu's content report is `…_Content-Analysis.pdf`. No `content_…_report1.pdf`. [ui] |
 | T2 | Content Analysis redraft (Admin) | Rewrites the same `…_Content-Analysis.pdf`. [ui] |
 | R1 | Regression | Practice combined report names unchanged; History Downloads (1)/(2) counts unchanged; skip-PDF data pulls unaffected. |
+
+## IR-TYPE-GUARD — warn when a practice-shaped listing is run as a Hospital (2026-10-02)
+
+**Context:** an orthopedic group entered as Hospital is scored on the hospital rubric and gets "Leapfrog / CMS not published" gaps it can never close, and skips the physician checks. The entity search now returns each Google listing's Places types, and Run Diagnostic shows a one-time notice when the type is Hospital but the chosen listing is practice-shaped (Places type such as doctor / physiotherapist / dentist / clinic, or a name containing e.g. Orthopaedic, Clinic, Associates, Physicians, Dermatology…; listings typed or named hospital / medical center / health system are never flagged). Buttons: "Switch to Specialty Practice" (switches the form and prefills the listing) or "Run as Hospital anyway →".
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic, type Hospital, pick "Olympia Orthopaedic Associates - Westside Clinic" (Seattle), confirm website, Run Diagnostic | Amber notice: "… looks like a specialty practice — Google lists it as "doctor" and the name says "Orthopaedic". …" with the two buttons; the run does not start. [ui] |
+| T2 | Click "Switch to Specialty Practice" | Form switches to Specialty Practice with the listing prefilled; after entering the specialty the run proceeds on the practice rubric (no Leapfrog/CMS lines in the PDF). [ui][pdf] |
+| T3 | Click "Run as Hospital anyway →" | Run starts; the notice does not reappear for that listing in the session. [ui] |
+| T4 | Type Hospital with "UNC Medical Center" or "Castle Rock Medical Center" | No notice. [ui] |
+| R1 | Regression | Website gate and duplicate-run gate unchanged and still shown in that order after the type guard; practice / service line / community health types never show the notice. |
