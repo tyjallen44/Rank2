@@ -3589,3 +3589,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | A practice with a readable site, or whose pillar is already below the cap | No note, no change. [pdf] |
 | T4 | Competitors Rankings including a capped practice within 30 days | Shows the capped score (canonical sync overwritten). [pdf] |
 | R1 | Regression | Hospital reports unchanged (no Identity pillar); the 74 board-cert/entity-resolution ceiling still applies on top; pytest: tests/test_identity_cap.py passes, the 15 stale failures only. |
+
+## FIX-WEBSITE-REFUSED — a site that refuses our server is "unverified", not "blocks AI crawlers" (2026-10-02)
+
+**Context:** dmos.com answered 403 to every request from Cloud Run — the AI crawler names AND the plain browser request — and Pulse reported "URGENT: AI assistants cannot read your website" and (from today) capped Identity at 45. From a laptop, GPTBot, ClaudeBot and a browser all get 200 and robots.txt allows everyone: the site's firewall refuses our hosting's addresses, which says nothing about AI crawlers. Rule now: **blocked** only when the browser request gets through while the named crawlers are turned away; when the browser request is refused too the status is **refused** — no red box, no Identity cap, website sub-score left to the model's stated assumption, Score Evidence "website access unverified — the site refused our server". As a second opinion the run asks Claude to fetch the homepage live from Anthropic's servers (web_fetch tool, ~1 cent); when it reads the page the evidence, Score Evidence and checklist say so ("Claude's live fetch read it", checklist row 1 ◐ Partial). Cached re-runs re-verify sites previously marked blocked/refused. Help topic updated.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Re-run DMOS Orthopaedic Centers (Des Moines, IA) | No URGENT box; no Identity cap note; Evidence line "… website access unverified — the site refused our server; Claude's live fetch read it"; checklist row 1 "◐ Partial … Claude's live fetch read the homepage", robots row "Not readable: the site refused our server". Progress log shows no "capped" line. [ui][pdf] |
+| T2 | A site that admits a browser but turns away GPTBot/ClaudeBot by name | Still "blocked": red box, Identity cap 45, checklist ✗ Fix. [pdf] |
+| T3 | AI Website Access Scan (History) on dmos.com | Bucket "Unreachable from our servers" (unchanged behaviour). [ui] |
+| R1 | Regression | Measured sites unchanged; unreachable (DNS/timeout) unchanged; pytest: tests/test_website_refused.py passes, the 15 stale failures only. |

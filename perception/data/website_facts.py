@@ -71,6 +71,31 @@ def probe_ai_crawlers(url: str, timeout: float = 15.0) -> dict:
     return out
 
 
+def assistant_fetch_check(url: str) -> Optional[dict]:
+    """Second opinion when our own server is refused: ask Claude to fetch the homepage live
+    (the web_fetch tool runs from Anthropic's infrastructure, not ours). Returns
+    {"assistant": "Claude", "ok": bool, "note"} or None when the check could not run."""
+    try:
+        from ..plain import _client, _MODEL
+        u = url if "://" in url else "https://" + url
+        resp = _client().beta.messages.create(
+            model=_MODEL, max_tokens=200, betas=["web-fetch-2025-09-10"],
+            tools=[{"type": "web_fetch_20250910", "name": "web_fetch", "max_uses": 1}],
+            messages=[{"role": "user", "content": (
+                f"Fetch {u} and answer with exactly one word: READABLE if the page loaded and you can see its main "
+                f"text (services, locations, providers), or BLOCKED if the fetch failed, was denied, or returned a "
+                f"challenge / access-denied page.")}],
+        )
+        text = " ".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text").strip().upper()
+        if "READABLE" in text:
+            return {"assistant": "Claude", "ok": True, "note": "Claude's live fetch read the homepage"}
+        if "BLOCKED" in text:
+            return {"assistant": "Claude", "ok": False, "note": "Claude's live fetch was refused too"}
+        return None
+    except Exception:
+        return None
+
+
 def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
     """Crawl the site (reusing the content analyzer's crawler) and return the facts.
     status: measured | blocked | unreachable | skipped."""
@@ -90,10 +115,17 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
             pass
     if not snap.get("reachable"):
         if snap.get("fetch_status") == "blocked":
-            f = {"status": "blocked", "url": url, "pages": 0, "points": 0, "breakdown": {},
-                 "note": "site returns a bot wall to non-browser clients — AI crawlers are turned away the same way"}
-            f["crawler_probe"] = probe_ai_crawlers(url)
-            return f
+            probe = probe_ai_crawlers(url)
+            if probe.get("browser_blocked") or not probe.get("blocked"):
+                # Our plain-browser request was refused too (or nothing was blocked by name): the
+                # site is refusing our hosting (IP / ASN rule), which says nothing about AI crawlers.
+                f = {"status": "refused", "url": url, "pages": 0, "points": 0, "breakdown": {}, "crawler_probe": probe,
+                     "note": "the site refused every request from our server, a normal browser request included — "
+                             "a firewall rule against our hosting, not evidence about AI crawlers"}
+                f["assistant_fetch"] = assistant_fetch_check(url)
+                return f
+            return {"status": "blocked", "url": url, "pages": 0, "points": 0, "breakdown": {}, "crawler_probe": probe,
+                    "note": "site admits a browser but turns away the AI crawlers by name (firewall / bot-management rule)"}
         return {"status": "unreachable", "url": url, "note": "site could not be reached (DNS / timeout / connection)"}
     types = set(snap.get("schema_types") or set())
     kp = snap.get("key_pages") or []
@@ -133,7 +165,7 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
         pass
     # Even a readable site may challenge the named AI crawlers at the firewall; ask as each of them.
     facts["crawler_probe"] = probe_ai_crawlers(url)
-    if facts["crawler_probe"]["blocked"] and not facts["crawler_probe"]["allowed"]:
+    if facts["crawler_probe"]["blocked"] and not facts["crawler_probe"]["allowed"] and not facts["crawler_probe"].get("browser_blocked"):
         facts["status"] = "blocked"
         facts["note"] = "the site challenges every AI crawler by name (firewall / bot-management rule)"
         facts["points"] = 0
@@ -308,6 +340,14 @@ def evidence_lines(f: dict, kind: str = "practice") -> str:
     if f.get("status") == "unreachable":
         lines.append(f"Website {f.get('url')}: could not be reached ({f.get('note')}). Treat machine-readability as UNVERIFIED; do not assume.")
         return "\n".join(lines) + "\n"
+    if f.get("status") == "refused":
+        af = f.get("assistant_fetch") or {}
+        second = (" Claude's live fetch from Anthropic's servers READ the homepage, so AI assistants can read the site."
+                  if af.get("ok") else (" Claude's live fetch was refused as well." if af.get("ok") is False else ""))
+        lines.append(f"Website {f.get('url')}: our analysis server was refused by the site's firewall (a normal browser request too), "
+                     f"so the crawl could not run and machine-readability is UNVERIFIED.{second} Do NOT say AI assistants cannot read the site; "
+                     "state your assumed website sub-score as usual.")
+        return "\n".join(lines) + "\n"
     if f.get("status") == "blocked":
         pr = f.get("crawler_probe") or {}
         who = ", ".join(pr.get("blocked") or []) or "automated readers"
@@ -352,6 +392,9 @@ def summary(f: dict, kind: str = "practice") -> Optional[str]:
         return "website unreachable — machine-readability unverified"
     if f.get("status") == "blocked":
         return "website blocks AI crawlers (verified)"
+    if f.get("status") == "refused":
+        af = f.get("assistant_fetch") or {}
+        return "website access unverified — the site refused our server" + ("; Claude's live fetch read it" if af.get("ok") else "")
     if kind in ("practice", "service_line"):
         return f"website facts verified by crawl ({f.get('points')}/20)"
     return "website quality claims checked by crawl"

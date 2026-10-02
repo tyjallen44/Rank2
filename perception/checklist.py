@@ -117,6 +117,12 @@ def build_checklist(result, findings=None) -> list[dict]:
         add("ai_access", FAIL, "Turned away: " + ", ".join(pr.get("blocked") or ["AI crawlers"]) + ".", _finding_for(findings, "website", "crawler", "firewall", "bot"))
     elif measured:
         add("ai_access", PASS, f"Homepage served to AI crawlers; {wf.get('pages', 0)} page(s) read.")
+    elif st == "refused":
+        af = wf.get("assistant_fetch") or {}
+        if af.get("ok"):
+            add("ai_access", PARTIAL, "Our server was refused by the site's firewall, so the crawl could not run; Claude's live fetch read the homepage.")
+        else:
+            add("ai_access", NA, "Our server was refused by the site's firewall (a browser request too); AI-crawler access could not be verified.")
     elif st == "unreachable":
         add("ai_access", NA, "Website unreachable at analysis time.")
     else:
@@ -127,8 +133,8 @@ def build_checklist(result, findings=None) -> list[dict]:
         ok = wf.get("robots_allows_ai")
         add("robots", PASS if ok else FAIL, "No AI-crawler disallow rules." if ok else "robots.txt disallows AI crawlers.",
             None if ok else _finding_for(findings, "website", "robots"))
-    elif st == "blocked":
-        add("robots", NA, "Not readable while the firewall blocks crawlers.")
+    elif st in ("blocked", "refused"):
+        add("robots", NA, "Not readable while the firewall blocks crawlers." if st == "blocked" else "Not readable: the site refused our server.")
     else:
         add("robots", NA, "Not checked.")
 

@@ -126,7 +126,8 @@ def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: 
     res.teaser_pdf_path = None
 
     # Website facts (crawl + AI-crawler probe): no model calls, a few seconds.
-    if res.website_facts is None and res.rankings and getattr(res.rankings[0], "website_url", None):
+    _wf_status = (res.website_facts or {}).get("status")
+    if (res.website_facts is None or _wf_status in ("blocked", "refused")) and res.rankings and getattr(res.rankings[0], "website_url", None):
         try:
             from .data import website_facts as _wf
             emit({"type": "phase", "name": "website", "text": "Checking the website for AI-crawler access"})
