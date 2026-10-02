@@ -563,7 +563,8 @@ def _assessment_body_html(text: str | None, footnote: bool = False, result=None)
     if a and not is_bullets(text):
         text = "• " + a["first_move"] + ("\n• " + (text or "").strip() if (text or "").strip() else "")
     if is_bullets(text):
-        items = [ln.lstrip("• ").strip() for ln in (text or "").splitlines() if ln.strip()]
+        from .plain import prioritize_first_moves
+        items = prioritize_first_moves([ln.lstrip("• ").strip() for ln in (text or "").splitlines() if ln.strip()])[:5]
         if a and not any("crawler" in i.lower() and ("allow" in i.lower() or "robots" in i.lower()) for i in items):
             items = [a["first_move"]] + items
         if a:

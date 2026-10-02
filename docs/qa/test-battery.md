@@ -3618,3 +3618,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Re-run DMOS Orthopaedic Centers (cached today), confirm physicians in Stage 2, Run Diagnostic | Progress shows "Returning today's cached result" then "Collecting practice reputation" with the physician lookups; the PDF's Physicians table lists the confirmed physicians with ratings / reviews / platforms; History row dated today. [ui][pdf] |
 | T2 | Re-run with the same physicians already in the cached composite | No second collection (table reused). [ui] |
 | R1 | Regression | Fresh runs unchanged; hospital cache hits unchanged; pytest: the 15 stale failures only. |
+
+## FIXED-SHAPE + SPECIALTY-LABELS — association consistency items 3 and 4 (2026-10-02)
+
+**Context:** every Deep Diagnostic's written sections now have the same shape, and specialties print the same way everywhere. (3) Executive Summary = headline + at most 4 bullets (the structuring call retries once before falling back to a sentence split). What to Do First = at most 5 bullets in a fixed priority order — website access → machine-readability (schema, bios, llms.txt, sitemap) → physician linkage → Google profiles → reviews → public record → anything else — applied when the plain-language pass writes them and again at render for older runs. Strengths and Areas for Improvement = 3–5 bullets each, ≤22 words, rewritten by the same plain-language pass (names and numbers kept), capped at 5 at render. Patient voice trimmed to two sentences in Evidence. (4) `perception/specialties.py`: free-text specialties map to one canonical label ("ortho", "Orthopaedics", "ORTHOPEDIC SURGERY" → Orthopedics; "ENT" → Otolaryngology (ENT); "GI" → Gastroenterology; "OB/GYN" → Obstetrics & Gynecology (OB/GYN); "cardiac surgery" → Cardiothoracic Surgery; unknown text keeps its wording, title-cased). Applied on the way in for Specialty Practice / Service Line / Rankings runs and Event Prep rows, so the cover, file name, History and spot-check bank all use the same label.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | New Specialty Practice run, specialty typed "ortho" | Cover and file name say Orthopedics; History specialty Orthopedics; spot-check uses the orthopedics bank. [ui][pdf] |
+| T2 | Event Prep CSV with specialties "Orthopaedics", "Ortho Surgery", "ENT" | Rows show Orthopedics / Orthopedics / Otolaryngology (ENT). [ui] |
+| T3 | Any new Deep Diagnostic PDF | Executive Summary ≤4 bullets; What to Do First ≤5 bullets with the crawler/robots fix first when present, then schema/bio fixes, then physician linkage, Google profiles, reviews, Wikidata/Wikipedia; Strengths and Areas 3–5 short bullets each. [pdf] |
+| T4 | Re-render an older run (cache hit) | What to Do First reordered into the same priority order. [pdf] |
+| R1 | Regression | Hospital runs unaffected by the specialty mapping; scores unchanged; pytest: tests/test_specialties.py passes, the 15 stale failures only. |

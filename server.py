@@ -2041,6 +2041,9 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
 
     city = _normalize_input(city)
     specialty = _normalize_input(req.specialty)
+    if specialty and (req.entity_type in ('practice', 'service_line') or req.individual_report is False):
+        from perception.specialties import normalize_specialty
+        specialty = normalize_specialty(specialty)
     entity_name = _normalize_input(req.entity_name)
 
     job_id = _new_job(role, brand, payload.get("email"))
@@ -6146,7 +6149,7 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
             "input_state":    (e.get("input_state") or "").strip().upper(),
             "input_url":      (e.get("input_url") or "").strip(),
             "input_customer": (e.get("input_customer") or "").strip(),
-            "input_specialty": (e.get("input_specialty") or "").strip(),
+            "input_specialty": __import__("perception.specialties", fromlist=["normalize_specialty"]).normalize_specialty((e.get("input_specialty") or "").strip()) or "",
             "resolved_name":  _normalize_input(e.get("resolved_name") or e.get("input_name", "")),
             "resolved_addr":  e.get("resolved_addr", ""),
         }

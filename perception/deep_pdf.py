@@ -218,6 +218,7 @@ def _exec_summary(result: AnalysisResult) -> str:
         head = verdict[0] if verdict else overview[0]
         rest = (verdict[1:] if verdict else overview[1:]) + (overview if verdict else [])
         st = {"headline": head, "bullets": [s for s in rest if s != head][:4]}
+    st = {"headline": st.get("headline", ""), "bullets": list(st.get("bullets") or [])[:4]}
     return f'<h2>Executive Summary</h2><div class="exec-summary">{_structured_html(st, st.get("headline", ""))}</div>'
 
 
@@ -623,15 +624,15 @@ def evidence_section_html(p: Optional[RankedProvider], heading: bool = True) -> 
     if fp.gap_note:
         items.append(f'<strong>Gap:</strong> <span style="color:#B45309">{_e(fp.gap_note)}</span>')
     if p.patient_voice_summary:
-        items.append(f"<strong>Patient voice:</strong> {_e(_strip_md(p.patient_voice_summary))}")
+        items.append(f"<strong>Patient voice:</strong> {_e(' '.join(_sentences(p.patient_voice_summary)[:2]))}")
     if p.disqualifiers:
         items.append(f'<strong style="color:{_RED_BAD}">Disqualifiers:</strong> {_e("; ".join(p.disqualifiers))}')
     ratings_html = "".join(f"<li>{x}</li>" for x in items)
 
     quality = ("" if is_practice else _outcomes_safety_block(p)) + _quality_signals_block(p)
 
-    strengths = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
-    weaknesses = "".join(f"<li>{_e(_strip_md(w))}</li>" for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p))
+    strengths = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in list(p.key_strengths)[:5])
+    weaknesses = "".join(f"<li>{_e(_strip_md(w))}</li>" for w in (list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p))[:5])
     traits = ""
     if strengths or weaknesses:
         traits = (f'<div class="traits"><div class="trait-col"><div class="trait-label strengths-label">Strengths</div><ul>{strengths}</ul></div>'

@@ -58,7 +58,10 @@ _SYSTEM = (
     "standing if given, the main reason, and the one thing that would move it most.\n"
     f"- first_moves: {BULLETS_MIN} to {BULLETS_MAX} bullets, each ONE action and ONE reason in "
     "at most 25 words, ordered by impact, drawn from the assessment and roadmap given.\n"
-    "Return JSON only: {\"overview\": str, \"verdict\": str, \"first_moves\": [str, ...]}."
+    "- strengths and weaknesses (when given): 3 to 5 bullets each, at most 22 words, one fact each, "
+    "keeping every name and number; drop nothing that is not already covered by another bullet.\n"
+    "Return JSON only: {\"overview\": str, \"verdict\": str, \"first_moves\": [str, ...], "
+    "\"strengths\": [str, ...], \"weaknesses\": [str, ...]}."
 )
 
 
@@ -79,6 +82,29 @@ def _words(text: str, n: int) -> str:
     cut = " ".join(w[:n])
     m = re.search(r"^(.*[.!?])\s", cut + " ")
     return (m.group(1) if m else cut.rstrip(",;:") + ".").strip()
+
+
+# What to Do First: a fixed priority order so every report reads the same way.
+# (website access → machine-readability → physician linkage → Google profiles → reviews → public record → rest)
+_MOVE_ORDER = [
+    ("crawler", "robots", "firewall", "bot wall", "cannot read", "can't read", "turned away", "blocked"),
+    ("schema", "llms.txt", "sitemap", "crawlable", "bio page", "machine-read", "structured data", "html"),
+    ("physician", "doctor", "surgeon", "provider", "npi", "link"),
+    ("google business", "google profile", "listing", "hours", "photos", "nap", "claim"),
+    ("review", "rating", "star"),
+    ("wikidata", "wikipedia", "public record"),
+]
+
+
+def prioritize_first_moves(items: list[str]) -> list[str]:
+    """Stable sort of the first-moves bullets into the fixed priority order."""
+    def rank(s: str) -> int:
+        t = (s or "").lower()
+        for i, kws in enumerate(_MOVE_ORDER):
+            if any(k in t for k in kws):
+                return i
+        return len(_MOVE_ORDER)
+    return sorted(items, key=rank)
 
 
 def bullets_to_text(items: list[str]) -> str:
@@ -118,6 +144,9 @@ def _fallback(result) -> None:
     result.ai_visibility_verdict = _sentences(result.ai_visibility_verdict, VERDICT_SENTENCES)
     if result.top_recommendation and not is_bullets(result.top_recommendation):
         result.top_recommendation = _sentence_bullets(result.top_recommendation)
+    if is_bullets(result.top_recommendation):
+        items = [ln.lstrip("• ").strip() for ln in result.top_recommendation.splitlines() if ln.strip()]
+        result.top_recommendation = bullets_to_text(prioritize_first_moves(items))
 
 
 _STRUCT_SYSTEM = (
@@ -137,22 +166,25 @@ def structure_prose(text: str, *, label: str = "section", console=None) -> Optio
         return None
     sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", t) if s.strip()]
     fallback = {"headline": sents[0] if sents else t[:200], "bullets": sents[1:6]}
-    try:
-        resp = _client().messages.create(
-            model=_MODEL, max_tokens=700, system=_STRUCT_SYSTEM,
-            messages=[{"role": "user", "content": f"Section ({label}):\n{t[:6000]}\n\nReturn the JSON."}],
-        )
-        txt = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
-        m = re.search(r"\{.*\}", txt, re.S)
-        data = json.loads(m.group(0) if m else txt)
-        head = str(data.get("headline") or "").strip()
-        bullets = [str(x).strip() for x in (data.get("bullets") or []) if str(x).strip()]
-        if not head or len(bullets) < 2:
-            raise ValueError("thin structure")
-        return {"headline": head, "bullets": bullets[:5]}
-    except Exception as exc:
-        _log(f"structure_prose failed for {label} ({type(exc).__name__}: {str(exc)[:120]}); sentence split used.", console)
-        return fallback if fallback["bullets"] else {"headline": fallback["headline"], "bullets": []}
+    last = None
+    for attempt in (1, 2):
+        try:
+            resp = _client().messages.create(
+                model=_MODEL, max_tokens=700, system=_STRUCT_SYSTEM,
+                messages=[{"role": "user", "content": f"Section ({label}):\n{t[:6000]}\n\nReturn the JSON."}],
+            )
+            txt = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+            m = re.search(r"\{.*\}", txt, re.S)
+            data = json.loads(m.group(0) if m else txt)
+            head = str(data.get("headline") or "").strip()
+            bullets = [str(x).strip() for x in (data.get("bullets") or []) if str(x).strip()]
+            if not head or len(bullets) < 2:
+                raise ValueError("thin structure")
+            return {"headline": head, "bullets": bullets[:5]}
+        except Exception as exc:
+            last = exc
+    _log(f"structure_prose failed for {label} ({type(last).__name__}: {str(last)[:120]}); sentence split used.", console)
+    return fallback if fallback["bullets"] else {"headline": fallback["headline"], "bullets": []}
 
 
 def structure_ai_says(result, console=None) -> bool:
@@ -213,9 +245,11 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
         "verdict": result.ai_visibility_verdict or "",
         "assessment": result.top_recommendation or "",
         "roadmap_items": roadmap[:12],
+        "strengths": list(getattr(p, "key_strengths", None) or [])[:8] if p else [],
+        "weaknesses": list(getattr(p, "notable_weaknesses", None) or [])[:8] if p else [],
     }
     if only_assessment:
-        material.pop("overview", None); material.pop("verdict", None)
+        material.pop("overview", None); material.pop("verdict", None); material.pop("strengths", None); material.pop("weaknesses", None)
     ask = ("Rewrite ONLY first_moves from the assessment and roadmap. Return JSON {\"first_moves\": [...]} and nothing else."
            if only_assessment else "Rewrite all three.")
     last_err = None
@@ -246,7 +280,12 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
                 raise ValueError("empty rewrite")
             result.market_overview = _words(ov, OVERVIEW_WORDS + 15)
             result.ai_visibility_verdict = _sentences(vd, VERDICT_SENTENCES)
-        result.top_recommendation = bullets_to_text(moves[:BULLETS_MAX])
+        result.top_recommendation = bullets_to_text(prioritize_first_moves(moves[:BULLETS_MAX]))
+        if not only_assessment and p is not None:
+            for key, attr in (("strengths", "key_strengths"), ("weaknesses", "notable_weaknesses")):
+                vals = [str(x).strip() for x in (data.get(key) or []) if str(x).strip()]
+                if 2 <= len(vals) <= 6 and getattr(p, attr, None):
+                    setattr(p, attr, vals[:5])
         result.plain_language = True
         structure_ai_says(result, console=console)
         if not only_assessment:
