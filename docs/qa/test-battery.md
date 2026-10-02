@@ -3630,3 +3630,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Any new Deep Diagnostic PDF | Executive Summary ≤4 bullets; What to Do First ≤5 bullets with the crawler/robots fix first when present, then schema/bio fixes, then physician linkage, Google profiles, reviews, Wikidata/Wikipedia; Strengths and Areas 3–5 short bullets each. [pdf] |
 | T4 | Re-render an older run (cache hit) | What to Do First reordered into the same priority order. [pdf] |
 | R1 | Regression | Hospital runs unaffected by the specialty mapping; scores unchanged; pytest: tests/test_specialties.py passes, the 15 stale failures only. |
+
+## FIX-PHYSICIAN-BOX-PRECHECKED — a pre-ticked physician composite box now triggers discovery (2026-10-02)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic → Specialty Practice with "Include physicians" already ticked (preset default or browser form restore) → pick a listing | The physician discovery runs immediately after the listing is chosen (Stage 2 table appears) without unticking / re-ticking. [ui] |
+| T2 | Account on a preset where the option starts on | Ticking happens on load and fires the same handler as a click. [ui] |
+| R1 | Regression | Manual tick / untick unchanged; hospital Practice Composite unchanged. |

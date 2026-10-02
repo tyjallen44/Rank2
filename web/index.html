@@ -4621,8 +4621,8 @@ function applyCaps(scope) {
         if (st === 'hidden') { if (wrap) wrap.style.display = 'none'; if (box) box.checked = false; }
         else {
           if (wrap && wrap.dataset.capHidden) wrap.style.display = '';
-          if (st === 'on' && box && !box.disabled) box.checked = true;
-          if (st === 'off' && box) box.checked = false;
+          if (st === 'on' && box && !box.disabled && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); }
+          if (st === 'off' && box && box.checked) { box.checked = false; box.dispatchEvent(new Event('change')); }
         }
         if (wrap) wrap.dataset.capHidden = st === 'hidden' ? '1' : '';
       }
@@ -5902,6 +5902,10 @@ function selectIrCandidate(idx) {
   document.getElementById('ir-selected-display').innerHTML = '';
   _irCollapseCandidates(idx);
   _irWebsiteLookup();
+  // The physician / practice composite box may already be ticked (preset default, browser form
+  // restore) without its change handler ever having run — start the discovery for this listing.
+  const _phPre = document.getElementById('ir-physician-composite'), _pcPre = document.getElementById('ir-practice-composite');
+  if (_irIsPractice() ? (_phPre && _phPre.checked) : (_pcPre && _pcPre.checked)) { try { runCompositeDiscovery(); } catch (e) {} }
 
   const titleInput = document.getElementById('ir-custom-title');
   const titlePreview = document.getElementById('ir-title-preview');
