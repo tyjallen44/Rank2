@@ -164,6 +164,16 @@ def structure_ai_says(result, console=None) -> bool:
     return bool(p.ai_says_structured)
 
 
+def structure_executive(result, console=None, force: bool = False) -> bool:
+    """Deep Diagnostic Executive Summary box: overview + verdict → headline + bullets on the result."""
+    text = " ".join(x for x in [(getattr(result, "market_overview", "") or "").strip(),
+                                (getattr(result, "ai_visibility_verdict", "") or "").strip()] if x)
+    if not text or (getattr(result, "executive_summary_structured", None) and not force):
+        return False
+    result.executive_summary_structured = structure_prose(text, label="executive summary", console=console)
+    return bool(result.executive_summary_structured)
+
+
 def condense_network(result, console=None) -> bool:
     """Hospital Network: executive summary and 'What AI assistants currently see' → headline + bullets."""
     changed = False
@@ -239,6 +249,10 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
         result.top_recommendation = bullets_to_text(moves[:BULLETS_MAX])
         result.plain_language = True
         structure_ai_says(result, console=console)
+        if not only_assessment:
+            structure_executive(result, console=console, force=True)
+        else:
+            structure_executive(result, console=console)
         _log(f"condensed run={getattr(result, 'run_id', '?')} ({'assessment only' if only_assessment else 'all sections'})", console)
         return True
     except Exception as exc:
@@ -246,6 +260,7 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
         if not only_assessment:
             _fallback(result)           # readable now; plain_language stays False so the next request retries
             structure_ai_says(result, console=console)
+            structure_executive(result, console=console)
             return True
         if result.top_recommendation:
             result.top_recommendation = _sentence_bullets(result.top_recommendation)

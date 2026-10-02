@@ -621,9 +621,9 @@ def test_location_count_plural():
 
 # D6: Best-for echo removed
 def test_recommendation_summary_not_in_card():
-    """The individual entity card must not render recommendation_summary."""
+    """The Deep Diagnostic evidence section must not render recommendation_summary."""
     from perception.models import RankedProvider
-    from perception.pdf import _individual_entity_card
+    from perception.deep_pdf import evidence_section_html as _individual_entity_card
     p = RankedProvider(
         rank=1,
         name="Desert Orthopaedic Center",
@@ -895,9 +895,9 @@ def test_outcomes_safety_weaknesses_fires_for_hospital_when_both_absent():
 
 
 def test_individual_entity_card_no_hospital_signals_for_practice():
-    """_individual_entity_card must not inject Leapfrog/CMS strings for practice providers."""
+    """The Deep Diagnostic evidence section must not inject Leapfrog/CMS strings for practice providers."""
     from perception.models import RankedProvider
-    from perception.pdf import _individual_entity_card
+    from perception.deep_pdf import evidence_section_html as _individual_entity_card
 
     p = RankedProvider(
         rank=1,

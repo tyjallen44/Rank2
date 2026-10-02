@@ -108,6 +108,14 @@ def _website_facts(ctx: "_Ctx", kind: str) -> Optional[dict]:
         return {"status": "unreachable", "url": None, "note": f"{type(exc).__name__}"}
 
 
+def _merge_casing(org_name: str, typed_name: str) -> str:
+    """Registry org names arrive title-cased ('Ucsf Orthopaedics'); keep the casing the user
+    typed for any word they also typed ('UCSF Orthopaedics')."""
+    typed = {w.lower(): w for w in (typed_name or "").split()}
+    return " ".join(typed.get(w.lower(), w) if len(typed.get(w.lower(), "")) == len(w) else w
+                    for w in (org_name or "").split())
+
+
 def _physician_facts(ctx: "_Ctx") -> Optional[dict]:
     """NPI-registry linkage + certification statements for the practice's physicians (fail-soft)."""
     try:
@@ -387,7 +395,7 @@ class PracticeAdapter(_Adapter):
             parent_system=ctx.parent_system, org_name=ctx.org_name, emit=emit, force_rerun=ctx.force_rerun,
         )
         if ctx.org_name and not ctx.report_title:
-            ctx.report_title = ctx.org_name
+            ctx.report_title = _merge_casing(ctx.org_name, ctx.entity_name)
 
         # Anchor pinning + roster Google pre-pass.
         ctx.anchor_google, ctx.roster_rep, _suffix = _prac._roster_google_prepass(

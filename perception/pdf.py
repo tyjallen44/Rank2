@@ -293,9 +293,10 @@ def render_content_deep_dive(result: AnalysisResult, pdf_path: Path, findings,
     _rebrand_for_display(findings)   # display-time AI Reputation naming
     from playwright.sync_api import sync_playwright
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
-    html = _build_html(result, cfg)
-    section = _content_keys_section(findings)
-    html = html.replace("</body>", section + "</body>", 1) if "</body>" in html else html + section
+    html = _build_html(result, cfg, content_keys=findings)
+    if not (result.individual_report and not result.simplified):
+        section = _content_keys_section(findings)
+        html = html.replace("</body>", section + "</body>", 1) if "</body>" in html else html + section
     _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -789,62 +790,6 @@ def _sources_box_html(result: AnalysisResult) -> str:
   </div>"""
 
 
-def _physician_facts_section(result: AnalysisResult) -> str:
-    pf = getattr(result, "physician_facts", None) or {}
-    rows = pf.get("rows") or []
-    if pf.get("status") != "measured" or not rows:
-        return ""
-    ok, bad, na = _GREEN_OK, _RED_BAD, "#7a9095"
-    def cell(v, yes="✓", no="✗"):
-        return (f'<span style="color:{ok};font-weight:700">{yes}</span>' if v is True else
-                f'<span style="color:{bad};font-weight:700">{no}</span>' if v is False else f'<span style="color:{na}">—</span>')
-    def reg(r):
-        st = r.get("registry")
-        return cell(True, "found") if st == "found" else (f'<span style="color:{na}">{_e(st or "—")}</span>')
-    trs = "".join(
-        f'<tr><td style="padding:3px 6px">{_e(r["name"])}</td><td style="padding:3px 6px;text-align:center">{reg(r)}</td>'
-        f'<td style="padding:3px 6px;text-align:center">{cell(r.get("linked"))}</td>'
-        f'<td style="padding:3px 6px;text-align:center">{cell(r.get("cert_stated"))}</td></tr>' for r in rows)
-    lp = f"{pf['linkage_pct']}% ({pf['linked']} of {pf['checked']})" if pf.get("linkage_pct") is not None else "not measurable"
-    cs = f"{pf['cert_stated']} of {pf['cert_checked']}" if pf.get("cert_checked") else "no pages read"
-    return f"""
-  <div style="margin-top:18px;padding:12px 16px;border:1px solid #d0e4e8;border-radius:8px;page-break-inside:avoid">
-    <div class="section-title" style="margin-bottom:4px">Physicians Checked</div>
-    <div style="font-size:8.5pt;color:#5a7075;margin-bottom:8px">{len(rows)} physicians checked against the NPI registry{" and " + str(pf.get("bio_pages_read")) + " of the practice's own bio pages" if pf.get("bio_pages_read") else ""}. Linked to a confirmed location: <strong>{_e(lp)}</strong> — this measured value sets physician↔practice linkage in Identity &amp; Machine-Readability. Certification stated on the pages read: <strong>{_e(cs)}</strong> (informational; AI assistants can only cite a certification the site states).</div>
-    <table style="width:100%;border-collapse:collapse;font-size:8pt">
-      <thead><tr style="background:#eef4f5;color:#0F4146"><th style="text-align:left;padding:4px 6px">Physician</th><th style="padding:4px 6px">NPI registry</th><th style="padding:4px 6px">Linked to a confirmed location</th><th style="padding:4px 6px">Certification stated on site</th></tr></thead>
-      <tbody>{trs}</tbody></table>
-  </div>"""
-
-
-def _profile_audit_section(result: AnalysisResult) -> str:
-    """'Google Business Profiles checked' — what is actually on each confirmed profile."""
-    au = getattr(result, "profile_audit", None)
-    if not au or not (au.get("summary") or {}).get("checked"):
-        return ""
-    sm = au["summary"]; dom = au.get("domain") or "practice site"
-    tick = lambda ok: f'<span style="color:{_GREEN_OK if ok else _RED_BAD};font-weight:700">{"✓" if ok else "—"}</span>'
-    rows = "".join(
-        f'<tr><td>{_e(p.get("name") or "")}<div style="font-size:7pt;color:#7a9095">{_e(p.get("city") or "")}</div></td>'
-        f'<td style="text-align:center">{tick(p.get("domain_matches"))}</td><td style="text-align:center">{tick(p.get("has_hours"))}</td>'
-        f'<td style="text-align:center">{tick(p.get("has_phone"))}</td><td style="text-align:center">{tick((p.get("photos") or 0) >= 3)}</td>'
-        f'<td style="text-align:center">{(str(p.get("rating")) + "★ (" + str(p.get("review_count") or 0) + ")") if p.get("rating") is not None else "—"}</td></tr>'
-        for p in (au.get("profiles") or []) if p.get("found"))
-    owner = (f'<div style="font-size:8pt;color:{_GREEN_OK};margin-top:5px">Owner-attested: the practice reports these profiles are claimed and managed'
-             + (f'; review invitations active since {_e((result.owner_facts or {}).get("reviews_since"))}' if (result.owner_facts or {}).get("reviews_since") else '') + '.</div>') if au.get("owner_attested") else ""
-    return f"""
-  <div style="margin-top:18px;padding:14px 18px;border:1px solid #d0e4e8;border-radius:8px;page-break-inside:avoid">
-    <div class="section-title" style="margin-bottom:6px">Google Business Profiles Checked</div>
-    <div style="font-size:8.5pt;color:#5a7075;margin-bottom:8px">{sm['checked']} confirmed location profile{'s' if sm['checked'] != 1 else ''} read directly from Google —
-      {sm['linked']} link to <strong>{_e(dom)}</strong>, {sm['with_hours']} list hours, {sm['with_phone']} list a phone, {sm['with_photos']} have 3+ photos, {sm['thin_reviews']} have under 5 reviews.
-      These are the signals AI assistants read as "managed"; claim status itself is not visible to them or to us.</div>
-    <table style="width:100%;border-collapse:collapse;font-size:8pt">
-      <thead><tr style="background:#0F4146;color:#fff"><th style="text-align:left;padding:4px 6px">Profile</th><th style="padding:4px 6px">Links to site</th><th style="padding:4px 6px">Hours</th><th style="padding:4px 6px">Phone</th><th style="padding:4px 6px">Photos</th><th style="padding:4px 6px">Google</th></tr></thead>
-      <tbody>{rows}</tbody></table>
-    {owner}
-  </div>"""
-
-
 def _spotcheck_section(result: AnalysisResult) -> str:
     """'What AI assistants actually said' — observed check panel (never affects the score)."""
     sc = getattr(result, "spotcheck", None)
@@ -1232,135 +1177,6 @@ def _provider_card(p: RankedProvider, display_rank: int) -> str:
     </div>"""
 
 
-def _individual_entity_card(p: RankedProvider, confidence: dict = None) -> str:
-    """Full-width card for individual entity reports — no rank badge."""
-    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
-    weaknesses_html = "".join(
-        f"<li>{_e(_strip_md(w))}</li>"
-        for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
-    )
-    disq_html = (
-        f'<div class="disqualifier">⚠ Disqualifiers: {_e("; ".join(p.disqualifiers))}</div>'
-        if p.disqualifiers else ""
-    )
-    # Only show physician pill for brief counts, not descriptive sentences
-    _pc = (p.physician_count or "").strip()
-    physician_pill = (
-        f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
-        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60
-        else ""
-    )
-    return f"""
-    <div class="card" style="border:2px solid {_TEAL}">
-      <div class="card-body" style="padding:16px 20px">
-        <div class="card-top">
-          <h3 class="provider-name" style="font-size:13pt">{_e(p.name)}</h3>
-          {physician_pill}
-          {_trauma_teaching_pills(p)}
-          {_rating_pill(p)}
-        </div>
-        {f'<div class="provider-url"><a href="{_e(p.website_url)}">{_e(p.website_url)}</a></div>' if p.website_url else ""}
-        {_aivs_block(p, confidence=confidence)}
-        {_ai_says_block(p)}
-        {_google_stat(p)}
-        {_patient_voice_block(p)}
-        {_outcomes_safety_block(p)}
-        {_quality_signals_block(p)}
-        {disq_html}
-        {_locations_block(p)}
-        <div class="traits">
-          <div class="trait-col">
-            <div class="trait-label strengths-label">Strengths</div>
-            <ul>{strengths_html}</ul>
-          </div>
-          <div class="trait-col">
-            <div class="trait-label weaknesses-label">Areas for Improvement</div>
-            <ul>{weaknesses_html}</ul>
-          </div>
-        </div>
-        <div class="best-for"><strong>Best for:</strong> {_e(p.best_suited_for)}</div>
-      </div>
-    </div>"""
-
-
-def _individual_teaser_card(p: RankedProvider) -> str:
-    """Blurred individual entity card for teaser version."""
-    _pc = (p.physician_count or "").strip()
-    physician_html = (
-        f'<span class="surgeon-pill">{_e(_physician_label(_pc))}</span>'
-        if _pc and _pc.lower() not in ("unknown", "") and len(_pc) <= 60 else ""
-    )
-    strengths_html = "".join(f"<li>{_e(_strip_md(s))}</li>" for s in p.key_strengths)
-    weaknesses_html = "".join(
-        f"<li>{_e(_strip_md(w))}</li>"
-        for w in list(p.notable_weaknesses) + _outcomes_safety_weaknesses(p)
-    )
-    return f"""
-    <div class="card" style="border:2px solid {_TEAL}">
-      <div class="card-body" style="padding:16px 20px">
-        <div class="card-top">
-          <h3 class="provider-name" style="font-size:13pt">{_e(p.name)}</h3>
-          {physician_html}
-          {_trauma_teaching_pills(p)}
-          {_rating_pill(p)}
-        </div>
-        {_aivs_block(p)}
-        {_ai_says_block(p)}
-        <div class="teaser-blur-wrapper">
-          <div class="teaser-blur-content">
-            {_google_stat(p)}
-            {_patient_voice_block(p)}
-            {_outcomes_safety_block(p)}
-            {_quality_signals_block(p)}
-            <div class="traits">
-              <div class="trait-col">
-                <div class="trait-label strengths-label">Strengths</div>
-                <ul>{strengths_html}</ul>
-              </div>
-              <div class="trait-col">
-                <div class="trait-label weaknesses-label">Areas for Improvement</div>
-                <ul>{weaknesses_html}</ul>
-              </div>
-            </div>
-          </div>
-          <div class="teaser-blur-overlay">
-            <div class="blur-lock">&#128274;</div>
-            <div class="blur-cta-heading">Full analysis available upon request</div>
-            <div class="blur-cta-sub">{BLUR_CTA_INDIVIDUAL}</div>
-            <div class="blur-cta-actions">
-              <span class="blur-phone">{_TEASER_PHONE}</span>
-              &nbsp;&nbsp;&middot;&nbsp;&nbsp;
-              <a href="{_TEASER_DEMO_URL}" class="blur-demo-link">Book a Demo &rarr;</a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>"""
-
-
-def _individual_rankings_section(providers: list[RankedProvider], result=None) -> str:
-    """Entity card(s) for an individual report. The Score Evidence line needs the whole
-    result (reviews, verified quality, website / physician facts), so it is computed here
-    and passed to the first (target) card — the Compare Two path does the same in
-    _entity_deep_dive."""
-    if not providers:
-        return ""
-    conf = None
-    if result is not None:
-        try:
-            from .confidence import score_confidence
-            conf = score_confidence(result)
-        except Exception:
-            conf = None
-    return "\n".join(_individual_entity_card(p, confidence=conf if i == 0 else None) for i, p in enumerate(providers))
-
-
-def _individual_teaser_section(providers: list[RankedProvider]) -> str:
-    if not providers:
-        return ""
-    return "\n".join(_individual_teaser_card(p) for p in providers) + _teaser_roadmap_section()
-
-
 def _rankings_section(providers: list[RankedProvider], title: str, subtitle: str) -> str:
     if not providers:
         return ""
@@ -1595,14 +1411,20 @@ def _practice_appendix_html() -> str:
 
 
 def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
-                content_findings=None, page_map=None, content_teaser: bool = False) -> str:
-    """Build the individual/market report HTML. When `content_findings` (a
-    ContentFindings) is given (practice combined report), the AI Reputation
-    Improvement Roadmap is replaced by the embedded Content Report body — the
-    contents index, every finding, and its drafted prescription — and the
-    Assessment above it is expected to already cite those findings
-    (result.top_recommendation is set by the caller)."""
+                content_findings=None, page_map=None, content_teaser: bool = False,
+                content_keys=None, _legacy: bool = False) -> str:
+    """Build the report HTML. Individual (Deep Diagnostic) reports — hospital, practice,
+    service line, their teasers and the practice combined report — are laid out by
+    perception.deep_pdf in the Hospital Network report's structure. Market / rankings /
+    simplified reports keep this builder. `content_findings` embeds the Content Report
+    (practice combined report); `content_keys` appends the Content Improvement Keys box
+    (hospital Deep Diagnostic). `_legacy=True` forces this builder (Compare Two borrows
+    its stylesheet from here)."""
     brand_cfg = brand_cfg or _BRAND_CONFIGS["original"]
+    if result.individual_report and not result.simplified and not _legacy:
+        from .deep_pdf import build_deep_html
+        return build_deep_html(result, brand_cfg, content_findings=content_findings, page_map=page_map,
+                               content_teaser=content_teaser, content_keys=content_keys)
     location        = _e(result.location)
     specialty_label = _e(result.specialty or "Hospital Market")
     date_str        = result.generated_at.strftime("%B %d, %Y")
@@ -1619,12 +1441,10 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
             "Ranked by AI reputation — most to least visible",
             obscure=result.obscure_competitors,
         )
-    elif result.individual_report and result.teaser_report:
-        all_ranked = sorted(result.rankings, key=lambda p: p.rank)
-        rankings_html = _individual_teaser_section(all_ranked)
     elif result.individual_report:
-        all_ranked = sorted(result.rankings, key=lambda p: p.rank)
-        rankings_html = _individual_rankings_section(all_ranked, result) + _spotcheck_section(result) + _profile_audit_section(result) + _physician_facts_section(result)
+        # Only reached with _legacy=True (Compare Two takes the stylesheet from this
+        # document); the individual layout itself lives in perception.deep_pdf.
+        rankings_html = ""
     elif result.teaser_report:
         # Teaser: summary-only cards, flat rank order
         all_ranked = sorted(result.rankings, key=lambda p: p.rank)
@@ -2736,12 +2556,8 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
     p = result.rankings[0] if result.rankings else None
     name = _e(result.report_title or result.entity_name or result.location)
 
-    try:
-        from .confidence import score_confidence
-        _conf = score_confidence(result)
-    except Exception:
-        _conf = None
-    card_html = _individual_entity_card(p, confidence=_conf) if p else ""
+    from .deep_pdf import entity_summary_html
+    card_html = entity_summary_html(result) if p else ""
 
     # AI Reputation Assessment
     assessment_html = f"""
@@ -2822,7 +2638,7 @@ def _build_comparison_html(
         logo_tag = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
 
     # Reuse the base HTML/CSS from a minimal individual result (entity_a) then override content
-    base_html = _build_html(result_a, brand_cfg)
+    base_html = _build_html(result_a, brand_cfg, _legacy=True)
     # Extract everything up to and including <body>
     body_start = base_html.index("<body>") + len("<body>")
     head_section = base_html[:body_start]
@@ -2853,10 +2669,8 @@ def _build_comparison_html(
   {_comparison_summary_block(comparison)}
 
   {_entity_deep_dive(result_a, include_roadmap=False)}
-  {_practice_reputation_table_html(result_a.practice_composite_rows, result_a.generated_at.strftime("%B %d, %Y")) if result_a.practice_composite_rows else ""}
 
   {_entity_deep_dive(result_b, include_roadmap=False)}
-  {_practice_reputation_table_html(result_b.practice_composite_rows, result_b.generated_at.strftime("%B %d, %Y")) if result_b.practice_composite_rows else ""}
 
   {_practice_appendix_html() if (result_a.entity_type == "practice" or result_b.entity_type == "practice") else _appendix_html()}
 
