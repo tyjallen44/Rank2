@@ -1749,7 +1749,9 @@ def set_run_role(run_id: str, role: str, ran_by: Optional[str] = None) -> None:
 # Every signed-in role sees every report (all native accounts share the 'user' role, so
 # per-role isolation only hid admin/legacy-role reports from staff). Partner logins stay
 # limited to their own runs plus admin-created ones.
-_ISOLATED_ROLES = {"partner"}
+# Roles whose History is scoped to their own runs (+ admin's). Emptied 2026-10-01: every
+# signed-in user sees every report, including the ones the administrator ran.
+_ISOLATED_ROLES: set = set()
 
 
 def _history_role(role):
@@ -1757,7 +1759,8 @@ def _history_role(role):
 
 
 def query_history(role: str) -> list[dict[str, Any]]:
-    """Return analysis runs + network runs visible to the given role, newest first."""
+    """Return analysis runs + network runs visible to the given role, newest first.
+    Every role resolves to the full listing unless it is in _ISOLATED_ROLES."""
     role = _history_role(role)
     con = get_connection()
 

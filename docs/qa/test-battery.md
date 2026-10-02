@@ -3472,3 +3472,17 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T7 | Compare Two (any mix of hospital / practice) | Each entity's section = pillar bars + Evidence line + "currently see" box + evidence bullets + Locations + Physicians tables + What to Do First; no dense card, no Practice Composite appendix. [pdf] |
 | T8 | Walled-off website (Concord Hospital Health System practice/hospital) | The red "URGENT" box sits right under "What AI assistants currently see" on page 2, bullets as in AI-ACCESS-ALERT-BULLETS. [pdf] |
 | R1 | Regression | Scores, pillars, quartiles, Evidence line, spot-check numbers, Content Improvement Keys and drafts identical to the previous render of the same run. Competitors Rankings, Simplified / Enticement, Community Health and Hospital Network PDFs unchanged. pytest: the 15 pre-existing stale failures only (test_rebrand eyebrow/filename tokens, test_briefing letter grade, test_practice_reputation CSV columns), no new ones. |
+
+## TEASER-OPT-IN + HISTORY-OPEN — teasers off by default everywhere; every signed-in user sees every report in History (2026-10-01)
+
+**Context:** Deep Diagnostic and Hospital Network produced a teaser PDF with every run and Trends → "Create full report" asked for one too; they were rarely used. The teaser is now opt-in on every report type (a checkbox, off by default); nothing else about it changed and existing teasers stay downloadable. Separately, History scoped the `partner` role to its own runs + admin's; the isolated-role set is now empty so every signed-in user (any role, password or email login) sees every run, including those the administrator ran. Event runs were already open to everyone.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic → Advanced options | New checkbox "Also generate a teaser report" (unchecked). Run with it unchecked → History row has the full PDF only, no "Teaser (PDF)" file; completion screen has no "Download Teaser" button. Run with it checked → teaser file appears as before. [ui][pdf] |
+| T2 | Hospital Network → Advanced options | Same checkbox below the service-line option (unchecked). Unchecked → base + Full Detail only; checked → base + teaser + Full Detail. [ui][pdf] |
+| T3 | Trends → Create full report (hospital, practice, network) | No teaser produced. [ui] |
+| T4 | Compare Two and Event Preparation | Their existing teaser checkboxes unchanged (off by default). [ui] |
+| T5 | Help ⓘ "Teaser version" | Says it is off by default on every report type and where the checkbox sits. [ui] |
+| T6 | History as a Partner-password user and as an email "user" account | Sees reports the admin ran (Deep Diagnostic, Network, Compare Two, Community Health) with working downloads; "Run by" dropdown lists the admin's name. [ui] |
+| R1 | Regression | Public network request (HubSpot) still produces no teaser; Event Prep "Also generate a teaser" still works; History filters (type / run by / Mine / range / search) unchanged. |
