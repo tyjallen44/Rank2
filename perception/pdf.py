@@ -307,14 +307,7 @@ def render_content_deep_dive(result: AnalysisResult, pdf_path: Path, findings,
             margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
             print_background=True, display_header_footer=True,
             header_template="<span></span>",
-            footer_template=(
-                '<div style="width:100%;font-family:Arial,sans-serif;'
-                'font-size:9px;color:#7a9095;display:flex;justify-content:space-between;'
-                'align-items:center;padding:0 48px 8px;box-sizing:border-box">'
-                f'<span>{_cached_lbl}</span>'
-                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
-                "</div>"
-            ),
+            footer_template=_report_footer(_cached_lbl),
         )
         browser.close()
 
@@ -349,14 +342,7 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
             print_background=True,
             display_header_footer=True,
             header_template="<span></span>",
-            footer_template=(
-                '<div style="width:100%;font-family:Arial,sans-serif;'
-                'font-size:9px;color:#7a9095;display:flex;justify-content:space-between;'
-                'align-items:center;padding:0 48px 8px;box-sizing:border-box">'
-                f'<span>{_cached_lbl}</span>'
-                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
-                "</div>"
-            ),
+            footer_template=_report_footer(_cached_lbl),
         )
         browser.close()
 
@@ -377,13 +363,7 @@ def render_practice_combined(result: AnalysisResult, findings, pdf_path,
     items = [f.model_dump() if hasattr(f, "model_dump") else f
              for f in (getattr(findings, "findings", []) or [])]
     _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
-    _footer = (
-        '<div style="width:100%;font-family:Arial,sans-serif;font-size:9px;color:#7a9095;'
-        'display:flex;justify-content:space-between;align-items:center;padding:0 48px 8px;box-sizing:border-box">'
-        f'<span>{_cached_lbl}</span>'
-        '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
-        '</div>'
-    )
+    _footer = _report_footer(_cached_lbl)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -429,6 +409,15 @@ def _fmt_cached(gen) -> str:
         return "Data " + d.strftime("%m/%d/%Y")
     except Exception:
         return ""
+
+
+def _report_footer(data_label: str) -> str:
+    """Playwright footer shared by every report: prepared-by, data date, page x of y."""
+    return ('<div style="width:100%;font-family:Arial,Helvetica,sans-serif;font-size:8px;color:#8a9aaa;'
+            'display:flex;justify-content:space-between;align-items:center;padding:0 48px 10px;box-sizing:border-box">'
+            '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+            f'<span>{data_label}</span>'
+            '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>')
 
 
 _METHODOLOGY_URL = "careclimb.com/methodology"
@@ -2722,14 +2711,7 @@ def render_comparison_pdf(
             print_background=True,
             display_header_footer=True,
             header_template="<span></span>",
-            footer_template=(
-                '<div style="width:100%;font-family:Arial,sans-serif;'
-                'font-size:9px;color:#7a9095;display:flex;justify-content:space-between;'
-                'align-items:center;padding:0 48px 8px;box-sizing:border-box">'
-                f'<span>{_cached_lbl}</span>'
-                '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
-                "</div>"
-            ),
+            footer_template=_report_footer(_cached_lbl),
         )
         browser.close()
 

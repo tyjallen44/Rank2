@@ -3498,3 +3498,17 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Run the same organization twice in one day | Second run is served from the same-day lock and still gets its own History row. [ui] |
 | T4 | Event Prep with attendees analyzed recently | Each cached attendee gets a new row tagged to THIS event (previously the old row was re-tagged to the new event). [ui] |
 | R1 | Regression | Fresh (non-cached) runs unchanged; Trends snapshots (force re-run) unchanged; Community Health cache hits re-render with the Community Health layout. pytest: test_cache_same_day_lock_keys_on_aggregate updated to the new behaviour; the 15 stale failures only. |
+
+## DEEP-DIAGNOSTIC-PAGINATION — fewer blank pages in Deep Diagnostic / content reports (2026-10-02)
+
+**Context:** each content finding card was kept whole on one page while its drafted content often ran longer than a page, so every finding started a fresh page and the overflow left pages nearly blank (UNC Orthopaedics: 18 pages, ~6 of them mostly empty). Now: findings are compact cards (summary, why it matters, current / expected, evidence, remediation, and a pointer "Drafted content — see p. N"), and every draft / action plan lives in one appendix, "Ready-to-publish drafts & action plans", that flows continuously across pages. The contents index shows both pages ("draft p. N"). The contents index and the drafts appendix no longer force page breaks; the Content Analysis band follows the evidence section unless its header group needs a new page. Locations / Physicians tables of ≤15 rows never split; longer ones repeat the header row. The Evidence heading stays with its first bullets and the Strengths / Areas columns move as one block. Every report now carries the same footer as the network report (Prepared by Pulse | RLDatix — Confidential · Data mm/dd/yyyy · Page x of y). Same change applies to the Hospital Network Full Detail report and the standalone content report, which share the content body.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Practice combined report with several long drafts (re-run UNC Orthopaedics, Chapel Hill) | No page that is mostly blank; finding cards 2–3 per page, each ending with "▸ Drafted content (ready to publish) — see p. N (CIK-00x in Ready-to-publish drafts & action plans)"; the appendix follows the last card and its entries run continuously across pages; page numbers in the index and the pointers match the actual pages. Expect roughly 11 pages instead of 18. [pdf] |
+| T2 | Contents index | Each row shows the finding page on the right and "draft p. N" under the platform label when a draft exists. [pdf] |
+| T3 | Locations (≤15 rows) and Physicians (≤15 rows) | Heading, intro and table on one page together; a 27-row Locations table (USA Health) splits with the header row repeated. [pdf] |
+| T4 | Evidence Behind the Score | The heading never ends a page alone; Strengths / Areas for Improvement columns stay together. [pdf] |
+| T5 | Footer, every page, every report type | "Prepared by Pulse \| RLDatix — Confidential" left, "Data mm/dd/yyyy" centre, "Page x of y" right. [pdf] |
+| T6 | Hospital Network Full Detail + standalone content report | Same compact findings + drafts appendix; the Full Detail still starts the content section on a new page. [pdf] |
+| R1 | Regression | Finding text, drafts and page-map two-pass numbering unchanged in content; teaser blur unchanged; pytest: the 15 stale failures only. |

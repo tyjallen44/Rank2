@@ -57,6 +57,20 @@ def _anchor_token(fid) -> str:
     return "ZZ" + re.sub(r"[^A-Za-z0-9]", "", str(fid or "").upper()) + "ZZ"
 
 
+def _draft_key(fid) -> str:
+    """page_map key for a finding's entry in the drafts appendix."""
+    return f"{fid}:draft"
+
+
+def _draft_label(f: dict) -> str:
+    rows = (f.get("meta") or {}).get("rows") or []
+    if rows:
+        return "Recommended program — one template for all locations (swap [FACILITY]/[CITY] per location)"
+    if f.get("remediation_type", "") in _PUBLISHABLE_REMEDIATION:
+        return "Drafted content (ready to publish)"
+    return "Recommended action plan (for your team to implement)"
+
+
 def _hidden_marker(token: str) -> str:
     return f'<span style="color:#fff;font-size:1px;line-height:0">{token}</span>'
 
@@ -147,6 +161,8 @@ def _page_map(pdf_path, items, has_service_line: bool) -> dict:
         return {}
     out = {}
     tokens = [(f.get("finding_id"), _anchor_token(f.get("finding_id"))) for f in items]
+    tokens += [(_draft_key(f.get("finding_id")), _anchor_token(str(f.get("finding_id")) + "DRAFT"))
+               for f in items if f.get("draft_content")]
     if has_service_line:
         tokens.append((_SL_ANCHOR, _SL_ANCHOR))
     for key, tok in tokens:
@@ -211,7 +227,7 @@ def _rating_color(r) -> str:
     return "#2e9e5b"
 
 
-def _finding_block(f: dict) -> str:
+def _finding_block(f: dict, page_map=None) -> str:
     sev = f.get("severity", "low")
     sc = _SEV.get(sev, "#7a9095")
     dot_c, dot_l = _STATUS.get(f.get("status", "verified"), ("#9aa8ac", f.get("status", "")))
@@ -239,16 +255,10 @@ def _finding_block(f: dict) -> str:
     draft = f.get("draft_content")
     draft_html = ""
     if draft:
-        publishable = f.get("remediation_type", "") in _PUBLISHABLE_REMEDIATION
-        if rows:
-            # grouped operational program (e.g. weak-reputation locations)
-            _lbl = "Recommended program — one template for all locations above (swap [FACILITY]/[CITY] per location)"
-        elif publishable:
-            _lbl = "Drafted content (ready to publish)"
-        else:
-            _lbl = "Recommended action plan (for your team to implement)"
-        draft_html = (f'<div class="lbl">{_lbl}</div>'
-                      f'<pre class="draft">{_e(draft)}</pre>')
+        n = (page_map or {}).get(_draft_key(f.get("finding_id")))
+        where = f"p.&nbsp;{n}" if n else "the drafts appendix"
+        draft_html = (f'<div class="draft-ref">&#9656; {_e(_draft_label(f))} &mdash; see {where} '
+                      f'(<span class="fid">{_e(f.get("finding_id"))}</span> in <em>Ready-to-publish drafts &amp; action plans</em>).</div>')
     return f"""
     <div class="finding">
       {_hidden_marker(_anchor_token(f.get("finding_id")))}
@@ -325,6 +335,28 @@ def _service_line_section(summary, scorecards) -> str:
     </div>"""
 
 
+def _drafts_section(items) -> str:
+    """Appendix: every finding's drafted content / action plan in one continuous run, keyed by
+    finding id. Long blocks flow across pages (only each entry's header is kept with its first
+    lines) so no page is left mostly blank."""
+    entries = [f for f in items if f.get("draft_content")]
+    if not entries:
+        return ""
+    blocks = ""
+    for f in entries:
+        sc = _SEV.get(f.get("severity", "low"), "#7a9095")
+        blocks += (f'<div class="dentry">'
+                   f'<div class="dhead">{_hidden_marker(_anchor_token(str(f.get("finding_id")) + "DRAFT"))}'
+                   f'<span class="fid">{_e(f.get("finding_id"))}</span>'
+                   f'<span class="sev" style="background:{sc}">{_e(f.get("severity", "low"))}</span>'
+                   f'<span class="dtitle">{_e(f.get("teaser_summary"))}</span></div>'
+                   f'<div class="lbl" style="margin-top:2px">{_e(_draft_label(f))}</div>'
+                   f'<pre class="draft">{_e(f.get("draft_content"))}</pre></div>')
+    return (f'<div class="drafts"><div class="dintro"><div class="dsec">Ready-to-publish drafts &amp; action plans</div>'
+            f'<div class="dlead">One entry per finding above, in the same order. Replace every [VERIFY: &hellip;] placeholder '
+            f'with a confirmed value before publishing.</div></div>{blocks}</div>')
+
+
 def _contents_section(items, has_service_line: bool, page_map) -> str:
     """The cover-page Contents list: every item from the Deep Diagnostic summary,
     with the page it's addressed on. `page_map` is {finding_id: page_no} (and
@@ -347,7 +379,9 @@ def _contents_section(items, has_service_line: bool, page_map) -> str:
             f'<span class="toc-id">{_e(f.get("finding_id"))}</span>'
             f'<span class="toc-sev" style="background:{sc}">{_e(sev)}</span>'
             f'<span class="toc-title">{_e(f.get("teaser_summary"))}'
-            f'<span class="toc-plat">{_e(plat)}</span></span>'
+            f'<span class="toc-plat">{_e(plat)}'
+            + (f' &middot; draft {_pg(_draft_key(f.get("finding_id")))}' if f.get("draft_content") else '')
+            + f'</span></span>'
             f'<span class="toc-pg">{_pg(f.get("finding_id"))}</span></div>')
     if has_service_line:
         rows += (
@@ -383,7 +417,8 @@ def _content_css(include_reset: bool = True) -> str:
                border-bottom:1px solid #d7e7e2; line-height:1.6; }}
       .meta b {{ color:{_TEAL}; }}
       .intro {{ padding:16px 44px 4px; font-size:11pt; color:{_INK}; line-height:1.55; }}
-      .toc {{ padding:12px 44px 20px; page-break-after:always; }}
+      .toc {{ padding:12px 44px 20px; }}
+      .pxhead {{ break-inside:avoid; page-break-inside:avoid; break-after:avoid; }}
       .toc-lead {{ font-size:10.5pt; color:{_INK}; line-height:1.5; margin-bottom:14px; }}
       .toc-list {{ border-top:2px solid {_TEAL}; }}
       .toc-row {{ display:flex; align-items:center; gap:11px; padding:9px 2px;
@@ -409,7 +444,15 @@ def _content_css(include_reset: bool = True) -> str:
       .val {{ font-size:9.5pt; color:{_INK}; line-height:1.5; }}
       ul.ev {{ margin:2px 0 0 16px; }} ul.ev li {{ font-size:9pt; color:{_MUTE}; word-break:break-all; line-height:1.5; }}
       pre.draft {{ background:{_PALE}; border:1px solid #d0e4e8; border-radius:6px; padding:10px 12px;
-                   font-size:8.5pt; white-space:pre-wrap; color:{_INK}; margin-top:3px; }}
+                   font-size:8.5pt; white-space:pre-wrap; color:{_INK}; margin-top:3px; orphans:4; widows:4; }}
+      .draft-ref {{ font-size:8.5pt; color:{_MUTE}; margin-top:8px; padding-top:6px; border-top:1px dashed #d7e7e2; }}
+      .drafts {{ padding:8px 44px 24px; }}
+      .dintro {{ break-inside:avoid; page-break-inside:avoid; break-after:avoid; page-break-after:avoid; }}
+      .dsec {{ font-size:14pt; font-weight:700; color:{_TEAL}; margin:6px 0 4px; }}
+      .dlead {{ font-size:9.5pt; color:{_MUTE}; margin-bottom:12px; }}
+      .dentry {{ margin:0 0 18px; }}
+      .dhead {{ display:flex; align-items:center; gap:10px; margin-bottom:4px; break-after:avoid; page-break-after:avoid; }}
+      .dtitle {{ font-size:10pt; font-weight:600; color:{_TEAL}; line-height:1.35; }}
       .method {{ margin:12px 44px 24px; padding:12px 16px; background:{_PALE}; border-radius:8px;
                  font-size:9pt; color:{_MUTE}; line-height:1.55; }}
       .method b {{ color:{_TEAL}; }}
@@ -446,7 +489,7 @@ def _content_body_html(entity_name: str, location: str, findings, report_title: 
     if items:
         summary = (f'<strong>{len(items)} item{"s" if len(items)!=1 else ""}</strong> — '
                    f'{by_sev["high"]} high, {by_sev["medium"]} medium, {by_sev["low"]} low.')
-        blocks = "".join(_finding_block(f) for f in items)
+        blocks = "".join(_finding_block(f, page_map) for f in items)
     else:
         summary = "No content-visibility issues were detected, or sources could not be assessed."
         blocks = '<div class="finding"><div class="fsum">Nothing to detail.</div></div>'
@@ -460,6 +503,7 @@ def _content_body_html(entity_name: str, location: str, findings, report_title: 
     toc = _contents_section(items, bool(sl_section), page_map)
 
     return f"""
+      <div class="pxhead">
       <div class="band">
         <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI REPUTATION<br>REPORT</div></div>
         <h1>Content Analysis &mdash; Detailed Findings and Improvement Prescriptions</h1>
@@ -472,10 +516,12 @@ def _content_body_html(entity_name: str, location: str, findings, report_title: 
       <div class="intro">This report goes deep on every content-visibility finding from your Deep
         Diagnostic — where the sources AI assistants read are missing, outdated, or inconsistent — with the
         evidence behind each one and the specific fix. Findings keep the same order and IDs as your Deep
-        Diagnostic summary.</div>
+        Diagnostic summary; the drafted content and action plans follow in one appendix.</div>
+      </div>
       {toc}
       {sl_section}
       <div class="wrap">{blocks}</div>
+      {_drafts_section(items)}
       <div class="method"><b>How to read this.</b> Findings are drawn from live checks of your website
         (schema.org structured data, llms.txt, AI-crawler access), Wikidata, and Wikipedia — not estimates.
         Status: <b>Verified</b> = confirmed by direct check; <b>Partial</b> = checked but needs human

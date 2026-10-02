@@ -387,6 +387,19 @@ def _rating_cell(cr: dict) -> str:
     return f"<strong>{avg:.1f}</strong> / 5{unv}"
 
 
+_WHOLE_TABLE_ROWS = 15
+
+
+def _table_section(title: str, intro: str, th: list, trs: str, n_rows: int) -> str:
+    """Heading + intro + table. Tables of up to 15 rows never split across pages (the whole
+    section moves together); longer ones flow and repeat their header row on each page."""
+    table = f'<table class="facility-table deep-table"><thead><tr>{"".join(th)}</tr></thead><tbody>{trs}</tbody></table>'
+    head = f'<h2>{title}</h2><p style="font-size:9pt;color:#4a5a6a">{intro}</p>'
+    if n_rows <= _WHOLE_TABLE_ROWS:
+        return f'<div style="break-inside:avoid;page-break-inside:avoid">{head}{table}</div>'
+    return f'<div style="break-inside:avoid;page-break-inside:avoid">{head}</div>{table}'
+
+
 def _tick(v) -> str:
     if v is True:
         return f'<span style="color:{_GREEN_OK};font-weight:700">✓</span>'
@@ -459,13 +472,7 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
             else:
                 tds += ['<td style="text-align:center;color:#b0b8c0">—</td>', '<td style="text-align:right;color:#b0b8c0">—</td>', '<td></td>']
         trs += f"<tr{style}>{''.join(tds)}</tr>"
-    return f"""
-<div style="break-inside:avoid;page-break-inside:avoid">
-<h2>Locations</h2>
-<p style="font-size:9pt;color:#4a5a6a">{intro}</p>
-</div>
-<table class="facility-table deep-table"><thead><tr>{''.join(th)}</tr></thead><tbody>{trs}</tbody></table>
-{owner}"""
+    return _table_section("Locations", intro, th, trs, len(rows)) + owner
 
 
 def _physicians_section(result: AnalysisResult) -> str:
@@ -530,12 +537,7 @@ def _physicians_section(result: AnalysisResult) -> str:
             else:
                 tds += ['<td style="text-align:center;color:#b0b8c0">—</td>', '<td style="text-align:right;color:#b0b8c0">—</td>', '<td></td>']
         trs += f"<tr>{''.join(tds)}</tr>"
-    return f"""
-<div style="break-inside:avoid;page-break-inside:avoid">
-<h2>Physicians</h2>
-<p style="font-size:9pt;color:#4a5a6a">{intro}</p>
-</div>
-<table class="facility-table deep-table"><thead><tr>{''.join(th)}</tr></thead><tbody>{trs}</tbody></table>"""
+    return _table_section("Physicians", intro, th, trs, len(rows))
 
 
 # ── Evidence behind the score ─────────────────────────────────────────────────
@@ -593,10 +595,12 @@ def evidence_section_html(p: Optional[RankedProvider], heading: bool = True) -> 
     if not (ratings_html or quality or traits or best):
         return ""
     head = "<h2>Evidence Behind the Score</h2>" if heading else ""
-    return (f'{head}<div class="evidence">'
-            + (f'<div class="ev-label">Public &amp; Social Ratings</div><ul class="ev-list">{ratings_html}</ul>' if ratings_html else "")
-            + (f'<div class="ev-label">Quality &amp; Accreditation</div>{quality}' if quality else "")
-            + traits + best + "</div>")
+    first = (f'<div class="ev-label">Public &amp; Social Ratings</div><ul class="ev-list">{ratings_html}</ul>' if ratings_html
+             else (f'<div class="ev-label">Quality &amp; Accreditation</div>{quality}' if quality else ""))
+    rest = (f'<div class="ev-label">Quality &amp; Accreditation</div>{quality}' if (quality and ratings_html) else "")
+    return (f'<div class="evidence"><div style="break-inside:avoid;page-break-inside:avoid">{head}{first}</div>'
+            + rest + (f'<div style="break-inside:avoid;page-break-inside:avoid">{traits}{best}</div>' if (traits or best) else "")
+            + "</div>")
 
 
 def _roadmap_section(result: AnalysisResult) -> str:
@@ -706,7 +710,7 @@ def _deep_extra_css(primary: str, accent: str, pale: str) -> str:
 .advice-group-title {{ font-size: 10pt; font-weight: 700; color: {primary}; margin: 12px 0 2px; }}
 .advice-group-desc {{ font-size: 8.5pt; color: #5a6a7a; font-style: italic; margin-bottom: 5px; }}
 .disclaimer {{ border-top: 1px solid #dde3ea; padding-top: 10px; margin-top: 24px; font-size: 7.5pt; color: #7a8a9a; line-height: 1.5; }}
-.pxcontent {{ font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; page-break-before: always; margin: 0 -48px; }}
+.pxcontent {{ font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; margin: 24px -48px 0; }}
 .pxcontent .band {{ background: {primary}; }}
 """
 
