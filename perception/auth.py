@@ -103,13 +103,30 @@ def update_last_login(user_id: str) -> None:
 def list_users() -> list[dict]:
     con = get_connection()
     con.execute("""
-        SELECT id, email, name, role, auth_type, is_active, created_at, last_login, brand
+        SELECT id, email, name, role, auth_type, is_active, created_at, last_login, brand, preset, indicators_json
         FROM users ORDER BY created_at DESC
     """)
     rows = con.fetchall()
-    cols = ["id", "email", "name", "role", "auth_type", "is_active", "created_at", "last_login", "brand"]
+    cols = ["id", "email", "name", "role", "auth_type", "is_active", "created_at", "last_login", "brand", "preset", "indicators_json"]
     con.close()
     return [dict(zip(cols, r)) for r in rows]
+
+
+def update_user_access(user_id: str, preset: Optional[str], indicators_json: Optional[str]) -> None:
+    """Assign an access preset and/or per-user report indicators (NULL = unrestricted / use preset)."""
+    con = get_connection()
+    con.execute("UPDATE users SET preset=?, indicators_json=? WHERE id=?", [preset or None, indicators_json or None, user_id])
+    con.commit()
+    con.close()
+
+
+def emails_on_preset(preset: str) -> list[str]:
+    """Every active account on the given preset (History scope for association accounts)."""
+    con = get_connection()
+    con.execute("SELECT email FROM users WHERE preset = ? AND is_active", [preset])
+    rows = con.fetchall()
+    con.close()
+    return [str(r[0]).lower() for r in rows if r and r[0]]
 
 
 def update_user_brand(user_id: str, brand: str) -> None:

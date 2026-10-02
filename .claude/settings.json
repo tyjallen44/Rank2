@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s https://rank2-883710187036.us-central1.run.app/*)",
+      "Bash(curl -s http://localhost:8000/*)",
+      "Bash(gcloud logging read *)",
+      "Bash(gh run watch *)",
+      "Bash(bash scripts/deploy_status.sh)",
+      "Bash(pdftoppm *)",
+      "Bash(pdftotext *)",
+      "Bash(.venv/bin/python -m pytest tests -q)",
+      "Bash(.venv/bin/python -m pytest tests -q -x)",
+      "Bash(PYTHONPATH=. .venv/bin/python -m pytest tests -q)",
+      "Bash(PYTHONPATH=. .venv/bin/python -m pytest tests -q -x)",
+      "Bash(.venv/bin/python --version)"
+    ]
+  }
+}

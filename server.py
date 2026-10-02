@@ -229,6 +229,45 @@ def require_integration_admin(payload: dict = Depends(get_current_user_payload))
     return payload
 
 
+def _caps_for_payload(payload: dict) -> dict:
+    """The account's access (perception/presets.py). Password sessions and accounts with no
+    preset / indicators are unrestricted."""
+    from perception.presets import capabilities
+    uid = payload.get("uid")
+    user = None
+    if uid:
+        try:
+            from perception.auth import get_user_by_id
+            user = get_user_by_id(uid)
+        except Exception:
+            user = None
+    return capabilities(user)
+
+
+def _require_report(payload: dict, report_id: str) -> dict:
+    """403 unless the account may run this report type."""
+    from perception.presets import report_allowed, REPORTS
+    caps = _caps_for_payload(payload)
+    if not report_allowed(caps, report_id):
+        label = next((l for i, l, _ in REPORTS if i == report_id), report_id)
+        raise HTTPException(403, f"Your account does not include {label}. Ask an administrator to add it.")
+    return caps
+
+
+def _scope_history_rows(rows: list, payload: dict) -> list:
+    """Association accounts (preset history_scope='preset') see runs by accounts on the same
+    preset plus their own; everyone else sees the full listing."""
+    caps = _caps_for_payload(payload)
+    if caps.get("history_scope") != "preset" or not caps.get("preset"):
+        return rows
+    from perception.auth import emails_on_preset
+    allowed = set(emails_on_preset(caps["preset"]))
+    me_ = (payload.get("email") or "").strip().lower()
+    if me_:
+        allowed.add(me_)
+    return [r for r in rows if str(r.get("ran_by") or "").strip().lower() in allowed]
+
+
 @app.get("/api/auth/me")
 async def me(payload: dict = Depends(get_current_user_payload)):
     role = payload.get("role", "")
@@ -238,6 +277,7 @@ async def me(payload: dict = Depends(get_current_user_payload)):
         "display_name": name,
         "email": payload.get("email"),
         "brand": payload.get("brand", "original"),
+        "capabilities": _caps_for_payload(payload),
     }
 
 
@@ -522,6 +562,7 @@ def _start_ai_access_scan(rows: list[dict], label: str, payload: dict) -> dict:
 async def ai_access_scan_start(file: UploadFile = File(...), label: str = Form(""),
                                payload: dict = Depends(get_current_user_payload)):
     """Any signed-in user: upload a list and test every website for AI-crawler access."""
+    _require_report(payload, "ai_access_scan")
     raw = await file.read()
     rows = _aas_parse_csv(raw)
     if not rows:
@@ -533,6 +574,7 @@ async def ai_access_scan_start(file: UploadFile = File(...), label: str = Form("
 async def ai_access_scan_single(body: dict = Body(...), payload: dict = Depends(get_current_user_payload)):
     """Any signed-in user: test one organization's website without uploading a list.
     Body: {name, city?, state?, url?, label?}. Without a url the site is looked up from the Google listing."""
+    _require_report(payload, "ai_access_scan")
     name = str(body.get("name") or "").strip()
     url = str(body.get("url") or "").strip()
     if not name and not url:
@@ -1921,6 +1963,8 @@ class CompareRequest(BaseModel):
 
 @app.post("/api/analyze")
 async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_current_user_payload)):
+    from perception.presets import deep_report_id
+    _require_report(payload, deep_report_id(req.entity_type, req.service_line) if req.individual_report else "rankings")
     role  = payload["role"]
     brand = payload.get("brand", "original")
     city, state = req.city, req.state
@@ -2093,6 +2137,7 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
 
 @app.post("/api/compare")
 async def start_comparison(req: CompareRequest, payload: dict = Depends(get_current_user_payload)):
+    _require_report(payload, "compare")
     brand = payload.get("brand", "original")
     role  = payload.get("role", "user")
     job_id = _new_job(role, brand, payload.get("email"))
@@ -2288,7 +2333,7 @@ async def get_history(payload: dict = Depends(get_current_user_payload), days: i
     from datetime import datetime as _dt, timedelta as _td
     role = payload.get("role", "")
     init_db()
-    everything = query_history(role)
+    everything = _scope_history_rows(query_history(role), payload)
     ran_by_options = sorted({str(r.get("ran_by")) for r in everything if r.get("ran_by")}, key=str.lower)
     rb = (payload.get("email") or "").strip().lower() if mine else (ran_by or "").strip().lower()
     every = [r for r in everything
@@ -2375,9 +2420,10 @@ async def delete_report_run(run_id: str, _: dict = Depends(require_admin)):
 
 
 @app.get("/api/reports/{run_id}/pdf")
-async def download_pdf(run_id: str, role: str = Depends(require_auth)):
+async def download_pdf(run_id: str, payload: dict = Depends(get_current_user_payload)):
+    role = payload.get("role", "")
     from perception.db import query_history
-    run = next((r for r in query_history(role) if r["run_id"] == run_id), None)
+    run = next((r for r in _scope_history_rows(query_history(role), payload) if r["run_id"] == run_id), None)
     if not run or not run.get("pdf_path"):
         raise HTTPException(404, "Report not found")
     pdf = Path(run["pdf_path"])
@@ -2387,10 +2433,11 @@ async def download_pdf(run_id: str, role: str = Depends(require_auth)):
 
 
 @app.get("/api/reports/{run_id}/teaser-pdf")
-async def download_report_teaser_pdf(run_id: str, role: str = Depends(require_auth)):
+async def download_report_teaser_pdf(run_id: str, payload: dict = Depends(get_current_user_payload)):
+    role = payload.get("role", "")
     """Download the practice combined report's teaser (blurred content) by run_id."""
     from perception.db import query_history
-    run = next((r for r in query_history(role) if r["run_id"] == run_id), None)
+    run = next((r for r in _scope_history_rows(query_history(role), payload) if r["run_id"] == run_id), None)
     if not run or not run.get("teaser_pdf_path"):
         raise HTTPException(404, "Teaser report not found")
     pdf = Path(run["teaser_pdf_path"])
@@ -2400,9 +2447,10 @@ async def download_report_teaser_pdf(run_id: str, role: str = Depends(require_au
 
 
 @app.get("/api/reports/{run_id}/briefing-pdf")
-async def download_briefing_pdf(run_id: str, role: str = Depends(require_auth)):
+async def download_briefing_pdf(run_id: str, payload: dict = Depends(get_current_user_payload)):
+    role = payload.get("role", "")
     from perception.db import query_history
-    run = next((r for r in query_history(role) if r["run_id"] == run_id), None)
+    run = next((r for r in _scope_history_rows(query_history(role), payload) if r["run_id"] == run_id), None)
     if not run or not run.get("briefing_pdf_path"):
         raise HTTPException(404, "Briefing PDF not found for this run")
     pdf = Path(run["briefing_pdf_path"])
@@ -2756,6 +2804,7 @@ class NetworkAnalyzeRequest(BaseModel):
 @app.post("/api/network/analyze")
 async def network_analyze(req: NetworkAnalyzeRequest, payload: dict = Depends(get_current_user_payload)):
     """Start a Network Pulse analysis job. Returns job_id for SSE streaming."""
+    _require_report(payload, "network")
     role  = payload["role"]
     brand = payload.get("brand", req.brand)
     ignore_cache = req.ignore_cache and (role == "admin")
@@ -3246,6 +3295,7 @@ async def student_health_resolve(req: StudentRosterRequest,
 async def student_health_run(req: StudentRunRequest,
                              payload: dict = Depends(get_current_user_payload)):
     """Score + rank a confirmed roster of student health clinics (background job)."""
+    _require_report(payload, "student_health")
     schools = [s for s in (req.schools or []) if (s.get("clinic_name") or s.get("school"))]
     if not schools:
         raise HTTPException(400, "No clinics to score.")
@@ -4525,6 +4575,33 @@ async def admin_update_role(
     return {"status": "updated"}
 
 
+@app.get("/api/admin/access-catalog")
+async def admin_access_catalog(_: dict = Depends(require_admin)):
+    """Indicators and presets an account can be assigned (Admin → Users → Access)."""
+    from perception.presets import catalog
+    return catalog()
+
+
+class UpdateAccessRequest(BaseModel):
+    preset: Optional[str] = None            # preset id or null (unrestricted unless indicators given)
+    indicators: Optional[list[str]] = None  # report indicator ids; null = use the preset's list
+
+
+@app.put("/api/admin/users/{user_id}/access")
+async def admin_update_access(user_id: str, req: UpdateAccessRequest, _: dict = Depends(require_admin)):
+    from perception.db import init_db
+    from perception.auth import update_user_access
+    from perception.presets import PRESETS, REPORT_IDS
+    init_db()
+    if req.preset and req.preset not in PRESETS:
+        raise HTTPException(400, f"Unknown preset: {req.preset}")
+    ind = None
+    if req.indicators is not None:
+        ind = json.dumps([i for i in req.indicators if i in REPORT_IDS])
+    update_user_access(user_id, req.preset or None, ind)
+    return {"status": "updated"}
+
+
 @app.put("/api/admin/users/{user_id}/brand")
 async def admin_update_brand(
     user_id: str, req: UpdateBrandRequest, _: dict = Depends(require_admin)
@@ -5180,6 +5257,7 @@ async def track_list(_: dict = Depends(get_current_user_payload)):
 
 @app.post("/api/track/entities")
 async def track_create(req: TrackEntityRequest, payload: dict = Depends(get_current_user_payload)):
+    _require_report(payload, "trends")
     from perception.db import init_db, create_tracked_entity, mark_tracked_entity_ran
     if req.schedule not in ("monthly", "weekly", "manual"):
         raise HTTPException(400, "schedule must be monthly, weekly, or manual")
@@ -5936,8 +6014,9 @@ _event_job_map: dict[str, str] = {}   # event_id -> job_id
 
 
 @app.post("/api/event/upload")
-async def event_upload(file: UploadFile = File(...), _: str = Depends(require_auth)):
+async def event_upload(file: UploadFile = File(...), payload: dict = Depends(get_current_user_payload)):
     """Parse an event CSV and resolve each row via Google Places (batches of 5)."""
+    _require_report(payload, "events")
     import csv
     import io as _io
 
@@ -5989,6 +6068,7 @@ async def event_upload(file: UploadFile = File(...), _: str = Depends(require_au
 @app.post("/api/event/run")
 async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_user_payload)):
     """Create an event run record and kick off batch analysis."""
+    _require_report(payload, "events")
     from perception.db import init_db, create_event_run, create_event_entities
     role  = payload["role"]
     brand = payload.get("brand", "original")

@@ -3534,3 +3534,17 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Click "Run as Hospital anyway →" | Run starts; the notice does not reappear for that listing in the session. [ui] |
 | T4 | Type Hospital with "UNC Medical Center" or "Castle Rock Medical Center" | No notice. [ui] |
 | R1 | Regression | Website gate and duplicate-run gate unchanged and still shown in that order after the type guard; practice / service line / community health types never show the notice. |
+
+## ACCESS-PRESETS — per-account report indicators and presets (2026-10-02)
+
+**Context:** an association will run hundreds of Specialty Practice Deep Diagnostics and needs every report produced the same way, and its users to see only what they need. An *indicator* is one report type an account may run; a *preset* is a named bundle of indicators plus, for each form option, whether it starts on / off / hidden (users can still toggle on/off options). Accounts with no preset and no indicators are unrestricted — nothing changes for existing users. Admin → Users gets an **Access** column: a preset select ("Unrestricted" / "Association — Specialty Practice" / "Association — Hospital Network") and an **Indicators…** row to tick individual report types (e.g. Event Preparation for the coordinator). Enforced server-side (403) on every report-launching route; History listing and downloads are scoped to accounts on the same preset when the preset says so.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Admin → Users: set a test email account to "Association — Specialty Practice"; sign in as it | Sidebar shows Home, Deep Diagnostic, History, Learn, Release Notes only (no Network, Rankings, Compare, Events, Trends). Deep Diagnostic shows only the Specialty Practice type; "Ask the AI assistants…" is pre-checked (can be unchecked); teaser, Search by ZIP, Practice Composite, Skip PDF and Force re-run are absent; owner facts and custom title present but off. History → no AI Website Access Scan panel. [ui] |
+| T2 | Same account: run a Specialty Practice Deep Diagnostic | Runs; the resulting PDF has the spot-check section and the physician table. [ui][pdf] |
+| T3 | Same account: `POST /api/network/analyze` (or any other guarded route) with its token | 403 "Your account does not include Hospital Network. Ask an administrator to add it." [api] |
+| T4 | Admin: Indicators… → tick Event Preparation → Save | That account now also sees Event Prep; Hospital Network still hidden; options unchanged. "Use the preset's list" removes the custom list. [ui] |
+| T5 | History as the association account vs. as an unrestricted user | Association account sees only runs by accounts on its preset plus its own (downloads of other runs 404); unrestricted users see everything as before. [ui] |
+| T6 | Switch the account back to "Unrestricted" | Full sidebar and all types/options return after a reload. [ui] |
+| R1 | Regression | Partner password sessions and every existing email account are unrestricted and behave exactly as before; Admin role gating unchanged; pytest: tests/test_presets.py passes, the 15 stale failures only. |
