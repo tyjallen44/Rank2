@@ -333,9 +333,12 @@ def test_briefing_gated_on_variant_and_pdf(harness):
 
 def test_cache_same_day_lock_keys_on_aggregate(harness):
     res, _ = harness.run("hospital", aggregate=False)
-    # Same-day lock (override off): the just-saved single run is served back.
+    # Same-day lock (override off): the just-saved single run is served back — republished as
+    # a NEW History row (new run_id, today's date) with the cached score and data date.
     res2, events2 = harness.run("hospital", aggregate=False, override_today_lock=False, force_rerun=True)
-    assert res2.run_id == res.run_id
+    assert res2.run_id != res.run_id
+    assert res2.rankings[0].ai_visibility_score == res.rankings[0].ai_visibility_score
+    assert res2.data_collected_at == res.data_collected_at
     assert any(e.get("name") == "cached" for e in events2)
     # An aggregate request must NOT share the single run's slot.
     res3, events3 = harness.run("hospital", aggregate=True, override_today_lock=False, force_rerun=True)

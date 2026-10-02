@@ -108,6 +108,55 @@ def _website_facts(ctx: "_Ctx", kind: str) -> Optional[dict]:
         return {"status": "unreachable", "url": None, "note": f"{type(exc).__name__}"}
 
 
+def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: str, skip_pdf: bool,
+                      emit, console) -> AnalysisResult:
+    """Serve a cached analysis as today's report: new run_id + History row, generated today
+    (data date = the original analysis), fresh PDF in `output_dir`, teaser dropped (opt-in,
+    the server rebuilds it when asked). Cached results from before the website crawl get
+    their website facts fetched now, so the AI-access alert and Score Evidence are current."""
+    import re as _re
+    from datetime import datetime as _dt
+    from .analyzer import _save_to_db
+
+    old_generated = res.generated_at
+    res.run_id = str(uuid.uuid4())
+    res.data_collected_at = res.data_collected_at or old_generated
+    res.generated_at = date.today()
+    res.teaser_report = False
+    res.teaser_pdf_path = None
+
+    # Website facts (crawl + AI-crawler probe): no model calls, a few seconds.
+    if res.website_facts is None and res.rankings and getattr(res.rankings[0], "website_url", None):
+        try:
+            from .data import website_facts as _wf
+            emit({"type": "phase", "name": "website", "text": "Checking the website for AI-crawler access"})
+            f = _wf.fetch_website_facts(res.rankings[0].website_url)
+            res.website_facts = {k: v for k, v in (f or {}).items() if k != "site_pages"}
+        except Exception as exc:
+            console.print(f"[yellow]⚠[/yellow] Website facts failed on cached result ({type(exc).__name__}); proceeding without.")
+
+    if not skip_pdf:
+        ts = _dt.utcnow().strftime("%y%m%d-%H%M")
+        if res.pdf_path:
+            stem = _re.sub(r"-\d{6}-\d{4}(_[A-Za-z]+)?$", "", Path(res.pdf_path).stem) or res.run_id
+        else:
+            stem = _re.sub(r"[^A-Za-z0-9]+", "-", res.entity_name or res.location or "report").strip("-")
+        pdf_path = Path(output_dir) / f"{stem}-{ts}.pdf"
+        emit({"type": "phase", "name": "pdf", "text": "Rendering PDF"})
+        try:
+            if adapter.type_key == "community_health":
+                from .fqhc_pdf import render_fqhc_pdf
+                render_fqhc_pdf(res, str(pdf_path), brand=brand)
+            else:
+                from .pdf import render_pdf
+                render_pdf(res, pdf_path, brand=brand)
+            res.pdf_path = str(pdf_path)
+        except Exception as exc:
+            console.print(f"[yellow]⚠[/yellow] PDF re-render of cached result failed ({type(exc).__name__}: {exc}); keeping the stored file.")
+    _save_to_db(res)
+    return res
+
+
 def _merge_casing(org_name: str, typed_name: str) -> str:
     """Registry org names arrive title-cased ('Ucsf Orthopaedics'); keep the casing the user
     typed for any word they also typed ('UCSF Orthopaedics')."""
@@ -680,17 +729,22 @@ def run_individual(
     _loc_key = f"{city}, {state}"
 
     # ── 2. cache (same-day lock always; 30-day unless force_rerun) ───────────
+    # A cache hit is still a report the user ran today: it is republished as a NEW History
+    # row (new run_id, today's date, the requester as "Run by", a fresh PDF in this job's
+    # output folder) while the score and data date stay those of the cached analysis.
     if not override_today_lock:
         from .db import get_recent_run
         _today = get_recent_run(entity_name, _loc_key, days=0, entity_type=adapter.type_key, aggregate=aggregate)
         if _today:
             emit({"type": "phase", "name": "cached", "text": f"Returning today's cached result for {entity_name}"})
-            return AnalysisResult.model_validate_json(_today["result_json"])
+            return _republish_cached(AnalysisResult.model_validate_json(_today["result_json"]), adapter,
+                                     output_dir=output_dir, brand=brand, skip_pdf=skip_pdf, emit=emit, console=console)
         if not force_rerun:
             _cached = get_recent_run(entity_name, _loc_key, days=30, entity_type=adapter.type_key, aggregate=aggregate)
             if _cached:
                 emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
-                return AnalysisResult.model_validate_json(_cached["result_json"])
+                return _republish_cached(AnalysisResult.model_validate_json(_cached["result_json"]), adapter,
+                                         output_dir=output_dir, brand=brand, skip_pdf=skip_pdf, emit=emit, console=console)
 
     client = _get_client()
     run_id = str(uuid.uuid4())

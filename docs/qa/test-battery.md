@@ -3486,3 +3486,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T5 | Help ⓘ "Teaser version" | Says it is off by default on every report type and where the checkbox sits. [ui] |
 | T6 | History as a Partner-password user and as an email "user" account | Sees reports the admin ran (Deep Diagnostic, Network, Compare Two, Community Health) with working downloads; "Run by" dropdown lists the admin's name. [ui] |
 | R1 | Regression | Public network request (HubSpot) still produces no teaser; Event Prep "Also generate a teaser" still works; History filters (type / run by / Mine / range / search) unchanged. |
+
+## FIX-CACHE-HIT-HISTORY — re-runs served from the 30-day cache now appear at the top of History, with current website facts (2026-10-02)
+
+**Context:** a Deep Diagnostic of an organization analyzed in the last 30 days was served from the cache by returning the *stored* result unchanged — same run_id, original date, original "Run by" — so the "new" report sorted under its original date in History (users saw nothing new after running it) and its cover said "Generated <old date>". Results cached before the website crawl existed also carried no website facts, so the red/amber AI-access alert and the crawl part of Score Evidence were missing from the re-rendered PDF. Now a cache hit is republished as a NEW History row: new run_id, generated today, "Run by" = the requester, a fresh PDF in the current job's folder, data date = the original analysis (footer "Data mm/dd/yyyy"). Before rendering, website facts are fetched when the cached result has none (no model calls). The plain-language pass on cached results also writes the structured Executive Summary.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Run a Deep Diagnostic on an organization already analyzed in the last 30 days (e.g. UNC Orthopaedics, Chapel Hill) | Progress shows "Returning cached result", then "Checking the website…" (if the cached result had no crawl) and "Rendering PDF". History: a new row at the top dated today, Run by = you, Downloads work; the old row is untouched. Cover "Generated <today>"; footer "Data <original date>"; score identical to the old row. [ui][pdf] |
+| T2 | Same, for an organization whose site turns away or disallows AI crawlers (unchealth.org disallows GPTBot/ClaudeBot) | The amber "Your website tells AI assistants to stay out" (or red URGENT) box appears under "What AI assistants currently see"; Score Evidence mentions the crawl. [pdf] |
+| T3 | Run the same organization twice in one day | Second run is served from the same-day lock and still gets its own History row. [ui] |
+| T4 | Event Prep with attendees analyzed recently | Each cached attendee gets a new row tagged to THIS event (previously the old row was re-tagged to the new event). [ui] |
+| R1 | Regression | Fresh (non-cached) runs unchanged; Trends snapshots (force re-run) unchanged; Community Health cache hits re-render with the Community Health layout. pytest: test_cache_same_day_lock_keys_on_aggregate updated to the new behaviour; the 15 stale failures only. |
