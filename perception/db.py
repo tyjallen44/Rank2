@@ -743,6 +743,14 @@ def _init_db_impl() -> None:
         _c = {r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name=?", [_t]).fetchall()}
         if "cost_usd" not in _c:
             con.execute(f"ALTER TABLE {_t} ADD COLUMN cost_usd DOUBLE PRECISION")
+    # Groups (associations / cohorts / programs) — perception/groups.py
+    from .groups import ensure_tables as _groups_tables
+    _groups_tables(con)
+    _ev_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='event_runs'").fetchall()}
+    if "group_id" not in _ev_cols:
+        con.execute("ALTER TABLE event_runs ADD COLUMN group_id VARCHAR")
+
     # Reviewed "needs attention" flags: keyed by entity + reason + a fingerprint of the
     # data that raised it, so the flag comes back when the condition recurs with new data.
     con.execute("""
@@ -1117,17 +1125,18 @@ def create_event_run(
     total_count: int, role: str,
     include_teaser: bool = False, override_cache: bool = False,
     auto_practice_composite: bool = False, practice_content: bool = False,
+    group_id: Optional[str] = None,
 ) -> None:
     from datetime import datetime
     con = get_connection()
     con.execute(
         "INSERT INTO event_runs (id, event_name, event_date, entity_type, csv_filename, "
         "total_count, done_count, skip_count, status, user_role, "
-        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?, ?, ?, ?, ?)",
+        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?, ?, ?, ?, ?, ?)",
         [event_id, event_name, event_date, entity_type, csv_filename, total_count, role,
          bool(include_teaser), bool(override_cache), bool(auto_practice_composite),
-         bool(practice_content), datetime.utcnow()],
+         bool(practice_content), datetime.utcnow(), group_id or None],
     )
     con.close()
 
@@ -1218,7 +1227,7 @@ def get_event_run(event_id: str) -> Optional[dict]:
     row = con.execute(
         "SELECT id, event_name, event_date, entity_type, csv_filename, total_count, "
         "done_count, skip_count, status, user_role, enriched_csv_path, zip_path, "
-        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at "
+        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id "
         "FROM event_runs WHERE id = ?",
         [event_id],
     ).fetchone()
@@ -1228,7 +1237,7 @@ def get_event_run(event_id: str) -> Optional[dict]:
     cols = ["id", "event_name", "event_date", "entity_type", "csv_filename",
             "total_count", "done_count", "skip_count", "status", "user_role",
             "enriched_csv_path", "zip_path", "include_teaser", "override_cache",
-            "auto_practice_composite", "practice_content", "created_at"]
+            "auto_practice_composite", "practice_content", "created_at", "group_id"]
     return dict(zip(cols, row))
 
 

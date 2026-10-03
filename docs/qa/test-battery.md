@@ -3638,3 +3638,17 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Deep Diagnostic → Specialty Practice with "Include physicians" already ticked (preset default or browser form restore) → pick a listing | The physician discovery runs immediately after the listing is chosen (Stage 2 table appears) without unticking / re-ticking. [ui] |
 | T2 | Account on a preset where the option starts on | Ticking happens on load and fires the same handler as a click. [ui] |
 | R1 | Regression | Manual tick / untick unchanged; hospital Practice Composite unchanged. |
+
+## GROUPS — associations / cohorts / programs: tag, rank, benchmark (2026-10-03)
+
+**Context (association item 5):** a **group** is a named set of Deep Diagnostic runs ranked and benchmarked against each other. Tag a report from the Deep Diagnostic form (Advanced options → "Add this report to a group", with "New group…"), tag every report of an Event Prep upload, or add past runs from History ("+ group…" under the organization name; chips open the group). A run can be in several groups; each organization counts once (its latest run in the group). New **Groups** page (sidebar, Reporting): list with member counts; group page with the ranked table (rank, Pulse Score, four pillars, evidence chip, "site blocks AI" badge, report date, run by, PDF, Remove), median / quartiles, CSV export, rename / archive / "Hide benchmark on reports" (admin or creator). PDF: cover line "Member of <group>"; once a group has **10** organizations (and the group allows it) the cover adds "· 3rd of 12 · group median 61" and the Executive Summary gains "Ranks 3rd of 12 in <group>, 13 points above the group median of 61." Below 10: "Part of <group> (N members); group benchmarks appear once it reaches 10 members." Association accounts see only groups on their preset (groups they create inherit it); admins/unrestricted see all. Server routes: GET/POST /api/groups, GET/PUT /api/groups/{id}, GET /api/groups/{id}.csv, POST /api/groups/{id}/runs, DELETE /api/groups/{id}/runs/{run_id}.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Groups → + New group "Iowa Ortho test" → Deep Diagnostic → Advanced options → pick it → run a practice | Progress log "Added to group “Iowa Ortho test”"; History row shows the chip; the PDF cover shows "MEMBER OF IOWA ORTHO TEST"; Executive Summary ends with the "Part of … benchmarks appear once it reaches 10 members" bullet. [ui][pdf] |
+| T2 | History → "+ group…" on nine older practice rows → Groups page | Ranked table of 10 organizations with scores, pillars, median and quartiles; "Benchmark on reports: on". Re-run one member → its new PDF shows "3rd of 10 · group median NN" on the cover and the rank bullet in the Executive Summary. [ui][pdf] |
+| T3 | Event Prep → "Add every report from this upload to a group" | Every produced report is a member (cached attendees too); resume keeps the group. [ui] |
+| T4 | Group page → "Hide benchmark on reports" → re-run a member | Cover shows only "Member of …"; no rank line. [pdf] |
+| T5 | Association account (preset) | Sees only its preset's groups; a group it creates is scoped to the preset; cannot open other groups (403). [ui] |
+| T6 | CSV | Rank, organization, location, specialty, type, score, four pillars, evidence, website access, date, run by, run id. [ui] |
+| R1 | Regression | Runs without a group unchanged; Hospital Network unaffected; pytest: tests/test_groups.py passes, the 15 stale failures only. |

@@ -174,6 +174,7 @@ def _cover(result: AnalysisResult, p: Optional[RankedProvider], cfg: dict, logo_
   <div class="cover-network-name">{_e(name)}</div>
   <div class="cover-subtitle">{subtitle}</div>
   <div class="cover-confidential">Confidential &nbsp;·&nbsp; Prepared exclusively for {_e(name)}</div>
+  {_group_cover_line(result)}
   <div class="cover-score-center">
     <div style="line-height:1"><span class="cover-score-num" style="color:{accent}">{score_str}</span><span class="cover-score-out-of">/100</span></div>
     <div class="cover-score-lbl">AI Reputation Score</div>
@@ -206,6 +207,34 @@ def _front_door_rating(p: Optional[RankedProvider]) -> str:
     return ""
 
 
+def _group_cover_line(result: AnalysisResult) -> str:
+    g = getattr(result, "group_context", None) or {}
+    if not g.get("group_name"):
+        return ""
+    from .groups import ordinal
+    txt = f"Member of {_e(g['group_name'])}"
+    if g.get("ready") and g.get("rank") and g.get("total"):
+        txt += f" &nbsp;·&nbsp; {ordinal(int(g['rank']))} of {g['total']} &nbsp;·&nbsp; group median {g.get('median')}"
+    return f'<div style="font-size:8pt;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:-24px 0 28px">{txt}</div>'
+
+
+def _group_summary_bullet(result: AnalysisResult) -> Optional[str]:
+    g = getattr(result, "group_context", None) or {}
+    if not g.get("group_name"):
+        return None
+    from .groups import ordinal, GROUP_MIN
+    if g.get("ready") and g.get("rank") and g.get("total"):
+        score = (result.rankings[0].ai_visibility_score if result.rankings else None)
+        rel = ""
+        if score is not None and g.get("median") is not None:
+            diff = int(score) - int(g["median"])
+            rel = (f", {abs(diff)} points {'above' if diff > 0 else 'below'} the group median of {g['median']}" if diff
+                   else f", at the group median of {g['median']}")
+        return f"Ranks {ordinal(int(g['rank']))} of {g['total']} in {g['group_name']}{rel}."
+    n = int(g.get("members") or 0)
+    return f"Part of {g['group_name']} ({n} member{'s' if n != 1 else ''}); group benchmarks appear once it reaches {GROUP_MIN} members."
+
+
 def _exec_summary(result: AnalysisResult) -> str:
     """Headline + bullets. The plain-language pass stores a model-written version on
     executive_summary_structured; older results fall back to the verdict's sentences."""
@@ -219,6 +248,9 @@ def _exec_summary(result: AnalysisResult) -> str:
         rest = (verdict[1:] if verdict else overview[1:]) + (overview if verdict else [])
         st = {"headline": head, "bullets": [s for s in rest if s != head][:4]}
     st = {"headline": st.get("headline", ""), "bullets": list(st.get("bullets") or [])[:4]}
+    gb = _group_summary_bullet(result)
+    if gb:
+        st["bullets"] = st["bullets"] + [gb]
     return f'<h2>Executive Summary</h2><div class="exec-summary">{_structured_html(st, st.get("headline", ""))}</div>'
 
 

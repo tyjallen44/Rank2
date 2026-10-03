@@ -1026,6 +1026,7 @@ def _job_run_single(
                                         for l in (_p.consolidated_locations or [])], source="analysis")
         else:
             _backfill_teaser_pdf(result, job)
+        _group_attach(result, job, emit)
         set_run_role(result.run_id, job["role"], _job_ran_by(job))
 
         # Single-hospital Deep Diagnostic: fold the content analysis + prescription
@@ -1096,6 +1097,145 @@ def _descriptive_pdf_name(run: dict, key: str = "pdf_path") -> str:
     except Exception:
         pass
     return titlecase_filename(f"{name}_{city}_{state}_{kind}{ts}") + f"{suffix}.pdf"
+
+
+def _group_attach(result, job: dict, emit=None) -> None:
+    """Attach a finished run to the group the form / upload named, and put the group's name
+    (and, once the group is large enough, this organization's rank and the group median) on
+    the result so the renders that follow print it. Fail-soft."""
+    gid = (job or {}).get("group_id")
+    if not gid or result is None or not getattr(result, "run_id", None):
+        return
+    try:
+        from perception.groups import add_runs, context_for_pdf
+        add_runs(gid, [result.run_id], (job or {}).get("email") or (job or {}).get("role") or "")
+        ctx = context_for_pdf(gid, result.run_id, result.entity_name or "", result.location or "")
+        if ctx:
+            result.group_context = ctx
+            try:
+                from perception.analyzer import _save_to_db as _resave_group
+                _resave_group(result)
+            except Exception:
+                pass
+            if emit:
+                line = f"Added to group \u201c{ctx['group_name']}\u201d"
+                if ctx.get("ready") and ctx.get("rank"):
+                    line += f" \u2014 {ctx['rank']} of {ctx['total']}, group median {ctx['median']}"
+                emit({"type": "text", "text": "\n" + line})
+    except Exception as exc:
+        print(f"[groups] attach failed run={getattr(result, 'run_id', '?')}: {type(exc).__name__}: {exc}", flush=True)
+
+
+def _visible_groups(payload: dict, include_archived: bool = False) -> list:
+    from perception.groups import list_groups
+    caps = _caps_for_payload(payload)
+    if caps.get("unrestricted"):
+        return list_groups(None, include_archived)
+    return list_groups(caps.get("preset") or "__none__", include_archived)
+
+
+def _group_visible(payload: dict, group_id: str) -> dict:
+    from perception.groups import get_group
+    g = get_group(group_id)
+    if not g:
+        raise HTTPException(404, "Group not found")
+    caps = _caps_for_payload(payload)
+    if not caps.get("unrestricted") and g.get("preset") != caps.get("preset"):
+        raise HTTPException(403, "That group is not available to your account")
+    return g
+
+
+class GroupRequest(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    type_hint: Optional[str] = "mixed"
+    preset: Optional[str] = None
+    show_on_pdf: Optional[bool] = True
+    archived: Optional[bool] = None
+
+
+class GroupRunsRequest(BaseModel):
+    run_ids: List[str]
+
+
+@app.get("/api/groups")
+async def groups_list(include_archived: int = 0, payload: dict = Depends(get_current_user_payload)):
+    """Groups this account can see, with member counts."""
+    from perception.db import init_db
+    init_db()
+    return _visible_groups(payload, bool(include_archived) and payload.get("role") == "admin")
+
+
+@app.post("/api/groups")
+async def groups_create(req: GroupRequest, payload: dict = Depends(get_current_user_payload)):
+    """Any signed-in user may create a group; association accounts' groups are scoped to their preset."""
+    from perception.db import init_db
+    from perception.groups import create_group
+    init_db()
+    if not (req.name or "").strip():
+        raise HTTPException(400, "Give the group a name.")
+    caps = _caps_for_payload(payload)
+    preset = req.preset if caps.get("unrestricted") else caps.get("preset")
+    return create_group(req.name, req.description or "", req.type_hint or "mixed",
+                        payload.get("email") or payload.get("role") or "", preset, bool(req.show_on_pdf))
+
+
+@app.put("/api/groups/{group_id}")
+async def groups_update(group_id: str, req: GroupRequest, payload: dict = Depends(get_current_user_payload)):
+    from perception.groups import update_group
+    _group_visible(payload, group_id)
+    fields = {"name": (req.name or "").strip() or None, "description": req.description, "type_hint": req.type_hint,
+              "show_on_pdf": req.show_on_pdf, "archived": req.archived}
+    if payload.get("role") == "admin":
+        fields["preset"] = req.preset
+    return update_group(group_id, **fields)
+
+
+@app.get("/api/groups/{group_id}")
+async def groups_detail(group_id: str, payload: dict = Depends(get_current_user_payload)):
+    """The group, its members ranked by Pulse Score (latest run per organization) and the benchmark."""
+    from perception.groups import members, benchmark
+    g = _group_visible(payload, group_id)
+    return {"group": g, "members": members(group_id), "benchmark": benchmark(group_id)}
+
+
+@app.get("/api/groups/{group_id}.csv")
+async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_payload)):
+    import csv as _csv, io as _io
+    from perception.groups import members
+    g = _group_visible(payload, group_id)
+    buf = _io.StringIO(); w = _csv.writer(buf)
+    w.writerow(["Rank", "Organization", "Location", "Specialty", "Type", "Pulse Score", "Pillar 1", "Pillar 2", "Pillar 3", "Pillar 4",
+                "Evidence", "Website access", "Report date", "Run by", "Run id"])
+    for m in members(group_id):
+        p = m["pillars"]
+        w.writerow([m.get("rank") or "", m["entity_name"], m["location"], m.get("specialty") or "", m.get("entity_type") or "",
+                    m.get("score") if m.get("score") is not None else "", p.get("clinical_outcomes_safety"), p.get("credentials_recognition"),
+                    p.get("patient_experience_reviews"), p.get("access_fit"), m.get("confidence") or "", m.get("website_status") or "",
+                    m.get("generated_at") or "", m.get("ran_by") or "", m["run_id"]])
+    safe = re.sub(r"[^A-Za-z0-9]+", "-", g["name"]).strip("-")[:40] or "group"
+    return Response(buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{safe}_group.csv"'})
+
+
+@app.post("/api/groups/{group_id}/runs")
+async def groups_add_runs(group_id: str, req: GroupRunsRequest, payload: dict = Depends(get_current_user_payload)):
+    """Add existing History runs to a group."""
+    from perception.groups import add_runs
+    from perception.db import query_history
+    _group_visible(payload, group_id)
+    visible = {r["run_id"] for r in _scope_history_rows(query_history(payload.get("role", "")), payload)}
+    ids = [r for r in req.run_ids if r in visible]
+    n = add_runs(group_id, ids, payload.get("email") or payload.get("role") or "")
+    return {"added": n, "skipped": len(req.run_ids) - len(ids)}
+
+
+@app.delete("/api/groups/{group_id}/runs/{run_id}")
+async def groups_remove_run(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
+    from perception.groups import remove_run
+    _group_visible(payload, group_id)
+    remove_run(group_id, run_id)
+    return {"status": "removed"}
 
 
 def _content_report_paths(result, ca_id: str) -> tuple[Path, Path]:
@@ -1562,6 +1702,7 @@ def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
         if job.get("roster_from_graph"):
             emit({"type": "text", "text": "\nLocations taken from your confirmed roster (entity graph) — no discovery needed."})
 
+        _group_attach(result, job, emit)
         set_run_role(result.run_id, job["role"], _job_ran_by(job))
         if job.get("tracked_entity_id") and etype == "hospital":
             _note_method_change(job["tracked_entity_id"], result)
@@ -1716,6 +1857,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
                 output_dir=REPORTS_DIR, on_event=emit,
                 brand=job.get("brand", "original"),
             )
+            _group_attach(result, job, emit)
             set_run_role(result.run_id, job["role"], _job_ran_by(job))
             results.append({
                 "run_id": result.run_id,
@@ -1976,6 +2118,7 @@ class AnalyzeRequest(BaseModel):
     physician_roster: dict = {}             # {practice_name: [{name, npi, specialty, credential}]}
     practice_facts: Optional[dict] = None   # owner-attested: {profiles_claimed: bool, reviews_since: 'YYYY-MM-DD', locations: int, notes: str}
     spotcheck: bool = False                 # opt-in: ask real AI assistants ~30 questions × 2 passes (~$3, ~5 min)
+    group_id: Optional[str] = None          # attach the run to a group (association / cohort) — perception/groups.py
     force_rerun: bool = False               # bypass 90-day score cache
     override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
     briefing_variant: Optional[str] = None  # "sales" | "cs" | None — generates Pulse Briefing companion
@@ -2050,6 +2193,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["zip_code"] = req.zip_code if req.zip_code else None
     _jobs[job_id]["patient_perspective"] = req.patient_perspective
     _jobs[job_id]["teaser_report"] = req.teaser_report
+    _jobs[job_id]["group_id"] = (req.group_id or "").strip() or None
     _jobs[job_id]["simplified_patient"] = req.simplified_patient
     _jobs[job_id]["obscure_competitors"] = req.obscure_competitors
     _jobs[job_id]["target_entity"] = _normalize_input(req.target_entity) if req.target_entity else None
@@ -2439,6 +2583,11 @@ async def get_history(payload: dict = Depends(get_current_user_payload), days: i
                     pass
     present = _existing_files(to_check, recent)
 
+    try:
+        from perception.groups import groups_for_runs
+        _gmap = groups_for_runs([r.get("run_id") for r in rows if r.get("report_type") != "network"])
+    except Exception:
+        _gmap = {}
     result = []
     for r in rows:
         pdf_path = r.get("pdf_path")
@@ -2450,6 +2599,7 @@ async def get_history(payload: dict = Depends(get_current_user_payload), days: i
         result.append({
             **r,
             "file_name": _descriptive_pdf_name(r),
+            "groups": _gmap.get(r.get("run_id"), []),
             "generated_at": str(r["generated_at"]),
             "created_at": str(r["created_at"]) if r.get("created_at") else None,
             "has_pdf": has_pdf,
@@ -3610,6 +3760,7 @@ def _job_content_analysis(job_id: str, ca_id: str, req: dict, brand: str) -> Non
                 brand=brand, report_title=req.get("report_title"),
                 force_rerun=override, override_today_lock=override,
             )
+        _group_attach(result, job, emit)
         set_run_role(result.run_id, job["role"], _job_ran_by(job))
 
         # 2. Website URLs: user-confirmed, else the resolved provider's site.
@@ -6071,6 +6222,7 @@ class EventRunRequest(BaseModel):
     override_cache: bool = False           # bypass same-day lock + 90-day score cache
     auto_practice_composite: bool = False  # FQHC only: discover all sites & build aggregate
     practice_content: bool = False         # Practice only: content analysis + prescription (combined report)
+    group_id: Optional[str] = None         # attach every report of this upload to a group
     entities: List[dict]                   # confirmed list: {input_name,input_city,input_state,resolved_name,resolved_addr}
 
 
@@ -6168,13 +6320,15 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
         override_cache=req.override_cache,
         auto_practice_composite=req.auto_practice_composite,
         practice_content=req.practice_content,
+        group_id=(req.group_id or "").strip() or None,
     )
     create_event_entities(entities_db)
 
     job_id = _new_job(role, brand, payload.get("email"))
     _event_job_map[event_id] = job_id
     _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser,
-                 req.override_cache, req.auto_practice_composite, req.practice_content)
+                 req.override_cache, req.auto_practice_composite, req.practice_content,
+                 (req.group_id or "").strip() or None)
     return {"event_id": event_id, "job_id": job_id}
 
 
@@ -6200,7 +6354,8 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
                  bool(run.get("include_teaser")),
                  bool(run.get("override_cache")),
                  bool(run.get("auto_practice_composite")),
-                 bool(run.get("practice_content")))
+                 bool(run.get("practice_content")),
+                 run.get("group_id") or None)
     return {"event_id": event_id, "job_id": job_id, "pending": len(pending)}
 
 
@@ -6210,6 +6365,7 @@ def _run_event_job(
     override_cache: bool = False,
     auto_practice_composite: bool = False,
     practice_content: bool = False,
+    group_id: Optional[str] = None,
 ) -> None:
     """Background: analyze all entities in the event, 5 at a time."""
     import re as _re
@@ -6375,6 +6531,8 @@ def _run_event_job(
                     # base four-pillar PDF in place (same path → zip picks it up).
                     # Fail-soft: on error the base report stands.
                     combined_ok = False
+                    if group_id:
+                        _group_attach(result, {"group_id": group_id, "email": (_jobs.get(job_id) or {}).get("email")}, emit)
                     if practice_content and entity_type == "practice":
                         _ca_job = {
                             "teaser_report": include_teaser,
