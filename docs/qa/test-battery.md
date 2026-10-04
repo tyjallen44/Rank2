@@ -3732,3 +3732,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Coordinator (Event Preparation ticked) → group page → "⬆ Upload a list" → CSV of practices → run | Reports produced in the new layout (checklist, pillar notes, Executive Summary, Identity cap, spot-check section, physicians table, content analysis + drafts) and every one joins the group with a "View in group" on completion; the group page ranks them. [ui][pdf] |
 | T3 | Event Prep → Advanced → spot check checkbox | Off by default for unrestricted users; on by default for the association preset; per-entity "What AI assistants actually said" appears when on. [ui][pdf] |
 | R1 | Regression | Event Prep without a group or spot check unchanged; resume repeats the spot-check setting. |
+
+## GROUPS-PROSPECTS — evaluate a non-member against the group (2026-10-04)
+
+**Context:** a group membership now has a status, member (default) or prospect. "Not a member yet (prospect)" sits beside the group picker on the Deep Diagnostic form and on the bulk upload ("These organizations are not members yet"). Prospects are listed in amber with a "prospect" badge, excluded from the group's median, quartiles and ranks, and shown with the rank they would hold among members ("would be 4"); the PDF cover reads "Prospect for <group> · would rank 4th of 24 · group median 61" and the Executive Summary "Would rank 4th of 24 members of <group>, 11 points above the group median of 61". An admin can "✓ Make member" / "Mark prospect" per row (applies to every run of that organization in the group). History chips say "· prospect"; the CSV has a Status column and "would rank N".
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic → group picked → tick "Not a member yet (prospect)" → run | Progress "Added to group … as a prospect"; group page row amber with the prospect badge, rank column "would be N", median unchanged; PDF cover/summary use the prospect wording. [ui][pdf] |
+| T2 | Admin → "✓ Make member" on the row | Row joins the ranking (rank number, no badge); median recomputed; "Mark prospect" reverses it. [ui] |
+| T3 | Bulk upload with "These organizations are not members yet" ticked | Every report lands as a prospect. [ui] |
+| T4 | Summary strip | "Prospects" tile counts them; Organizations / median tiles exclude them. [ui] |
+| R1 | Regression | Existing memberships read as members; pytest: tests/test_groups.py passes, the 15 stale failures only. |

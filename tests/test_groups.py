@@ -4,7 +4,7 @@ from perception import groups as G
 
 
 def _members(scores):
-    ms = [{"run_id": f"r{i}", "entity_name": f"Org {i}", "location": "City, ST", "score": s, "pillars": {}} for i, s in enumerate(scores)]
+    ms = [{"run_id": f"r{i}", "entity_name": f"Org {i}", "location": "City, ST", "score": s, "pillars": {}, "status": "member"} for i, s in enumerate(scores)]
     scored = sorted([m for m in ms if m["score"] is not None], key=lambda m: -m["score"])
     rank, prev = 0, None
     for i, m in enumerate(scored, 1):
@@ -51,3 +51,21 @@ def test_pdf_lines():
     r.group_context = {"group_name": "Iowa Ortho", "ready": False, "members": 4}
     assert "benchmarks appear once it reaches 10" in _group_summary_bullet(r)
     assert G.ordinal(1) == "1st" and G.ordinal(12) == "12th" and G.ordinal(22) == "22nd" and G.ordinal(113) == "113th"
+
+
+def test_prospect_gets_would_rank_and_pdf_wording(monkeypatch):
+    base = _members([90, 85, 80, 75, 70, 65, 60, 55, 50, 45])
+    prospect = {"run_id": "px", "entity_name": "New Ortho", "location": "City, ST", "score": 78, "pillars": {}, "status": "prospect", "rank": None, "would_rank": 4}
+    monkeypatch.setattr(G, "members", lambda gid: base + [prospect])
+    b = G.benchmark("g", run_id="px")
+    assert b["prospect"] is True and b["rank"] == 4 and b["total"] == 10 and b["prospects"] == 1
+    monkeypatch.setattr(G, "get_group", lambda gid: {"id": gid, "name": "Iowa Ortho", "archived": False, "show_on_pdf": True})
+    c = G.context_for_pdf("g", "px", "New Ortho", "City, ST")
+    assert c["prospect"] and c["rank"] == 4
+    from datetime import date
+    from perception.models import AnalysisResult, RankedProvider
+    from perception.deep_pdf import _group_summary_bullet, _group_cover_line
+    r = AnalysisResult(run_id="px", location="City, ST", generated_at=date.today(), individual_report=True, entity_name="New Ortho",
+                       entity_type="practice", rankings=[RankedProvider(rank=1, name="New Ortho", ai_visibility_score=78)], group_context=c | {"median": 67, "total": 10})
+    assert _group_summary_bullet(r).startswith("Would rank 4th of 10 members of Iowa Ortho")
+    assert "Prospect for Iowa Ortho" in _group_cover_line(r) and "would rank 4th of 10" in _group_cover_line(r)

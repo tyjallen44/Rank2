@@ -212,9 +212,9 @@ def _group_cover_line(result: AnalysisResult) -> str:
     if not g.get("group_name"):
         return ""
     from .groups import ordinal
-    txt = f"Member of {_e(g['group_name'])}"
+    txt = (f"Prospect for {_e(g['group_name'])}" if g.get("prospect") else f"Member of {_e(g['group_name'])}")
     if g.get("ready") and g.get("rank") and g.get("total"):
-        txt += f" &nbsp;·&nbsp; {ordinal(int(g['rank']))} of {g['total']} &nbsp;·&nbsp; group median {g.get('median')}"
+        txt += f" &nbsp;·&nbsp; {'would rank ' if g.get('prospect') else ''}{ordinal(int(g['rank']))} of {g['total']} &nbsp;·&nbsp; group median {g.get('median')}"
     return f'<div style="font-size:8pt;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:-24px 0 28px">{txt}</div>'
 
 
@@ -230,9 +230,12 @@ def _group_summary_bullet(result: AnalysisResult) -> Optional[str]:
             diff = int(score) - int(g["median"])
             rel = (f", {abs(diff)} points {'above' if diff > 0 else 'below'} the group median of {g['median']}" if diff
                    else f", at the group median of {g['median']}")
+        if g.get("prospect"):
+            return f"Would rank {ordinal(int(g['rank']))} of {g['total']} members of {g['group_name']}{rel}."
         return f"Ranks {ordinal(int(g['rank']))} of {g['total']} in {g['group_name']}{rel}."
     n = int(g.get("members") or 0)
-    return f"Part of {g['group_name']} ({n} member{'s' if n != 1 else ''}); group benchmarks appear once it reaches {GROUP_MIN} members."
+    lead = f"Evaluated against {g['group_name']}" if g.get("prospect") else f"Part of {g['group_name']}"
+    return f"{lead} ({n} member{'s' if n != 1 else ''}); group benchmarks appear once it reaches {GROUP_MIN} members."
 
 
 def _exec_summary(result: AnalysisResult) -> str:

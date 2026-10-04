@@ -1108,7 +1108,8 @@ def _group_attach(result, job: dict, emit=None) -> None:
         return
     try:
         from perception.groups import add_runs, context_for_pdf
-        add_runs(gid, [result.run_id], (job or {}).get("email") or (job or {}).get("role") or "")
+        add_runs(gid, [result.run_id], (job or {}).get("email") or (job or {}).get("role") or "",
+                 status=((job or {}).get("group_role") or "member"))
         ctx = context_for_pdf(gid, result.run_id, result.entity_name or "", result.location or "")
         if ctx:
             result.group_context = ctx
@@ -1122,9 +1123,10 @@ def _group_attach(result, job: dict, emit=None) -> None:
             except Exception:
                 pass
             if emit:
-                line = f"Added to group \u201c{ctx['group_name']}\u201d"
+                line = (f"Added to group \u201c{ctx['group_name']}\u201d as a prospect" if ctx.get("prospect")
+                        else f"Added to group \u201c{ctx['group_name']}\u201d")
                 if ctx.get("ready") and ctx.get("rank"):
-                    line += f" \u2014 {ctx['rank']} of {ctx['total']}, group median {ctx['median']}"
+                    line += f" \u2014 {'would rank ' if ctx.get('prospect') else ''}{ctx['rank']} of {ctx['total']}, group median {ctx['median']}"
                 emit({"type": "text", "text": "\n" + line})
     except Exception as exc:
         print(f"[groups] attach failed run={getattr(result, 'run_id', '?')}: {type(exc).__name__}: {exc}", flush=True)
@@ -1161,6 +1163,11 @@ class GroupRequest(BaseModel):
 
 class GroupRunsRequest(BaseModel):
     run_ids: List[str]
+    status: Optional[str] = "member"     # member | prospect
+
+
+class GroupStatusRequest(BaseModel):
+    status: str                          # member | prospect
 
 
 @app.get("/api/groups")
@@ -1307,11 +1314,12 @@ async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_pay
     from perception.groups import members
     g = _group_visible(payload, group_id)
     buf = _io.StringIO(); w = _csv.writer(buf)
-    w.writerow(["Rank", "Organization", "Location", "Specialty", "Type", "Pulse Score", "Pillar 1", "Pillar 2", "Pillar 3", "Pillar 4",
+    w.writerow(["Rank", "Status", "Organization", "Location", "Specialty", "Type", "Pulse Score", "Pillar 1", "Pillar 2", "Pillar 3", "Pillar 4",
                 "Evidence", "Website access", "Report date", "Run by", "Run id"])
     for m in members(group_id):
         p = m["pillars"]
-        w.writerow([m.get("rank") or "", m["entity_name"], m["location"], m.get("specialty") or "", m.get("entity_type") or "",
+        w.writerow([m.get("rank") or (f"would rank {m['would_rank']}" if m.get("would_rank") else ""), m.get("status") or "member",
+                    m["entity_name"], m["location"], m.get("specialty") or "", m.get("entity_type") or "",
                     m.get("score") if m.get("score") is not None else "", p.get("clinical_outcomes_safety"), p.get("credentials_recognition"),
                     p.get("patient_experience_reviews"), p.get("access_fit"), m.get("confidence") or "", m.get("website_status") or "",
                     m.get("generated_at") or "", m.get("ran_by") or "", m["run_id"]])
@@ -1328,8 +1336,21 @@ async def groups_add_runs(group_id: str, req: GroupRunsRequest, payload: dict = 
     _group_visible(payload, group_id)
     visible = {r["run_id"] for r in _scope_history_rows(query_history(payload.get("role", "")), payload)}
     ids = [r for r in req.run_ids if r in visible]
-    n = add_runs(group_id, ids, payload.get("email") or payload.get("role") or "")
+    n = add_runs(group_id, ids, payload.get("email") or payload.get("role") or "", status=(req.status or "member"))
     return {"added": n, "skipped": len(req.run_ids) - len(ids)}
+
+
+@app.put("/api/groups/{group_id}/runs/{run_id}/status")
+async def groups_set_status(group_id: str, run_id: str, req: GroupStatusRequest, payload: dict = Depends(get_current_user_payload)):
+    """Admin: promote a prospect to member (or back). Applies to every run of that organization in the group."""
+    from perception.groups import set_status, STATUSES
+    _group_visible(payload, group_id)
+    if payload.get("role") != "admin":
+        raise HTTPException(403, "Only an administrator can change membership status")
+    if req.status not in STATUSES:
+        raise HTTPException(400, "status must be member or prospect")
+    set_status(group_id, run_id, req.status)
+    return {"status": req.status}
 
 
 @app.delete("/api/groups/{group_id}/runs/{run_id}")
@@ -2227,6 +2248,7 @@ class AnalyzeRequest(BaseModel):
     practice_facts: Optional[dict] = None   # owner-attested: {profiles_claimed: bool, reviews_since: 'YYYY-MM-DD', locations: int, notes: str}
     spotcheck: bool = False                 # opt-in: ask real AI assistants ~30 questions × 2 passes (~$3, ~5 min)
     group_id: Optional[str] = None          # attach the run to a group (association / cohort) — perception/groups.py
+    group_role: Optional[str] = None        # 'member' (default) | 'prospect' — a non-member being evaluated against the group
     force_rerun: bool = False               # bypass 90-day score cache
     override_today_lock: bool = False       # admin only: bypass same-day cache lock and regenerate
     briefing_variant: Optional[str] = None  # "sales" | "cs" | None — generates Pulse Briefing companion
@@ -2302,6 +2324,7 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
     _jobs[job_id]["patient_perspective"] = req.patient_perspective
     _jobs[job_id]["teaser_report"] = req.teaser_report
     _jobs[job_id]["group_id"] = (req.group_id or "").strip() or None
+    _jobs[job_id]["group_role"] = (req.group_role or "member").strip().lower()
     _jobs[job_id]["simplified_patient"] = req.simplified_patient
     _jobs[job_id]["obscure_competitors"] = req.obscure_competitors
     _jobs[job_id]["target_entity"] = _normalize_input(req.target_entity) if req.target_entity else None
@@ -6332,6 +6355,7 @@ class EventRunRequest(BaseModel):
     practice_content: bool = False         # Practice only: content analysis + prescription (combined report)
     group_id: Optional[str] = None         # attach every report of this upload to a group
     spotcheck: bool = False                # ask the AI assistants ~30 questions per entity (same section as a single run)
+    group_role: Optional[str] = None       # 'member' | 'prospect' for every report of this upload
     entities: List[dict]                   # confirmed list: {input_name,input_city,input_state,resolved_name,resolved_addr}
 
 
@@ -6438,7 +6462,7 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
     _event_job_map[event_id] = job_id
     _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser,
                  req.override_cache, req.auto_practice_composite, req.practice_content,
-                 (req.group_id or "").strip() or None, bool(req.spotcheck))
+                 (req.group_id or "").strip() or None, bool(req.spotcheck), (req.group_role or "member"))
     return {"event_id": event_id, "job_id": job_id}
 
 
@@ -6465,7 +6489,7 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
                  bool(run.get("override_cache")),
                  bool(run.get("auto_practice_composite")),
                  bool(run.get("practice_content")),
-                 run.get("group_id") or None, bool(run.get("spotcheck")))
+                 run.get("group_id") or None, bool(run.get("spotcheck")), run.get("group_role") or "member")
     return {"event_id": event_id, "job_id": job_id, "pending": len(pending)}
 
 
@@ -6477,6 +6501,7 @@ def _run_event_job(
     practice_content: bool = False,
     group_id: Optional[str] = None,
     spotcheck: bool = False,
+    group_role: str = "member",
 ) -> None:
     """Background: analyze all entities in the event, 5 at a time."""
     import re as _re
@@ -6650,7 +6675,7 @@ def _run_event_job(
                         except Exception as _sx:
                             emit({"type": "log", "text": f"  {resolved_name}: spot check failed ({type(_sx).__name__})"})
                     if group_id:
-                        _group_attach(result, {"group_id": group_id, "email": (_jobs.get(job_id) or {}).get("email")}, emit)
+                        _group_attach(result, {"group_id": group_id, "group_role": group_role, "email": (_jobs.get(job_id) or {}).get("email")}, emit)
                     if practice_content and entity_type == "practice":
                         _ca_job = {
                             "teaser_report": include_teaser,
