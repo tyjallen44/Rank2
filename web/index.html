@@ -2711,7 +2711,10 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div class="page-title">Groups</div>
           <div class="page-sub">Associations, cohorts and programs: a named set of Deep Diagnostics ranked and benchmarked against each other. Attach a report when you run it, from a bulk upload, or from History. Benchmarks print on members' reports once a group has 10 organizations.</div>
         </div>
-        <button class="btn btn-primary" onclick="groupShowCreate()">+ New group</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="groups-search" class="fi" type="search" placeholder="Search organizations, locations, specialties…" style="width:300px;padding:8px 10px;font-size:13px" oninput="groupsFilter(this.value)">
+          <button class="btn btn-primary" id="groups-new-btn" onclick="groupShowCreate()">+ New group</button>
+        </div>
       </div>
       <div id="group-create" class="card hidden" style="margin:12px 0;max-width:640px">
         <div class="fg"><label class="fl">Name</label><input id="grp-name" class="fi" placeholder="e.g. Iowa Orthopaedic Society 2026"></div>
@@ -4707,7 +4710,7 @@ function navigate(p) {
   document.getElementById('app').classList.toggle('rail', p === 'home');
   document.getElementById('main').classList.toggle('patient-bg', p === 'patient');
   if (p === 'history') loadHistory();
-  if (p === 'groups') loadGroupsPage();
+  if (p === 'groups') { const lg = localStorage.getItem('rk2_last_group_open'); if (lg && _lastPage === 'groups') { localStorage.removeItem('rk2_last_group_open'); openGroupPage(lg); } else loadGroupsPage(); }
   if (p === 'individual') _fillGroupSelect('ir-group');
   if (p === 'events') _fillGroupSelect('ev-group');
   if (p === 'admin') loadAdminPage();
@@ -7655,12 +7658,24 @@ async function groupCreate() {
     groupShowCreate(false); _groupsCache = null; loadGroupsPage();
   } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
 }
+let _groupPoll = null;
+function _groupStopPoll() { if (_groupPoll) { clearInterval(_groupPoll); _groupPoll = null; } }
+function groupsFilter(q) {
+  const needle = (q || '').trim().toLowerCase();
+  document.querySelectorAll('#groups-body tr[data-search]').forEach(tr => { tr.style.display = (!needle || tr.dataset.search.includes(needle)) ? '' : 'none'; });
+}
 async function loadGroupsPage() {
   const host = document.getElementById('groups-body'); if (!host) return;
+  _groupStopPoll();
+  const restricted = !!(_caps && !_caps.unrestricted);
+  const nb = document.getElementById('groups-new-btn'); if (nb) nb.style.display = restricted ? 'none' : '';
   const groups = await loadGroupsList(true);
-  if (!groups.length) { host.innerHTML = '<div class="empty"><div class="ei">▦</div><div>No groups yet. Create one, then attach reports when you run them, from a bulk upload, or from History.</div></div>'; return; }
+  // An account that belongs to exactly one group lands on it directly.
+  if (restricted && groups.length === 1) { openGroupPage(groups[0].id); return; }
+  const sb = document.getElementById('groups-search'); if (sb) { sb.value = ''; sb.placeholder = 'Search groups…'; }
+  if (!groups.length) { host.innerHTML = `<div class="empty"><div class="ei">▦</div><div>${restricted ? 'No group has been set up for your account yet.' : 'No groups yet. Create one, then attach reports when you run them, from a bulk upload, or from History.'}</div></div>`; return; }
   host.innerHTML = `<table class="admin-tbl"><thead><tr><th>Group</th><th>Members</th><th>Benchmark on reports</th><th>Created</th><th></th></tr></thead><tbody>
-    ${groups.map(g => `<tr>
+    ${groups.map(g => `<tr data-search="${_learnEsc((g.name + ' ' + (g.description || '')).toLowerCase())}">
       <td><div style="font-weight:600">${_learnEsc(g.name)}</div>${g.description ? `<div style="font-size:12px;color:var(--muted)">${_learnEsc(g.description)}</div>` : ''}${g.preset ? `<div style="font-size:11px;color:var(--muted)">preset: ${_learnEsc(g.preset)}</div>` : ''}</td>
       <td>${g.member_count}${g.member_count < 10 ? ` <span style="font-size:11px;color:var(--muted)">(${10 - g.member_count} more for benchmarks)</span>` : ''}</td>
       <td>${g.show_on_pdf ? 'Yes' : 'No'}</td>
@@ -7676,23 +7691,28 @@ async function openGroupPage(id) {
   let d;
   try { const r = await api('/api/groups/' + encodeURIComponent(id)); if (!r.ok) throw new Error(await errDetail(r, 'Could not load the group')); d = await r.json(); }
   catch (e) { host.innerHTML = `<div class="err">${_learnEsc(e.message)}</div>`; return; }
-  const g = d.group, b = d.benchmark, ms = d.members;
+  const g = d.group, b = d.benchmark, ms = d.members, running = d.running || [];
+  const sb = document.getElementById('groups-search'); if (sb) sb.placeholder = 'Search organizations, locations, specialties…';
+  const _runningFor = (m) => running.find(r => String(r.entity_name || '').trim().toLowerCase() === String(m.entity_name || '').trim().toLowerCase());
+  const _since = (ts) => { if (!ts) return ''; const dt = new Date(ts * 1000); return isNaN(dt) ? '' : dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
   const canEdit = (_role === 'admin') || (String(g.created_by || '').toLowerCase() === String(localStorage.getItem('rk2_email') || '').toLowerCase());
   const pillarLabels = (m) => (m.entity_type === 'practice' || m.entity_type === 'service_line')
     ? ['Credentials', 'Reviews', 'Identity', 'Access'] : ['Outcomes', 'Credentials', 'Experience', 'Access'];
   const rows = ms.map(m => {
     const p = m.pillars || {}; const pl = pillarLabels(m);
     const pv = [p.clinical_outcomes_safety, p.credentials_recognition, p.patient_experience_reviews, p.access_fit];
-    return `<tr>
+    const rr = _runningFor(m);
+    const runBadge = rr ? `<div style="margin-top:3px;font-size:11px;color:var(--teal);display:flex;align-items:center;gap:6px"><span class="spinner" style="width:10px;height:10px"></span> Re-run in progress${_since(rr.started_at) ? ' · started ' + _since(rr.started_at) : ''}${rr.email ? ' · ' + _learnEsc(String(rr.email).split('@')[0]) : ''} · <a href="#" onclick="_lastPage='groups'; startProgress('${rr.job_id}', ${_jsq((m.entity_name || '') + ' — Deep Diagnostic')}, false); return false">View progress</a></div>` : '';
+    return `<tr data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by].filter(Boolean).join(' ').toLowerCase())}" ${rr ? 'style="background:#f4f9f8"' : ''}>
       <td style="text-align:center;font-weight:700">${m.rank ?? '—'}</td>
-      <td><div style="font-weight:600">${_learnEsc(m.entity_name || '')}</div><div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div></td>
+      <td><div style="font-weight:600">${_learnEsc(m.entity_name || '')}</div><div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>${runBadge}</td>
       <td style="text-align:center;font-weight:800;font-size:16px;color:${_scoreColor(m.score)}">${m.score ?? '—'}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${pv.map((v, i) => `${pl[i]} <strong style="color:${_scoreColor(v)}">${v ?? '—'}</strong>`).join(' · ')}</td>
       <td>${_confChip(m.confidence, '')}${m.website_status === 'blocked' ? '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px;margin-left:4px">site blocks AI</span>' : ''}</td>
       <td style="font-size:12px;color:var(--muted);white-space:nowrap">${m.generated_at || ''}</td>
       <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
       <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}">⬇ PDF</a>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group">↻ Re-run</button>
+        <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')">Remove</button>` : ''}</td></tr>`;
   }).join('');
   const bench = b.scored ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px">
@@ -7724,8 +7744,15 @@ async function openGroupPage(id) {
       <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="groupSaveEdit('${g.id}')">Save</button><button class="btn btn-ghost" onclick="document.getElementById('group-edit').classList.add('hidden')">Cancel</button></div>
       <div id="ge-err" class="err hidden mt8"></div>
     </div>
+    ${running.length ? `<div style="margin-top:10px;font-size:12px;color:var(--teal)"><span class="spinner" style="width:10px;height:10px"></span> ${running.length} re-run${running.length === 1 ? '' : 's'} in progress — this page refreshes every 20 seconds.</div>` : ''}
     ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center">#</th><th>Organization</th><th style="text-align:center">Pulse Score</th><th>Pillars</th><th>Evidence</th><th>Report</th><th>Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
                : '<div class="empty" style="margin-top:12px"><div>No members yet. Pick this group on the Deep Diagnostic form or an Event Prep upload, or add runs from History.</div></div>'}`;
+  groupsFilter(sb ? sb.value : '');
+  _groupStopPoll();
+  if (running.length) _groupPoll = setInterval(() => {
+    if (!document.getElementById('page-groups')?.classList.contains('active')) { _groupStopPoll(); return; }
+    openGroupPage(id);
+  }, 20000);
 }
 async function groupRerun(btn, gid, runId, name) {
   if (!confirm(`Re-run ${name} now? This starts a fresh Deep Diagnostic with the same settings (spot check on) and attaches it to the group.`)) return;
@@ -7734,7 +7761,7 @@ async function groupRerun(btn, gid, runId, name) {
     const r = await api(`/api/groups/${gid}/rerun/${runId}`, { method: 'POST' });
     if (!r.ok) throw new Error(await errDetail(r, 'Could not start the re-run'));
     const { job_id } = await r.json();
-    _lastPage = 'groups'; startProgress(job_id, `${name} — Deep Diagnostic`, false);
+    _lastPage = 'groups'; localStorage.setItem('rk2_last_group_open', gid); startProgress(job_id, `${name} — Deep Diagnostic`, false);
   } catch (e) { alert(e.message); btn.disabled = false; btn.innerHTML = orig; }
 }
 async function _groupPut(id, body, msg) {

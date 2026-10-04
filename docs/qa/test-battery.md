@@ -3669,3 +3669,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | "↻ Re-run" on a hospital member | Hospital Deep Diagnostic with the hospital rubric; joins the group. [ui] |
 | T3 | Account without the report indicator (association preset lacking the type) | 403 with the "Your account does not include…" message. [api] |
 | R1 | Regression | Remove / PDF buttons unchanged; pytest: tests/test_group_rerun.py passes. |
+
+## GROUPS-UX-2 — association accounts land on their group; search; re-run in progress (2026-10-04)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Account on an association preset with one group → click Groups | Lands directly on that group's ranked table; no "+ New group" button. With no group: "No group has been set up for your account yet." Unrestricted users see the list and the button as before. [ui] |
+| T2 | Search box on the Groups page | On the list it filters groups by name/description; on a group page it filters members by organization, location, specialty or runner as you type; the filter survives the 20-second refresh. [ui] |
+| T3 | Group page → "↻ Re-run" → confirm → progress screen → back to Groups | Returns to the same group; the member's row is tinted and shows "⟳ Re-run in progress · started 2:14 PM · <user> · View progress"; its Re-run button is disabled; a line above the table says how many re-runs are running and that the page refreshes every 20 seconds. When the run finishes the row shows the new run's score and date and the badge disappears. "View progress" reopens the live progress screen. [ui] |
+| R1 | Regression | Group CRUD, CSV, Remove unchanged; polling stops when leaving the page. |

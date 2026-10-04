@@ -1271,7 +1271,12 @@ async def groups_detail(group_id: str, payload: dict = Depends(get_current_user_
     """The group, its members ranked by Pulse Score (latest run per organization) and the benchmark."""
     from perception.groups import members, benchmark
     g = _group_visible(payload, group_id)
-    return {"group": g, "members": members(group_id), "benchmark": benchmark(group_id)}
+    running = []
+    for jid, j in list(_jobs.items()):
+        if j.get("group_id") == group_id and j.get("status", "running") == "running":
+            running.append({"job_id": jid, "entity_name": j.get("entity_name") or j.get("label") or "",
+                            "started_at": j.get("started_at"), "email": j.get("email") or ""})
+    return {"group": g, "members": members(group_id), "benchmark": benchmark(group_id), "running": running}
 
 
 @app.get("/api/groups/{group_id}.csv")
