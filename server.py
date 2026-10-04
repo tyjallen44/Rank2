@@ -6496,9 +6496,16 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
         raise HTTPException(400, "All entities already completed — nothing to resume.")
     job_id = _new_job(payload.get("role", ""), payload.get("brand", "original"), payload.get("email"))
     _event_job_map[event_id] = job_id
-    # Repeat the original run's settings so resumed entities are analyzed the same way.
+    # Repeat the original run's settings so resumed entities are analyzed the same way —
+    # except the type, where a typed group (practice / hospital) wins, as it does on upload.
+    _etype = run.get("entity_type", "hospital")
+    if run.get("group_id"):
+        from perception.groups import get_group as _gg
+        _g = _gg(run["group_id"])
+        if _g and _g.get("type_hint") in ("practice", "hospital"):
+            _etype = _g["type_hint"]
     _pool.submit(_run_event_job, job_id, event_id, pending,
-                 run.get("entity_type", "hospital"),
+                 _etype,
                  bool(run.get("include_teaser")),
                  bool(run.get("override_cache")),
                  bool(run.get("auto_practice_composite")),
