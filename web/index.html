@@ -4710,7 +4710,7 @@ function navigate(p) {
   document.getElementById('app').classList.toggle('rail', p === 'home');
   document.getElementById('main').classList.toggle('patient-bg', p === 'patient');
   if (p === 'history') loadHistory();
-  if (p === 'groups') { const lg = localStorage.getItem('rk2_last_group_open'); if (lg && _lastPage === 'groups') { localStorage.removeItem('rk2_last_group_open'); openGroupPage(lg); } else loadGroupsPage(); }
+  if (p === 'groups' && !_suppressGroupsLoad) { const lg = localStorage.getItem('rk2_last_group_open'); if (lg && _lastPage === 'groups') { localStorage.removeItem('rk2_last_group_open'); openGroupPage(lg); } else loadGroupsPage(); }
   if (p === 'individual') _fillGroupSelect('ir-group');
   if (p === 'events') _fillGroupSelect('ev-group');
   if (p === 'admin') loadAdminPage();
@@ -7664,12 +7664,15 @@ function groupsFilter(q) {
   const needle = (q || '').trim().toLowerCase();
   document.querySelectorAll('#groups-body tr[data-search]').forEach(tr => { tr.style.display = (!needle || tr.dataset.search.includes(needle)) ? '' : 'none'; });
 }
+let _groupOpenId = null;
 async function loadGroupsPage() {
   const host = document.getElementById('groups-body'); if (!host) return;
-  _groupStopPoll();
+  _groupStopPoll(); _groupOpenId = null;
   const restricted = !!(_caps && !_caps.unrestricted);
   const nb = document.getElementById('groups-new-btn'); if (nb) nb.style.display = restricted ? 'none' : '';
+  const _token_ = (loadGroupsPage._seq = (loadGroupsPage._seq || 0) + 1);
   const groups = await loadGroupsList(true);
+  if (_token_ !== loadGroupsPage._seq || _groupOpenId) return;   // superseded, or a group was opened meanwhile
   // An account that belongs to exactly one group lands on it directly.
   if (restricted && groups.length === 1) { openGroupPage(groups[0].id); return; }
   const sb = document.getElementById('groups-search'); if (sb) { sb.value = ''; sb.placeholder = 'Search groups…'; }
@@ -7684,13 +7687,21 @@ async function loadGroupsPage() {
   </tbody></table>`;
 }
 function _scoreColor(s) { return s == null ? 'var(--muted)' : s >= 75 ? '#2e9e5b' : s >= 58 ? '#e09b2a' : '#d94f4f'; }
+let _suppressGroupsLoad = false;
 async function openGroupPage(id) {
-  navigate('groups');
+  // Switch to the Groups page without triggering the list load (which would race with,
+  // and overwrite, this group's render).
+  if (!document.getElementById('page-groups')?.classList.contains('active')) {
+    _suppressGroupsLoad = true;
+    try { navigate('groups'); } finally { _suppressGroupsLoad = false; }
+  }
+  _groupStopPoll(); _groupOpenId = id;
   const host = document.getElementById('groups-body');
   host.innerHTML = '<div class="empty"><div>Loading…</div></div>';
   let d;
   try { const r = await api('/api/groups/' + encodeURIComponent(id)); if (!r.ok) throw new Error(await errDetail(r, 'Could not load the group')); d = await r.json(); }
   catch (e) { host.innerHTML = `<div class="err">${_learnEsc(e.message)}</div>`; return; }
+  if (_groupOpenId !== id) return;   // the user moved on while this loaded
   const g = d.group, b = d.benchmark, ms = d.members, running = d.running || [];
   const sb = document.getElementById('groups-search'); if (sb) sb.placeholder = 'Search organizations, locations, specialties…';
   const _runningFor = (m) => running.find(r => String(r.entity_name || '').trim().toLowerCase() === String(m.entity_name || '').trim().toLowerCase());
