@@ -4672,6 +4672,16 @@ function applyCaps(scope) {
         adv.style.display = '';
       }
     }
+    const evTypes = { hospital: 'deep_hospital', practice: 'deep_practice', fqhc: 'deep_community' };
+    let evFirst = null;
+    for (const [t, cap] of Object.entries(evTypes)) {
+      const rb = document.getElementById('ev-type-' + t); if (!rb) continue;
+      const ok = !restricted || _capReport(cap);
+      const lab = rb.closest('label'); if (lab) lab.style.display = ok ? '' : 'none';
+      if (ok && !evFirst) evFirst = rb;
+      if (!ok && rb.checked) rb.checked = false;
+    }
+    if (evFirst && !document.querySelector('input[name="ev-type"]:checked')) { evFirst.checked = true; evFirst.dispatchEvent(new Event('change')); }
     const et = document.getElementById('ev-page-title-text'), eh = document.getElementById('ev-title-help'), es = document.getElementById('ev-page-sub');
     if (et) et.textContent = restricted ? 'Upload a list of organizations' : 'Event Preparation';
     if (eh) eh.style.display = restricted ? 'none' : '';
@@ -7790,7 +7800,7 @@ async function openGroupPage(id, highlightRunId) {
       <td>${_confChip(m.confidence, '')}${m.website_status === 'blocked' ? '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px;margin-left:4px">site blocks AI</span>' : ''}</td>
       <td style="font-size:12px;color:var(--muted);white-space:nowrap">${m.generated_at || ''}</td>
       <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
-      <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}">⬇ PDF</a>` : ''}
+      <td style="white-space:nowrap">${(g.type_hint === 'practice' && (m.entity_type || 'hospital') === 'hospital') ? '<span class="badge" style="font-size:10px;background:#fee2e2;color:#991b1b;margin-right:4px" title="This report was run on the hospital rubric; Re-run produces it as a Specialty Practice">hospital rubric</span>' : ''}${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}">⬇ PDF</a>` : ''}
         <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member' : 'Mark as a prospect (not a member)'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')">Remove</button>` : ''}</td></tr>
@@ -7856,7 +7866,11 @@ function groupUploadList(gid) {
   _fillGroupSelect('ev-group', gid);
   const nm = document.getElementById('ev-name'); if (nm && !nm.value.trim() && g) nm.value = `${g.name} — ${new Date().toISOString().slice(0, 10)}`;
   const dt = document.getElementById('ev-date'); if (dt && !dt.value) dt.value = new Date().toISOString().slice(0, 10);
-  const pr = document.getElementById('ev-type-practice'); if (pr && (!g || g.type_hint !== 'hospital')) { pr.checked = true; pr.dispatchEvent(new Event('change')); }
+  const want = (g && g.type_hint === 'hospital') ? 'hospital' : 'practice';
+  const rb = document.getElementById('ev-type-' + want); if (rb) { rb.checked = true; rb.dispatchEvent(new Event('change')); }
+  if (g && (g.type_hint === 'practice' || g.type_hint === 'hospital')) {
+    ['hospital', 'practice', 'fqhc'].forEach(t => { const r = document.getElementById('ev-type-' + t); const lab = r && r.closest('label'); if (lab) lab.style.display = (t === want) ? '' : 'none'; });
+  }
   const sc = document.getElementById('ev-spotcheck'); if (sc) sc.checked = true;
   _flash('Every report from this upload will join the group when it finishes.');
 }

@@ -1193,7 +1193,8 @@ async def groups_create(req: GroupRequest, payload: dict = Depends(get_current_u
     g = create_group(req.name, req.description or "", req.type_hint or "mixed",
                      payload.get("email") or payload.get("role") or "", preset, bool(req.show_on_pdf))
     if (req.default_specialty or "").strip():
-        g = update_group(g["id"], default_specialty=normalize_specialty(req.default_specialty))
+        g = update_group(g["id"], default_specialty=normalize_specialty(req.default_specialty),
+                         type_hint=("practice" if (req.type_hint or "mixed") == "mixed" else req.type_hint))
     return g
 
 
@@ -1207,6 +1208,8 @@ async def groups_update(group_id: str, req: GroupRequest, payload: dict = Depend
     fields = {"name": (req.name or "").strip() or None, "description": req.description, "type_hint": req.type_hint,
               "show_on_pdf": req.show_on_pdf, "archived": req.archived,
               "default_specialty": (normalize_specialty(req.default_specialty) if req.default_specialty is not None else None)}
+    if (req.default_specialty or "").strip() and (req.type_hint or "mixed") == "mixed":
+        fields["type_hint"] = "practice"      # a default specialty means a practice group
     if payload.get("role") == "admin":
         fields["preset"] = req.preset
     return update_group(group_id, **fields)
@@ -1274,6 +1277,12 @@ async def groups_rerun(group_id: str, run_id: str, payload: dict = Depends(get_c
         raise HTTPException(500, f"Stored result unreadable: {type(exc).__name__}")
     if not result.individual_report or not result.entity_name:
         raise HTTPException(400, "Only Deep Diagnostic runs can be re-run from a group")
+    g = _group_visible(payload, group_id)
+    if g.get("type_hint") == "practice" and (result.entity_type or "hospital") == "hospital":
+        # The group is for practices: a run that went in on the hospital rubric comes back as a practice.
+        result.entity_type = "practice"
+        result.specialty = result.specialty or g.get("default_specialty") or "Orthopedics"
+        result.practice_profile = result.practice_profile or "practice_procedural"
     req = _rerun_request_from_result(result, group_id)
     return await start_analysis(req, payload)
 
@@ -6441,6 +6450,11 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
         for i, e in enumerate(req.entities, start=1)
     ]
 
+    if (req.group_id or "").strip():
+        from perception.groups import get_group as _gg
+        _g = _gg(req.group_id.strip())
+        if _g and _g.get("type_hint") in ("practice", "hospital"):
+            req.entity_type = _g["type_hint"]
     create_event_run(
         event_id=event_id,
         event_name=req.event_name.strip(),

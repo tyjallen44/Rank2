@@ -3744,3 +3744,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Bulk upload with "These organizations are not members yet" ticked | Every report lands as a prospect. [ui] |
 | T4 | Summary strip | "Prospects" tile counts them; Organizations / median tiles exclude them. [ui] |
 | R1 | Regression | Existing memberships read as members; pytest: tests/test_groups.py passes, the 15 stale failures only. |
+
+## FIX-GROUP-UPLOAD-TYPE — a practice group's uploads and re-runs always use the practice rubric (2026-10-04)
+
+**Context:** a bulk upload into The OrthoForum ran on the hospital rubric (Outcomes / Credentials / Experience / Access) because the upload's type was Hospital and nothing enforced the group's type. Now: a group with a default specialty is a practice group (type set automatically); an upload into a practice / hospital group takes the group's type on the server regardless of the radio; the Event Prep page shows only the types the account may run and locks the radio to the group's type; Re-run from a practice group converts a hospital-typed row to a Specialty Practice run (specialty from the row, else the group's default); such rows are flagged "hospital rubric" on the group page.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | The OrthoForum → Edit details → Type "practice" (or set Default specialty Orthopedics) → "⬆ Upload a list" | Only the Specialty Practice type is offered; every produced report has the practice pillars (Credentials & Clinical Quality / Reviews & Reputation / Identity & Machine-Readability / Access & Fit) and a "…_Practice-…" file name. [ui][pdf] |
+| T2 | Rows flagged "hospital rubric" → ↻ Re-run | Fresh Specialty Practice report replaces the row; flag gone; pillars match the rest of the group. [ui][pdf] |
+| T3 | Event Prep as an association account (deep_practice only) | Only the Specialty Practice radio is visible and selected. [ui] |
