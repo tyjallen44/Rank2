@@ -4593,6 +4593,7 @@ function _pageAllowed(p) {
   if (p === 'events')     return _capReport('events');
   if (p === 'track')      return _capReport('trends');
   if (p === 'history')    return !_soleGroup();
+  if (p === 'release' || p === 'start') return false;   // narrowed accounts: Groups, Deep Diagnostic, Learn, Feedback
   return true;
 }
 async function _refreshCaps() {
@@ -4600,7 +4601,10 @@ async function _refreshCaps() {
     const r = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${_token}` } });
     if (!r.ok) return;
     const d = await r.json();
-    if (d && d.capabilities) { _caps = d.capabilities; localStorage.setItem('rk2_caps', JSON.stringify(_caps)); applyCaps(); if (!_caps.unrestricted) loadGroupsList(true).then(applyCaps); }
+    if (d && d.capabilities) {
+      _caps = d.capabilities; localStorage.setItem('rk2_caps', JSON.stringify(_caps)); applyCaps();
+      if (!_caps.unrestricted) loadGroupsList(true).then(() => { applyCaps(); if (_soleGroup() && document.getElementById('page-home')?.classList.contains('active')) navigate('groups'); });
+    }
     if (d && d.email) localStorage.setItem('rk2_email', d.email);
   } catch (e) { /* keep the cached copy */ }
 }
@@ -4624,7 +4628,7 @@ function applyCaps(scope) {
   try {
     const restricted = !!(_caps && !_caps.unrestricted);
     // Navigation
-    const navMap = { individual: 'nav-individual', network: 'nav-network', compare: 'nav-compare', patient: 'nav-patient', events: 'nav-events', track: 'nav-track', history: 'nav-history' };
+    const navMap = { individual: 'nav-individual', network: 'nav-network', compare: 'nav-compare', patient: 'nav-patient', events: 'nav-events', track: 'nav-track', history: 'nav-history', release: 'nav-release', start: 'nav-start' };
     for (const [p, id] of Object.entries(navMap)) {
       const el = document.getElementById(id); if (!el) continue;
       if (restricted && !_pageAllowed(p)) el.style.display = 'none';
@@ -7695,7 +7699,7 @@ async function loadGroupsPage() {
 }
 function _scoreColor(s) { return s == null ? 'var(--muted)' : s >= 75 ? '#2e9e5b' : s >= 58 ? '#e09b2a' : '#d94f4f'; }
 let _suppressGroupsLoad = false;
-async function openGroupPage(id) {
+async function openGroupPage(id, highlightRunId) {
   // Switch to the Groups page without triggering the list load (which would race with,
   // and overwrite, this group's render).
   if (!document.getElementById('page-groups')?.classList.contains('active')) {
@@ -7716,14 +7720,25 @@ async function openGroupPage(id) {
   const canEdit = (_role === 'admin') || (String(g.created_by || '').toLowerCase() === String(localStorage.getItem('rk2_email') || '').toLowerCase());
   const pillarLabels = (m) => (m.entity_type === 'practice' || m.entity_type === 'service_line')
     ? ['Credentials', 'Reviews', 'Identity', 'Access'] : ['Outcomes', 'Credentials', 'Experience', 'Access'];
+  const _days = (d) => { if (!d) return null; const t = new Date(d + 'T00:00:00Z'); return isNaN(t) ? null : Math.round((Date.now() - t.getTime()) / 86400000); };
+  const scoredMs = ms.filter(m => m.score != null);
+  const strip = scoredMs.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px">
+      ${[['Organizations', scoredMs.length, ''], ['Group median', b.median ?? '—', ''],
+         ['Above median', scoredMs.filter(m => b.median != null && m.score > b.median).length, 'of ' + scoredMs.length],
+         ['Top quartile (≥75)', scoredMs.filter(m => m.score >= 75).length, 'of ' + scoredMs.length],
+         ['Site blocks AI', ms.filter(m => m.website_status === 'blocked').length, 'need the firewall fix'],
+         ['Reports over 90 days old', ms.filter(m => (_days(m.generated_at) ?? 0) > 90).length, 'worth a re-run']]
+        .map(([l, v, sub]) => `<div style="flex:1;min-width:140px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">${l}</div><div style="font-size:20px;font-weight:800;color:var(--teal)">${v}</div>${sub ? `<div style="font-size:11px;color:var(--muted)">${sub}</div>` : ''}</div>`).join('')}
+    </div>` : '';
   const rows = ms.map(m => {
     const p = m.pillars || {}; const pl = pillarLabels(m);
     const pv = [p.clinical_outcomes_safety, p.credentials_recognition, p.patient_experience_reviews, p.access_fit];
     const rr = _runningFor(m);
+    const isNew = highlightRunId && m.run_id === highlightRunId;
     const runBadge = rr ? `<div style="margin-top:3px;font-size:11px;color:var(--teal);display:flex;align-items:center;gap:6px"><span class="spinner" style="width:10px;height:10px"></span> Re-run in progress${_since(rr.started_at) ? ' · started ' + _since(rr.started_at) : ''}${rr.email ? ' · ' + _learnEsc(String(rr.email).split('@')[0]) : ''} · <a href="#" onclick="_lastPage='groups'; startProgress('${rr.job_id}', ${_jsq((m.entity_name || '') + ' — Deep Diagnostic')}, false); return false">View progress</a></div>` : '';
-    return `<tr data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by].filter(Boolean).join(' ').toLowerCase())}" ${rr ? 'style="background:#f4f9f8"' : ''}>
+    return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by].filter(Boolean).join(' ').toLowerCase())}" ${isNew ? 'style="background:#eaf7ee"' : (rr ? 'style="background:#f4f9f8"' : '')}>
       <td style="text-align:center;font-weight:700">${m.rank ?? '—'}</td>
-      <td><div style="font-weight:600">${_learnEsc(m.entity_name || '')}</div><div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>${runBadge}</td>
+      <td><div style="font-weight:600;cursor:pointer" onclick="groupToggleMember('${g.id}','${m.run_id}')" title="Show this organization's score history and checklist">${_learnEsc(m.entity_name || '')} <span style="font-size:11px;color:var(--muted)">▾</span>${isNew ? ' <span class="badge bg-teal" style="font-size:10px">new</span>' : ''}</div><div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>${runBadge}</td>
       <td style="text-align:center;font-weight:800;font-size:16px;color:${_scoreColor(m.score)}">${m.score ?? '—'}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${pv.map((v, i) => `${pl[i]} <strong style="color:${_scoreColor(v)}">${v ?? '—'}</strong>`).join(' · ')}</td>
       <td>${_confChip(m.confidence, '')}${m.website_status === 'blocked' ? '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px;margin-left:4px">site blocks AI</span>' : ''}</td>
@@ -7731,7 +7746,8 @@ async function openGroupPage(id) {
       <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
       <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}">⬇ PDF</a>` : ''}
         <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
-        ${canEdit ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')">Remove</button>` : ''}</td></tr>`;
+        ${canEdit ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')">Remove</button>` : ''}</td></tr>
+      <tr id="gdet-${m.run_id}" class="hidden"><td colspan="8" style="background:#f6fafa;padding:10px 14px"></td></tr>`;
   }).join('');
   const bench = b.scored ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px">
       <div><span style="color:var(--muted)">Organizations</span> <strong>${b.scored}</strong></div>
@@ -7742,7 +7758,7 @@ async function openGroupPage(id) {
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
       <div>${_soleGroup() ? '' : `<button class="btn btn-ghost btn-sm" onclick="loadGroupsPage()">← All groups</button>`}
         <div style="font-size:20px;font-weight:700;margin-top:6px">${_learnEsc(g.name)}</div>
-        ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}</div>
+        ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}${strip}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}.csv?token=${encodeURIComponent(_token)}">⬇ CSV</a>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')">✎ Edit details</button>
@@ -7766,6 +7782,7 @@ async function openGroupPage(id) {
     ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center">#</th><th>Organization</th><th style="text-align:center">Pulse Score</th><th>Pillars</th><th>Evidence</th><th>Report</th><th>Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
                : '<div class="empty" style="margin-top:12px"><div>No members yet. Pick this group on the Deep Diagnostic form or an Event Prep upload, or add runs from History.</div></div>'}`;
   groupsFilter(sb ? sb.value : '');
+  if (highlightRunId) { const tr = document.getElementById('grow-' + highlightRunId); if (tr) tr.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   _groupStopPoll();
   if (running.length) _groupPoll = setInterval(() => {
     if (!document.getElementById('page-groups')?.classList.contains('active')) { _groupStopPoll(); return; }
@@ -7781,6 +7798,27 @@ async function groupRerun(btn, gid, runId, name) {
     const { job_id } = await r.json();
     _lastPage = 'groups'; localStorage.setItem('rk2_last_group_open', gid); startProgress(job_id, `${name} — Deep Diagnostic`, false);
   } catch (e) { alert(e.message); btn.disabled = false; btn.innerHTML = orig; }
+}
+async function groupToggleMember(gid, runId) {
+  const row = document.getElementById('gdet-' + runId); if (!row) return;
+  if (!row.classList.contains('hidden')) { row.classList.add('hidden'); return; }
+  row.classList.remove('hidden');
+  const cell = row.firstElementChild; cell.innerHTML = '<span class="spinner"></span> Loading…';
+  try {
+    const r = await api(`/api/groups/${gid}/member?run_id=${encodeURIComponent(runId)}`);
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not load'));
+    const d = await r.json();
+    const runs = d.runs || [];
+    const hist = runs.length ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px">Score history in this group</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${runs.map(x => `<div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 10px;min-width:110px${x.run_id === runId ? ';border-color:var(--teal)' : ''}">
+        <div style="font-size:11px;color:var(--muted)">${x.generated_at || ''}${x.ran_by ? ' · ' + _learnEsc(String(x.ran_by).split('@')[0]) : ''}</div>
+        <div style="font-size:18px;font-weight:800;color:${_scoreColor(x.score)}">${x.score ?? '—'}${x.delta != null ? ` <span style="font-size:11px;color:${x.delta > 0 ? '#2e9e5b' : x.delta < 0 ? '#d94f4f' : 'var(--muted)'}">${x.delta > 0 ? '+' : ''}${x.delta}</span>` : ''}</div>
+        <div style="font-size:10px;color:var(--muted)">${['clinical_outcomes_safety','credentials_recognition','patient_experience_reviews','access_fit'].map(k => x.pillars?.[k] ?? '—').join(' · ')}</div></div>`).join('')}</div>` : '';
+    const c = d.checklist;
+    const check = c ? `<div style="margin-top:10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px">AI Readiness Checklist (latest run)</div>
+      <div style="font-size:13px"><strong>${c.pass} of ${c.checked} checks pass</strong>${c.failing.length ? ` — to fix: ${c.failing.map(_learnEsc).join(', ')}` : ''}${c.partial.length ? ` · partial: ${c.partial.map(_learnEsc).join(', ')}` : ''}${c.na ? ` · ${c.na} not checked` : ''}</div>` : '';
+    cell.innerHTML = (hist + check) || '<span style="color:var(--muted)">No detail available.</span>';
+  } catch (e) { cell.innerHTML = `<span class="err">${_learnEsc(e.message)}</span>`; }
 }
 async function _groupPut(id, body, msg) {
   try {
@@ -8143,6 +8181,9 @@ function showSingleDone(r) {
     ? `<button class="btn btn-ghost" onclick="_download('/api/${isNetwork ? ')network' : 'reports'}/${r.run_id}/teaser-pdf?token=${encodeURIComponent(_token)}'">⬇ Download Teaser</button>`
     : '';
 
+  const groupBtn = (r.group && r.group.group_id)
+    ? `<button class="btn btn-secondary" onclick="openGroupPage('${r.group.group_id}', '${r.run_id}')">▦ View in ${_learnEsc(r.group.group_name || 'group')}${r.group.ready && r.group.rank ? ` · ${r.group.rank} of ${r.group.total}` : ''}</button>`
+    : '';
   const fullDetailBtn = (isNetwork && r.full_detail_pdf_path)
     ? `<button class="btn btn-secondary" onclick="_download('/api/network/${r.run_id}/full-detail-pdf?token=${encodeURIComponent(_token)}')">⬇ Download Full Detail</button>`
     : '';
@@ -8184,6 +8225,7 @@ function showSingleDone(r) {
     ${teaserBtn}
     ${briefingBtn}
     ${fullDetailBtn}
+    ${groupBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${scLine}
     ${costLine}

@@ -224,6 +224,57 @@ def members(group_id: str) -> list[dict]:
     return scored + unscored
 
 
+def member_history(group_id: str, run_id: str) -> dict:
+    """Every run of one organization inside the group (oldest first) plus the AI Readiness
+    Checklist summary of its latest run — what the group page shows when a row is expanded."""
+    con = get_connection()
+    row = con.execute("SELECT entity_name, location FROM analysis_runs WHERE run_id = ?", [run_id]).fetchone()
+    if not row:
+        con.close()
+        return {"runs": [], "checklist": None}
+    name, loc = row
+    rows = con.execute(
+        """SELECT a.run_id, a.generated_at, a.created_at, a.ran_by, p.ai_visibility_score, p.tier_scores, a.result_json
+           FROM group_runs g JOIN analysis_runs a ON a.run_id = g.run_id
+           LEFT JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
+           WHERE g.group_id = ? AND LOWER(COALESCE(a.entity_name,'')) = LOWER(?) AND LOWER(COALESCE(a.location,'')) = LOWER(?)
+           ORDER BY a.created_at ASC""", [group_id, name or "", loc or ""]).fetchall()
+    con.close()
+    runs, latest_json = [], None
+    for rid, gen, created, ran_by, score, ts_json, rj in rows:
+        ts = {}
+        try:
+            ts = json.loads(ts_json) if ts_json else {}
+        except Exception:
+            pass
+        if score is None and rj:
+            try:
+                p0 = (json.loads(rj).get("rankings") or [{}])[0]
+                score, ts = p0.get("ai_visibility_score"), p0.get("tier_scores") or ts
+            except Exception:
+                pass
+        runs.append({"run_id": rid, "generated_at": str(gen)[:10] if gen else None, "created_at": str(created) if created else None,
+                     "ran_by": ran_by, "score": score,
+                     "pillars": {k: ts.get(k) for k in ("clinical_outcomes_safety", "credentials_recognition", "patient_experience_reviews", "access_fit")}})
+        latest_json = rj or latest_json
+    for i, r in enumerate(runs):
+        prev = next((x["score"] for x in reversed(runs[:i]) if x["score"] is not None), None)
+        r["delta"] = (r["score"] - prev) if (r["score"] is not None and prev is not None) else None
+    checklist = None
+    if latest_json:
+        try:
+            from .models import AnalysisResult
+            from .checklist import build_checklist, summarize
+            res = AnalysisResult.model_validate_json(latest_json)
+            rows_c = build_checklist(res)
+            sm = summarize(rows_c)
+            checklist = {**sm, "failing": [r["label"] for r in rows_c if r["status"] == "fail"],
+                         "partial": [r["label"] for r in rows_c if r["status"] == "partial"]}
+        except Exception:
+            checklist = None
+    return {"entity_name": name, "location": loc, "runs": runs, "checklist": checklist}
+
+
 def benchmark(group_id: str, run_id: Optional[str] = None, entity_name: Optional[str] = None,
               location: Optional[str] = None) -> dict:
     """Group statistics and, when a run / organization is given, its rank in the group."""

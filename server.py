@@ -1113,6 +1113,10 @@ def _group_attach(result, job: dict, emit=None) -> None:
         if ctx:
             result.group_context = ctx
             try:
+                job["group_name"] = ctx.get("group_name")
+            except Exception:
+                pass
+            try:
                 from perception.analyzer import _save_to_db as _resave_group
                 _resave_group(result)
             except Exception:
@@ -1277,6 +1281,14 @@ async def groups_detail(group_id: str, payload: dict = Depends(get_current_user_
             running.append({"job_id": jid, "entity_name": j.get("entity_name") or j.get("label") or "",
                             "started_at": j.get("started_at"), "email": j.get("email") or ""})
     return {"group": g, "members": members(group_id), "benchmark": benchmark(group_id), "running": running}
+
+
+@app.get("/api/groups/{group_id}/member")
+async def groups_member(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
+    """One organization's runs inside the group (score history) + its latest checklist summary."""
+    from perception.groups import member_history
+    _group_visible(payload, group_id)
+    return member_history(group_id, run_id)
 
 
 @app.get("/api/groups/{group_id}.csv")
@@ -1819,6 +1831,7 @@ def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
             "spotcheck": _spotcheck_brief(result),
             "mqcr": getattr(result, "fqhc_mqcr", None) if is_fqhc else None,
             "ai_access": __import__("perception.data.website_facts", fromlist=["ai_access_problem"]).ai_access_problem(getattr(result, "website_facts", None)),
+            "group": getattr(result, "group_context", None),
         }
         if not job.get("skip_pdf"):
             _notify_run_complete(job, "Community Health report" if is_fqhc else "Deep Diagnostic",
@@ -2127,7 +2140,8 @@ def _spotcheck_brief(result) -> Optional[dict]:
             "our_domain_cited": sc.get("our_domain_cited"), "summary": summary_sentence(sc),
             "sourcing": (sc.get("sourcing") or {}).get("sentence") or "",
             "passes": sc.get("passes"), "queries": sc.get("queries"), "rate_range": sc.get("rate_range"),
-            "ai_access": __import__("perception.data.website_facts", fromlist=["ai_access_problem"]).ai_access_problem(getattr(result, "website_facts", None))}
+            "ai_access": __import__("perception.data.website_facts", fromlist=["ai_access_problem"]).ai_access_problem(getattr(result, "website_facts", None)),
+            "group": getattr(result, "group_context", None)}
 
 
 def _notify_run_complete(job: dict, kind: str, title: str, files: list) -> None:
@@ -2142,6 +2156,8 @@ def _notify_run_complete(job: dict, kind: str, title: str, files: list) -> None:
         if not get_notify_pref(email):
             return
         minutes = (time.time() - job.get("started_at", time.time())) / 60.0
+        if job.get("group_name"):
+            title = f"{title} · {job['group_name']}"
         job["label"] = title
         send_run_complete(email, kind, title, [p for p in (files or []) if p], minutes=minutes)
     except Exception as exc:

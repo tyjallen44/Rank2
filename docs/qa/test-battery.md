@@ -3686,3 +3686,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Association account with exactly one visible group → Groups | Lands on the group; no "← All groups" button; sidebar has no History; any History link (completion screen, Home) opens the group instead. [ui] |
 | T2 | Same account → Deep Diagnostic → Advanced options | Group picker preselected to its group and disabled; no "New group…" button. [ui] |
 | T3 | Unrestricted user, or a narrowed account with two or more groups | Unchanged: list, back button, History, editable picker. [ui] |
+
+## GROUPS-UX-3 — group as landing page, View in group, summary strip, member detail, email subject, trimmed sidebar (2026-10-04)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Sign in as a single-group association account | Opens on the group page, not Home; sidebar shows Home, Deep Diagnostic, Groups, Feedback, Learn (no Start a report, History, Trends, Release Notes). [ui] |
+| T2 | Run a Deep Diagnostic with a group picked → completion screen | "▦ View in <group>" button (with "· rank of N" once the group is ready) opens the group with the new row tinted green, tagged "new" and scrolled into view. [ui] |
+| T3 | Group page summary strip | Six tiles: Organizations, Group median, Above median, Top quartile (≥75), Site blocks AI, Reports over 90 days old. Counts match the table. [ui] |
+| T4 | Click an organization's name in the table | Row expands: every run of that organization in the group with score, change vs. the previous run and pillars; latest-run checklist "N of 10 checks pass — to fix: …". Click again to collapse. [ui] |
+| T5 | Re-run completes (coordinator has "Email me when a long run finishes" on) | Email subject/title carries "· <group name>". [email] |
+| R1 | Regression | Unrestricted users: Home landing, full sidebar, no change to completion screen without a group. |
