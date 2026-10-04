@@ -1845,6 +1845,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <span class="run-gate-hint" id="ir-run-gate-hint">⚠ Confirm the website first — <a href="#" onclick="_websiteGateAttention('ir');return false">take me there</a></span>
           <span style="font-size:12px;color:var(--muted)">Produces the report (with content analysis and a drafted prescription) and a teaser<span id="ir-auto-composite-note" class="hidden">, plus the per-location reputation table</span>.</span>
         </div>
+        <div id="ir-run-note" style="display:none;margin-top:10px;font-size:13px;color:var(--muted);line-height:1.5">The report takes about 10 minutes. You will get an email when it is done, and it will appear in your group ranked against the other members.</div>
       </div>
 
       <!-- ── FQHC Intake step (community health only) ───────────────────── -->
@@ -2719,6 +2720,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <div id="group-create" class="card hidden" style="margin:12px 0;max-width:640px">
         <div class="fg"><label class="fl">Name</label><input id="grp-name" class="fi" placeholder="e.g. Iowa Orthopaedic Society 2026"></div>
         <div class="fg"><label class="fl">Description (optional)</label><input id="grp-desc" class="fi" placeholder="What this group is for"></div>
+        <div class="fg"><label class="fl">Default specialty (optional)</label><input id="grp-spec" class="fi" placeholder="e.g. Orthopedics — prefilled on the Deep Diagnostic form for this group"></div>
         <label class="aggregate-toggle" style="margin:6px 0 12px"><input type="checkbox" id="grp-show-pdf" checked><span class="agg-label">Print each member's rank and the group median on its report (once the group has 10 organizations)</span></label>
         <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="groupCreate()">Create group</button><button class="btn btn-ghost" onclick="groupShowCreate(false)">Cancel</button></div>
         <div id="grp-err" class="err hidden mt8"></div>
@@ -4654,6 +4656,18 @@ function applyCaps(scope) {
                        community_health: 'Run a diagnostic on a community health center: its Pulse Score, what AI assistants currently see, and what to fix first.' };
     const tt = document.getElementById('ir-page-title-text'), th = document.getElementById('ir-title-help'), ts = document.getElementById('ir-page-sub');
     const slRow = document.getElementById('ir-sl-help-row'), tw = document.getElementById('ir-type-wrap');
+    const adv = document.getElementById('ir-advanced'), gw = document.getElementById('ir-group-wrap');
+    if (adv && gw) {
+      if (single) {
+        if (gw.parentElement === adv.querySelector('div')) { adv.parentElement.insertBefore(gw, adv); gw.style.margin = '8px 0 12px'; }
+        adv.style.display = 'none';
+      } else {
+        if (gw.parentElement !== adv.querySelector('div') && adv.querySelector('div')) { adv.querySelector('div').appendChild(gw); gw.style.margin = ''; }
+        adv.style.display = '';
+      }
+    }
+    const note = document.getElementById('ir-run-note');
+    if (note) note.style.display = single ? '' : 'none';
     if (tt) tt.textContent = single ? `${typeNames[single]} Deep Diagnostic` : 'Deep Diagnostic';
     if (th) th.style.display = single ? 'none' : '';
     if (ts) ts.textContent = single ? typeSubs[single] : 'Run a focused diagnostic on a hospital, a service line within a hospital system, a specialty practice, or a community health center: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.';
@@ -7637,7 +7651,7 @@ async function _fillGroupSelect(id, pick) {
   sel.innerHTML = '<option value="">— none —</option>' + groups.map(g => `<option value="${g.id}" ${g.id === want ? 'selected' : ''}>${_learnEsc(g.name)} (${g.member_count})</option>`).join('');
   if (!groups.some(g => g.id === want)) sel.value = '';
   const sole = _soleGroup();
-  if (sole) { sel.value = sole.id; sel.disabled = true; const nb = sel.parentElement?.querySelector('button'); if (nb) nb.style.display = 'none'; }
+  if (sole) { sel.value = sole.id; sel.disabled = true; const nb = sel.parentElement?.querySelector('button'); if (nb) nb.style.display = 'none'; if (id === 'ir-group') _groupPrefillSpecialty(sole.id); }
   else { sel.disabled = false; const nb = sel.parentElement?.querySelector('button'); if (nb) nb.style.display = ''; }
 }
 async function groupCreateInline(selectId) {
@@ -7675,7 +7689,7 @@ async function groupCreate() {
   if (!name) { err.textContent = 'Give the group a name.'; err.classList.remove('hidden'); return; }
   try {
     const r = await api('/api/groups', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description: document.getElementById('grp-desc').value.trim(), show_on_pdf: document.getElementById('grp-show-pdf').checked }) });
+      body: JSON.stringify({ name, description: document.getElementById('grp-desc').value.trim(), show_on_pdf: document.getElementById('grp-show-pdf').checked, default_specialty: document.getElementById('grp-spec').value.trim() || null }) });
     if (!r.ok) throw new Error(await errDetail(r, 'Could not create the group'));
     document.getElementById('grp-name').value = ''; document.getElementById('grp-desc').value = '';
     groupShowCreate(false); _groupsCache = null; loadGroupsPage();
@@ -7775,7 +7789,7 @@ async function openGroupPage(id, highlightRunId) {
         <div style="font-size:20px;font-weight:700;margin-top:6px">${_learnEsc(g.name)}</div>
         ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}${strip}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')">+ Run a report in this group</button>
+        <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')">+ Add an organization</button>
         <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}.csv?token=${encodeURIComponent(_token)}">⬇ CSV</a>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')">✎ Edit details</button>
         <button class="btn btn-ghost btn-sm" onclick="groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})">${g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports'}</button>
@@ -7786,6 +7800,7 @@ async function openGroupPage(id, highlightRunId) {
     <div id="group-edit" class="card hidden" style="margin:12px 0;max-width:680px">
       <div class="fg"><label class="fl">Name</label><input id="ge-name" class="fi" value="${_learnEsc(g.name)}"></div>
       <div class="fg"><label class="fl">Description</label><input id="ge-desc" class="fi" value="${_learnEsc(g.description || '')}"></div>
+      <div class="fg"><label class="fl">Default specialty <span style="color:var(--muted);font-weight:400">(prefilled on the Deep Diagnostic form for this group)</span></label><input id="ge-spec" class="fi" value="${_learnEsc(g.default_specialty || '')}" placeholder="e.g. Orthopedics"></div>
       <div class="fg"><label class="fl">Type</label>
         <select id="ge-type" class="fi" style="width:auto">${['mixed','practice','hospital','network'].map(t => `<option value="${t}" ${t === (g.type_hint || 'mixed') ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       ${_role === 'admin' ? `<div class="fg"><label class="fl">Visible to accounts on preset <span style="color:var(--muted);font-weight:400">(blank = unrestricted users only)</span></label>
@@ -7815,14 +7830,19 @@ async function groupRerun(btn, gid, runId, name) {
     _lastPage = 'groups'; localStorage.setItem('rk2_last_group_open', gid); startProgress(job_id, `${name} — Deep Diagnostic`, false);
   } catch (e) { alert(e.message); btn.disabled = false; btn.innerHTML = orig; }
 }
+function _groupPrefillSpecialty(gid) {
+  const g = (_groupsCache || []).find(x => x.id === gid);
+  const sp = document.getElementById('ir-specialty');
+  if (g && g.default_specialty && sp && !sp.value.trim()) sp.value = g.default_specialty;
+}
 function groupRunReport(gid) {
   localStorage.setItem('rk2_last_group', gid);
   navigate('individual');
-  _fillGroupSelect('ir-group', gid);
+  _fillGroupSelect('ir-group', gid).then(() => _groupPrefillSpecialty(gid));
   const first = ['specialty', 'hospital', 'service_line', 'community_health'].find(t => _irTypeAllowed(t));
   if (first && !_irTypeAllowed(_irType)) setIrType(first);
   document.getElementById('ir-name')?.focus();
-  _flash('This report will join the group when it finishes.');
+  _flash('The report will join the group when it finishes.');
 }
 async function groupToggleMember(gid, runId) {
   const row = document.getElementById('gdet-' + runId); if (!row) return;
@@ -7865,7 +7885,7 @@ async function groupSaveEdit(id) {
   const name = document.getElementById('ge-name').value.trim();
   if (!name) { err.textContent = 'The group needs a name.'; err.classList.remove('hidden'); return; }
   const body = { name, description: document.getElementById('ge-desc').value.trim(), type_hint: document.getElementById('ge-type').value,
-                 show_on_pdf: document.getElementById('ge-show-pdf').checked };
+                 show_on_pdf: document.getElementById('ge-show-pdf').checked, default_specialty: document.getElementById('ge-spec').value.trim() };
   const ps = document.getElementById('ge-preset'); if (ps) body.preset = ps.value || null;
   await _groupPut(id, body, 'Group updated'); openGroupPage(id);
 }

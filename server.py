@@ -1156,6 +1156,7 @@ class GroupRequest(BaseModel):
     preset: Optional[str] = None
     show_on_pdf: Optional[bool] = True
     archived: Optional[bool] = None
+    default_specialty: Optional[str] = None   # prefilled on the Deep Diagnostic form for this group
 
 
 class GroupRunsRequest(BaseModel):
@@ -1180,16 +1181,23 @@ async def groups_create(req: GroupRequest, payload: dict = Depends(get_current_u
         raise HTTPException(400, "Give the group a name.")
     caps = _caps_for_payload(payload)
     preset = req.preset if caps.get("unrestricted") else caps.get("preset")
-    return create_group(req.name, req.description or "", req.type_hint or "mixed",
-                        payload.get("email") or payload.get("role") or "", preset, bool(req.show_on_pdf))
+    from perception.groups import update_group
+    from perception.specialties import normalize_specialty
+    g = create_group(req.name, req.description or "", req.type_hint or "mixed",
+                     payload.get("email") or payload.get("role") or "", preset, bool(req.show_on_pdf))
+    if (req.default_specialty or "").strip():
+        g = update_group(g["id"], default_specialty=normalize_specialty(req.default_specialty))
+    return g
 
 
 @app.put("/api/groups/{group_id}")
 async def groups_update(group_id: str, req: GroupRequest, payload: dict = Depends(get_current_user_payload)):
     from perception.groups import update_group
     _group_visible(payload, group_id)
+    from perception.specialties import normalize_specialty
     fields = {"name": (req.name or "").strip() or None, "description": req.description, "type_hint": req.type_hint,
-              "show_on_pdf": req.show_on_pdf, "archived": req.archived}
+              "show_on_pdf": req.show_on_pdf, "archived": req.archived,
+              "default_specialty": (normalize_specialty(req.default_specialty) if req.default_specialty is not None else None)}
     if payload.get("role") == "admin":
         fields["preset"] = req.preset
     return update_group(group_id, **fields)

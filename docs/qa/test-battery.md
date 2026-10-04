@@ -3705,3 +3705,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Group page → "+ Run a report in this group" | Opens the Deep Diagnostic with the group preselected (locked for single-group accounts), the right type selected, cursor in the organization field; the finished report joins the group. [ui] |
 | T2 | Account whose preset allows one Deep Diagnostic type (e.g. Specialty Practice) → Deep Diagnostic | Title reads "Specialty Practice Deep Diagnostic"; no "Not sure this is the right report?" link; one-sentence subtitle; no "How to analyze a hospital service line" link; no Analysis Type row or "ⓘ Which type?" help. [ui] |
 | R1 | Regression | Unrestricted users see the full title, chooser link, subtitle, service-line link and the type toggle. |
+
+## GROUPS-UX-5 — default specialty, collapsed options, "Add an organization", what-happens-next note (2026-10-04)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group → Edit details → Default specialty "ortho" → Save → "+ Add an organization" | Deep Diagnostic opens with Specialty prefilled "Orthopedics" (canonical label); a field the user already typed is not overwritten. Single-group accounts get the prefill on every visit to the form. [ui] |
+| T2 | Account with one Deep Diagnostic type → Deep Diagnostic | No Advanced options panel; the group picker sits above where it was (locked for single-group accounts); under Run Diagnostic: "The report takes about 10 minutes. You will get an email when it is done, and it will appear in your group ranked against the other members." [ui] |
+| T3 | Group page button | Reads "+ Add an organization"; Run Diagnostic button and page title unchanged. [ui] |
+| R1 | Regression | Unrestricted users: Advanced options present with the picker inside it; no note. |

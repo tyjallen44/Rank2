@@ -33,6 +33,9 @@ def ensure_tables(con) -> None:
             created_at   TIMESTAMP
         )
     """)
+    cols = {r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name='groups'").fetchall()}
+    if "default_specialty" not in cols:
+        con.execute("ALTER TABLE groups ADD COLUMN default_specialty VARCHAR")
     con.execute("""
         CREATE TABLE IF NOT EXISTS group_runs (
             group_id  VARCHAR NOT NULL,
@@ -44,7 +47,7 @@ def ensure_tables(con) -> None:
     """)
 
 
-_COLS = ["id", "name", "description", "type_hint", "preset", "show_on_pdf", "archived", "created_by", "created_at"]
+_COLS = ["id", "name", "description", "type_hint", "preset", "show_on_pdf", "archived", "created_by", "created_at", "default_specialty"]
 
 
 def _row(r) -> dict:
@@ -75,7 +78,7 @@ def get_group(group_id: str) -> Optional[dict]:
 
 
 def update_group(group_id: str, **fields) -> Optional[dict]:
-    allowed = {"name", "description", "type_hint", "preset", "show_on_pdf", "archived"}
+    allowed = {"name", "description", "type_hint", "preset", "show_on_pdf", "archived", "default_specialty"}
     sets, vals = [], []
     for k, v in fields.items():
         if k in allowed and v is not None:
