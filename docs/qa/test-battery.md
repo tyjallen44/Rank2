@@ -3721,3 +3721,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 |---|---|---|
 | T1 | Groups list → "✎ Edit" (admin), or group page → "✎ Edit details" | The edit form opens the first time, with Default specialty and the preset select populated; Save works. [ui] |
 | T2 | Non-admin account on the group page (association member or coordinator) | No Edit / Archive / Hide benchmark / Remove / Delete controls; `PUT /api/groups/{id}` and `DELETE /api/groups/{id}/runs/{run_id}` return 403. [ui][api] |
+
+## GROUPS-UPLOAD — upload a list into a group; spot check on bulk runs; CSV route fix (2026-10-04)
+
+**Context:** the group CSV download returned "Group not found" because `/api/groups/{id}.csv` was matched by the `/api/groups/{id}` route first; it is now `/api/groups/{id}/export.csv`. Group pages gain "⬆ Upload a list" (accounts with the Event Preparation indicator): it opens the bulk upload with the group preselected, the event name prefilled as "<group> — <date>", type Specialty Practice, and the new "Ask the AI assistants what they actually say, for every organization" option ticked, so bulk reports carry the same sections as a single run (the event job now runs the spot check per entity when asked; the preset's spotcheck=on also ticks it). For narrowed accounts the page is titled "Upload a list of organizations" with a one-sentence subtitle and no chooser link.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → ⬇ CSV | Downloads `<group>_group.csv`. [ui] |
+| T2 | Coordinator (Event Preparation ticked) → group page → "⬆ Upload a list" → CSV of practices → run | Reports produced in the new layout (checklist, pillar notes, Executive Summary, Identity cap, spot-check section, physicians table, content analysis + drafts) and every one joins the group with a "View in group" on completion; the group page ranks them. [ui][pdf] |
+| T3 | Event Prep → Advanced → spot check checkbox | Off by default for unrestricted users; on by default for the association preset; per-entity "What AI assistants actually said" appears when on. [ui][pdf] |
+| R1 | Regression | Event Prep without a group or spot check unchanged; resume repeats the spot-check setting. |

@@ -866,7 +866,7 @@ def _init_db_impl() -> None:
     if "zip_path" not in _er_cols:
         con.execute("ALTER TABLE event_runs ADD COLUMN zip_path VARCHAR")
     # Run settings persisted so a resumed run repeats the original as closely as possible
-    for _c in ("include_teaser", "override_cache", "auto_practice_composite", "practice_content"):
+    for _c in ("include_teaser", "override_cache", "auto_practice_composite", "practice_content", "spotcheck"):
         if _c not in _er_cols:
             con.execute(f"ALTER TABLE event_runs ADD COLUMN {_c} BOOLEAN DEFAULT FALSE")
     con.execute("""
@@ -1125,18 +1125,18 @@ def create_event_run(
     total_count: int, role: str,
     include_teaser: bool = False, override_cache: bool = False,
     auto_practice_composite: bool = False, practice_content: bool = False,
-    group_id: Optional[str] = None,
+    group_id: Optional[str] = None, spotcheck: bool = False,
 ) -> None:
     from datetime import datetime
     con = get_connection()
     con.execute(
         "INSERT INTO event_runs (id, event_name, event_date, entity_type, csv_filename, "
         "total_count, done_count, skip_count, status, user_role, "
-        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id) "
-        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?, ?, ?, ?, ?, ?)",
+        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id, spotcheck) "
+        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?, ?, ?, ?, ?, ?, ?)",
         [event_id, event_name, event_date, entity_type, csv_filename, total_count, role,
          bool(include_teaser), bool(override_cache), bool(auto_practice_composite),
-         bool(practice_content), datetime.utcnow(), group_id or None],
+         bool(practice_content), datetime.utcnow(), group_id or None, bool(spotcheck)],
     )
     con.close()
 
@@ -1227,7 +1227,7 @@ def get_event_run(event_id: str) -> Optional[dict]:
     row = con.execute(
         "SELECT id, event_name, event_date, entity_type, csv_filename, total_count, "
         "done_count, skip_count, status, user_role, enriched_csv_path, zip_path, "
-        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id "
+        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id, spotcheck "
         "FROM event_runs WHERE id = ?",
         [event_id],
     ).fetchone()
@@ -1237,7 +1237,7 @@ def get_event_run(event_id: str) -> Optional[dict]:
     cols = ["id", "event_name", "event_date", "entity_type", "csv_filename",
             "total_count", "done_count", "skip_count", "status", "user_role",
             "enriched_csv_path", "zip_path", "include_teaser", "override_cache",
-            "auto_practice_composite", "practice_content", "created_at", "group_id"]
+            "auto_practice_composite", "practice_content", "created_at", "group_id", "spotcheck"]
     return dict(zip(cols, row))
 
 

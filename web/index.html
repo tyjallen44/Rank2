@@ -2538,8 +2538,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
     <!-- ── Events Pulse ─────────────────────────────────────────────────── -->
     <div id="page-events" class="page">
-      <div class="page-title">Event Preparation <a href="#" class="title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
-      <div class="page-sub">Upload an event attendee list to generate a Deep Diagnostic for every hospital, practice, or community health center — and download an enriched CSV with scores.</div>
+      <div class="page-title"><span id="ev-page-title-text">Event Preparation</span> <a href="#" class="title-help" id="ev-title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
+      <div class="page-sub" id="ev-page-sub">Upload an event attendee list to generate a Deep Diagnostic for every hospital, practice, or community health center — and download an enriched CSV with scores.</div>
 
       <!-- Step 1: Setup -->
       <div id="ev-step1" style="max-width:680px">
@@ -2579,6 +2579,10 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
               Also generate a teaser report for each entity<a href="#" class="help-link" onclick="showHelp('teaser',event);return false">ⓘ What is this?</a>
             </label>
             <div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:25px">Each entity will produce both a full Deep Diagnostic and a teaser (summary-only) PDF.</div>
+            <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px;margin-top:14px" id="ev-spotcheck-wrap">
+              <input type="checkbox" id="ev-spotcheck">
+              Ask the AI assistants what they actually say, for every organization <span style="color:var(--muted);font-size:12px">(~30 questions × 2 passes each; adds ~5 minutes and ~$3 per organization)</span>
+            </label>
             <div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" id="ev-group-wrap">
               <span style="font-size:14px">Add every report from this upload to a group</span>
               <select id="ev-group" class="fi" style="width:auto;min-width:220px;padding:6px 10px;font-size:13px"><option value="">— none —</option></select>
@@ -4613,7 +4617,7 @@ async function _refreshCaps() {
 // Option id → checkbox + wrapper (+ the same option on other forms). 'on' = checked (user may
 // uncheck), 'off' = unchecked, 'hidden' = wrapper hidden and unchecked.
 const _CAP_OPTS = {
-  spotcheck:           [['ir-spotcheck', 'ir-spotcheck-wrap']],
+  spotcheck:           [['ir-spotcheck', 'ir-spotcheck-wrap'], ['ev-spotcheck', 'ev-spotcheck-wrap']],
   physician_composite: [['ir-physician-composite', 'ir-physician-composite-wrap']],
   practice_composite:  [['ir-practice-composite', 'ir-practice-composite-wrap']],
   owner_facts:         [[null, 'ir-facts-wrap']],
@@ -4666,6 +4670,11 @@ function applyCaps(scope) {
         adv.style.display = '';
       }
     }
+    const et = document.getElementById('ev-page-title-text'), eh = document.getElementById('ev-title-help'), es = document.getElementById('ev-page-sub');
+    if (et) et.textContent = restricted ? 'Upload a list of organizations' : 'Event Preparation';
+    if (eh) eh.style.display = restricted ? 'none' : '';
+    if (es) es.textContent = restricted ? 'Upload a spreadsheet of organizations (name, city, state) to run a report for each one. The reports join your group as they finish, and you can download a CSV of the scores.'
+                                        : 'Upload an event attendee list to generate a Deep Diagnostic for every hospital, practice, or community health center — and download an enriched CSV with scores.';
     const note = document.getElementById('ir-run-note');
     if (note) note.style.display = single ? '' : 'none';
     if (tt) tt.textContent = single ? `${typeNames[single]} Deep Diagnostic` : 'Deep Diagnostic';
@@ -7792,7 +7801,8 @@ async function openGroupPage(id, highlightRunId) {
         ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}${strip}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')">+ Add an organization</button>
-        <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}.csv?token=${encodeURIComponent(_token)}">⬇ CSV</a>
+        ${_capReport('events') ? `<button class="btn btn-secondary btn-sm" onclick="groupUploadList('${g.id}')">⬆ Upload a list</button>` : ''}
+        <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/export.csv?token=${encodeURIComponent(_token)}">⬇ CSV</a>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')">✎ Edit details</button>
         <button class="btn btn-ghost btn-sm" onclick="groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})">${g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupArchive('${g.id}')">Archive</button>` : ''}
@@ -7831,6 +7841,17 @@ async function groupRerun(btn, gid, runId, name) {
     const { job_id } = await r.json();
     _lastPage = 'groups'; localStorage.setItem('rk2_last_group_open', gid); startProgress(job_id, `${name} — Deep Diagnostic`, false);
   } catch (e) { alert(e.message); btn.disabled = false; btn.innerHTML = orig; }
+}
+function groupUploadList(gid) {
+  const g = (_groupsCache || []).find(x => x.id === gid);
+  localStorage.setItem('rk2_last_group', gid);
+  navigate('events');
+  _fillGroupSelect('ev-group', gid);
+  const nm = document.getElementById('ev-name'); if (nm && !nm.value.trim() && g) nm.value = `${g.name} — ${new Date().toISOString().slice(0, 10)}`;
+  const dt = document.getElementById('ev-date'); if (dt && !dt.value) dt.value = new Date().toISOString().slice(0, 10);
+  const pr = document.getElementById('ev-type-practice'); if (pr && (!g || g.type_hint !== 'hospital')) { pr.checked = true; pr.dispatchEvent(new Event('change')); }
+  const sc = document.getElementById('ev-spotcheck'); if (sc) sc.checked = true;
+  _flash('Every report from this upload will join the group when it finishes.');
 }
 function _groupPrefillSpecialty(gid) {
   const g = (_groupsCache || []).find(x => x.id === gid);
@@ -13133,6 +13154,7 @@ async function evSubmitRun() {
         auto_practice_composite: autoPracticeComposite,
         practice_content: practiceContent,
         group_id: (document.getElementById('ev-group')?.value || null),
+        spotcheck: !!document.getElementById('ev-spotcheck')?.checked,
         entities,
       }),
     });

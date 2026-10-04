@@ -1301,7 +1301,7 @@ async def groups_member(group_id: str, run_id: str, payload: dict = Depends(get_
     return member_history(group_id, run_id)
 
 
-@app.get("/api/groups/{group_id}.csv")
+@app.get("/api/groups/{group_id}/export.csv")
 async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_payload)):
     import csv as _csv, io as _io
     from perception.groups import members
@@ -6331,6 +6331,7 @@ class EventRunRequest(BaseModel):
     auto_practice_composite: bool = False  # FQHC only: discover all sites & build aggregate
     practice_content: bool = False         # Practice only: content analysis + prescription (combined report)
     group_id: Optional[str] = None         # attach every report of this upload to a group
+    spotcheck: bool = False                # ask the AI assistants ~30 questions per entity (same section as a single run)
     entities: List[dict]                   # confirmed list: {input_name,input_city,input_state,resolved_name,resolved_addr}
 
 
@@ -6429,6 +6430,7 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
         auto_practice_composite=req.auto_practice_composite,
         practice_content=req.practice_content,
         group_id=(req.group_id or "").strip() or None,
+        spotcheck=bool(req.spotcheck),
     )
     create_event_entities(entities_db)
 
@@ -6436,7 +6438,7 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
     _event_job_map[event_id] = job_id
     _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser,
                  req.override_cache, req.auto_practice_composite, req.practice_content,
-                 (req.group_id or "").strip() or None)
+                 (req.group_id or "").strip() or None, bool(req.spotcheck))
     return {"event_id": event_id, "job_id": job_id}
 
 
@@ -6463,7 +6465,7 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
                  bool(run.get("override_cache")),
                  bool(run.get("auto_practice_composite")),
                  bool(run.get("practice_content")),
-                 run.get("group_id") or None)
+                 run.get("group_id") or None, bool(run.get("spotcheck")))
     return {"event_id": event_id, "job_id": job_id, "pending": len(pending)}
 
 
@@ -6474,6 +6476,7 @@ def _run_event_job(
     auto_practice_composite: bool = False,
     practice_content: bool = False,
     group_id: Optional[str] = None,
+    spotcheck: bool = False,
 ) -> None:
     """Background: analyze all entities in the event, 5 at a time."""
     import re as _re
@@ -6639,6 +6642,13 @@ def _run_event_job(
                     # base four-pillar PDF in place (same path → zip picks it up).
                     # Fail-soft: on error the base report stands.
                     combined_ok = False
+                    if spotcheck and entity_type != "fqhc":
+                        try:
+                            _run_spotcheck(result, resolved_name, city, entity.get("input_state") or "",
+                                           (entity.get("input_specialty") or None) if entity_type == "practice" else None,
+                                           "practice" if entity_type == "practice" else "hospital", emit)
+                        except Exception as _sx:
+                            emit({"type": "log", "text": f"  {resolved_name}: spot check failed ({type(_sx).__name__})"})
                     if group_id:
                         _group_attach(result, {"group_id": group_id, "email": (_jobs.get(job_id) or {}).get("email")}, emit)
                     if practice_content and entity_type == "practice":
