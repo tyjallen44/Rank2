@@ -3714,3 +3714,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Account with one Deep Diagnostic type → Deep Diagnostic | No Advanced options panel; the group picker sits above where it was (locked for single-group accounts); under Run Diagnostic: "The report takes about 10 minutes. You will get an email when it is done, and it will appear in your group ranked against the other members." [ui] |
 | T3 | Group page button | Reads "+ Add an organization"; Run Diagnostic button and page title unchanged. [ui] |
 | R1 | Regression | Unrestricted users: Advanced options present with the picker inside it; no note. |
+
+## GROUPS-ADMIN-ONLY — editing is reliable and admin-only (2026-10-04)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Groups list → "✎ Edit" (admin), or group page → "✎ Edit details" | The edit form opens the first time, with Default specialty and the preset select populated; Save works. [ui] |
+| T2 | Non-admin account on the group page (association member or coordinator) | No Edit / Archive / Hide benchmark / Remove / Delete controls; `PUT /api/groups/{id}` and `DELETE /api/groups/{id}/runs/{run_id}` return 403. [ui][api] |

@@ -7723,7 +7723,7 @@ async function loadGroupsPage() {
       <td>${g.member_count}${g.member_count < 10 ? ` <span style="font-size:11px;color:var(--muted)">(${10 - g.member_count} more for benchmarks)</span>` : ''}</td>
       <td>${g.show_on_pdf ? 'Yes' : 'No'}</td>
       <td style="font-size:12px;color:var(--muted)">${(g.created_at || '').slice(0, 10)}${g.created_by ? ` · ${_learnEsc(String(g.created_by).split('@')[0])}` : ''}</td>
-      <td><button class="btn btn-primary btn-sm" onclick="openGroupPage('${g.id}')">Open →</button></td></tr>`).join('')}
+      <td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openGroupPage('${g.id}')">Open →</button>${_role === 'admin' ? ` <button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')">✎ Edit</button>` : ''}</td></tr>`).join('')}
   </tbody></table>`;
 }
 function _scoreColor(s) { return s == null ? 'var(--muted)' : s >= 75 ? '#2e9e5b' : s >= 58 ? '#e09b2a' : '#d94f4f'; }
@@ -7743,10 +7743,12 @@ async function openGroupPage(id, highlightRunId) {
   catch (e) { host.innerHTML = `<div class="err">${_learnEsc(e.message)}</div>`; return; }
   if (_groupOpenId !== id) return;   // the user moved on while this loaded
   const g = d.group, b = d.benchmark, ms = d.members, running = d.running || [];
+  if (_role === 'admin' && !(_adminCatalog.presets || []).length) { try { const rc = await api('/api/admin/access-catalog'); if (rc.ok) _adminCatalog = await rc.json(); } catch (e) {} }
+  if (_groupOpenId !== id) return;
   const sb = document.getElementById('groups-search'); if (sb) sb.placeholder = 'Search organizations, locations, specialties…';
   const _runningFor = (m) => running.find(r => String(r.entity_name || '').trim().toLowerCase() === String(m.entity_name || '').trim().toLowerCase());
   const _since = (ts) => { if (!ts) return ''; const dt = new Date(ts * 1000); return isNaN(dt) ? '' : dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
-  const canEdit = (_role === 'admin') || (String(g.created_by || '').toLowerCase() === String(localStorage.getItem('rk2_email') || '').toLowerCase());
+  const canEdit = (_role === 'admin');   // group settings are an administrator's job; members only run and view
   const pillarLabels = (m) => (m.entity_type === 'practice' || m.entity_type === 'service_line')
     ? ['Credentials', 'Reviews', 'Identity', 'Access'] : ['Outcomes', 'Credentials', 'Experience', 'Access'];
   const _days = (d) => { if (!d) return null; const t = new Date(d + 'T00:00:00Z'); return isNaN(t) ? null : Math.round((Date.now() - t.getTime()) / 86400000); };
@@ -7875,9 +7877,10 @@ async function _groupPut(id, body, msg) {
 async function groupShowEdit(id) {
   if (_role === 'admin' && !(_adminCatalog.presets || []).length) {
     try { const rc = await api('/api/admin/access-catalog'); if (rc.ok) _adminCatalog = await rc.json(); } catch (e) {}
-    openGroupPage(id); setTimeout(() => document.getElementById('group-edit')?.classList.remove('hidden'), 300); return;
+    await openGroupPage(id);
   }
-  document.getElementById('group-edit')?.classList.remove('hidden');
+  const f = document.getElementById('group-edit');
+  if (f) { f.classList.remove('hidden'); f.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   document.getElementById('ge-name')?.focus();
 }
 async function groupSaveEdit(id) {

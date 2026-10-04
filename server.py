@@ -1194,6 +1194,8 @@ async def groups_create(req: GroupRequest, payload: dict = Depends(get_current_u
 async def groups_update(group_id: str, req: GroupRequest, payload: dict = Depends(get_current_user_payload)):
     from perception.groups import update_group
     _group_visible(payload, group_id)
+    if payload.get("role") != "admin":
+        raise HTTPException(403, "Only an administrator can change a group's settings")
     from perception.specialties import normalize_specialty
     fields = {"name": (req.name or "").strip() or None, "description": req.description, "type_hint": req.type_hint,
               "show_on_pdf": req.show_on_pdf, "archived": req.archived,
@@ -1334,6 +1336,8 @@ async def groups_add_runs(group_id: str, req: GroupRunsRequest, payload: dict = 
 async def groups_remove_run(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
     from perception.groups import remove_run
     _group_visible(payload, group_id)
+    if payload.get("role") != "admin":
+        raise HTTPException(403, "Only an administrator can remove a report from a group")
     remove_run(group_id, run_id)
     return {"status": "removed"}
 
