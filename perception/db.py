@@ -1739,6 +1739,7 @@ def delete_event_run(event_id: str) -> None:
     if run_ids:
         placeholders = ",".join("?" * len(run_ids))
         con.execute(f"DELETE FROM ranked_providers WHERE run_id IN ({placeholders})", run_ids)
+        con.execute(f"DELETE FROM group_runs WHERE run_id IN ({placeholders})", run_ids)       # group memberships
         con.execute(f"DELETE FROM analysis_runs WHERE run_id IN ({placeholders})", run_ids)
     con.execute("DELETE FROM event_entities WHERE event_id = ?", [event_id])
     con.execute("DELETE FROM event_runs WHERE id = ?", [event_id])
@@ -2804,6 +2805,7 @@ def delete_analysis_run(run_id: str) -> Optional[dict]:
         _exec(con, "DELETE FROM practice_reputation_physicians WHERE rep_run_id = ?", [r[0]])
     _exec(con, "DELETE FROM practice_reputation_runs WHERE run_id = ?", [run_id])
     _exec(con, "DELETE FROM practice_reputation_run_log WHERE run_id = ?", [run_id])
+    _exec(con, "DELETE FROM group_runs WHERE run_id = ?", [run_id])     # group memberships
     # FQHC edition
     _exec(con, "DELETE FROM fqhc_battery_runs WHERE fqhc_run_id = ?", [run_id])
     _exec(con, "DELETE FROM fqhc_fact_audit WHERE run_id = ?", [run_id])
