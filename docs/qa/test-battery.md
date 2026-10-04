@@ -3678,3 +3678,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Search box on the Groups page | On the list it filters groups by name/description; on a group page it filters members by organization, location, specialty or runner as you type; the filter survives the 20-second refresh. [ui] |
 | T3 | Group page → "↻ Re-run" → confirm → progress screen → back to Groups | Returns to the same group; the member's row is tinted and shows "⟳ Re-run in progress · started 2:14 PM · <user> · View progress"; its Re-run button is disabled; a line above the table says how many re-runs are running and that the page refreshes every 20 seconds. When the run finishes the row shows the new run's score and date and the badge disappears. "View progress" reopens the live progress screen. [ui] |
 | R1 | Regression | Group CRUD, CSV, Remove unchanged; polling stops when leaving the page. |
+
+## GROUPS-SOLE — a narrowed account with one group: no list, no History, picker locked (2026-10-04)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Association account with exactly one visible group → Groups | Lands on the group; no "← All groups" button; sidebar has no History; any History link (completion screen, Home) opens the group instead. [ui] |
+| T2 | Same account → Deep Diagnostic → Advanced options | Group picker preselected to its group and disabled; no "New group…" button. [ui] |
+| T3 | Unrestricted user, or a narrowed account with two or more groups | Unchanged: list, back button, History, editable picker. [ui] |

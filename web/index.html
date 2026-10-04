@@ -4592,6 +4592,7 @@ function _pageAllowed(p) {
   if (p === 'patient')    return _capReport('rankings') || _capReport('student_health');
   if (p === 'events')     return _capReport('events');
   if (p === 'track')      return _capReport('trends');
+  if (p === 'history')    return !_soleGroup();
   return true;
 }
 async function _refreshCaps() {
@@ -4599,7 +4600,7 @@ async function _refreshCaps() {
     const r = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${_token}` } });
     if (!r.ok) return;
     const d = await r.json();
-    if (d && d.capabilities) { _caps = d.capabilities; localStorage.setItem('rk2_caps', JSON.stringify(_caps)); applyCaps(); }
+    if (d && d.capabilities) { _caps = d.capabilities; localStorage.setItem('rk2_caps', JSON.stringify(_caps)); applyCaps(); if (!_caps.unrestricted) loadGroupsList(true).then(applyCaps); }
     if (d && d.email) localStorage.setItem('rk2_email', d.email);
   } catch (e) { /* keep the cached copy */ }
 }
@@ -4623,7 +4624,7 @@ function applyCaps(scope) {
   try {
     const restricted = !!(_caps && !_caps.unrestricted);
     // Navigation
-    const navMap = { individual: 'nav-individual', network: 'nav-network', compare: 'nav-compare', patient: 'nav-patient', events: 'nav-events', track: 'nav-track' };
+    const navMap = { individual: 'nav-individual', network: 'nav-network', compare: 'nav-compare', patient: 'nav-patient', events: 'nav-events', track: 'nav-track', history: 'nav-history' };
     for (const [p, id] of Object.entries(navMap)) {
       const el = document.getElementById(id); if (!el) continue;
       if (restricted && !_pageAllowed(p)) el.style.display = 'none';
@@ -4696,7 +4697,7 @@ async function errDetail(r, fallback) {
 
 // ── Navigation ────────────────────────────────────────────────────────────
 function navigate(p) {
-  if (!_pageAllowed(p)) p = 'home';
+  if (!_pageAllowed(p)) p = (p === 'history' && _soleGroup()) ? 'groups' : 'home';
   if (_completedPages.has(p)) {
     resetPage(p);
     _completedPages.delete(p);
@@ -7616,6 +7617,9 @@ async function _fillGroupSelect(id, pick) {
   const want = pick || sel.value || localStorage.getItem('rk2_last_group') || '';
   sel.innerHTML = '<option value="">— none —</option>' + groups.map(g => `<option value="${g.id}" ${g.id === want ? 'selected' : ''}>${_learnEsc(g.name)} (${g.member_count})</option>`).join('');
   if (!groups.some(g => g.id === want)) sel.value = '';
+  const sole = _soleGroup();
+  if (sole) { sel.value = sole.id; sel.disabled = true; const nb = sel.parentElement?.querySelector('button'); if (nb) nb.style.display = 'none'; }
+  else { sel.disabled = false; const nb = sel.parentElement?.querySelector('button'); if (nb) nb.style.display = ''; }
 }
 async function groupCreateInline(selectId) {
   const name = prompt('Name for the new group (e.g. Iowa Orthopaedic Society 2026):');
@@ -7664,6 +7668,9 @@ function groupsFilter(q) {
   const needle = (q || '').trim().toLowerCase();
   document.querySelectorAll('#groups-body tr[data-search]').forEach(tr => { tr.style.display = (!needle || tr.dataset.search.includes(needle)) ? '' : 'none'; });
 }
+// A narrowed account that belongs to exactly one group: that group is its whole world —
+// no group list, no History (the group page lists its reports), the form picker locked.
+function _soleGroup() { return !!(_caps && !_caps.unrestricted && Array.isArray(_groupsCache) && _groupsCache.length === 1) ? _groupsCache[0] : null; }
 let _groupOpenId = null;
 async function loadGroupsPage() {
   const host = document.getElementById('groups-body'); if (!host) return;
@@ -7733,7 +7740,7 @@ async function openGroupPage(id) {
       <div><span style="color:var(--muted)">Benchmark on reports</span> <strong>${b.ready && g.show_on_pdf ? 'on' : (g.show_on_pdf ? `after ${b.min_members - b.scored} more` : 'off')}</strong></div></div>` : '';
   host.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-      <div><button class="btn btn-ghost btn-sm" onclick="loadGroupsPage()">← All groups</button>
+      <div>${_soleGroup() ? '' : `<button class="btn btn-ghost btn-sm" onclick="loadGroupsPage()">← All groups</button>`}
         <div style="font-size:20px;font-weight:700;margin-top:6px">${_learnEsc(g.name)}</div>
         ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
