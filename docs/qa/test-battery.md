@@ -3652,3 +3652,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T5 | Association account (preset) | Sees only its preset's groups; a group it creates is scoped to the preset; cannot open other groups (403). [ui] |
 | T6 | CSV | Rank, organization, location, specialty, type, score, four pillars, evidence, website access, date, run by, run id. [ui] |
 | R1 | Regression | Runs without a group unchanged; Hospital Network unaffected; pytest: tests/test_groups.py passes, the 15 stale failures only. |
+
+## GROUPS-EDIT-DELETE — edit a group's details; admin can delete a group (2026-10-04)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → "✎ Edit details" (admin or creator) | Inline form: name, description, type (mixed / practice / hospital / network), visible-to-preset (admin only), benchmark-on-reports switch; Save updates the page and the pickers; Cancel closes. [ui] |
+| T2 | Group page → "Delete" (admin only) → confirm | Group and its memberships removed; member reports untouched (History rows lose the chip); returns to the Groups list. Non-admins do not see Delete; `DELETE /api/groups/{id}` as a non-admin → 403. [ui][api] |
+| R1 | Regression | Rename via Edit; Archive, Hide/Show benchmark unchanged; pytest unchanged. |

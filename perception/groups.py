@@ -136,6 +136,16 @@ def remove_run(group_id: str, run_id: str) -> None:
     con.close()
 
 
+def delete_group(group_id: str) -> int:
+    """Hard delete: the group and its memberships. Member runs and their PDFs are untouched."""
+    con = get_connection()
+    n = con.execute("SELECT COUNT(*) FROM group_runs WHERE group_id = ?", [group_id]).fetchone()
+    con.execute("DELETE FROM group_runs WHERE group_id = ?", [group_id])
+    con.execute("DELETE FROM groups WHERE id = ?", [group_id])
+    con.close()
+    return int(n[0] if n else 0)
+
+
 def groups_for_runs(run_ids: list[str]) -> dict[str, list[dict]]:
     """run_id → [{id, name}] for History."""
     ids = [r for r in run_ids if r]

@@ -1191,6 +1191,15 @@ async def groups_update(group_id: str, req: GroupRequest, payload: dict = Depend
     return update_group(group_id, **fields)
 
 
+@app.delete("/api/groups/{group_id}")
+async def groups_delete(group_id: str, _: dict = Depends(require_admin)):
+    """Admin: delete the group and its memberships (reports are kept)."""
+    from perception.groups import get_group, delete_group
+    if not get_group(group_id):
+        raise HTTPException(404, "Group not found")
+    return {"status": "deleted", "memberships_removed": delete_group(group_id)}
+
+
 @app.get("/api/groups/{group_id}")
 async def groups_detail(group_id: str, payload: dict = Depends(get_current_user_payload)):
     """The group, its members ranked by Pulse Score (latest run per organization) and the benchmark."""

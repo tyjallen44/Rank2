@@ -7706,10 +7706,22 @@ async function openGroupPage(id) {
         ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}.csv?token=${encodeURIComponent(_token)}">⬇ CSV</a>
-        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupRename('${g.id}', ${_jsq(g.name)})">Rename</button>
+        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')">✎ Edit details</button>
         <button class="btn btn-ghost btn-sm" onclick="groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})">${g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupArchive('${g.id}')">Archive</button>` : ''}
+        ${_role === 'admin' ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupDelete('${g.id}', ${_jsq(g.name)}, ${ms.length})">Delete</button>` : ''}
       </div>
+    </div>
+    <div id="group-edit" class="card hidden" style="margin:12px 0;max-width:680px">
+      <div class="fg"><label class="fl">Name</label><input id="ge-name" class="fi" value="${_learnEsc(g.name)}"></div>
+      <div class="fg"><label class="fl">Description</label><input id="ge-desc" class="fi" value="${_learnEsc(g.description || '')}"></div>
+      <div class="fg"><label class="fl">Type</label>
+        <select id="ge-type" class="fi" style="width:auto">${['mixed','practice','hospital','network'].map(t => `<option value="${t}" ${t === (g.type_hint || 'mixed') ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      ${_role === 'admin' ? `<div class="fg"><label class="fl">Visible to accounts on preset <span style="color:var(--muted);font-weight:400">(blank = unrestricted users only)</span></label>
+        <select id="ge-preset" class="fi" style="width:auto;min-width:260px"><option value="">— none —</option>${(_adminCatalog.presets || []).map(p => `<option value="${p.id}" ${p.id === g.preset ? 'selected' : ''}>${_learnEsc(p.label)}</option>`).join('')}${(!(_adminCatalog.presets || []).length && g.preset) ? `<option value="${_learnEsc(g.preset)}" selected>${_learnEsc(g.preset)}</option>` : ''}</select></div>` : ''}
+      <label class="aggregate-toggle" style="margin:6px 0 12px"><input type="checkbox" id="ge-show-pdf" ${g.show_on_pdf ? 'checked' : ''}><span class="agg-label">Print each member's rank and the group median on its report (once the group has 10 organizations)</span></label>
+      <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="groupSaveEdit('${g.id}')">Save</button><button class="btn btn-ghost" onclick="document.getElementById('group-edit').classList.add('hidden')">Cancel</button></div>
+      <div id="ge-err" class="err hidden mt8"></div>
     </div>
     ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center">#</th><th>Organization</th><th style="text-align:center">Pulse Score</th><th>Pillars</th><th>Evidence</th><th>Report</th><th>Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
                : '<div class="empty" style="margin-top:12px"><div>No members yet. Pick this group on the Deep Diagnostic form or an Event Prep upload, or add runs from History.</div></div>'}`;
@@ -7719,6 +7731,31 @@ async function _groupPut(id, body, msg) {
     const r = await api('/api/groups/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!r.ok) throw new Error(await errDetail(r, 'Could not update the group'));
     _groupsCache = null; if (msg) _flash(msg);
+  } catch (e) { alert(e.message); }
+}
+async function groupShowEdit(id) {
+  if (_role === 'admin' && !(_adminCatalog.presets || []).length) {
+    try { const rc = await api('/api/admin/access-catalog'); if (rc.ok) _adminCatalog = await rc.json(); } catch (e) {}
+    openGroupPage(id); setTimeout(() => document.getElementById('group-edit')?.classList.remove('hidden'), 300); return;
+  }
+  document.getElementById('group-edit')?.classList.remove('hidden');
+  document.getElementById('ge-name')?.focus();
+}
+async function groupSaveEdit(id) {
+  const err = document.getElementById('ge-err'); err.classList.add('hidden');
+  const name = document.getElementById('ge-name').value.trim();
+  if (!name) { err.textContent = 'The group needs a name.'; err.classList.remove('hidden'); return; }
+  const body = { name, description: document.getElementById('ge-desc').value.trim(), type_hint: document.getElementById('ge-type').value,
+                 show_on_pdf: document.getElementById('ge-show-pdf').checked };
+  const ps = document.getElementById('ge-preset'); if (ps) body.preset = ps.value || null;
+  await _groupPut(id, body, 'Group updated'); openGroupPage(id);
+}
+async function groupDelete(id, name, n) {
+  if (!confirm(`Delete the group “${name}”? Its ${n} member report${n === 1 ? '' : 's'} are kept; only the grouping is removed. This cannot be undone.`)) return;
+  try {
+    const r = await api('/api/groups/' + id, { method: 'DELETE' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not delete the group'));
+    _groupsCache = null; _flash('Group deleted'); loadGroupsPage();
   } catch (e) { alert(e.message); }
 }
 async function groupRename(id, current) { const n = prompt('New name:', current); if (!n || !n.trim() || n.trim() === current) return; await _groupPut(id, { name: n.trim() }, 'Renamed'); openGroupPage(id); }
