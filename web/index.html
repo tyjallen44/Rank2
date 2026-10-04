@@ -7692,6 +7692,7 @@ async function openGroupPage(id) {
       <td style="font-size:12px;color:var(--muted);white-space:nowrap">${m.generated_at || ''}</td>
       <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
       <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}">⬇ PDF</a>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group">↻ Re-run</button>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')">Remove</button>` : ''}</td></tr>`;
   }).join('');
   const bench = b.scored ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px">
@@ -7725,6 +7726,16 @@ async function openGroupPage(id) {
     </div>
     ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center">#</th><th>Organization</th><th style="text-align:center">Pulse Score</th><th>Pillars</th><th>Evidence</th><th>Report</th><th>Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
                : '<div class="empty" style="margin-top:12px"><div>No members yet. Pick this group on the Deep Diagnostic form or an Event Prep upload, or add runs from History.</div></div>'}`;
+}
+async function groupRerun(btn, gid, runId, name) {
+  if (!confirm(`Re-run ${name} now? This starts a fresh Deep Diagnostic with the same settings (spot check on) and attaches it to the group.`)) return;
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api(`/api/groups/${gid}/rerun/${runId}`, { method: 'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not start the re-run'));
+    const { job_id } = await r.json();
+    _lastPage = 'groups'; startProgress(job_id, `${name} — Deep Diagnostic`, false);
+  } catch (e) { alert(e.message); btn.disabled = false; btn.innerHTML = orig; }
 }
 async function _groupPut(id, body, msg) {
   try {

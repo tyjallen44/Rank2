@@ -1191,6 +1191,72 @@ async def groups_update(group_id: str, req: GroupRequest, payload: dict = Depend
     return update_group(group_id, **fields)
 
 
+def _rerun_request_from_result(result, group_id: str) -> "AnalyzeRequest":
+    """Rebuild a Deep Diagnostic request from a stored result so a group member can be re-run
+    with one click: same organization, type, specialty, website, confirmed locations, anchor
+    listing and physicians; spot check on; cache bypassed; attached to the group."""
+    p = result.rankings[0] if result.rankings else None
+    city, _, state = (result.location or "").partition(",")
+    et = result.entity_type or "hospital"
+    is_practice = et in ("practice", "service_line")
+    website = getattr(p, "website_url", None) if p else None
+    anchor = None
+    physicians: list[dict] = []
+    for cr in (result.practice_composite_rows or []):
+        if cr.get("is_anchor") and cr.get("place_id") and anchor is None:
+            anchor = {"place_id": cr.get("place_id"), "address": cr.get("address") or "", "rating": cr.get("rating"),
+                      "review_count": cr.get("review_count"), "maps_url": cr.get("maps_url")}
+        for ph in (cr.get("physicians") or []):
+            nm = re.sub(r"^(dr\.?|md|do)\s+", "", str(ph.get("physician_name") or ""), flags=re.I).strip()
+            if nm:
+                physicians.append({"name": nm, "npi": ph.get("npi"), "specialty": ph.get("specialty"), "credential": ph.get("credential")})
+    siblings = None
+    if p is not None and p.consolidated_locations:
+        anchor_lc = (result.entity_name or "").strip().lower()
+        siblings = [{"name": l.name, "address": l.address or "", "city": city.strip(), "state": state.strip()}
+                    for l in p.consolidated_locations if (l.name or "").strip().lower() != anchor_lc] or None
+    roster = ([{"name": result.entity_name, "entity_type": "practice", "is_anchor": True, "city": city.strip(), "state": state.strip(),
+                "address": (anchor or {}).get("address") or "", "place_id": (anchor or {}).get("place_id"),
+                "rating": (anchor or {}).get("rating"), "review_count": (anchor or {}).get("review_count"),
+                "maps_url": (anchor or {}).get("maps_url")}] if is_practice else [])
+    return AnalyzeRequest(
+        city=city.strip() or None, state=state.strip() or None,
+        specialty=(result.specialty or result.service_line) if is_practice else None,
+        aggregate=True if is_practice else bool(result.aggregate), individual_report=True,
+        entity_name=result.entity_name, report_title=result.report_title or None,
+        entity_type=("practice" if is_practice else ("community_health" if et == "community_health" else None)),
+        practice_profile=(result.practice_profile or "practice_procedural") if is_practice else None,
+        service_line=result.service_line if et == "service_line" or result.service_line else None,
+        parent_system=result.parent_system or None,
+        confirmed_siblings=siblings if is_practice else None, anchor_listing=anchor if is_practice else None,
+        website=website, content_urls=[website] if website else [],
+        practice_composite=is_practice, practice_roster=roster,
+        physician_composite=bool(physicians), physician_roster={result.entity_name: physicians} if physicians else {},
+        spotcheck=(et != "community_health"), force_rerun=True, group_id=group_id,
+    )
+
+
+@app.post("/api/groups/{group_id}/rerun/{run_id}")
+async def groups_rerun(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
+    """Re-run a group member with its stored settings; the new run joins the group."""
+    from perception.db import get_connection as _gc
+    from perception.models import AnalysisResult as _AR
+    _group_visible(payload, group_id)
+    con = _gc()
+    row = con.execute("SELECT result_json FROM analysis_runs WHERE run_id = ?", [run_id]).fetchone()
+    con.close()
+    if not row or not row[0]:
+        raise HTTPException(404, "Stored result not found for that run")
+    try:
+        result = _AR.model_validate_json(row[0])
+    except Exception as exc:
+        raise HTTPException(500, f"Stored result unreadable: {type(exc).__name__}")
+    if not result.individual_report or not result.entity_name:
+        raise HTTPException(400, "Only Deep Diagnostic runs can be re-run from a group")
+    req = _rerun_request_from_result(result, group_id)
+    return await start_analysis(req, payload)
+
+
 @app.delete("/api/groups/{group_id}")
 async def groups_delete(group_id: str, _: dict = Depends(require_admin)):
     """Admin: delete the group and its memberships (reports are kept)."""

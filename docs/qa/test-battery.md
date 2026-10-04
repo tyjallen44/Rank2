@@ -3660,3 +3660,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Group page → "✎ Edit details" (admin or creator) | Inline form: name, description, type (mixed / practice / hospital / network), visible-to-preset (admin only), benchmark-on-reports switch; Save updates the page and the pickers; Cancel closes. [ui] |
 | T2 | Group page → "Delete" (admin only) → confirm | Group and its memberships removed; member reports untouched (History rows lose the chip); returns to the Groups list. Non-admins do not see Delete; `DELETE /api/groups/{id}` as a non-admin → 403. [ui][api] |
 | R1 | Regression | Rename via Edit; Archive, Hide/Show benchmark unchanged; pytest unchanged. |
+
+## GROUPS-RERUN — re-run a group member in one click (2026-10-04)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → "↻ Re-run" on a practice member → confirm | Progress screen opens; the run uses the stored organization, type, specialty, website, confirmed locations, anchor listing and physicians, spot check on, cache bypassed; when done the group lists the new run in place of the old one (same organization, newest run) and the new PDF carries the group line. [ui][pdf] |
+| T2 | "↻ Re-run" on a hospital member | Hospital Deep Diagnostic with the hospital rubric; joins the group. [ui] |
+| T3 | Account without the report indicator (association preset lacking the type) | 403 with the "Your account does not include…" message. [api] |
+| R1 | Regression | Remove / PDF buttons unchanged; pytest: tests/test_group_rerun.py passes. |
