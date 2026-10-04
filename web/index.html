@@ -1613,16 +1613,16 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
     <!-- ── Individual Report ────────────────────────────────────────────── -->
     <div id="page-individual" class="page">
-      <div class="page-title">Deep Diagnostic <a href="#" class="title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
-      <div class="page-sub">Run a focused diagnostic on a hospital, a service line within a hospital system, a specialty practice, or a community health center: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
-      <div style="margin:-4px 0 12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <div class="page-title"><span id="ir-page-title-text">Deep Diagnostic</span> <a href="#" class="title-help" id="ir-title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
+      <div class="page-sub" id="ir-page-sub">Run a focused diagnostic on a hospital, a service line within a hospital system, a specialty practice, or a community health center: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.</div>
+      <div style="margin:-4px 0 12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap" id="ir-sl-help-row">
         <a href="#" onclick="showIrHelp();return false" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none">ℹ How to analyze a hospital service line →</a>
       </div>
 
       <!-- Step 1: Search form. Analysis Type comes first so the fields below adapt
            (labels, service-line note, market vs location) before the user types. -->
       <div id="ir-step1" class="card">
-        <div class="fg" style="margin-bottom:16px">
+        <div class="fg" style="margin-bottom:16px" id="ir-type-wrap">
           <label class="fl">Analysis Type <a href="#" class="help-link" onclick="showHelp('analysis-type',event);return false">ⓘ Which type?</a></label>
           <div class="tg-group">
             <button class="tg-opt on" id="ir-tg-hospital"    onclick="setIrType('hospital')">Hospital</button>
@@ -4644,6 +4644,21 @@ function applyCaps(scope) {
       const first = Object.keys(tg).find(_irTypeAllowed);
       if (first) setIrType(first);
     }
+    // One report type on the account: the type is the page title, not a choice.
+    const allowedTypes = Object.keys(tg).filter(_irTypeAllowed);
+    const single = restricted && allowedTypes.length === 1 ? allowedTypes[0] : null;
+    const typeNames = { hospital: 'Hospital', service_line: 'Hospital Service Line', specialty: 'Specialty Practice', community_health: 'Community Health' };
+    const typeSubs = { hospital: 'Run a diagnostic on a hospital: its Pulse Score, what AI assistants currently see, and what to fix first.',
+                       service_line: 'Run a diagnostic on one service line of a hospital system: its Pulse Score, what AI assistants currently see, and what to fix first.',
+                       specialty: 'Run a diagnostic on a specialty practice: its Pulse Score, what AI assistants currently see, and what to fix first.',
+                       community_health: 'Run a diagnostic on a community health center: its Pulse Score, what AI assistants currently see, and what to fix first.' };
+    const tt = document.getElementById('ir-page-title-text'), th = document.getElementById('ir-title-help'), ts = document.getElementById('ir-page-sub');
+    const slRow = document.getElementById('ir-sl-help-row'), tw = document.getElementById('ir-type-wrap');
+    if (tt) tt.textContent = single ? `${typeNames[single]} Deep Diagnostic` : 'Deep Diagnostic';
+    if (th) th.style.display = single ? 'none' : '';
+    if (ts) ts.textContent = single ? typeSubs[single] : 'Run a focused diagnostic on a hospital, a service line within a hospital system, a specialty practice, or a community health center: its Pulse Score, what AI assistants currently see, and the roadmap to improve it.';
+    if (slRow) slRow.style.display = (single || (restricted && !_irTypeAllowed('service_line'))) ? 'none' : '';
+    if (tw) tw.style.display = single ? 'none' : '';
     // Rankings types
     const ppOk = { hospital: _capReport('rankings'), specialty: _capReport('rankings'), student: _capReport('student_health') };
     for (const [t, ok] of Object.entries(ppOk)) {
@@ -7760,6 +7775,7 @@ async function openGroupPage(id, highlightRunId) {
         <div style="font-size:20px;font-weight:700;margin-top:6px">${_learnEsc(g.name)}</div>
         ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}${strip}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')">+ Run a report in this group</button>
         <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}.csv?token=${encodeURIComponent(_token)}">⬇ CSV</a>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')">✎ Edit details</button>
         <button class="btn btn-ghost btn-sm" onclick="groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})">${g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports'}</button>
@@ -7798,6 +7814,15 @@ async function groupRerun(btn, gid, runId, name) {
     const { job_id } = await r.json();
     _lastPage = 'groups'; localStorage.setItem('rk2_last_group_open', gid); startProgress(job_id, `${name} — Deep Diagnostic`, false);
   } catch (e) { alert(e.message); btn.disabled = false; btn.innerHTML = orig; }
+}
+function groupRunReport(gid) {
+  localStorage.setItem('rk2_last_group', gid);
+  navigate('individual');
+  _fillGroupSelect('ir-group', gid);
+  const first = ['specialty', 'hospital', 'service_line', 'community_health'].find(t => _irTypeAllowed(t));
+  if (first && !_irTypeAllowed(_irType)) setIrType(first);
+  document.getElementById('ir-name')?.focus();
+  _flash('This report will join the group when it finishes.');
 }
 async function groupToggleMember(gid, runId) {
   const row = document.getElementById('gdet-' + runId); if (!row) return;

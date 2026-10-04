@@ -3697,3 +3697,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Click an organization's name in the table | Row expands: every run of that organization in the group with score, change vs. the previous run and pillars; latest-run checklist "N of 10 checks pass — to fix: …". Click again to collapse. [ui] |
 | T5 | Re-run completes (coordinator has "Email me when a long run finishes" on) | Email subject/title carries "· <group name>". [email] |
 | R1 | Regression | Unrestricted users: Home landing, full sidebar, no change to completion screen without a group. |
+
+## GROUPS-UX-4 — "Run a report" from the group; simplified Deep Diagnostic for single-type accounts (2026-10-04)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → "+ Run a report in this group" | Opens the Deep Diagnostic with the group preselected (locked for single-group accounts), the right type selected, cursor in the organization field; the finished report joins the group. [ui] |
+| T2 | Account whose preset allows one Deep Diagnostic type (e.g. Specialty Practice) → Deep Diagnostic | Title reads "Specialty Practice Deep Diagnostic"; no "Not sure this is the right report?" link; one-sentence subtitle; no "How to analyze a hospital service line" link; no Analysis Type row or "ⓘ Which type?" help. [ui] |
+| R1 | Regression | Unrestricted users see the full title, chooser link, subtitle, service-line link and the type toggle. |
