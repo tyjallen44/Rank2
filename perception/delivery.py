@@ -31,6 +31,7 @@ LABELS: dict[str, str] = {
     "specialty":    "Specialty label unresolved",
     "benchmark":    "Benchmark not printed",
     "roster_drift": "Roster drifted since confirmation",
+    "listing_quality": "Listing details disagree",
     "stale":        f"Over {STALE_DAYS} days old",
 }
 
@@ -132,6 +133,14 @@ def check_result(d: dict, *, group: Optional[dict] = None, benchmark_ready: bool
             bits.append(f"{len(dr['missing'])} confirmed {label}{'s' if len(dr['missing']) != 1 else ''} not found this run ({', '.join(dr['missing'][:5])}{'…' if len(dr['missing']) > 5 else ''})")
     if bits:
         add("roster_drift", WARN, "; ".join(bits) + ". Open Fix roster to confirm or drop them, then re-run.")
+
+    lq = d.get("listing_quality") or {}
+    if lq:
+        from .listing_quality import issues as _lq_issues
+        probs = _lq_issues(lq)
+        if probs:
+            closed = (lq.get("status") or {}).get("closed") or []
+            add("listing_quality", FIX if closed else WARN, " ".join(probs[:3]) + (" …" if len(probs) > 3 else ""))
 
     if benchmark_ready and not ((d.get("group_context") or {}).get("ready")):
         add("benchmark", WARN, "The group now prints a rank and median, but this report predates that; re-run to include the benchmark.")

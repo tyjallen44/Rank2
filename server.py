@@ -1568,11 +1568,14 @@ def _profile_audit(result, job: dict, emit=None) -> None:
             d = place_details(r["place_id"]) or {}
             web = d.get("websiteUri") or ""
             wd = _dom(web)
+            _rev_times = [rv.get("publishTime") for rv in (d.get("reviews") or []) if rv.get("publishTime")]
             profiles.append({"name": r["name"], "city": r["city"], "place_id": r["place_id"],
                              "website": web, "website_domain": wd,
                              "has_phone": bool(d.get("nationalPhoneNumber")), "has_hours": bool(d.get("regularOpeningHours")),
                              "photos": len(d.get("photos") or []), "rating": d.get("rating"), "review_count": d.get("userRatingCount"),
-                             "status": d.get("businessStatus") or "", "primary_type": d.get("primaryType") or "", "found": bool(d)})
+                             "status": d.get("businessStatus") or "", "primary_type": d.get("primaryType") or "", "found": bool(d),
+                             "phone": d.get("nationalPhoneNumber") or "", "address": d.get("formattedAddress") or "",
+                             "last_review_at": max(_rev_times) if _rev_times else None})
         if not org_domain:
             doms = [p["website_domain"] for p in profiles if p["website_domain"]]
             org_domain = max(set(doms), key=doms.count) if doms else ""
@@ -1587,6 +1590,26 @@ def _profile_audit(result, job: dict, emit=None) -> None:
                    "total_reviews": sum(int(p["review_count"] or 0) for p in found)}
         result.profile_audit = {"domain": org_domain, "profiles": profiles, "summary": summary,
                                 "owner_attested": bool((job.get("practice_facts") or {}).get("profiles_claimed"))}
+        # Listing quality: NAP consistency, category, status, duplicates, review recency, physician↔office.
+        try:
+            from perception.listing_quality import audit as _lq_audit, nppes_org_addresses as _lq_npi, summary_line as _lq_line
+            lr = getattr(result, "location_resolution", None) or {}
+            offices = []
+            aw = lr.get("anchor_website") or {}
+            offices.append({"name": result.entity_name, "address": aw.get("address") or a.get("address") or "", "website_address": aw.get("address") or "",
+                            "phone": aw.get("phone") or "", "place_id": a.get("place_id") or next((r["place_id"] for r in roster if r.get("name") == result.entity_name), None),
+                            "is_anchor": True, "sources": ["website"] if aw else []})
+            for s in (lr.get("siblings") or []):
+                offices.append({"name": s.get("name"), "address": s.get("address") or "", "website_address": s.get("address") if "website" in (s.get("sources") or []) else "",
+                                "phone": s.get("phone") or "", "place_id": s.get("place_id"), "is_anchor": False, "sources": s.get("sources") or []})
+            npi_recs = _lq_npi(result.entity_name or "", job.get("state") or (result.location or "").rpartition(",")[2].strip())
+            phys = [{"name": ph.get("physician_name"), "google_address": ph.get("google_address")}
+                    for cr in (result.practice_composite_rows or []) for ph in (cr.get("physicians") or [])]
+            result.listing_quality = _lq_audit(offices=offices, profiles=profiles, nppes=npi_recs, physicians=phys, duplicates=lr.get("duplicates") or [])
+            if emit:
+                emit({"type": "text", "text": "\nListing quality: " + (_lq_line(result.listing_quality) or "nothing to compare")})
+        except Exception as _lq_exc:
+            print(f"[listing-quality] failed: {type(_lq_exc).__name__}: {_lq_exc}", flush=True)
         if emit:
             s = summary
             emit({"type": "text", "text": f"\nProfiles checked: {s['checked']} · linked to {org_domain or 'the practice site'}: {s['linked']} · hours: {s['with_hours']} · phone: {s['with_phone']} · under 5 reviews: {s['thin_reviews']}\n"})

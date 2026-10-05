@@ -355,7 +355,7 @@ def place_details(place_id: str, *, api_key: str | None = None,
             headers={
                 "X-Goog-Api-Key": key,
                 "X-Goog-FieldMask": (
-                    "id,displayName,primaryType,types,nationalPhoneNumber,"
+                    "id,displayName,primaryType,types,nationalPhoneNumber,formattedAddress,businessStatus,"
                     "websiteUri,regularOpeningHours,editorialSummary,photos,"
                     "rating,userRatingCount,reviews"
                 ),

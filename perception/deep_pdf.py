@@ -592,7 +592,18 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
                          f"{_e(', '.join(goog_only[:12]))}{'…' if len(goog_only) > 12 else ''}. Either an office the site forgot, or a stale or duplicate profile to claim and fix.</li>")
         gaps = (f'<div class="pxcontent" style="margin-top:6px"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing gaps</p>'
                 f'<ul style="font-size:8.5pt;margin:0 0 0 14px;padding:0">{"".join(items)}</ul></div>')
-    return _table_section("Locations", intro, th, trs, len(rows)) + gaps + owner
+    quality = ""
+    lq = getattr(result, "listing_quality", None) or {}
+    if lq:
+        from .listing_quality import issues as _lq_issues, summary_line as _lq_line
+        line, items = _lq_line(lq), _lq_issues(lq)
+        if line or items:
+            quality = (f'<div class="pxcontent" style="margin-top:6px"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing quality</p>'
+                       + (f'<p style="font-size:8.5pt;margin:0 0 3px">Measured across the offices above: {_e(line)}.</p>' if line else "")
+                       + (f'<ul style="font-size:8.5pt;margin:0 0 0 14px;padding:0">{"".join(f"<li>{_e(i)}</li>" for i in items)}</ul>' if items
+                          else '<p style="font-size:8.5pt;margin:0;color:#2e9e5b">Phone, address and category agree across the website, Google and the NPI registry; no duplicate or closed profiles.</p>')
+                       + '</div>')
+    return _table_section("Locations", intro, th, trs, len(rows)) + gaps + quality + owner
 
 
 def _sources_cell(r: dict) -> str:

@@ -787,7 +787,7 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
                     report["confirmed"] = {"by": _g.get("confirmed_by"), "at": _g.get("confirmed_at"), "count": len(_g["locations"]), "hard": bool(_g.get("hard"))}
                     report["drift"] = _drift
                 report["siblings"] = [{k: s.get(k) for k in ("name", "city", "state", "address", "place_id", "sources",
-                                                                 "google_missing", "website_missing")} for s in _siblings]
+                                                                 "google_missing", "website_missing", "phone")} for s in _siblings]
             _aggregate_siblings = list(_siblings or [])
             if _siblings:
                 _location_roster = [entity_name] + [s["name"] for s in _siblings]

@@ -3854,3 +3854,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T5 | Deep Diagnostic form on an organization with a confirmed roster | Locations show "From your confirmed roster" (as before) and the Physicians step shows "From your confirmed roster — N physicians confirmed on <date> by <who>" with "confirmed" chips; "re-discover physicians" resolves afresh. Running the form saves the ticked physicians as the confirmed physician roster (unticked ones are dropped). [ui] |
 | R1 | Regression | Organizations without a confirmed roster behave exactly as in LOCATIONS-RESOLVER / PHYSICIANS-RESOLVER; finished unconfirmed runs store their locations and physicians as candidates only (they never add to a confirmed roster). `tests/test_roster_confirm.py` (3 tests) passes. |
 | T6 | Organization whose roster only passed through an earlier form run (not saved in Fix roster) | The run log says "Roster: N locations — fresh findings plus the offices kept from the earlier run" (soft): resolver findings are used, earlier offices/physicians the resolver missed are kept, nothing new is hidden. After a Fix roster **Save** the same organization logs "Using the confirmed roster" (hard) and new finds appear only as drift. Stored upper-case physician names print title-cased. [ui] |
+
+## LISTING-QUALITY — are the listings right, not just present (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Specialty Practice report (form, upload or re-run) with a website | Under the Locations table, after "Listing gaps", a **Listing quality** block: a measured summary line ("phone matches the website on 7 of 8 profiles; address matches on 8 of 8; NPI registry lists 6 of 8 offices; one Google category across offices; 7 of 8 reviewed in the last 90 days; 31 of 46 physicians have a Google profile, 27 at a practice office") and bullets naming each problem — phone/address mismatches (site vs Google values), offices with no organizational NPI address, inconsistent or generic Google categories, closed profiles still live, duplicate profiles at an office's address, offices with no review in 90 days / no reviews, physician profiles pointing elsewhere. Clean listings print a green "agree" line. [pdf] |
+| T2 | Run log | A "Listing quality: …" line after the profile audit. [ui] |
+| T3 | Group page | Members with listing problems carry a ⚠ "Listing details disagree" flag (red when a closed profile is still live, amber otherwise); hover shows the first three problems. [ui] |
+| T4 | Scores | Pulse Score and pillar scores are unchanged by any of this — listing quality is evidence only. [pdf] |
+| R1 | Regression | Hospital reports unaffected (no listing quality block); `tests/test_listing_quality.py` (3 tests) passes. |

@@ -95,8 +95,8 @@ def collect_physician_data(
     emit({"type": "text", "text": f"Collecting reputation for {len(physicians)} physician(s) at {practice_name}…"})
 
     # ── Google Places lookup (real-time, one API call per physician) ──────────
-    def _google_lookup(ph: dict) -> tuple[str, float | None, int | None, str | None]:
-        """Return (name, rating, count, maps_url) via Google Places."""
+    def _google_lookup(ph: dict) -> tuple[str, float | None, int | None, str | None, str | None]:
+        """Return (name, rating, count, maps_url, address) via Google Places."""
         name = ph["name"]
         cred = (ph.get("credential") or "").upper()
         display = f"Dr. {name}" if cred in ("MD", "DO") else name
@@ -110,15 +110,17 @@ def collect_physician_data(
             read, _ = _places.fetch_provider(name_q, city_q, state)
             if read.verified and read.rating is not None:
                 if last in (read.matched_name or "").lower():
-                    return name, read.rating, read.review_count, read.maps_url
-        return name, None, None, None
+                    return name, read.rating, read.review_count, read.maps_url, getattr(read, "formatted_address", None)
+        return name, None, None, None, None
 
     google_data: dict[str, tuple] = {}
+    google_addr: dict[str, str | None] = {}
     with ThreadPoolExecutor(max_workers=8) as pool:
         futs = {pool.submit(_google_lookup, ph): ph["name"] for ph in physicians}
         for fut in as_completed(futs):
-            name, rating, count, url = fut.result()
+            name, rating, count, url, addr = fut.result()
             google_data[name] = (rating, count, url)
+            google_addr[name] = addr
 
     emit({"type": "text",
           "text": f"Google lookups complete: "
@@ -237,6 +239,7 @@ def collect_physician_data(
             "google_rating":       g_rating,
             "google_count":        g_count,
             "google_url":          g_url,
+            "google_address":      google_addr.get(name),     # listing quality: does the profile point at a practice office?
             "healthgrades_rating": pd.get("healthgrades_rating"),
             "healthgrades_count":  pd.get("healthgrades_count"),
             "healthgrades_url":    _strip_tracking(pd.get("healthgrades_url")),

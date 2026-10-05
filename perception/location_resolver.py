@@ -579,10 +579,14 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
         siblings.append(s)
     seeds = sorted({(o.get("city") or "") for o in offices} | {c for c, _ in npp})
     snow = google_snowball(brand, city, state, seeds=seeds, exclude=used)
+    duplicates: list[dict] = [{"name": c.get("name"), "place_id": c.get("place_id"), "address": c.get("address"), "of": "the analyzed listing"}
+                              for c in snow["candidates"] if anchor_addr and same_office(c.get("address", ""), anchor_addr)]
     extra = [c for c in snow["candidates"] if not (anchor_addr and same_office(c.get("address", ""), anchor_addr))]
     for c in extra:
-        # already matched to a website office by address under a different place_id? treat as the same office
-        if any(same_office(c.get("address", ""), s["address"]) for s in siblings):
+        # a second Google profile at an office already on the roster: a duplicate to report, not a location
+        dup_of = next((s for s in siblings if same_office(c.get("address", ""), s["address"])), None)
+        if dup_of is not None:
+            duplicates.append({"name": c.get("name"), "place_id": c.get("place_id"), "address": c.get("address"), "of": dup_of["name"]})
             continue
         cty, st = _city_state_of(c.get("address", ""))
         s = {"name": display_name(brand, c.get("name"), None, cty or city), "entity_type": "practice", "city": cty or city, "state": st or state,
@@ -624,6 +628,9 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
         "model": {"used": model_used, "count": len(siblings) if model_used else 0},
         "website_only": [s["name"] for s in siblings if s.get("google_missing")],
         "google_only": [s["name"] for s in siblings if s.get("website_missing")],
+        "duplicates": duplicates,
+        "anchor_website": next(({"name": o.get("name"), "address": o["address"], "phone": o.get("phone") or ""}
+                                for o in (web.get("locations") or []) if anchor_addr and same_office(o["address"], anchor_addr)), None),
     }
     if use_registry:
         try:
