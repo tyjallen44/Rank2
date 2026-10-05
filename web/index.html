@@ -2586,7 +2586,7 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             </label>
             <div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" id="ev-group-wrap">
               <span style="font-size:14px">Add every report from this upload to a group</span>
-              <select id="ev-group" class="fi" style="width:auto;min-width:220px;padding:6px 10px;font-size:13px"><option value="">— none —</option></select>
+              <select id="ev-group" class="fi" style="width:auto;min-width:220px;padding:6px 10px;font-size:13px" onchange="_evGroupMembers = null; evMarkGroupOverlap()"><option value="">— none —</option></select>
               <button class="btn btn-ghost btn-sm" onclick="groupCreateInline('ev-group')">New group…</button>
               <a href="#" class="help-link" onclick="showHelp('groups',event);return false">ⓘ What is this?</a>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="ev-group-prospect"> These organizations are not members yet (prospects)</label>
@@ -13034,13 +13034,18 @@ function evShowConfirmation() {
     `${_evRows.length} entities from CSV — ${resolved} auto-confirmed, ${ambiguous} need selection, ${notFound} unresolved (best effort).`;
 
   const container = document.getElementById('ev-confirm-rows');
-  container.innerHTML = '';
+  container.innerHTML = `<div style="display:grid;grid-template-columns:28px 1fr 140px 230px 60px 80px;gap:0;align-items:center;padding:4px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">
+      <span></span><span style="padding:0 10px">Google listing</span><span>City, state</span><span>Website (confirm or correct)</span><span></span><span></span></div>
+    <div id="ev-overlap-bar" class="hidden" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 8px;padding:8px 12px;border-radius:6px;background:#fdf3dc;color:#7a5a00;font-size:13px">
+      <span id="ev-overlap-text"></span>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ev-skip-in-group" onchange="evApplySkipInGroup()"> Skip organizations already in this group</label></div>`;
 
   let _hasMismatch = false;
 
   _evRows.forEach((row, idx) => {
     const div = document.createElement('div');
-    div.style.cssText = 'display:grid;grid-template-columns:28px 1fr 140px 60px 80px;gap:0;align-items:center;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:2px';
+    div.id = `ev-row-${idx}`;
+    div.style.cssText = 'display:grid;grid-template-columns:28px 1fr 140px 230px 60px 80px;gap:0;align-items:center;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:2px';
     div.style.background = idx % 2 === 0 ? '#f9fafb' : '#fff';
 
     let statusIcon, resolvedHtml;
@@ -13062,23 +13067,28 @@ function evShowConfirmation() {
       const opts = row.candidates.map((c, ci) =>
         `<option value="${ci}">${c.name}${c.address ? ' — ' + c.address : ''}</option>`
       ).join('');
-      resolvedHtml = `<select id="ev-sel-${idx}" class="input" style="font-size:12px;padding:4px 8px;width:100%">${opts}</select>`;
+      resolvedHtml = `<select id="ev-sel-${idx}" class="input" style="font-size:12px;padding:4px 8px;width:100%" onchange="evCandidateChanged(${idx})">${opts}</select>`;
     } else {
       statusIcon   = `<span style="color:#e67e22;font-size:15px">◎</span>`;
       resolvedHtml = `<div style="font-weight:600">${row.input_name}</div>
                       <div style="font-size:11px;color:var(--muted)">Not found in Google Places — will analyze using CSV name</div>`;
     }
 
+    const cand0 = (row.candidates || [])[0] || {};
+    const urlSeed = (row.input_url || '').trim() || (cand0.website || '');
+    const urlSrc = (row.input_url || '').trim() ? 'from your spreadsheet' : (cand0.website ? 'from the Google listing' : 'none found — enter it');
     div.innerHTML = `
       ${statusIcon}
-      <div style="padding:0 10px">${resolvedHtml}</div>
+      <div style="padding:0 10px">${resolvedHtml}<span id="ev-ingroup-${idx}" class="hidden" style="display:inline-block;margin-top:3px;font-size:10px;background:#fdf3dc;color:#7a5a00;border-radius:3px;padding:1px 6px">already in group</span></div>
       <div style="color:var(--muted);font-size:12px">${row.input_city}, ${row.input_state}</div>
+      <div style="padding-right:10px"><input type="url" id="ev-url-${idx}" class="input" value="${_learnEsc(urlSeed)}" placeholder="https://" data-auto="${(row.input_url || '').trim() ? '' : '1'}" style="font-size:12px;padding:4px 8px;width:100%" oninput="this.dataset.auto=''"><div id="ev-url-src-${idx}" style="font-size:10px;color:var(--muted);margin-top:2px">${urlSrc}</div></div>
       <div style="text-align:center">
         <input type="checkbox" id="ev-inc-${idx}" checked onchange="evUpdateCounts()">
       </div>
       <div style="font-size:11px;color:var(--muted);text-align:center">Include</div>`;
     container.appendChild(div);
   });
+  evMarkGroupOverlap();
 
   const mismatchEl = document.getElementById('ev-state-mismatch-warning');
   if (_hasMismatch) mismatchEl.classList.remove('hidden');
@@ -13087,6 +13097,48 @@ function evShowConfirmation() {
   evUpdateCounts();
 }
 
+function evCandidateChanged(idx) {
+  const row = _evRows[idx]; const sel = document.getElementById(`ev-sel-${idx}`); const url = document.getElementById(`ev-url-${idx}`);
+  if (!row || !sel || !url) return;
+  const c = row.candidates[parseInt(sel.value) || 0] || {};
+  if (url.dataset.auto === '1') { url.value = c.website || ''; const src = document.getElementById(`ev-url-src-${idx}`); if (src) src.textContent = c.website ? 'from the Google listing' : 'none found — enter it'; }
+  evMarkGroupOverlap();
+}
+function _evOrgKey(name, city) {
+  let n = String(name || '').toLowerCase().replace(/[.,'’]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\b(inc|llc|pc|pa|ltd|llp|the|of|and)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  return n + '|' + String(city || '').trim().toLowerCase();
+}
+let _evGroupMembers = null;
+async function evMarkGroupOverlap() {
+  const bar = document.getElementById('ev-overlap-bar'); if (!bar) return;
+  const gid = document.getElementById('ev-group')?.value || '';
+  if (!gid || !_evRows.length) { bar.classList.add('hidden'); _evRows.forEach((_, i) => document.getElementById(`ev-ingroup-${i}`)?.classList.add('hidden')); return; }
+  try {
+    if (!_evGroupMembers || _evGroupMembers.gid !== gid) {
+      const r = await api('/api/groups/' + encodeURIComponent(gid)); const d = r.ok ? await r.json() : { members: [], group: {} };
+      _evGroupMembers = { gid, keys: new Set((d.members || []).map(m => _evOrgKey(m.entity_name, String(m.location || '').split(',')[0]))), name: (d.group || {}).name || 'the group' };
+    }
+  } catch (e) { bar.classList.add('hidden'); return; }
+  let n = 0;
+  _evRows.forEach((row, idx) => {
+    let name = row.input_name;
+    if (row.status === 'resolved') name = row.candidates[0].name;
+    else if (row.status === 'ambiguous') { const sel = document.getElementById(`ev-sel-${idx}`); const c = row.candidates[parseInt(sel?.value) || 0]; name = c ? c.name : row.input_name; }
+    const hit = _evGroupMembers.keys.has(_evOrgKey(name, row.input_city)) || _evGroupMembers.keys.has(_evOrgKey(row.input_name, row.input_city));
+    row._inGroup = hit; if (hit) n++;
+    document.getElementById(`ev-ingroup-${idx}`)?.classList.toggle('hidden', !hit);
+    const div = document.getElementById(`ev-row-${idx}`); if (div) div.style.outline = hit ? '1px solid #f0c040' : '';
+  });
+  if (!n) { bar.classList.add('hidden'); return; }
+  document.getElementById('ev-overlap-text').textContent = `${n} of ${_evRows.length} organizations on this list are already in ${_evGroupMembers.name} — a re-run today is served from the cache (same score), so they can be skipped.`;
+  bar.classList.remove('hidden');
+  evApplySkipInGroup();
+}
+function evApplySkipInGroup() {
+  const skip = !!document.getElementById('ev-skip-in-group')?.checked;
+  _evRows.forEach((row, idx) => { const cb = document.getElementById(`ev-inc-${idx}`); if (cb && row._inGroup) { cb.checked = !skip; cb.disabled = skip; } });
+  evUpdateCounts();
+}
 function evUpdateCounts() {
   let included = 0, skipped = 0, includedMismatch = 0;
   _evRows.forEach((row, idx) => {
@@ -13157,7 +13209,7 @@ async function evSubmitRun() {
       input_name:    row.input_name,
       input_city:    row.input_city,
       input_state:   row.input_state,
-      input_url:     row.input_url || '',
+      input_url:     (document.getElementById(`ev-url-${idx}`)?.value || row.input_url || '').trim(),
       resolved_name: resolvedName,
       resolved_addr: resolvedAddr,
     });
@@ -13184,6 +13236,7 @@ async function evSubmitRun() {
         group_id: (document.getElementById('ev-group')?.value || null),
         spotcheck: !!document.getElementById('ev-spotcheck')?.checked,
         group_role: (document.getElementById('ev-group-prospect')?.checked ? 'prospect' : 'member'),
+        skip_in_group: !!document.getElementById('ev-skip-in-group')?.checked,
         entities,
       }),
     });

@@ -1099,6 +1099,17 @@ def _descriptive_pdf_name(run: dict, key: str = "pdf_path") -> str:
     return titlecase_filename(f"{name}_{city}_{state}_{kind}{ts}") + f"{suffix}.pdf"
 
 
+def _org_key(name, location) -> str:
+    """Loose organization identity for overlap checks: lower-cased name without punctuation /
+    corporate suffixes, plus the city."""
+    n = re.sub(r"[.,'’]", "", str(name or "").lower())           # P.C. → pc, O'Neil → oneil
+    n = re.sub(r"[^a-z0-9 ]+", " ", n)
+    n = re.sub(r"\b(inc|llc|pc|pa|ltd|llp|the|of|and|&)\b", " ", n)
+    n = re.sub(r"\s+", " ", n).strip()
+    city = str(location or "").split(",")[0].strip().lower()
+    return f"{n}|{city}"
+
+
 def _group_attach(result, job: dict, emit=None) -> None:
     """Attach a finished run to the group the form / upload named, and put the group's name
     (and, once the group is large enough, this organization's rank and the group median) on
@@ -6365,6 +6376,7 @@ class EventRunRequest(BaseModel):
     group_id: Optional[str] = None         # attach every report of this upload to a group
     spotcheck: bool = False                # ask the AI assistants ~30 questions per entity (same section as a single run)
     group_role: Optional[str] = None       # 'member' | 'prospect' for every report of this upload
+    skip_in_group: bool = False            # drop rows whose organization is already in the group
     entities: List[dict]                   # confirmed list: {input_name,input_city,input_state,resolved_name,resolved_addr}
 
 
@@ -6455,6 +6467,13 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
         _g = _gg(req.group_id.strip())
         if _g and _g.get("type_hint") in ("practice", "hospital"):
             req.entity_type = _g["type_hint"]
+        if _g and req.skip_in_group:
+            from perception.groups import members as _members
+            _have = {_org_key(m.get("entity_name"), m.get("location")) for m in _members(_g["id"])}
+            req.entities = [e for e in req.entities
+                            if _org_key(e.get("resolved_name") or e.get("input_name"), f"{e.get('input_city','')}, {e.get('input_state','')}") not in _have]
+            if not req.entities:
+                raise HTTPException(400, "Every organization on this list is already in the group — nothing to run.")
     create_event_run(
         event_id=event_id,
         event_name=req.event_name.strip(),

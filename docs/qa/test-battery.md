@@ -3754,3 +3754,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | The OrthoForum → Edit details → Type "practice" (or set Default specialty Orthopedics) → "⬆ Upload a list" | Only the Specialty Practice type is offered; every produced report has the practice pillars (Credentials & Clinical Quality / Reviews & Reputation / Identity & Machine-Readability / Access & Fit) and a "…_Practice-…" file name. [ui][pdf] |
 | T2 | Rows flagged "hospital rubric" → ↻ Re-run | Fresh Specialty Practice report replaces the row; flag gone; pillars match the rest of the group. [ui][pdf] |
 | T3 | Event Prep as an association account (deep_practice only) | Only the Specialty Practice radio is visible and selected. [ui] |
+
+## EVENT-UPLOAD-REVIEW — website column, group overlap count, skip option (2026-10-04)
+
+**Context:** the upload review step (after the spreadsheet is resolved against Google) gains a **Website** column per row — prefilled from the spreadsheet's url column, else from the chosen Google listing, with a note saying which; editable, and it follows the listing when an ambiguous row's selection changes. The value is what the run crawls and feeds the content analysis. When a group is picked, rows whose organization is already in it get an "already in group" badge and an amber outline, a bar says "N of M organizations on this list are already in <group>…", and "Skip organizations already in this group" unticks them (the server also drops them). Matching is loose: lower-case, punctuation and corporate suffixes removed, plus city.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Upload a CSV with a url column and one without → review step | Website column shows the spreadsheet url ("from your spreadsheet") or the listing's website ("from the Google listing") or "none found — enter it"; editing it is kept; the run's report crawls that site. [ui][pdf] |
+| T2 | Ambiguous row → change the listing | Website follows the chosen listing unless the user edited it. [ui] |
+| T3 | Group picked that already contains some rows | Badges + amber outline on those rows; bar with the count; ticking Skip unticks and disables them; Run count drops; the run excludes them. Picking "— none —" clears the badges. [ui] |
+| T4 | All rows already in the group + Skip ticked | Run refuses with "Every organization on this list is already in the group — nothing to run." [api] |
