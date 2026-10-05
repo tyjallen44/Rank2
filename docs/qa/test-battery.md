@@ -3779,3 +3779,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | # | Test | Acceptance |
 |---|---|---|
 | T1 | Hover each control on the Groups list and a group page | Plain-language tooltip on: search box, + New group, Open, Edit, + Add an organization, Upload a list, CSV, Edit details, Hide/Show benchmark, Archive, Delete, PDF, Re-run, Make member / Mark prospect, Remove; each summary tile; each table header; the create form's benchmark switch. Page title has a "How groups work" link opening the help topic. [ui] |
+
+## EVENT-UPLOAD-GROUP-CONTEXT — the upload page says which group it feeds (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → "⬆ Upload a list" | Title "Upload a list into The OrthoForum"; subtitle names the group and the default specialty; a teal banner "Adding to group The OrthoForum · Orthopedics · practice" with "← Back to the group"; section "Upload setup", fields "Upload name" / "Date" / "Organization list CSV", note "one row per organization…" with the website and specialty column hints; no EventsDisplay download. [ui] |
+| T2 | Change the group select on the page to "— none —" / another group | Wording and banner follow the selection (event wording returns when no group). [ui] |
+| T3 | Narrowed account's sidebar | Says "Upload a list" instead of "Event Preparation". [ui] |
+| R1 | Regression | Opening Event Preparation from the sidebar with no group picked shows the original event wording. |
