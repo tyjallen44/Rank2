@@ -63,6 +63,7 @@ def test_merge_website_and_registry_with_gap_flags(monkeypatch):
     assert ps["Sam Lee"]["npi"] == "222" and ps["Sam Lee"]["credential"] == "MD" and "nppes" in ps["Sam Lee"]["sources"]
     assert ps["Nick Name"]["npi_missing"] and ps["Nick Name"]["npi"] is None
     assert ps["Gone Person"]["website_missing"] and ps["Gone Person"]["sources"] == ["nppes"]
+    assert PR._clean_name("ERIC MCKENNA O'NEIL") == "Eric McKenna O'Neil"
     r = res["resolution"]
     assert r["both"] == 2 and r["website_only"] == ["Nick Name"] and r["registry_only"] == ["Gone Person"] and r["model"]["used"] is False
     assert calls["model"] == 0 and [p["name"] for p in res["physicians"]][:3] == ["Jane Doe", "Sam Lee", "Nick Name"]   # website order first

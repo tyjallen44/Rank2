@@ -365,6 +365,7 @@ def resolve_physicians(entity_name: str, city: str, state: str, *, website: Opti
         order.append(k)
     npp_keys = {}
     for r in npp:
+        r = {**r, "name": _clean_name(r.get("name") or "")}      # registry names arrive upper-case
         k = name_key(r.get("name") or "")
         if not k:
             continue
