@@ -326,6 +326,41 @@ def website_physicians(site_url: Optional[str], *, hint_urls: Optional[list] = N
             "pages_read": pages_read, "physicians": phys, "midlevels": mids}
 
 
+def merge_confirmed_physicians(confirmed: list[dict], resolved: list[dict]) -> tuple[list[dict], dict]:
+    """The confirmed roster (entity graph) is the roster; resolver findings enrich it (NPI, credential,
+    bio page, sources, gap flags); drift = resolver names not confirmed (`new`) and confirmed names the
+    resolver did not find (`missing`)."""
+    by_npi = {r.get("npi"): i for i, r in enumerate(resolved) if r.get("npi")}
+    by_key = {name_key(r.get("name") or ""): i for i, r in enumerate(resolved)}
+    out: list[dict] = []
+    used: set[int] = set()
+    missing: list[str] = []
+    for c in confirmed:
+        nm = (c.get("name") or "").strip()
+        if not nm:
+            continue
+        i = by_npi.get(c.get("npi") or "") if c.get("npi") else None
+        if i is None:
+            i = by_key.get(name_key(nm))
+        e = {"name": nm, "npi": c.get("npi"), "credential": c.get("credential") or "", "specialty": c.get("specialty") or "", "bio_url": "",
+             "sources": ["confirmed"], "website_missing": False, "npi_missing": not c.get("npi")}
+        if i is not None and i not in used:
+            used.add(i)
+            r = resolved[i]
+            e["npi"] = e["npi"] or r.get("npi")
+            e["credential"] = e["credential"] or r.get("credential") or ""
+            e["specialty"] = e["specialty"] or r.get("specialty") or ""
+            e["bio_url"] = r.get("bio_url") or ""
+            e["sources"] = ["confirmed"] + [x for x in (r.get("sources") or []) if x != "confirmed"]
+            e["website_missing"] = bool(r.get("website_missing"))
+            e["npi_missing"] = not e["npi"]
+        else:
+            missing.append(nm)
+        out.append(e)
+    new = [r.get("name") for i, r in enumerate(resolved) if i not in used]
+    return out, {"new": new, "missing": missing}
+
+
 # ── 2+3. resolve ──────────────────────────────────────────────────────────────
 
 def resolve_physicians(entity_name: str, city: str, state: str, *, website: Optional[str] = None, hint_urls: Optional[list] = None,

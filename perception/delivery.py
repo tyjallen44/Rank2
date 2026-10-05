@@ -30,6 +30,7 @@ LABELS: dict[str, str] = {
     "first_moves":  "No What to Do First",
     "specialty":    "Specialty label unresolved",
     "benchmark":    "Benchmark not printed",
+    "roster_drift": "Roster drifted since confirmation",
     "stale":        f"Over {STALE_DAYS} days old",
 }
 
@@ -120,6 +121,17 @@ def check_result(d: dict, *, group: Optional[dict] = None, benchmark_ready: bool
             add("specialty", WARN, "No specialty on the report; the cover and the spot-check question bank default to a generic practice.")
         elif spec not in CANONICAL:
             add("specialty", WARN, f"“{spec}” is not one of the controlled specialty labels; the cover prints it as typed.")
+
+    lr, pr = d.get("location_resolution") or {}, d.get("physician_resolution") or {}
+    bits = []
+    for label, res in (("office", lr), ("physician", pr)):
+        dr = res.get("drift") or {}
+        if dr.get("new"):
+            bits.append(f"{len(dr['new'])} {label}{'s' if len(dr['new']) != 1 else ''} found that are not on the confirmed roster ({', '.join(dr['new'][:5])}{'…' if len(dr['new']) > 5 else ''})")
+        if dr.get("missing"):
+            bits.append(f"{len(dr['missing'])} confirmed {label}{'s' if len(dr['missing']) != 1 else ''} not found this run ({', '.join(dr['missing'][:5])}{'…' if len(dr['missing']) > 5 else ''})")
+    if bits:
+        add("roster_drift", WARN, "; ".join(bits) + ". Open Fix roster to confirm or drop them, then re-run.")
 
     if benchmark_ready and not ((d.get("group_context") or {}).get("ready")):
         add("benchmark", WARN, "The group now prints a rank and median, but this report predates that; re-run to include the benchmark.")

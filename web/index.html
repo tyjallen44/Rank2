@@ -6225,6 +6225,11 @@ async function irResolvePhysicians(force) {
   if (!force && key === _irPhyKey && _irPhysicians.length) { sec.classList.remove('hidden'); return; }
   _irPhyKey = key;
   sec.classList.remove('hidden');
+  if (!force && _irRosterFromGraph && (_irRosterFromGraph.physicians || []).length) {
+    // A physician roster this team already confirmed: show it instantly; "re-discover" resolves afresh.
+    _irPhysicians = _irRosterFromGraph.physicians; _irPhyResolution = { confirmed: true, by: _irRosterFromGraph.confirmed_by, at: _irRosterFromGraph.confirmed_at };
+    renderIrPhysicians(); return;
+  }
   document.getElementById('ir-phy-org-name').textContent = _irSelected.name;
   document.getElementById('ir-phy-loading').classList.remove('hidden');
   document.getElementById('ir-phy-content').classList.add('hidden');
@@ -6246,6 +6251,7 @@ function _phySourceChips(p) {
   const src = p.sources || [];
   const chip = (t, tip, warn) => `<span title="${tip}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:${warn ? '#fdf3dc' : '#e6f3f4'};color:${warn ? '#7a5a00' : 'var(--teal)'};margin-left:4px;white-space:nowrap">${t}</span>`;
   let out = '';
+  if (src.includes('confirmed')) out += chip('confirmed', 'On the roster this team confirmed');
   if (src.includes('website')) out += chip('website', 'Listed on the practice website\'s provider directory');
   if (src.includes('nppes'))   out += chip('NPI', p.npi ? 'NPI registry record ' + p.npi : 'NPI registry record');
   if (src.includes('model'))   out += chip('model recall', 'No verified source listed physicians; this came from model recall — check it', true);
@@ -6268,7 +6274,9 @@ function renderIrPhysicians() {
   if (n.count) parts.push(`${n.count} in the NPI registry at the practice\'s addresses`);
   if (r.both) parts.push(`${r.both} confirmed by both`);
   if ((r.model || {}).used) parts.push('model recall used as a last resort');
-  document.getElementById('ir-phy-count').innerHTML = (ps.length
+  document.getElementById('ir-phy-count').innerHTML = (r.confirmed
+    ? `<span style="color:var(--teal);font-weight:600">From your confirmed roster</span> — ${ps.length} physician${ps.length === 1 ? '' : 's'} confirmed${r.at ? ' on ' + _learnEsc(String(r.at).slice(0, 10)) : ''}${r.by ? ' by ' + _learnEsc(String(r.by).split('@')[0]) : ''}. Uncheck any who no longer belong, or`
+    : ps.length
     ? 'Every checked physician is verified against the NPI registry and the website, looked up on Google and the rating platforms, and printed in the report. Uncheck any who do not belong.'
     : 'No physicians were found for this practice; the report will say so.')
     + (parts.length ? `<div style="margin-top:4px">Sources: ${parts.join(' · ')}.</div>` : '')
@@ -6293,6 +6301,7 @@ function _sourceChips(s) {
   if (!src.length) return '';
   const chip = (t, tip, warn) => `<span title="${tip}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:${warn ? '#fdf3dc' : '#e6f3f4'};color:${warn ? '#7a5a00' : 'var(--teal)'};margin-left:4px;white-space:nowrap">${t}</span>`;
   let out = '';
+  if (src.includes('confirmed')) out += chip('confirmed', 'On the roster this team confirmed');
   if (src.includes('website')) out += chip('website', 'Listed on the practice website');
   if (src.includes('google'))  out += chip('Google', 'Google Business Profile verified by address');
   if (src.includes('nppes'))   out += chip('NPI', 'The practice holds an organizational NPI in this city');
@@ -6393,7 +6402,8 @@ async function irStartDiscovery(forceDiscover) {
       const g = await api(`/api/org/roster?name=${encodeURIComponent(_irSelected.name)}&city=${encodeURIComponent(_irResolvedCity || '')}&state=${encodeURIComponent(_irResolvedState || '')}`);
       const d = g.ok ? await g.json() : { found: false };
       if (d.found && (d.locations || []).length) {
-        _irRosterFromGraph = { confirmed_by: d.confirmed_by, confirmed_at: d.confirmed_at, source: d.source, count: d.locations.length };
+        _irRosterFromGraph = { confirmed_by: d.confirmed_by, confirmed_at: d.confirmed_at, source: d.source, count: d.locations.length,
+                               physicians: (d.physicians || []).map(p => ({ name: p.name, npi: p.npi, credential: p.credential || '', specialty: p.specialty || '', sources: ['confirmed'] })) };
         _irOrgName = _irOrgName || _irSelected.name;
         document.getElementById('ir-siblings-org-name').textContent = orgName;
         document.getElementById('ir-locations-section').classList.remove('hidden');
@@ -8089,8 +8099,81 @@ async function groupToggleMember(gid, runId) {
     const deliver = `<div style="margin-top:10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px">Before sending (delivery check)</div>
       ${fl.length ? `<ul style="margin:0;padding-left:18px;font-size:13px">${fl.map(f => `<li><strong style="color:${f.level === 'fix' ? '#991b1b' : '#7a5a00'}">${_learnEsc(f.label)}</strong> — ${_learnEsc(f.detail)}</li>`).join('')}</ul>`
                   : '<div style="font-size:13px;color:#2e9e5b">✓ Nothing flagged — the report has every section the group expects.</div>'}`;
-    cell.innerHTML = (hist + check + deliver) || '<span style="color:var(--muted)">No detail available.</span>';
+    const m0 = _groupMembersById[runId] || {};
+    const roster = (m0.entity_type === 'practice' || m0.entity_type === 'service_line')
+      ? `<div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="groupRosterOpen('${gid}','${runId}')" title="Confirm this organization's locations and physicians once; every later run — form, upload, re-run — uses the confirmed roster and flags anything that drifts">✎ Fix roster</button>
+         <span style="font-size:11px;color:var(--muted);margin-left:6px">Locations and physicians, confirmed once for every later run.</span></div><div id="groster-${runId}"></div>` : '';
+    cell.innerHTML = (hist + check + deliver + roster) || '<span style="color:var(--muted)">No detail available.</span>';
   } catch (e) { cell.innerHTML = `<span class="err">${_learnEsc(e.message)}</span>`; }
+}
+// ── Fix roster (group page): the confirmed roster merged with what the latest run found ──
+let _grosterData = {};
+async function groupRosterOpen(gid, runId) {
+  const host = document.getElementById('groster-' + runId); if (!host) return;
+  const m = _groupMembersById[runId] || {};
+  const _lp = String(m.location || '').split(','); const city = (_lp[0] || '').trim(), state = (_lp[1] || '').trim();
+  host.innerHTML = '<div style="margin-top:8px"><span class="spinner"></span> Loading roster…</div>';
+  try {
+    const r = await api(`/api/org/roster-edit?name=${encodeURIComponent(m.entity_name || '')}&city=${encodeURIComponent(city.trim())}&state=${encodeURIComponent(state)}&run_id=${encodeURIComponent(runId)}&group_id=${encodeURIComponent(gid)}`);
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not load the roster'));
+    const d = await r.json();
+    _grosterData[runId] = { gid, d };
+    groupRosterRender(runId);
+  } catch (e) { host.innerHTML = `<div class="err" style="margin-top:8px">${_learnEsc(e.message)}</div>`; }
+}
+function _grosterChips(x) {
+  const chip = (t, tip, warn) => `<span title="${tip}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:${warn ? '#fdf3dc' : '#e6f3f4'};color:${warn ? '#7a5a00' : 'var(--teal)'};margin-left:4px;white-space:nowrap">${t}</span>`;
+  let out = '';
+  if (x.confirmed) out += chip('confirmed', 'On the roster this team confirmed');
+  if (x.new) out += chip('new', 'Found by the latest run but not on the confirmed roster', true);
+  if (x.missing) out += chip('not found this run', 'Confirmed, but the latest run could not find it', true);
+  const src = x.sources || [];
+  if (src.includes('website')) out += chip('website', 'On the practice website');
+  if (src.includes('google'))  out += chip('Google', 'Google listing verified');
+  if (src.includes('nppes'))   out += chip('NPI', 'NPI registry');
+  if (src.includes('model'))   out += chip('model recall', 'Model recall — check it', true);
+  return out;
+}
+function groupRosterRender(runId) {
+  const host = document.getElementById('groster-' + runId); const st = _grosterData[runId]; if (!host || !st) return;
+  const d = st.d;
+  const row = (kind, x, i) => `<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;cursor:pointer${x.new ? ';border-color:#e3c77a' : ''}">
+      <input type="checkbox" data-kind="${kind}" data-i="${i}" ${(x.confirmed && !x.missing) || (!d.confirmed) ? 'checked' : ''} style="accent-color:var(--teal)">
+      <span style="font-size:13px;font-weight:600">${_learnEsc(x.name || '')}</span>
+      <span style="font-size:11px;color:var(--muted)">${_learnEsc(kind === 'loc' ? (x.address || [x.city, x.state].filter(Boolean).join(', ')) : [x.credential, x.specialty, x.npi ? 'NPI ' + x.npi : ''].filter(Boolean).join(' · '))}</span>${_grosterChips(x)}</label>`;
+  host.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:#fff;border:1px solid var(--border);border-radius:8px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${d.confirmed ? `Roster confirmed ${_learnEsc(String(d.confirmed_at || '').slice(0, 10))}${d.confirmed_by ? ' by ' + _learnEsc(String(d.confirmed_by).split('@')[0]) : ''}. ` : 'No roster confirmed yet — this is what the latest run found. '}Tick what belongs, add anything missing, then Save. Every later run of this organization uses the saved roster.</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:6px 0 4px">Locations (${d.locations.length})</div>
+      ${d.locations.map((x, i) => row('loc', x, i)).join('') || '<div style="font-size:12px;color:var(--muted)">None found.</div>'}
+      <div style="display:flex;gap:6px;margin:4px 0 8px"><input id="groster-addloc-${runId}" class="fi" placeholder="Add a location: name, street, city" style="flex:1;padding:6px 8px;font-size:12px"><button class="btn btn-ghost btn-sm" onclick="groupRosterAdd('${runId}','loc')">+ Add</button></div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:6px 0 4px">Physicians (${d.physicians.length})</div>
+      ${d.physicians.map((x, i) => row('phy', x, i)).join('') || '<div style="font-size:12px;color:var(--muted)">None found.</div>'}
+      <div style="display:flex;gap:6px;margin:4px 0 8px"><input id="groster-addphy-${runId}" class="fi" placeholder="Add a physician: name, credential, NPI (optional)" style="flex:1;padding:6px 8px;font-size:12px"><button class="btn btn-ghost btn-sm" onclick="groupRosterAdd('${runId}','phy')">+ Add</button></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="groupRosterSave('${runId}')">Save roster</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById('groster-${runId}').innerHTML=''">Cancel</button><span id="groster-msg-${runId}" style="font-size:12px;color:var(--muted)"></span></div>
+    </div>`;
+}
+function groupRosterAdd(runId, kind) {
+  const st = _grosterData[runId]; if (!st) return;
+  const inp = document.getElementById(`groster-add${kind}-${runId}`); const v = (inp?.value || '').trim(); if (!v) return;
+  const parts = v.split(',').map(s => s.trim()).filter(Boolean);
+  if (kind === 'loc') st.d.locations.push({ name: parts[0], address: parts.slice(1).join(', '), city: parts[2] || st.d.city, state: st.d.state, confirmed: true, added: true, sources: [] });
+  else st.d.physicians.push({ name: parts[0], credential: parts[1] || '', npi: (parts[2] || '').replace(/\D/g, '') || null, specialty: '', confirmed: true, added: true, sources: [] });
+  groupRosterRender(runId);
+}
+async function groupRosterSave(runId) {
+  const st = _grosterData[runId]; if (!st) return;
+  const msg = document.getElementById('groster-msg-' + runId);
+  const pick = (kind, arr) => arr.filter((_, i) => { const cb = document.querySelector(`#groster-${runId} input[data-kind="${kind}"][data-i="${i}"]`); return cb ? cb.checked : true; });
+  const body = { name: st.d.name, city: st.d.city, state: st.d.state, entity_type: st.d.entity_type || 'practice', group_id: st.gid,
+                 locations: pick('loc', st.d.locations), physicians: pick('phy', st.d.physicians) };
+  if (msg) msg.textContent = 'Saving…';
+  try {
+    const r = await api('/api/org/roster', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not save the roster'));
+    const d = await r.json();
+    if (msg) msg.innerHTML = `✓ Confirmed ${d.locations} location${d.locations === 1 ? '' : 's'} and ${d.physicians} physician${d.physicians === 1 ? '' : 's'}. Use ↻ Re-run to produce the report with this roster.`;
+    _flash('Roster confirmed');
+  } catch (e) { if (msg) msg.textContent = e.message; }
 }
 async function _groupPut(id, body, msg) {
   try {

@@ -1851,6 +1851,11 @@ def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
                              website=(result.rankings[0].website_url if result.rankings else None),
                              locations=[{"name": p["name"], "city": p.get("city"), "place_id": p.get("place_id"), "website": p.get("website")}
                                         for p in result.profile_audit["profiles"] if p.get("place_id")], source="analysis")
+                _pf_rows = ((getattr(result, "physician_facts", None) or {}).get("rows") or [])
+                if _pf_rows:
+                    _graph_write(_g_upsert, entity_name, city, state, etype,
+                                 physicians=[{"name": r.get("name"), "npi": r.get("npi"), "credential": r.get("credential"), "specialty": r.get("specialty")}
+                                             for r in _pf_rows if r.get("name")], source="analysis")
             elif etype == "hospital" and result.rankings:
                 _p = result.rankings[0]
                 _graph_write(_g_upsert, entity_name, city, state, "hospital", website=_p.website_url,
@@ -2386,7 +2391,8 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
         if req.confirmed_siblings is not None:
             _graph_write(_g_upsert, entity_name, city, state, _etype, specialty=specialty, anchor=req.anchor_listing,
                          locations=req.confirmed_siblings, physicians=[p for ps in (req.physician_roster or {}).values() for p in ps],
-                         source="deep_diagnostic", by=_jobs[job_id].get("email") or role, replace_locations=True)
+                         source="deep_diagnostic", by=_jobs[job_id].get("email") or role, replace_locations=True,
+                         replace_physicians=bool(req.physician_roster))
         else:
             _g = _graph_write(_g_get, entity_name, city, state)
             if _g and _g.get("locations"):
@@ -6196,6 +6202,98 @@ async def org_roster(name: str, city: str = "", state: str = "", payload: dict =
     if not org or not org.get("locations"):
         return {"found": False}
     return {"found": True, **org}
+
+
+@app.get("/api/org/roster-edit")
+async def org_roster_edit(name: str, city: str = "", state: str = "", run_id: str = "", group_id: str = "",
+                          payload: dict = Depends(get_current_user_payload)):
+    """What the Fix-roster editor shows for one organization: the confirmed roster (entity graph) merged
+    with what its latest run found, each location / physician marked confirmed, new or missing."""
+    from perception.graph import get_org
+    from perception.location_resolver import merge_confirmed_locations
+    from perception.physician_resolver import merge_confirmed_physicians, name_key
+    if group_id:
+        _group_visible(payload, group_id)
+    nm, ct, st = _normalize_input(name), _normalize_input(city), (state or "").upper().strip()
+
+    def _go():
+        org = get_org(nm, ct, st, confirmed_only=False) or {}
+        confirmed = bool(org.get("confirmed_at"))
+        run_locs, run_phys = [], []
+        if run_id:
+            from perception.db import get_connection
+            con = get_connection()
+            row = con.execute("SELECT result_json FROM analysis_runs WHERE run_id = ?", [run_id]).fetchone()
+            con.close()
+            if row and row[0]:
+                try:
+                    d = json.loads(row[0])
+                except Exception:
+                    d = {}
+                run_locs = list(((d.get("location_resolution") or {}).get("siblings")) or [])
+                if not run_locs:
+                    run_locs = [{"name": cr.get("practice_name"), "city": cr.get("city"), "state": cr.get("state"), "address": cr.get("address") or "",
+                                 "place_id": cr.get("place_id"), "sources": cr.get("sources") or []}
+                                for cr in (d.get("practice_composite_rows") or []) if not cr.get("is_anchor") and cr.get("practice_name")]
+                run_phys = [{"name": r.get("name"), "npi": r.get("npi"), "credential": r.get("credential") or "", "specialty": r.get("specialty") or "",
+                             "sources": r.get("sources") or [], "website_missing": bool(r.get("website_missing")), "npi_missing": bool(r.get("npi_missing"))}
+                            for r in (((d.get("physician_facts") or {}).get("rows")) or []) if r.get("name")]
+        g_locs = org.get("locations") or [] if confirmed else []
+        g_phys = org.get("physicians") or [] if confirmed else []
+        locs, ldrift = merge_confirmed_locations(g_locs, run_locs) if g_locs else ([], {"new": [], "missing": []})
+        for l in locs:
+            l["confirmed"] = True; l["missing"] = l["name"] in ldrift["missing"]
+        known = {(l.get("place_id") or "") for l in locs} | {(l.get("name") or "").lower() for l in locs}
+        for r in run_locs:
+            if (r.get("place_id") or "") in known and r.get("place_id"):
+                continue
+            if (r.get("name") or "").lower() in known:
+                continue
+            locs.append({**r, "confirmed": False, "missing": False, "new": bool(g_locs)})
+        phys, pdrift = merge_confirmed_physicians(g_phys, run_phys) if g_phys else ([], {"new": [], "missing": []})
+        for p in phys:
+            p["confirmed"] = True; p["missing"] = p["name"] in pdrift["missing"]
+        pknown = {name_key(p["name"]) for p in phys}
+        for r in run_phys:
+            if name_key(r.get("name") or "") in pknown:
+                continue
+            phys.append({**r, "confirmed": False, "missing": False, "new": bool(g_phys)})
+        return {"name": nm, "city": ct, "state": st, "confirmed": confirmed, "confirmed_by": org.get("confirmed_by"), "confirmed_at": org.get("confirmed_at"),
+                "entity_type": org.get("entity_type") or "practice", "locations": locs, "physicians": phys}
+    return await asyncio.get_running_loop().run_in_executor(None, _go)
+
+
+class RosterSaveRequest(BaseModel):
+    name: str
+    city: str
+    state: str
+    entity_type: str = "practice"
+    specialty: Optional[str] = None
+    locations: List[dict] = []
+    physicians: List[dict] = []
+    group_id: Optional[str] = None
+
+
+@app.put("/api/org/roster")
+async def org_roster_save(req: RosterSaveRequest, payload: dict = Depends(get_current_user_payload)):
+    """Confirm an organization's roster from the group page: the given locations and physicians become
+    THE roster (others are soft-removed) and every later run — form, upload, re-run — uses it."""
+    from perception.graph import upsert_org, get_org
+    if req.group_id:
+        _group_visible(payload, req.group_id)
+    nm, ct, st = _normalize_input(req.name), _normalize_input(req.city), (req.state or "").upper().strip()
+    who = payload.get("email") or payload.get("name") or ""
+    locs = [{"name": l.get("name"), "original_name": l.get("original_name") or l.get("name"), "city": l.get("city") or ct, "state": l.get("state") or st,
+             "address": l.get("address") or "", "place_id": l.get("place_id"), "rating": l.get("rating"), "review_count": l.get("review_count"),
+             "maps_url": l.get("maps_url")} for l in req.locations if (l.get("name") or "").strip()]
+    phys = [{"name": p.get("name"), "npi": p.get("npi"), "credential": p.get("credential"), "specialty": p.get("specialty")}
+            for p in req.physicians if (p.get("name") or "").strip()]
+    await asyncio.get_running_loop().run_in_executor(None, lambda: upsert_org(
+        nm, ct, st, req.entity_type or "practice", specialty=req.specialty, locations=locs, physicians=phys,
+        source="roster_edit", by=who, replace_locations=True, replace_physicians=True))
+    org = await asyncio.get_running_loop().run_in_executor(None, lambda: get_org(nm, ct, st))
+    return {"ok": True, "locations": len((org or {}).get("locations") or []), "physicians": len((org or {}).get("physicians") or []),
+            "confirmed_by": (org or {}).get("confirmed_by"), "confirmed_at": (org or {}).get("confirmed_at")}
 
 
 class PracticeDiscoverRequest(BaseModel):

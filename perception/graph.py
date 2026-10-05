@@ -98,7 +98,7 @@ def _loc_key(loc: dict) -> str:
 def upsert_org(name: str, city: str, state: str, entity_type: str, *, specialty: str | None = None,
                anchor: dict | None = None, website: str | None = None, locations: list | None = None,
                physicians: list | None = None, source: str = "deep_diagnostic", by: str | None = None,
-               replace_locations: bool = False) -> str:
+               replace_locations: bool = False, replace_physicians: bool = False) -> str:
     """Create or refresh the organization; add/refresh the given locations. With
     replace_locations=True the given list becomes the roster (others are soft-removed) —
     that is the confirmation semantics of the Deep Diagnostic and Trends forms. Physicians
@@ -154,21 +154,32 @@ def upsert_org(name: str, city: str, state: str, entity_type: str, *, specialty:
                 for lk, (lid, removed) in existing.items():
                     if lk not in seen and removed is None:
                         con.execute("UPDATE org_locations SET removed_at = ?, removed_by = ? WHERE id = ?", [now, by or source, lid])
-        if physicians:
-            have = {(r[1] or "") + "|" + (r[2] or "").lower(): r[0] for r in
-                    con.execute("SELECT id, npi, name FROM org_physicians WHERE org_key = ?", [key]).fetchall()}
-            for ph in physicians:
+        if physicians or (replace_physicians and physicians is not None):
+            from .physician_resolver import name_key as _nk
+            rows = con.execute("SELECT id, npi, name, removed_at FROM org_physicians WHERE org_key = ?", [key]).fetchall()
+            by_npi = {r[1]: r[0] for r in rows if r[1]}
+            by_name = {_nk(r[2] or ""): r[0] for r in rows}
+            kept: set = set()
+            for ph in physicians or []:
                 nm = (ph.get("name") or "").strip()
                 if not nm:
                     continue
-                pk = (ph.get("npi") or "") + "|" + nm.lower()
-                if pk in have:
-                    con.execute("UPDATE org_physicians SET specialty = COALESCE(?, specialty), credential = COALESCE(?, credential), removed_at = NULL WHERE id = ?",
-                                [ph.get("specialty"), ph.get("credential"), have[pk]])
-                else:
+                pid = by_npi.get(ph.get("npi") or "") or by_name.get(_nk(nm))
+                if pid:
+                    kept.add(pid)
+                    con.execute("UPDATE org_physicians SET npi = COALESCE(?, npi), name = ?, specialty = COALESCE(?, specialty), "
+                                "credential = COALESCE(?, credential), removed_at = NULL" + (", source = ?, confirmed_by = ?, confirmed_at = ?" if confirmed else "") + " WHERE id = ?",
+                                [ph.get("npi") or None, nm, ph.get("specialty"), ph.get("credential")] + ([source, by or "", now] if confirmed else []) + [pid])
+                elif allow_insert:
+                    nid = uuid.uuid4().hex[:12]
+                    kept.add(nid)
                     con.execute("""INSERT INTO org_physicians (id, org_key, npi, name, specialty, credential, source, confirmed_by, confirmed_at)
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                                [uuid.uuid4().hex[:12], key, ph.get("npi") or None, nm, ph.get("specialty"), ph.get("credential"), source, by or "", now])
+                                [nid, key, ph.get("npi") or None, nm, ph.get("specialty"), ph.get("credential"), source, by or "", now])
+            if replace_physicians and confirmed:
+                for r in rows:
+                    if r[0] not in kept and r[3] is None:
+                        con.execute("UPDATE org_physicians SET removed_at = ? WHERE id = ?", [now, r[0]])
     finally:
         con.close()
     return key
@@ -196,8 +207,9 @@ def get_org(name: str, city: str, state: str, *, confirmed_only: bool = True) ->
                              "address": r[4] or "", "place_id": r[0], "rating": r[5], "review_count": r[6], "maps_url": r[7],
                              "website": r[8], "source": r[9], "confirmed_by": r[10], "confirmed_at": str(r[11])[:10] if r[11] else None,
                              "from_graph": True} for r in locs]
-        phys = con.execute("SELECT npi, name, specialty, credential FROM org_physicians WHERE org_key = ? AND removed_at IS NULL ORDER BY name", [key]).fetchall()
-        org["physicians"] = [{"npi": r[0], "name": r[1], "specialty": r[2], "credential": r[3]} for r in phys]
+        phys = con.execute("SELECT npi, name, specialty, credential, source, confirmed_at FROM org_physicians WHERE org_key = ? AND removed_at IS NULL ORDER BY name", [key]).fetchall()
+        org["physicians"] = [{"npi": r[0], "name": r[1], "specialty": r[2], "credential": r[3], "source": r[4],
+                              "confirmed_at": str(r[5])[:10] if r[5] else None, "from_graph": True} for r in phys]
         return org
     finally:
         con.close()

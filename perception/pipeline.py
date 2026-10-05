@@ -522,8 +522,23 @@ class PracticeAdapter(_Adapter):
                 _hints = [p.get("url") for p in ((getattr(ctx, "website_facts", None) or {}).get("site_pages") or []) if p.get("url")]
                 emit({"type": "phase", "name": "physicians", "text": f"Finding every {ctx.entity_name} physician"})
                 _pr = resolve_physicians(ctx.entity_name, ctx.city, ctx.state, website=_site, hint_urls=_hints, emit=emit)
-                ctx.physician_roster = {ctx.entity_name: _pr["physicians"]}
-                ctx.physician_resolution = _pr["resolution"]
+                _phys, _res = _pr["physicians"], dict(_pr["resolution"])
+                try:
+                    from .graph import get_org
+                    _g = get_org(ctx.entity_name, ctx.city, ctx.state)
+                except Exception:
+                    _g = None
+                if _g and _g.get("physicians"):
+                    from .physician_resolver import merge_confirmed_physicians
+                    _phys, _drift = merge_confirmed_physicians(_g["physicians"], _phys)
+                    _res["confirmed"] = {"by": _g.get("confirmed_by"), "at": _g.get("confirmed_at"), "count": len(_g["physicians"])}
+                    _res["drift"] = _drift
+                    _res["total"] = len(_phys)
+                    emit({"type": "text", "text": f"Using the confirmed physician roster: {len(_phys)}"
+                          + (f"; {len(_drift['new'])} new name{'s' if len(_drift['new']) != 1 else ''} found since" if _drift["new"] else "")
+                          + (f"; {len(_drift['missing'])} confirmed not found this run" if _drift["missing"] else "")})
+                ctx.physician_roster = {ctx.entity_name: _phys}
+                ctx.physician_resolution = _res
                 if _pr["physicians"] and ctx.practice_composite:
                     ctx.physician_composite = True      # every physician gets a Google / platform lookup
             except Exception as _exc:

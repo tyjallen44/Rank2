@@ -3842,3 +3842,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T5 | Group ↻ Re-run of a practice | Physicians are resolved afresh (not copied from the old table). [code] |
 | T6 | Hospital Deep Diagnostic with Practice Composite + physicians | Still capped at 50 physicians (log line "capped at 50 of N"); physician facts check 50. [ui] |
 | R1 | Regression | Hospital Service Line and Community Health forms unchanged (no Physicians step); hospital physician opt-in unchanged; `tests/test_physician_resolver.py` passes. |
+
+## ROSTER-CONFIRM — confirm a roster once, every later run uses it (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → expand a practice → **✎ Fix roster** | An editor lists Locations and Physicians: confirmed items (checked, chip "confirmed") merged with what the latest run found (chips website / Google / NPI; amber "new" for items not on the confirmed roster, "not found this run" for confirmed items the run missed). Add rows for a location or physician by name. **Save roster** confirms the ticked items; the message says how many were confirmed and points to ↻ Re-run. [ui] |
+| T2 | ↻ Re-run after saving | The run log says "Using the confirmed roster: N locations" and "Using the confirmed physician roster: M"; the PDF Locations/Physicians tables show exactly the confirmed items (Found-on marks include a confirmed mark via sources); anything the resolver found beyond the roster is NOT added to the report. [ui][pdf] |
+| T3 | Upload a list containing an organization with a confirmed roster | The bulk report uses the confirmed roster too (no form involved). [pdf] |
+| T4 | Delivery check | A member whose latest run found offices or physicians not on the confirmed roster, or could not find confirmed ones, shows a ⚠ "Roster drifted since confirmation" flag naming them, with "Open Fix roster…" guidance. [ui] |
+| T5 | Deep Diagnostic form on an organization with a confirmed roster | Locations show "From your confirmed roster" (as before) and the Physicians step shows "From your confirmed roster — N physicians confirmed on <date> by <who>" with "confirmed" chips; "re-discover physicians" resolves afresh. Running the form saves the ticked physicians as the confirmed physician roster (unticked ones are dropped). [ui] |
+| R1 | Regression | Organizations without a confirmed roster behave exactly as in LOCATIONS-RESOLVER / PHYSICIANS-RESOLVER; finished unconfirmed runs store their locations and physicians as candidates only (they never add to a confirmed roster). `tests/test_roster_confirm.py` (3 tests) passes. |

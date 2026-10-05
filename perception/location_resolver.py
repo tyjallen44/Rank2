@@ -445,6 +445,41 @@ def display_name(brand: str, google_name: Optional[str], website_name: Optional[
     return f"{brand} – {city}" if city else (g or brand)
 
 
+def merge_confirmed_locations(confirmed: list[dict], resolved: list[dict]) -> tuple[list[dict], dict]:
+    """The confirmed roster (entity graph) is the roster; the resolver's findings enrich it (place_id,
+    rating, sources, gap flags) and tell the coordinator what drifted: offices the resolver found
+    that are not confirmed (`new`) and confirmed offices it could not find (`missing`)."""
+    def _match(c: dict, r: dict) -> bool:
+        if c.get("place_id") and r.get("place_id"):
+            return c["place_id"] == r["place_id"]
+        if c.get("address") and r.get("address") and same_office(c["address"], r["address"]):
+            return True
+        return (c.get("name") or "").strip().lower() == (r.get("name") or "").strip().lower() and \
+               (c.get("city") or "").strip().lower() == (r.get("city") or "").strip().lower()
+    out: list[dict] = []
+    used: set[int] = set()
+    missing: list[str] = []
+    for c in confirmed:
+        hit = next((i for i, r in enumerate(resolved) if i not in used and _match(c, r)), None)
+        s = {"name": c.get("original_name") or c.get("name"), "entity_type": "practice", "city": c.get("city") or "", "state": c.get("state") or "",
+             "address": c.get("address") or "", "phone": "", "place_id": c.get("place_id"), "rating": c.get("rating"), "review_count": c.get("review_count"),
+             "maps_url": c.get("maps_url"), "sources": ["confirmed"], "google_missing": False, "website_missing": False}
+        if hit is not None:
+            used.add(hit)
+            r = resolved[hit]
+            for k in ("address", "phone", "place_id", "rating", "review_count", "maps_url"):
+                if r.get(k) not in (None, "") and s.get(k) in (None, ""):
+                    s[k] = r[k]
+            s["sources"] = ["confirmed"] + [x for x in (r.get("sources") or []) if x != "confirmed"]
+            s["google_missing"] = bool(r.get("google_missing")) and not s.get("place_id")
+            s["website_missing"] = bool(r.get("website_missing"))
+        else:
+            missing.append(s["name"])
+        out.append(s)
+    new = [r.get("name") for i, r in enumerate(resolved) if i not in used]
+    return out, {"new": new, "missing": missing}
+
+
 # ── 4. resolve ────────────────────────────────────────────────────────────────
 
 def resolve_locations(entity_name: str, city: str, state: str, *, website: Optional[str] = None,
