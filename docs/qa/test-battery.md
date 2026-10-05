@@ -3873,3 +3873,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | A site that refuses only our hosting (bare 403, no challenge page) while Claude's live fetch reads it | Still "refused" — no red box, checklist PARTIAL. [pdf] |
 | T3 | A site that refuses our hosting AND Claude's live fetch | Now **blocked** ("the site refused our server and an AI assistant's own live fetch"). [pdf] |
 | R1 | Unit | `tests/test_website_refused.py` (3 tests) passes. |
+
+## GROUPS-UX-6 — members/prospects filter, archived groups, Fix roster shortcut (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page with at least one prospect | Toolbar chips "All (N) · Members (M) · Prospects (P)"; clicking filters the rows (combines with the search box and the Needs attention toggle); no chips when the group has no prospects. [ui] |
+| T2 | Admin → Groups list → "Show archived groups" | Lists archived groups with member counts; **↩ Restore** brings a group back into the list and pickers; Delete still available; "Hide" collapses the section. Non-admins do not see the link. [ui] |
+| T3 | Deep Diagnostic (practice) run attached to a group → completion panel | A **✎ Fix roster** button next to "▦ View in <group>"; clicking opens the group page, expands the organization and opens the roster editor. Hospital runs and runs without a group do not show it. [ui] |
+| R1 | Regression | Returning to the groups list resets the filters; group page rendering, re-run, Fix roster save unchanged. |

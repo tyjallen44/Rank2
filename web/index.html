@@ -7863,10 +7863,16 @@ function _groupStopPoll() { if (_groupPoll) { clearInterval(_groupPoll); _groupP
 function groupsFilter(q) {
   const needle = (q || '').trim().toLowerCase();
   document.querySelectorAll('#groups-body tr[data-search]').forEach(tr => {
-    const hit = (!needle || tr.dataset.search.includes(needle)) && (!_groupFlagOnly || tr.dataset.flagged === '1');
+    const hit = (!needle || tr.dataset.search.includes(needle)) && (!_groupFlagOnly || tr.dataset.flagged === '1')
+      && (_groupStatusFilter === 'all' || !tr.dataset.status || tr.dataset.status === _groupStatusFilter);
     tr.style.display = hit ? '' : 'none';
     if (!hit) { const det = document.getElementById('gdet-' + (tr.id || '').replace(/^grow-/, '')); if (det) det.classList.add('hidden'); }
   });
+}
+function groupSetStatusFilter(v) {
+  _groupStatusFilter = v;
+  document.querySelectorAll('#group-status-chips button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  const sb = document.getElementById('groups-search'); groupsFilter(sb ? sb.value : '');
 }
 function groupToggleFlagOnly() {
   _groupFlagOnly = !_groupFlagOnly;
@@ -7879,9 +7885,11 @@ function _soleGroup() { return !!(_caps && !_caps.unrestricted && Array.isArray(
 let _groupOpenId = null;
 let _groupMembersById = {};        // run_id → member row (flags for the expanded detail)
 let _groupFlagOnly = false;        // "Show flagged only" toggle on the group page
+let _groupStatusFilter = 'all';    // 'all' | 'member' | 'prospect' chips on the group page
 async function loadGroupsPage() {
   const host = document.getElementById('groups-body'); if (!host) return;
   _groupStopPoll(); _groupOpenId = null;
+  _groupStatusFilter = 'all'; _groupFlagOnly = false;
   const restricted = !!(_caps && !_caps.unrestricted);
   const nb = document.getElementById('groups-new-btn'); if (nb) nb.style.display = restricted ? 'none' : '';
   const _token_ = (loadGroupsPage._seq = (loadGroupsPage._seq || 0) + 1);
@@ -7898,8 +7906,24 @@ async function loadGroupsPage() {
       <td>${g.show_on_pdf ? 'Yes' : 'No'}</td>
       <td style="font-size:12px;color:var(--muted)">${(g.created_at || '').slice(0, 10)}${g.created_by ? ` · ${_learnEsc(String(g.created_by).split('@')[0])}` : ''}</td>
       <td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openGroupPage('${g.id}')" title="Open the ranked table, benchmarks and actions for this group">Open →</button>${_role === 'admin' ? ` <button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')" title="Edit name, description, type, default specialty, visibility and the benchmark-on-reports switch">✎ Edit</button>` : ''}</td></tr>`).join('')}
-  </tbody></table>`;
+  </tbody></table>${_role === 'admin' ? `<div id="groups-archived" style="margin-top:14px"><a href="#" style="font-size:12px" onclick="loadArchivedGroups();return false" title="Groups that were archived: hidden from lists and pickers, memberships kept; restore any of them">Show archived groups</a></div>` : ''}`;
 }
+async function loadArchivedGroups() {
+  const host = document.getElementById('groups-archived'); if (!host) return;
+  host.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api('/api/groups?include_archived=1'); if (!r.ok) throw new Error(await errDetail(r, 'Could not load archived groups'));
+    const arch = (await r.json()).filter(g => g.archived);
+    host.innerHTML = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Archived groups (${arch.length})</div>`
+      + (arch.length ? `<table class="admin-tbl"><tbody>${arch.map(g => `<tr><td><div style="font-weight:600">${_learnEsc(g.name)}</div>${g.description ? `<div style="font-size:12px;color:var(--muted)">${_learnEsc(g.description)}</div>` : ''}</td>
+          <td>${g.member_count} member${g.member_count === 1 ? '' : 's'}</td><td style="font-size:12px;color:var(--muted)">${(g.created_at || '').slice(0, 10)}</td>
+          <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="groupRestore('${g.id}')" title="Bring the group back into lists and pickers; nothing was lost while it was archived">↩ Restore</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupDelete('${g.id}', ${_jsq(g.name)}, ${g.member_count})" title="Remove the group and its memberships for good; the reports stay in History">Delete</button></td></tr>`).join('')}</tbody></table>`
+                   : '<div style="font-size:12px;color:var(--muted)">No archived groups.</div>')
+      + `<a href="#" style="font-size:12px;display:inline-block;margin-top:6px" onclick="loadGroupsPage();return false">Hide</a>`;
+  } catch (e) { host.innerHTML = `<div class="err">${_learnEsc(e.message)}</div>`; }
+}
+async function groupRestore(id) { await _groupPut(id, { archived: false }, 'Group restored'); loadGroupsPage(); }
 function _scoreColor(s) { return s == null ? 'var(--muted)' : s >= 75 ? '#2e9e5b' : s >= 58 ? '#e09b2a' : '#d94f4f'; }
 let _suppressGroupsLoad = false;
 async function openGroupPage(id, highlightRunId) {
@@ -7948,7 +7972,7 @@ async function openGroupPage(id, highlightRunId) {
     const fl = m.flags || []; const hasFix = fl.some(f => f.level === 'fix');
     const flagBadge = fl.length ? `<span class="badge" style="background:${hasFix ? '#fee2e2' : '#fdf3dc'};color:${hasFix ? '#991b1b' : '#7a5a00'};font-size:10px;margin-left:4px;cursor:help;white-space:nowrap" title="${_learnEsc('Before sending:\n' + fl.map(f => '• ' + f.label + ' — ' + f.detail).join('\n') + '\n\nClick the organization name for detail; ↻ Re-run refreshes the report.')}">⚠ ${fl.length === 1 ? _learnEsc(fl[0].label) : fl.length + ' to check'}</span>` : '';
     const runBadge = rr ? `<div style="margin-top:3px;font-size:11px;color:var(--teal);display:flex;align-items:center;gap:6px"><span class="spinner" style="width:10px;height:10px"></span> Re-run in progress${_since(rr.started_at) ? ' · started ' + _since(rr.started_at) : ''}${rr.email ? ' · ' + _learnEsc(String(rr.email).split('@')[0]) : ''} · <a href="#" onclick="_lastPage='groups'; startProgress('${rr.job_id}', ${_jsq((m.entity_name || '') + ' — Deep Diagnostic')}, false); return false">View progress</a></div>` : '';
-    return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by, isProspect ? 'prospect' : 'member'].filter(Boolean).join(' ').toLowerCase())}" data-flagged="${fl.length ? '1' : '0'}" ${isNew ? 'style="background:#eaf7ee"' : (isProspect ? 'style="background:#fdf6e3"' : (rr ? 'style="background:#f4f9f8"' : ''))}>
+    return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by, isProspect ? 'prospect' : 'member'].filter(Boolean).join(' ').toLowerCase())}" data-flagged="${fl.length ? '1' : '0'}" data-status="${isProspect ? 'prospect' : 'member'}" ${isNew ? 'style="background:#eaf7ee"' : (isProspect ? 'style="background:#fdf6e3"' : (rr ? 'style="background:#f4f9f8"' : ''))}>
       <td style="text-align:center;font-weight:700">${isProspect ? `<span style="font-size:11px;color:#7a5a00;white-space:nowrap" title="Not a member: shown where it would rank among members; left out of the median">would be<br>${m.would_rank ?? '—'}</span>` : (m.rank ?? '—')}</td>
       <td><div style="font-weight:600;cursor:pointer" onclick="groupToggleMember('${g.id}','${m.run_id}')" title="Show this organization's score history and checklist">${_learnEsc(m.entity_name || '')} <span style="font-size:11px;color:var(--muted)">▾</span>${isNew ? ' <span class="badge bg-teal" style="font-size:10px">new</span>' : ''}${isProspect ? ' <span class="badge" style="font-size:10px;background:#fdf3dc;color:#7a5a00">prospect</span>' : ''}</div><div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>${runBadge}</td>
       <td style="text-align:center;font-weight:800;font-size:16px;color:${_scoreColor(m.score)}">${m.score ?? '—'}</td>
@@ -7977,6 +8001,10 @@ async function openGroupPage(id, highlightRunId) {
         ${_capReport('events') ? `<button class="btn btn-secondary btn-sm" onclick="groupUploadList('${g.id}')" title="Upload a spreadsheet (name, city, state, optional website) and run a report for every row; all of them join this group">⬆ Upload a list</button>` : ''}
         <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/export.csv?token=${encodeURIComponent(_token)}" title="Download the ranked table: rank, status, scores, pillars, evidence, website access, what needs attention, dates and who ran each report">⬇ CSV</a>
         ${dv.flagged ? `<button class="btn btn-ghost btn-sm${_groupFlagOnly ? ' on' : ''}" id="group-flag-only" onclick="groupToggleFlagOnly()" title="Show only the reports the delivery check flagged — missing spot check, physician rows, fixed-shape summary, readable website, resolved specialty, printed benchmark, or over 90 days old">⚠ Needs attention (${dv.flagged})</button>` : ''}
+        ${prospects.length ? `<span id="group-status-chips" style="display:inline-flex;gap:4px;align-items:center" title="Show members, prospects, or both">
+          <button class="btn btn-ghost btn-sm${_groupStatusFilter === 'all' ? ' on' : ''}" data-v="all" onclick="groupSetStatusFilter('all')">All (${ms.length})</button>
+          <button class="btn btn-ghost btn-sm${_groupStatusFilter === 'member' ? ' on' : ''}" data-v="member" onclick="groupSetStatusFilter('member')" title="Organizations counted in the ranking and the median">Members (${ms.length - prospects.length})</button>
+          <button class="btn btn-ghost btn-sm${_groupStatusFilter === 'prospect' ? ' on' : ''}" data-v="prospect" onclick="groupSetStatusFilter('prospect')" title="Organizations evaluated against the group but not members">Prospects (${prospects.length})</button></span>` : ''}
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')" title="Edit name, description, type, default specialty, visibility and the benchmark-on-reports switch">✎ Edit details</button>
         <button class="btn btn-ghost btn-sm" onclick="groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})" title="Whether each member's PDF prints its rank, the group size and the group median (only once the group has 10 organizations)">${g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupArchive('${g.id}')" title="Hide the group from lists and pickers without losing anything; memberships and reports are kept and an administrator can restore it">Archive</button>` : ''}
@@ -8105,6 +8133,11 @@ async function groupToggleMember(gid, runId) {
          <span style="font-size:11px;color:var(--muted);margin-left:6px">Locations and physicians, confirmed once for every later run.</span></div><div id="groster-${runId}"></div>` : '';
     cell.innerHTML = (hist + check + deliver + roster) || '<span style="color:var(--muted)">No detail available.</span>';
   } catch (e) { cell.innerHTML = `<span class="err">${_learnEsc(e.message)}</span>`; }
+}
+async function groupFixRosterFromCompletion(gid, runId) {
+  await openGroupPage(gid, runId);
+  await groupToggleMember(gid, runId);
+  groupRosterOpen(gid, runId);
 }
 // ── Fix roster (group page): the confirmed roster merged with what the latest run found ──
 let _grosterData = {};
@@ -8540,6 +8573,9 @@ function showSingleDone(r) {
   const groupBtn = (r.group && r.group.group_id)
     ? `<button class="btn btn-secondary" onclick="openGroupPage('${r.group.group_id}', '${r.run_id}')">▦ View in ${_learnEsc(r.group.group_name || 'group')}${r.group.ready && r.group.rank ? ` · ${r.group.rank} of ${r.group.total}` : ''}</button>`
     : '';
+  const fixRosterBtn = (r.group && r.group.group_id && (r.entity_type === 'practice' || r.entity_type === 'service_line'))
+    ? `<button class="btn btn-ghost" onclick="groupFixRosterFromCompletion('${r.group.group_id}', '${r.run_id}')" title="Confirm this practice's locations and physicians now — every later run (form, upload, re-run) uses the confirmed roster">✎ Fix roster</button>`
+    : '';
   const fullDetailBtn = (isNetwork && r.full_detail_pdf_path)
     ? `<button class="btn btn-secondary" onclick="_download('/api/network/${r.run_id}/full-detail-pdf?token=${encodeURIComponent(_token)}')">⬇ Download Full Detail</button>`
     : '';
@@ -8581,7 +8617,7 @@ function showSingleDone(r) {
     ${teaserBtn}
     ${briefingBtn}
     ${fullDetailBtn}
-    ${groupBtn}
+    ${groupBtn}${fixRosterBtn}
     <button class="btn btn-secondary" onclick="navigate('${_lastPage}')">${backLabel}</button>
     ${scLine}
     ${costLine}
