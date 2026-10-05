@@ -634,7 +634,10 @@ def _entity_pulse_score(entity_name: str, location: str, brand: str = "original"
     # Website facts for the system's site (AI-access alert on the network report's first page).
     _wf = getattr(res, "website_facts", None)
     _site = getattr(_entity_pulse_score, "website_override", None) or getattr(prov, "website_url", None)
-    if (not _wf or getattr(_entity_pulse_score, "website_override", None)) and _site:
+    # A cached entity result may carry stale access facts (an earlier rule classed a challenge wall as
+    # "refused"); anything short of a measured crawl is re-verified so the page-1 alert is current.
+    _stale = (_wf or {}).get("status") not in ("measured",)
+    if (not _wf or _stale or getattr(_entity_pulse_score, "website_override", None)) and _site:
         try:
             from .data.website_facts import fetch_website_facts
             _wf = fetch_website_facts(_site)

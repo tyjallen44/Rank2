@@ -3882,3 +3882,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Admin → Groups list → "Show archived groups" | Lists archived groups with member counts; **↩ Restore** brings a group back into the list and pickers; Delete still available; "Hide" collapses the section. Non-admins do not see the link. [ui] |
 | T3 | Deep Diagnostic (practice) run attached to a group → completion panel | A **✎ Fix roster** button next to "▦ View in <group>"; clicking opens the group page, expands the organization and opens the roster editor. Hospital runs and runs without a group do not show it. [ui] |
 | R1 | Regression | Returning to the groups list resets the filters; group page rendering, re-run, Fix roster save unchanged. |
+
+## FIX-NETWORK-STALE-ACCESS — network reports re-verify website access on cached entity results (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Hospital Network report for a system whose entity result was cached today with a non-measured website status (USA Health) | The run re-crawls the site; the red "URGENT: AI assistants cannot read your website" box prints on page 1 with the JavaScript-challenge wording. Previously the cached "refused" facts were reused and the box was missing even after the classification fix. [pdf] |
+| R1 | Regression | A cached entity result with a measured crawl is not re-crawled by the network run. |
