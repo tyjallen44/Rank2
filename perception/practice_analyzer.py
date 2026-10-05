@@ -759,7 +759,7 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
         else:
             # Website office list → NPPES footprint → Google (pin + snowball); model recall only as a
             # last resort. Every sibling carries its sources and gap flags for the Locations table.
-            from .location_resolver import resolve_locations, merge_confirmed_locations
+            from .location_resolver import resolve_locations, apply_confirmed_locations
             emit({"type": "phase", "name": "discovery", "text": f"Finding every {entity_name} location"})
             _res = resolve_locations(entity_name, city, state, website=website, anchor_listing=anchor_listing,
                                      emit=emit, force_rerun=force_rerun)
@@ -774,15 +774,17 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
                 _g = None
             _drift = None
             if _g and _g.get("locations"):
-                _siblings, _drift = merge_confirmed_locations(_g["locations"], _siblings)
-                emit({"type": "text", "text": f"Using the confirmed roster: {len(_siblings)} location{'s' if len(_siblings) != 1 else ''}"
-                      f" (confirmed {_g.get('confirmed_at') or ''} by {_g.get('confirmed_by') or 'this team'})"
+                _hard = bool(_g.get("hard"))
+                _siblings, _drift = apply_confirmed_locations(_g["locations"], _siblings, hard=_hard)
+                emit({"type": "text", "text": (f"Using the confirmed roster: {len(_siblings)} location{'s' if len(_siblings) != 1 else ''}" if _hard
+                                               else f"Roster: {len(_siblings)} location{'s' if len(_siblings) != 1 else ''} — fresh findings plus the offices kept from the earlier run")
+                      + (f" (confirmed {_g.get('confirmed_at') or ''} by {_g.get('confirmed_by') or 'this team'})" if _hard else "")
                       + (f"; {len(_drift['new'])} new office{'s' if len(_drift['new']) != 1 else ''} found since" if _drift["new"] else "")
                       + (f"; {len(_drift['missing'])} confirmed office{'s' if len(_drift['missing']) != 1 else ''} not found this run" if _drift["missing"] else "")})
             if report is not None:
                 report.update(_res.get("resolution") or {})
                 if _g and _g.get("locations"):
-                    report["confirmed"] = {"by": _g.get("confirmed_by"), "at": _g.get("confirmed_at"), "count": len(_g["locations"])}
+                    report["confirmed"] = {"by": _g.get("confirmed_by"), "at": _g.get("confirmed_at"), "count": len(_g["locations"]), "hard": bool(_g.get("hard"))}
                     report["drift"] = _drift
                 report["siblings"] = [{k: s.get(k) for k in ("name", "city", "state", "address", "place_id", "sources",
                                                                  "google_missing", "website_missing")} for s in _siblings]

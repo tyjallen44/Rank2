@@ -6238,6 +6238,7 @@ async def org_roster_edit(name: str, city: str = "", state: str = "", run_id: st
                 run_phys = [{"name": r.get("name"), "npi": r.get("npi"), "credential": r.get("credential") or "", "specialty": r.get("specialty") or "",
                              "sources": r.get("sources") or [], "website_missing": bool(r.get("website_missing")), "npi_missing": bool(r.get("npi_missing"))}
                             for r in (((d.get("physician_facts") or {}).get("rows")) or []) if r.get("name")]
+        hard = bool(org.get("hard"))
         g_locs = org.get("locations") or [] if confirmed else []
         g_phys = org.get("physicians") or [] if confirmed else []
         locs, ldrift = merge_confirmed_locations(g_locs, run_locs) if g_locs else ([], {"new": [], "missing": []})
@@ -6258,7 +6259,7 @@ async def org_roster_edit(name: str, city: str = "", state: str = "", run_id: st
             if name_key(r.get("name") or "") in pknown:
                 continue
             phys.append({**r, "confirmed": False, "missing": False, "new": bool(g_phys)})
-        return {"name": nm, "city": ct, "state": st, "confirmed": confirmed, "confirmed_by": org.get("confirmed_by"), "confirmed_at": org.get("confirmed_at"),
+        return {"name": nm, "city": ct, "state": st, "confirmed": confirmed, "hard": hard, "confirmed_by": org.get("confirmed_by"), "confirmed_at": org.get("confirmed_at"),
                 "entity_type": org.get("entity_type") or "practice", "locations": locs, "physicians": phys}
     return await asyncio.get_running_loop().run_in_executor(None, _go)
 

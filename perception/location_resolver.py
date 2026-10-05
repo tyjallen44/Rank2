@@ -480,6 +480,21 @@ def merge_confirmed_locations(confirmed: list[dict], resolved: list[dict]) -> tu
     return out, {"new": new, "missing": missing}
 
 
+def apply_confirmed_locations(confirmed: list[dict], resolved: list[dict], *, hard: bool) -> tuple[list[dict], dict]:
+    """Hard confirmation (Fix roster): the confirmed list IS the roster; new finds are drift only.
+    Soft (a roster that passed through a form run): the fresh findings are the roster, plus any
+    confirmed office the resolver did not find — nothing confirmed is lost, nothing new is hidden."""
+    merged, drift = merge_confirmed_locations(confirmed, resolved)
+    if hard:
+        return merged, drift
+    kept_missing = [m for m in merged if m["name"] in drift["missing"]]
+    matched = [m for m in merged if m["name"] not in drift["missing"]]
+    extra = [r for r in resolved if r.get("name") in drift["new"]]
+    for r in extra:
+        r.setdefault("sources", [])
+    return matched + extra + kept_missing, {"new": [], "missing": drift["missing"], "soft": True}
+
+
 # ── 4. resolve ────────────────────────────────────────────────────────────────
 
 def resolve_locations(entity_name: str, city: str, state: str, *, website: Optional[str] = None,

@@ -336,7 +336,7 @@ def merge_confirmed_physicians(confirmed: list[dict], resolved: list[dict]) -> t
     used: set[int] = set()
     missing: list[str] = []
     for c in confirmed:
-        nm = (c.get("name") or "").strip()
+        nm = _clean_name(c.get("name") or "")
         if not nm:
             continue
         i = by_npi.get(c.get("npi") or "") if c.get("npi") else None
@@ -359,6 +359,18 @@ def merge_confirmed_physicians(confirmed: list[dict], resolved: list[dict]) -> t
         out.append(e)
     new = [r.get("name") for i, r in enumerate(resolved) if i not in used]
     return out, {"new": new, "missing": missing}
+
+
+def apply_confirmed_physicians(confirmed: list[dict], resolved: list[dict], *, hard: bool) -> tuple[list[dict], dict]:
+    """Hard confirmation: the confirmed list IS the roster (new names are drift). Soft: fresh findings
+    plus confirmed names the resolver did not find."""
+    merged, drift = merge_confirmed_physicians(confirmed, resolved)
+    if hard:
+        return merged, drift
+    kept_missing = [m for m in merged if m["name"] in drift["missing"]]
+    matched = [m for m in merged if m["name"] not in drift["missing"]]
+    extra = [r for r in resolved if r.get("name") in drift["new"]]
+    return matched + extra + kept_missing, {"new": [], "missing": drift["missing"], "soft": True}
 
 
 # ── 2+3. resolve ──────────────────────────────────────────────────────────────

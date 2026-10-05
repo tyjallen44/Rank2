@@ -46,3 +46,22 @@ def test_delivery_flags_roster_drift():
     assert "Brand – Covington" in fl[0]["detail"] and "Left Town" in fl[0]["detail"]
     d["location_resolution"]["drift"] = {"new": [], "missing": []}; d["physician_resolution"]["drift"] = {"new": [], "missing": []}
     assert D.check_result(d, group={"type_hint": "practice"}) == []
+
+
+def test_soft_confirmation_keeps_fresh_findings_and_hard_does_not():
+    from perception.location_resolver import apply_confirmed_locations
+    from perception.physician_resolver import apply_confirmed_physicians
+    confirmed = [{"name": "OrthoSouth", "city": "Memphis", "state": "TN", "address": "4515 Poplar Ave #206, Memphis, TN 38117", "place_id": "g1"},
+                 {"name": "OrthoSouth (old)", "city": "Memphis", "state": "TN", "address": "1 Gone Rd, Memphis, TN 38100", "place_id": None}]
+    resolved = [{"name": "OrthoSouth – Memphis Poplar", "city": "Memphis", "state": "TN", "address": "4515 Poplar Ave #206, Memphis, TN 38117, USA", "place_id": "g1", "sources": ["website", "google"]},
+                {"name": "OrthoSouth – Covington", "city": "Covington", "state": "TN", "address": "1995 Hwy 51 S, Covington, TN 38019", "place_id": "g2", "sources": ["google"]}]
+    soft, d1 = apply_confirmed_locations(confirmed, resolved, hard=False)
+    assert [s["name"] for s in soft] == ["OrthoSouth", "OrthoSouth – Covington", "OrthoSouth (old)"] and d1["new"] == [] and d1["soft"]
+    hard, d2 = apply_confirmed_locations(confirmed, resolved, hard=True)
+    assert [s["name"] for s in hard] == ["OrthoSouth", "OrthoSouth (old)"] and d2["new"] == ["OrthoSouth – Covington"]
+    cp = [{"name": "ANDREW WODOWSKI", "npi": "1", "credential": "MD"}]
+    rp = [{"name": "Andrew J. Wodowski", "npi": "1", "credential": "MD", "sources": ["website", "nppes"]}, {"name": "New Hire", "npi": "2", "credential": "MD", "sources": ["nppes"]}]
+    softp, _ = apply_confirmed_physicians(cp, rp, hard=False)
+    assert [p["name"] for p in softp] == ["Andrew Wodowski", "New Hire"]          # upper-case confirmed names are title-cased
+    hardp, dp = apply_confirmed_physicians(cp, rp, hard=True)
+    assert [p["name"] for p in hardp] == ["Andrew Wodowski"] and dp["new"] == ["New Hire"]

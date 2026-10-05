@@ -208,8 +208,12 @@ def get_org(name: str, city: str, state: str, *, confirmed_only: bool = True) ->
                              "website": r[8], "source": r[9], "confirmed_by": r[10], "confirmed_at": str(r[11])[:10] if r[11] else None,
                              "from_graph": True} for r in locs]
         phys = con.execute("SELECT npi, name, specialty, credential, source, confirmed_at FROM org_physicians WHERE org_key = ? AND removed_at IS NULL ORDER BY name", [key]).fetchall()
-        org["physicians"] = [{"npi": r[0], "name": r[1], "specialty": r[2], "credential": r[3], "source": r[4],
+        from .physician_resolver import _clean_name as _pclean
+        org["physicians"] = [{"npi": r[0], "name": _pclean(r[1] or ""), "specialty": r[2], "credential": r[3], "source": r[4],
                               "confirmed_at": str(r[5])[:10] if r[5] else None, "from_graph": True} for r in phys]
+        # Only an explicit roster edit (Fix roster / Trends roster edit) is a hard confirmation; a roster that
+        # passed through a form run is soft — fresh findings still join it.
+        org["hard"] = org.get("source") == "roster_edit"
         return org
     finally:
         con.close()

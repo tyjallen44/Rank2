@@ -529,12 +529,13 @@ class PracticeAdapter(_Adapter):
                 except Exception:
                     _g = None
                 if _g and _g.get("physicians"):
-                    from .physician_resolver import merge_confirmed_physicians
-                    _phys, _drift = merge_confirmed_physicians(_g["physicians"], _phys)
-                    _res["confirmed"] = {"by": _g.get("confirmed_by"), "at": _g.get("confirmed_at"), "count": len(_g["physicians"])}
+                    from .physician_resolver import apply_confirmed_physicians
+                    _hard = bool(_g.get("hard"))
+                    _phys, _drift = apply_confirmed_physicians(_g["physicians"], _phys, hard=_hard)
+                    _res["confirmed"] = {"by": _g.get("confirmed_by"), "at": _g.get("confirmed_at"), "count": len(_g["physicians"]), "hard": _hard}
                     _res["drift"] = _drift
                     _res["total"] = len(_phys)
-                    emit({"type": "text", "text": f"Using the confirmed physician roster: {len(_phys)}"
+                    emit({"type": "text", "text": (f"Using the confirmed physician roster: {len(_phys)}" if _hard else f"Physician roster: {len(_phys)} — fresh findings plus names kept from the earlier run")
                           + (f"; {len(_drift['new'])} new name{'s' if len(_drift['new']) != 1 else ''} found since" if _drift["new"] else "")
                           + (f"; {len(_drift['missing'])} confirmed not found this run" if _drift["missing"] else "")})
                 ctx.physician_roster = {ctx.entity_name: _phys}
