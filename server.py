@@ -1541,6 +1541,18 @@ def _profile_audit(result, job: dict, emit=None) -> None:
         for sbl in (job.get("confirmed_siblings") or []):
             if sbl.get("place_id"):
                 roster.append({"name": sbl.get("original_name") or sbl.get("name"), "city": sbl.get("city") or "", "place_id": sbl["place_id"]})
+        if len(roster) <= 1:
+            # Roster resolved by the run itself (website → NPPES → Google): audit every pinned office.
+            seen_pids = {r["place_id"] for r in roster}
+            for sbl in ((getattr(result, "location_resolution", None) or {}).get("siblings") or []):
+                if sbl.get("place_id") and sbl["place_id"] not in seen_pids:
+                    seen_pids.add(sbl["place_id"])
+                    roster.append({"name": sbl.get("name"), "city": sbl.get("city") or "", "place_id": sbl["place_id"]})
+            if not a.get("place_id"):
+                for cr in (getattr(result, "practice_composite_rows", None) or []):
+                    if cr.get("is_anchor") and cr.get("place_id") and cr["place_id"] not in seen_pids:
+                        roster.insert(0, {"name": result.entity_name, "city": job.get("city") or "", "place_id": cr["place_id"]})
+                        break
         if not roster:
             return
         if emit:
@@ -1553,7 +1565,7 @@ def _profile_audit(result, job: dict, emit=None) -> None:
         site = (result.rankings[0].website_url if result.rankings else None) or ((job.get("content_urls") or [None])[0])
         org_domain = _dom(site)
         profiles = []
-        for r in roster[:25]:
+        for r in roster:            # every office — practices are never sampled
             d = place_details(r["place_id"]) or {}
             web = d.get("websiteUri") or ""
             wd = _dom(web)
@@ -6193,6 +6205,9 @@ class PracticeDiscoverRequest(BaseModel):
     state: str
     service_line: Optional[str] = None   # set → scope sibling discovery to this service line
     parent_system: Optional[str] = None  # the larger hospital/health system that operates it
+    website: Optional[str] = None        # the practice site — its office list is the first source
+    anchor_listing: Optional[dict] = None  # the selected Google listing (place_id, address) — excluded from siblings
+    force: bool = False                  # bypass the 90-day registry and resolve afresh
 
 
 @app.post("/api/practice/detect-service-line")
@@ -6240,78 +6255,11 @@ class FindMoreRequest(BaseModel):
 
 @app.post("/api/practice/find-more")
 async def practice_find_more(req: FindMoreRequest, _: str = Depends(require_auth)):
-    """Widen the Google search for a multi-office practice: several query variants
-    (brand alone, brand + state, brand near the market city) merged by place_id and
-    kept only when the listing name matches the brand."""
-    from perception.data.places import search_entity_candidates, _tokens
-    brand = _normalize_input(req.brand)
-    btoks = _tokens(brand)
-    # Acronym brands: "Illinois Bone and Joint Institute" lists many offices as "IBJI Doctors' Office - …"
-    _stop = {"the", "of", "and", "at", "for", "&"}
-    _words = [w for w in re.findall(r"[A-Za-z]+", brand) if w.lower() not in _stop]
-    acronym = "".join(w[0] for w in _words).lower() if len(_words) >= 3 else ""
-    seen = set(req.exclude_place_ids or [])
-    out = []
-    def _city_of(addr: str) -> str:
-        parts = [p.strip() for p in str(addr or "").split(",")]
-        return parts[-3] if len(parts) >= 3 else ""
-
-    def _run(name, city, state):
-        try:
-            return search_entity_candidates(name, city, state, max_results=20) or []
-        except TypeError:
-            return search_entity_candidates(name, city, state) or []
-        except Exception:
-            return []
-
-    def _take(cands):
-        added = 0
-        for c in cands:
-            pid = c.get("place_id")
-            if not pid or pid in seen:
-                continue
-            cname = (c.get("name") or "").lower()
-            ctoks = _tokens(cname)
-            by_tokens = bool(btoks) and len(btoks & ctoks) / len(btoks) >= 0.5
-            by_acronym = bool(acronym) and re.search(r"\b" + re.escape(acronym) + r"\b", cname) is not None
-            if not (by_tokens or by_acronym):
-                continue
-            seen.add(pid)
-            out.append(c)
-            added += 1
-        return added
-
-    # Round 1: brand-level variants around the market
-    variants = [(brand, None, req.state), (brand, req.city, req.state),
-                (f"{brand} clinic", None, req.state), (f"{brand} near {req.city}", None, req.state)]
-    if acronym:
-        variants += [(acronym.upper(), None, req.state), (acronym.upper(), req.city, req.state),
-                     (f"{acronym.upper()} doctors office", None, req.state)]
-    for name, city, state in variants:
-        _take(_run(name, city, state))
-    # Round 2+: snowball — every city seen in a found address becomes its own query, so a
-    # suburban multi-office group is built up from its own footprint (capped).
-    queried = {str(req.city).strip().lower()}
-    max_queries, n = 14, 0
-    frontier = [c for c in out]
-    while frontier and n < max_queries:
-        nxt = []
-        for c in frontier:
-            city = _city_of(c.get("address"))
-            key = city.lower()
-            if not city or key in queried:
-                continue
-            queried.add(key)
-            n += 1
-            if n > max_queries:
-                break
-            before = len(out)
-            _take(_run(brand, city, req.state))
-            if acronym:
-                _take(_run(acronym.upper(), city, req.state))
-            nxt.extend(out[before:])
-        frontier = nxt
-    return {"candidates": out, "queries": n + len(variants)}
+    """Widen the Google search for a multi-office practice: brand variants, then every city seen in
+    a found address becomes its own query (perception.location_resolver.google_snowball)."""
+    from perception.location_resolver import google_snowball
+    out = google_snowball(_normalize_input(req.brand), req.city, req.state, exclude=set(req.exclude_place_ids or []))
+    return {"candidates": out["candidates"], "queries": out["queries"]}
 
 
 @app.post("/api/practice/siblings")
@@ -6332,9 +6280,11 @@ async def practice_siblings(
             siblings, brand = discover_service_line_siblings(
                 req.entity_name, req.parent_system, req.service_line, city, state)
             return {"siblings": siblings, "parent_org_name": brand, "count": len(siblings)}
-        from perception.practice_discovery import discover_practice_siblings
-        siblings, parent_org_name = discover_practice_siblings(req.entity_name, city, state)
-        return {"siblings": siblings, "parent_org_name": parent_org_name, "count": len(siblings)}
+        from perception.location_resolver import resolve_locations
+        res = resolve_locations(req.entity_name, city, state, website=req.website, anchor_listing=req.anchor_listing,
+                                force_rerun=req.force)
+        return {"siblings": res["siblings"], "parent_org_name": res.get("parent_org_name") or "",
+                "count": len(res["siblings"]), "resolution": res.get("resolution") or {}}
     except Exception as exc:
         raise HTTPException(500, f"Sibling discovery error: {exc}")
 
@@ -6638,8 +6588,10 @@ def _run_event_job(
                             "brand": brand, "force_rerun": override_cache, "override_today_lock": override_cache,
                             "website": _site or None, "city": city,
                             "service_line": _sl.get("service_line"), "parent_system": _sl.get("parent_system"),
-                            "confirmed_siblings": None if _sl.get("is_service_line") else ([] if entity_type == "practice" else None),
-                            "practice_composite": False,
+                            # None → the pipeline resolves every office (website → NPPES → Google) exactly as a
+                            # single Deep Diagnostic does; the composite table then covers the whole roster.
+                            "confirmed_siblings": None,
+                            "practice_composite": entity_type == "practice",
                         }
                         _agg = auto_practice_composite if entity_type == "fqhc" else True
                         _quiet = lambda _e: None
@@ -6696,7 +6648,7 @@ def _run_event_job(
                             _pkwargs["service_line"]  = _sl["service_line"]
                             _pkwargs["parent_system"] = _sl["parent_system"]
                         else:
-                            _pkwargs["confirmed_siblings"] = []   # single-location, unchanged
+                            _pkwargs["confirmed_siblings"] = None  # resolve every office, as a single run does
                         result = _analyze_with_retry(analyze_practice, _pkwargs,
                                                      resolved_name, base_wait=base_wait)
                     else:

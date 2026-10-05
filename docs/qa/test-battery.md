@@ -3809,3 +3809,17 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T6 | Group with 10+ members and benchmark on | Members whose report predates the benchmark are flagged "Benchmark not printed"; a re-run clears it. [ui] |
 | R1 | Regression | Ranking, median, prospects (amber rows, "would be N"), Re-run, Mark prospect/Remove and the member score history are unchanged; the old "site blocks AI" and "hospital rubric" badges are now flags in the ⚠ badge. |
 | R2 | Unit | `tests/test_delivery.py` (7 tests) passes: complete report → no flags; each missing piece named; website levels; rubric/benchmark/score; fix-first ordering; preset waiver; summary counts. |
+
+## LOCATIONS-RESOLVER — every practice office from verified sources (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic → Specialty Practice → pick a multi-office practice with a website | The Locations step lists the practice's offices with source chips per row: **website**, **Google**, **NPI**; a "Sources:" line under the heading says how many offices the website lists, how many Google listings were verified, and NPI cities. No "model recall" chip when the website or Google produced offices. [ui] |
+| T2 | An office on the website with no Google profile | Row shows an amber "no Google listing" chip; on the PDF the Locations table "Found on" column shows W and "no Google", and a "Listing gaps" note under the table names it. [ui][pdf] |
+| T3 | A Google listing for the practice that the website's office list omits | Amber "not on website" chip; PDF "Found on" shows G (+ N when NPI confirms the city) and "not on site"; named in "Listing gaps". [ui][pdf] |
+| T4 | Practice with no website and no brand listings on Google | Discovery falls back to model recall; rows carry a "model recall" chip; PDF marks M and the intro says the roster is model-recalled. [ui][pdf] |
+| T5 | Event Prep / group upload of practices | Each bulk report now has the full Locations table (every office, Google rating per office, profile audit of every pinned office) — identical to a form run; previously bulk reports showed the anchor only. Upload log lines show "Finding every <org> location". [ui][pdf] |
+| T6 | Re-run from a group row | Re-run bypasses the 90-day roster cache and resolves the offices afresh; a form run within 90 days reuses the resolved roster with its source marks intact. [code] |
+| T7 | Trends → Find more | Still works (same Google snowball, now shared with the resolver). [ui] |
+| R1 | Regression | Confirmed rosters from the form (checkboxes) and service-line scoping are unchanged; hospital reports unaffected; practice profile audit no longer stops at 25 offices. |
+| R2 | Unit | `tests/test_location_resolver.py` (7 tests): text + schema.org address parsing, same-office matching, brand matching incl. acronyms/DBAs, pin + gap flags + anchor exclusion, model as last resort only, registry round-trip keeps sources. |

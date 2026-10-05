@@ -571,6 +571,11 @@ def _init_db_impl() -> None:
         )
     except Exception:
         pass
+    # Resolver detail per sibling (address, place_id, sources, gap flags) — perception/location_resolver.py
+    try:
+        con.execute("ALTER TABLE practice_entity_registry ADD COLUMN meta_json VARCHAR")
+    except Exception:
+        pass
 
     # ── GBP durable identity table ───────────────────────────────────────────
     # Keyed by place_id (Google's permanent listing identifier).  Written once

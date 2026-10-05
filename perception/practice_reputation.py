@@ -399,6 +399,10 @@ def collect_platform_data(
             "state":                  p.get("state") or state,
             "entity_type":            p.get("entity_type", "practice"),
             "is_anchor":              bool(p.get("is_anchor", False)),
+            "sources":                list(p.get("sources") or []),        # location_resolver: website / nppes / google / model
+            "google_missing":         bool(p.get("google_missing", False)), # on the website, no Google listing
+            "website_missing":        bool(p.get("website_missing", False)),# Google listing not on the website
+            "phone":                  p.get("phone") or "",
             "affiliation_verified":   affiliation_ok,
             "google_rating":          g_rating,
             "google_count":           g_count,

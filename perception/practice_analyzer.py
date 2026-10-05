@@ -718,7 +718,9 @@ def _save_practice_extras(
 def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggregate: bool,
                              confirmed_siblings: Optional[list], service_line: Optional[str],
                              parent_system: Optional[str], org_name: Optional[str],
-                             emit, force_rerun: bool) -> tuple[Optional[list[str]], Optional[list[dict]], Optional[str]]:
+                             emit, force_rerun: bool, website: Optional[str] = None,
+                             anchor_listing: Optional[dict] = None,
+                             report: Optional[dict] = None) -> tuple[Optional[list[str]], Optional[list[dict]], Optional[str]]:
     """Establish the location roster for an aggregate run.
 
     Returns (location_roster, aggregate_siblings, org_name). location_roster is
@@ -755,11 +757,17 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
             if not org_name and _sl_brand:
                 org_name = _sl_brand
         else:
-            from .practice_discovery import discover_practice_siblings as _disc_siblings
-            emit({"type": "phase", "name": "discovery", "text": f"Discovering {entity_name} locations"})
-            _siblings, _discovered_org_name = _disc_siblings(
-                entity_name, city, state, on_event=emit, force_rerun=force_rerun
-            )
+            # Website office list → NPPES footprint → Google (pin + snowball); model recall only as a
+            # last resort. Every sibling carries its sources and gap flags for the Locations table.
+            from .location_resolver import resolve_locations
+            emit({"type": "phase", "name": "discovery", "text": f"Finding every {entity_name} location"})
+            _res = resolve_locations(entity_name, city, state, website=website, anchor_listing=anchor_listing,
+                                     emit=emit, force_rerun=force_rerun)
+            _siblings, _discovered_org_name = _res["siblings"], _res.get("parent_org_name") or ""
+            if report is not None:
+                report.update(_res.get("resolution") or {})
+                report["siblings"] = [{k: s.get(k) for k in ("name", "city", "state", "address", "place_id", "sources",
+                                                                 "google_missing", "website_missing")} for s in _siblings]
             _aggregate_siblings = list(_siblings or [])
             if _siblings:
                 _location_roster = [entity_name] + [s["name"] for s in _siblings]

@@ -6199,6 +6199,33 @@ function _irCityFromAddr(addr) {
 // Seed the Locations list from the Google candidates returned by the search:
 // same-brand listings at other streets are real locations of this practice /
 // service line. They carry place_id so the server pins each to its own profile.
+let _irResolution = null;   // how the office list was found (website / NPPES / Google / model), from /api/practice/siblings
+function _sourceChips(s) {
+  const src = s.sources || [];
+  if (!src.length) return '';
+  const chip = (t, tip, warn) => `<span title="${tip}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:${warn ? '#fdf3dc' : '#e6f3f4'};color:${warn ? '#7a5a00' : 'var(--teal)'};margin-left:4px;white-space:nowrap">${t}</span>`;
+  let out = '';
+  if (src.includes('website')) out += chip('website', 'Listed on the practice website');
+  if (src.includes('google'))  out += chip('Google', 'Google Business Profile verified by address');
+  if (src.includes('nppes'))   out += chip('NPI', 'The practice holds an organizational NPI in this city');
+  if (src.includes('model'))   out += chip('model recall', 'No verified source listed offices; this came from model recall — check it', true);
+  if (s.google_missing)        out += chip('no Google listing', 'On the website but no Google Business Profile could be verified at this address', true);
+  else if (s.website_missing)  out += chip('not on website', 'A Google listing for the practice that the website\'s office list does not show', true);
+  return out;
+}
+function _irResolutionLine() {
+  const r = _irResolution; if (!r || r.cached) return '';
+  const w = r.website || {}, g = r.google || {}, n = r.nppes || {};
+  const parts = [];
+  if (w.status === 'measured') parts.push(`${w.offices} office${w.offices === 1 ? '' : 's'} on the website`);
+  else if (w.status === 'none') parts.push('no office list readable on the website');
+  else if (w.status === 'unreachable') parts.push('website unreachable');
+  else if (w.status === 'skipped') parts.push('no website known');
+  const gl = (g.pinned || 0) + (g.extra || 0); if (gl) parts.push(`${gl} Google listing${gl === 1 ? '' : 's'} verified`);
+  if (n.cities) parts.push(`NPI addresses in ${n.cities} cit${n.cities === 1 ? 'y' : 'ies'}`);
+  if ((r.model || {}).used) parts.push('model recall used as a last resort');
+  return parts.length ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">Sources: ${parts.join(' · ')}.</div>` : '';
+}
 function _irSeedFromCandidates(discovered) {
   return _seedFromCandidates(_irSelected, _irCandidates, _irResolvedCity, _irResolvedState, discovered);
 }
@@ -6311,10 +6338,14 @@ async function irStartDiscovery(forceDiscover) {
         state: _irResolvedState,
         service_line:  _irServiceLine ? _irServiceLine.service_line  : undefined,
         parent_system: _irServiceLine ? _irServiceLine.parent_system : undefined,
+        website: _irSelected.website || (document.getElementById('ir-website')?.value || '').trim() || undefined,
+        anchor_listing: _irSelected.place_id ? { place_id: _irSelected.place_id, address: _irSelected.address || '' } : undefined,
+        force: !!forceDiscover,
       }),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Location discovery failed'));
     const data = await r.json();
+    _irResolution = data.resolution || null;
     _irDiscoveredSiblings = _irSeedFromCandidates(data.siblings || []);
     // Prefer the AI-identified parent org / service-line brand; fall back to typed name
     _irOrgName = (data.parent_org_name || '').trim() || orgName;
@@ -6355,8 +6386,8 @@ function renderIrSiblings(siblings) {
   countEl.innerHTML = _irRosterFromGraph
     ? `<span style="color:var(--teal);font-weight:600">From your confirmed roster</span> — ${_irRosterFromGraph.count} location${_irRosterFromGraph.count === 1 ? '' : 's'} confirmed ${_irRosterFromGraph.confirmed_at ? 'on ' + _learnEsc(String(_irRosterFromGraph.confirmed_at).slice(0, 10)) : ''}${_irRosterFromGraph.confirmed_by ? ' by ' + _learnEsc(String(_irRosterFromGraph.confirmed_by).split('@')[0]) : ''}. Uncheck any that no longer belong, or <a href="#" onclick="irStartDiscovery(true);return false" style="color:var(--teal);font-weight:600">re-discover locations</a>. <a href="#" class="help-link" onclick="showHelp('entity-graph',event);return false">ⓘ</a>`
     : siblings.length > 0
-    ? 'All checked locations are rolled into the report. Uncheck any that don\'t belong.'
-    : 'Only the flagship listing was found; the report covers this single location.';
+    ? 'All checked locations are rolled into the report. Uncheck any that don\'t belong.' + _irResolutionLine()
+    : 'Only the flagship listing was found; the report covers this single location.' + _irResolutionLine();
   setTimeout(() => _mountLocationImport('ir-siblings-import', { defaultState: _irResolvedState || '', existing: () => _irDiscoveredSiblings || [],
     onAdd: items => { _irDiscoveredSiblings = (_irDiscoveredSiblings || []).concat(items); renderIrSiblings(_irDiscoveredSiblings); } }), 0);
 
@@ -6381,7 +6412,7 @@ function renderIrSiblings(siblings) {
         <input type="checkbox" id="ir-sib-${i}" checked style="accent-color:var(--teal);flex-shrink:0;width:15px;height:15px">
         <label for="ir-sib-${i}" style="flex:1;min-width:0;cursor:pointer;margin:0;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
           <span style="font-size:13px;font-weight:600;color:var(--text)">${s.original_name || s.name}</span>
-          ${loc ? `<span style="font-size:11px;color:var(--muted)">${loc}</span>` : ''}${rating}
+          ${loc ? `<span style="font-size:11px;color:var(--muted)">${loc}</span>` : ''}${rating}${_sourceChips(s)}
         </label>
       </div>`;
   });
@@ -11099,7 +11130,9 @@ async function teStartDiscovery(forceDiscover) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entity_name: _teSelected.name, city: _teResolvedCity, state: _teResolvedState,
         service_line: _teServiceLine ? _teServiceLine.service_line : undefined,
-        parent_system: _teServiceLine ? _teServiceLine.parent_system : undefined }),
+        parent_system: _teServiceLine ? _teServiceLine.parent_system : undefined,
+        website: _teSelected.website || undefined,
+        anchor_listing: _teSelected.place_id ? { place_id: _teSelected.place_id, address: _teSelected.address || '' } : undefined }),
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Location discovery failed'));
     const data = await r.json();

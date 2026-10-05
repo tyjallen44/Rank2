@@ -9,6 +9,7 @@ to a Google listing with a strong name match.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -32,7 +33,7 @@ def get_registry_siblings(
     now = datetime.utcnow().isoformat()
     con = get_connection()
     rows = con.execute(
-        """SELECT name, entity_type, city, state, canonical_name
+        """SELECT name, entity_type, city, state, canonical_name, meta_json
            FROM practice_entity_registry
            WHERE anchor_key = ? AND expires_at > ?
            ORDER BY registered_at ASC, name ASC""",
@@ -41,15 +42,26 @@ def get_registry_siblings(
     con.close()
     if not rows:
         return None
-    return [
-        {
+    out = []
+    for r in rows:
+        d = {
             "name": r[4] or r[0],   # canonical_name when available, else registered name
             "entity_type": r[1],
             "city": r[2],
             "state": r[3],
         }
-        for r in rows
-    ]
+        # Resolver detail (address, place_id, sources, gap flags) rides along as JSON so a cached
+        # roster prints the same source marks as the run that resolved it.
+        try:
+            meta = json.loads(r[5]) if r[5] else {}
+        except Exception:
+            meta = {}
+        if isinstance(meta, dict):
+            d.update({k: v for k, v in meta.items() if k not in d or k == "name"})
+            if meta.get("name") and not r[4]:
+                d["name"] = meta["name"]
+        out.append(d)
+    return out
 
 
 def save_registry_siblings(
@@ -68,16 +80,19 @@ def save_registry_siblings(
     for s in siblings:
         if not s.get("name"):
             continue
+        meta = {k: s.get(k) for k in ("address", "phone", "place_id", "rating", "review_count", "maps_url", "sources",
+                                      "google_missing", "website_missing", "website_name") if s.get(k) is not None}
         con.execute(
             """INSERT INTO practice_entity_registry
                (id, anchor_key, name, entity_type, city, state, canonical_name,
-                registered_at, expires_at)
-               VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)""",
+                registered_at, expires_at, meta_json)
+               VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)""",
             [
                 str(uuid.uuid4()), key,
                 s["name"], s.get("entity_type", "practice"),
                 s.get("city", ""), s.get("state", ""),
                 now.isoformat(), expires.isoformat(),
+                json.dumps(meta) if meta else None,
             ],
         )
     con.close()

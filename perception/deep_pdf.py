@@ -379,6 +379,10 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
     for cr in result.practice_composite_rows or []:
         r = row(cr.get("practice_name") or "")
         r["composite"] = cr
+        if cr.get("sources"):
+            r["sources"] = cr["sources"]
+            r["google_missing"] = bool(cr.get("google_missing"))
+            r["website_missing"] = bool(cr.get("website_missing"))
         if cr.get("is_anchor"):
             r["anchor"] = True
             if cr.get("google_rating") is not None and r.get("google_rating") is None:
@@ -499,6 +503,24 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
     au = result.profile_audit or {}
     sm = au.get("summary") or {}
     intro = f"{len(rows)} location{'s' if len(rows) != 1 else ''} confirmed for this {'practice' if ed['rubric'] == 'practice' else 'organization'}; the highlighted row is the analyzed entity."
+    lr = getattr(result, "location_resolution", None) or {}
+    has_sources = any(r.get("sources") for r in rows)
+    if has_sources and not lr.get("cached") and lr.get("website"):
+        w = lr["website"] or {}
+        g = lr.get("google") or {}
+        parts = []
+        if w.get("status") == "measured":
+            parts.append(f"{w.get('offices', 0)} office{'s' if w.get('offices', 0) != 1 else ''} listed on the website")
+        elif w.get("status") in ("none", "unreachable"):
+            parts.append("no office list could be read from the website")
+        if g.get("pinned") or g.get("extra"):
+            parts.append(f"{(g.get('pinned') or 0) + (g.get('extra') or 0)} Google listing{'s' if (g.get('pinned') or 0) + (g.get('extra') or 0) != 1 else ''} verified")
+        if (lr.get("nppes") or {}).get("cities"):
+            parts.append(f"NPI registry addresses in {lr['nppes']['cities']} cit{'ies' if lr['nppes']['cities'] != 1 else 'y'}")
+        if (lr.get("model") or {}).get("used"):
+            parts.append("no verified source listed offices, so the roster is model-recalled and marked M")
+        if parts:
+            intro += " Sources: " + "; ".join(parts) + "."
     if has_audit and sm.get("checked"):
         dom = au.get("domain") or "the practice site"
         intro += (f" {sm['checked']} Google Business Profile{'s' if sm['checked'] != 1 else ''} read directly from Google: "
@@ -514,6 +536,8 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
 
     has_addr = any((r.get("address") or "").strip() for r in rows)
     th = ['<th>Location</th>'] + (['<th>Address</th>'] if has_addr else []) + ['<th style="text-align:center">Google</th>']
+    if has_sources:
+        th += ['<th style="text-align:center" title="W = on the website, G = Google listing verified, N = NPI registry address in this city, M = model recall">Found on</th>']
     if has_audit:
         th += ['<th style="text-align:center">Links to site</th>', '<th style="text-align:center">Hours</th>',
                '<th style="text-align:center">Phone</th>', '<th style="text-align:center">Photos</th>']
@@ -532,6 +556,8 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
                     if (r.get("composite") or {}).get("not_established") else '<span style="color:#b0b8c0">—</span>')))
         tds = [f"<td>{name}</td>"] + ([f'<td style="font-size:8.5pt;color:#4a5a6a">{_e(r.get("address") or "")}</td>'] if has_addr else []) + \
               [f'<td style="text-align:center">{google}</td>']
+        if has_sources:
+            tds.append(f'<td style="text-align:center">{_sources_cell(r)}</td>')
         if has_audit:
             a = r.get("audit")
             if a:
@@ -553,7 +579,37 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
             else:
                 tds += ['<td style="text-align:center;color:#b0b8c0">—</td>', '<td style="text-align:right;color:#b0b8c0">—</td>', '<td></td>']
         trs += f"<tr{style}>{''.join(tds)}</tr>"
-    return _table_section("Locations", intro, th, trs, len(rows)) + owner
+    gaps = ""
+    web_only = [r["name"] for r in rows if r.get("google_missing")]
+    goog_only = [r["name"] for r in rows if r.get("website_missing")]
+    if web_only or goog_only:
+        items = []
+        if web_only:
+            items.append(f"<li><strong>{len(web_only)} office{'s' if len(web_only) != 1 else ''} on the website with no Google Business Profile we could verify:</strong> "
+                         f"{_e(', '.join(web_only[:12]))}{'…' if len(web_only) > 12 else ''}. Patients asking an AI assistant for the nearest office will not be sent there.</li>")
+        if goog_only:
+            items.append(f"<li><strong>{len(goog_only)} Google listing{'s' if len(goog_only) != 1 else ''} for the practice not on the website's office list:</strong> "
+                         f"{_e(', '.join(goog_only[:12]))}{'…' if len(goog_only) > 12 else ''}. Either an office the site forgot, or a stale or duplicate profile to claim and fix.</li>")
+        gaps = (f'<div class="pxcontent" style="margin-top:6px"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing gaps</p>'
+                f'<ul style="font-size:8.5pt;margin:0 0 0 14px;padding:0">{"".join(items)}</ul></div>')
+    return _table_section("Locations", intro, th, trs, len(rows)) + gaps + owner
+
+
+def _sources_cell(r: dict) -> str:
+    marks = []
+    src = r.get("sources") or []
+    if r.get("anchor") and not src:
+        return '<span style="font-size:7.5pt;color:#7a9095">selected listing</span>'
+    for key, letter, tip in (("website", "W", "on the website"), ("google", "G", "Google listing verified"),
+                             ("nppes", "N", "NPI registry address in this city"), ("model", "M", "model recall")):
+        if key in src:
+            marks.append(f'<span title="{tip}" style="display:inline-block;min-width:13px;padding:0 3px;border-radius:3px;font-size:7.5pt;font-weight:700;'
+                         f'background:{"#e6f3f4" if key != "model" else "#fdf3dc"};color:{"#1f6f73" if key != "model" else "#7a5a00"};margin:0 1px">{letter}</span>')
+    if r.get("google_missing"):
+        marks.append('<span style="font-size:7.5pt;color:#991b1b;margin-left:3px">no Google</span>')
+    elif r.get("website_missing"):
+        marks.append('<span style="font-size:7.5pt;color:#7a5a00;margin-left:3px">not on site</span>')
+    return "".join(marks) or '<span style="color:#b0b8c0">—</span>'
 
 
 def _physicians_section(result: AnalysisResult) -> str:

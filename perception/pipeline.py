@@ -488,10 +488,13 @@ class PracticeAdapter(_Adapter):
             ctx.anchor_addr_norm = _prac._normalize_street(ctx.read.formatted_address.split(",")[0])
 
         # Roster: confirmed_siblings passthrough / service-line discovery / sibling discovery.
+        ctx.location_resolution = {}
+        _site = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)
         ctx.location_roster, ctx.aggregate_siblings, ctx.org_name = _prac._resolve_practice_roster(
             ctx.entity_name, ctx.city, ctx.state, aggregate=ctx.aggregate,
             confirmed_siblings=ctx.confirmed_siblings, service_line=ctx.service_line,
             parent_system=ctx.parent_system, org_name=ctx.org_name, emit=emit, force_rerun=ctx.force_rerun,
+            website=_site, anchor_listing=ctx.anchor_listing, report=ctx.location_resolution,
         )
         if ctx.org_name and not ctx.report_title:
             ctx.report_title = _merge_casing(ctx.org_name, ctx.entity_name)
@@ -877,6 +880,8 @@ def run_individual(
     result = AnalysisResult(**{**common, **adapter.extra_fields(ctx)})
     if getattr(ctx, "physician_facts", None):
         result.physician_facts = ctx.physician_facts
+    if getattr(ctx, "location_resolution", None):
+        result.location_resolution = ctx.location_resolution
     if getattr(ctx, "website_facts", None):
         result.website_facts = {k: v for k, v in ctx.website_facts.items() if k != "site_pages"}
         if getattr(ctx, "identity_override", None):
