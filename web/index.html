@@ -2715,19 +2715,19 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
     <div id="page-groups" class="page">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
         <div>
-          <div class="page-title">Groups</div>
+          <div class="page-title">Groups <a href="#" class="title-help" onclick="showHelp('groups',event);return false">How groups work</a></div>
           <div class="page-sub">Associations, cohorts and programs: a named set of Deep Diagnostics ranked and benchmarked against each other. Attach a report when you run it, from a bulk upload, or from History. Benchmarks print on members' reports once a group has 10 organizations.</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input id="groups-search" class="fi" type="search" placeholder="Search organizations, locations, specialties…" style="width:300px;padding:8px 10px;font-size:13px" oninput="groupsFilter(this.value)">
-          <button class="btn btn-primary" id="groups-new-btn" onclick="groupShowCreate()">+ New group</button>
+          <input id="groups-search" class="fi" type="search" placeholder="Search organizations, locations, specialties…" title="Filters the list as you type — group names on the list page; organization, location, specialty or who ran it on a group page" style="width:300px;padding:8px 10px;font-size:13px" oninput="groupsFilter(this.value)">
+          <button class="btn btn-primary" id="groups-new-btn" onclick="groupShowCreate()" title="Create a group — an association, cohort or program whose reports are ranked and benchmarked against each other">+ New group</button>
         </div>
       </div>
       <div id="group-create" class="card hidden" style="margin:12px 0;max-width:640px">
         <div class="fg"><label class="fl">Name</label><input id="grp-name" class="fi" placeholder="e.g. Iowa Orthopaedic Society 2026"></div>
         <div class="fg"><label class="fl">Description (optional)</label><input id="grp-desc" class="fi" placeholder="What this group is for"></div>
         <div class="fg"><label class="fl">Default specialty (optional)</label><input id="grp-spec" class="fi" placeholder="e.g. Orthopedics — prefilled on the Deep Diagnostic form for this group"></div>
-        <label class="aggregate-toggle" style="margin:6px 0 12px"><input type="checkbox" id="grp-show-pdf" checked><span class="agg-label">Print each member's rank and the group median on its report (once the group has 10 organizations)</span></label>
+        <label class="aggregate-toggle" style="margin:6px 0 12px" title="When on, each member's PDF cover and Executive Summary carry 'Nth of M · group median X' once the group has 10 organizations; off keeps just 'Member of <group>'"><input type="checkbox" id="grp-show-pdf" checked><span class="agg-label">Print each member's rank and the group median on its report (once the group has 10 organizations)</span></label>
         <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="groupCreate()">Create group</button><button class="btn btn-ghost" onclick="groupShowCreate(false)">Cancel</button></div>
         <div id="grp-err" class="err hidden mt8"></div>
       </div>
@@ -7745,7 +7745,7 @@ async function loadGroupsPage() {
       <td>${g.member_count}${g.member_count < 10 ? ` <span style="font-size:11px;color:var(--muted)">(${10 - g.member_count} more for benchmarks)</span>` : ''}</td>
       <td>${g.show_on_pdf ? 'Yes' : 'No'}</td>
       <td style="font-size:12px;color:var(--muted)">${(g.created_at || '').slice(0, 10)}${g.created_by ? ` · ${_learnEsc(String(g.created_by).split('@')[0])}` : ''}</td>
-      <td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openGroupPage('${g.id}')">Open →</button>${_role === 'admin' ? ` <button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')">✎ Edit</button>` : ''}</td></tr>`).join('')}
+      <td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openGroupPage('${g.id}')" title="Open the ranked table, benchmarks and actions for this group">Open →</button>${_role === 'admin' ? ` <button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')" title="Edit name, description, type, default specialty, visibility and the benchmark-on-reports switch">✎ Edit</button>` : ''}</td></tr>`).join('')}
   </tbody></table>`;
 }
 function _scoreColor(s) { return s == null ? 'var(--muted)' : s >= 75 ? '#2e9e5b' : s >= 58 ? '#e09b2a' : '#d94f4f'; }
@@ -7777,13 +7777,13 @@ async function openGroupPage(id, highlightRunId) {
   const scoredMs = ms.filter(m => m.score != null && m.status !== 'prospect');
   const prospects = ms.filter(m => m.status === 'prospect');
   const strip = scoredMs.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px">
-      ${[['Organizations', scoredMs.length, ''], ['Group median', b.median ?? '—', ''],
-         ['Above median', scoredMs.filter(m => b.median != null && m.score > b.median).length, 'of ' + scoredMs.length],
-         ['Top quartile (≥75)', scoredMs.filter(m => m.score >= 75).length, 'of ' + scoredMs.length],
-         ['Prospects', prospects.length, prospects.length ? 'shown in amber, outside the median' : ''],
-         ['Site blocks AI', ms.filter(m => m.website_status === 'blocked').length, 'need the firewall fix'],
-         ['Reports over 90 days old', ms.filter(m => (_days(m.generated_at) ?? 0) > 90).length, 'worth a re-run']]
-        .map(([l, v, sub]) => `<div style="flex:1;min-width:140px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">${l}</div><div style="font-size:20px;font-weight:800;color:var(--teal)">${v}</div>${sub ? `<div style="font-size:11px;color:var(--muted)">${sub}</div>` : ''}</div>`).join('')}
+      ${[['Organizations', scoredMs.length, '', 'Members with a score — each organization counted once, by its latest run'], ['Group median', b.median ?? '—', '', 'The middle Pulse Score of the members; prospects are left out'],
+         ['Above median', scoredMs.filter(m => b.median != null && m.score > b.median).length, 'of ' + scoredMs.length, 'Members scoring above the group median'],
+         ['Top quartile (≥75)', scoredMs.filter(m => m.score >= 75).length, 'of ' + scoredMs.length, 'Members in the national top quartile (Pulse Score 75 or more)'],
+         ['Prospects', prospects.length, prospects.length ? 'shown in amber, outside the median' : '', 'Organizations evaluated against the group that are not members; they do not affect the median or ranks'],
+         ['Site blocks AI', ms.filter(m => m.website_status === 'blocked').length, 'need the firewall fix', 'Members whose website turns AI crawlers away at the firewall — nothing they publish reaches AI answers until it is fixed'],
+         ['Reports over 90 days old', ms.filter(m => (_days(m.generated_at) ?? 0) > 90).length, 'worth a re-run', 'Members whose latest report is more than 90 days old; use ↻ Re-run to refresh']]
+        .map(([l, v, sub, tip]) => `<div title="${_learnEsc(tip || '')}" style="flex:1;min-width:140px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:help"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">${l}</div><div style="font-size:20px;font-weight:800;color:var(--teal)">${v}</div>${sub ? `<div style="font-size:11px;color:var(--muted)">${sub}</div>` : ''}</div>`).join('')}
     </div>` : '';
   const rows = ms.map(m => {
     const p = m.pillars || {}; const pl = pillarLabels(m);
@@ -7800,10 +7800,10 @@ async function openGroupPage(id, highlightRunId) {
       <td>${_confChip(m.confidence, '')}${m.website_status === 'blocked' ? '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px;margin-left:4px">site blocks AI</span>' : ''}</td>
       <td style="font-size:12px;color:var(--muted);white-space:nowrap">${m.generated_at || ''}</td>
       <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
-      <td style="white-space:nowrap">${(g.type_hint === 'practice' && (m.entity_type || 'hospital') === 'hospital') ? '<span class="badge" style="font-size:10px;background:#fee2e2;color:#991b1b;margin-right:4px" title="This report was run on the hospital rubric; Re-run produces it as a Specialty Practice">hospital rubric</span>' : ''}${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}">⬇ PDF</a>` : ''}
+      <td style="white-space:nowrap">${(g.type_hint === 'practice' && (m.entity_type || 'hospital') === 'hospital') ? '<span class="badge" style="font-size:10px;background:#fee2e2;color:#991b1b;margin-right:4px" title="This report was run on the hospital rubric; Re-run produces it as a Specialty Practice">hospital rubric</span>' : ''}${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Download this organization's latest report">⬇ PDF</a>` : ''}
         <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
-        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member' : 'Mark as a prospect (not a member)'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')">Remove</button>` : ''}</td></tr>
+        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member: it joins the ranking and the median' : 'Mark as a prospect: shown in amber with the rank it would hold, left out of the median and ranks'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')" title="Take this report out of the group; the report stays in History">Remove</button>` : ''}</td></tr>
       <tr id="gdet-${m.run_id}" class="hidden"><td colspan="8" style="background:#f6fafa;padding:10px 14px"></td></tr>`;
   }).join('');
   const bench = b.scored ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px">
@@ -7817,13 +7817,13 @@ async function openGroupPage(id, highlightRunId) {
         <div style="font-size:20px;font-weight:700;margin-top:6px">${_learnEsc(g.name)}</div>
         ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}${strip}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')">+ Add an organization</button>
-        ${_capReport('events') ? `<button class="btn btn-secondary btn-sm" onclick="groupUploadList('${g.id}')">⬆ Upload a list</button>` : ''}
-        <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/export.csv?token=${encodeURIComponent(_token)}">⬇ CSV</a>
-        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')">✎ Edit details</button>
-        <button class="btn btn-ghost btn-sm" onclick="groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})">${g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports'}</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupArchive('${g.id}')">Archive</button>` : ''}
-        ${_role === 'admin' ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupDelete('${g.id}', ${_jsq(g.name)}, ${ms.length})">Delete</button>` : ''}
+        <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')" title="Run a Deep Diagnostic on one organization; the report joins this group when it finishes">+ Add an organization</button>
+        ${_capReport('events') ? `<button class="btn btn-secondary btn-sm" onclick="groupUploadList('${g.id}')" title="Upload a spreadsheet (name, city, state, optional website) and run a report for every row; all of them join this group">⬆ Upload a list</button>` : ''}
+        <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/export.csv?token=${encodeURIComponent(_token)}" title="Download the ranked table: rank, status, scores, pillars, evidence, website access, dates and who ran each report">⬇ CSV</a>
+        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')" title="Edit name, description, type, default specialty, visibility and the benchmark-on-reports switch">✎ Edit details</button>
+        <button class="btn btn-ghost btn-sm" onclick="groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})" title="Whether each member's PDF prints its rank, the group size and the group median (only once the group has 10 organizations)">${g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports'}</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupArchive('${g.id}')" title="Hide the group from lists and pickers without losing anything; memberships and reports are kept and an administrator can restore it">Archive</button>` : ''}
+        ${_role === 'admin' ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupDelete('${g.id}', ${_jsq(g.name)}, ${ms.length})" title="Remove the group and its memberships for good; the member reports themselves are kept in History">Delete</button>` : ''}
       </div>
     </div>
     <div id="group-edit" class="card hidden" style="margin:12px 0;max-width:680px">
@@ -7839,7 +7839,7 @@ async function openGroupPage(id, highlightRunId) {
       <div id="ge-err" class="err hidden mt8"></div>
     </div>
     ${running.length ? `<div style="margin-top:10px;font-size:12px;color:var(--teal)"><span class="spinner" style="width:10px;height:10px"></span> ${running.length} re-run${running.length === 1 ? '' : 's'} in progress — this page refreshes every 20 seconds.</div>` : ''}
-    ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center">#</th><th>Organization</th><th style="text-align:center">Pulse Score</th><th>Pillars</th><th>Evidence</th><th>Report</th><th>Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center" title="Rank among members by Pulse Score; ties share a rank; prospects show the rank they would hold">#</th><th title="Click a name to see its score history in this group and its latest checklist">Organization</th><th style="text-align:center" title="Pulse Score out of 100 from the latest report">Pulse Score</th><th title="The four pillar scores of the organization's rubric">Pillars</th><th title="How much public data sits behind the score, and whether the site blocks AI crawlers">Evidence</th><th title="Date of the latest report">Report</th><th title="Who ran the latest report">Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
                : '<div class="empty" style="margin-top:12px"><div>No members yet. Pick this group on the Deep Diagnostic form or an Event Prep upload, or add runs from History.</div></div>'}`;
   groupsFilter(sb ? sb.value : '');
   if (highlightRunId) { const tr = document.getElementById('grow-' + highlightRunId); if (tr) tr.scrollIntoView({ behavior: 'smooth', block: 'center' }); }

@@ -3773,3 +3773,9 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Upload into The OrthoForum (default specialty Orthopedics) with no specialty column | Each practice report's cover says Orthopedics, the spot check uses the orthopedics question bank, History shows the specialty. [ui][pdf] |
 | T2 | Spreadsheet with a specialty column ("ortho", "Sports Med") | Row's specialty wins, canonicalized (Orthopedics / Sports Medicine). [pdf] |
 | R1 | Regression | Hospital / FQHC uploads unaffected (no specialty). |
+
+## GROUPS-TOOLTIPS — hover help on every Groups-page control (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Hover each control on the Groups list and a group page | Plain-language tooltip on: search box, + New group, Open, Edit, + Add an organization, Upload a list, CSV, Edit details, Hide/Show benchmark, Archive, Delete, PDF, Re-run, Make member / Mark prospect, Remove; each summary tile; each table header; the create form's benchmark switch. Page title has a "How groups work" link opening the help topic. [ui] |
