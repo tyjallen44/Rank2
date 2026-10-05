@@ -204,6 +204,7 @@ def members(group_id: str) -> list[dict]:
     con.close()
     seen: set = set()
     out: list[dict] = []
+    results: dict[str, dict] = {}     # run_id → parsed result_json, for the delivery check below
     for r in rows:
         (run_id, name, loc, spec, et, sl, ps, gen, created, ran_by, conf, pdf, score, ts_json, rj, status) = r
         key = f"{(name or '').strip().lower()}|{(loc or '').strip().lower()}"
@@ -215,20 +216,18 @@ def members(group_id: str) -> list[dict]:
             ts = json.loads(ts_json) if ts_json else {}
         except Exception:
             ts = {}
-        if score is None and rj:
-            try:
-                d = json.loads(rj)
-                p0 = (d.get("rankings") or [{}])[0]
-                score = p0.get("ai_visibility_score")
-                ts = p0.get("tier_scores") or ts
-            except Exception:
-                pass
-        wf_status = None
+        d: dict = {}
         if rj:
             try:
-                wf_status = ((json.loads(rj).get("website_facts") or {}).get("status"))
+                d = json.loads(rj) or {}
             except Exception:
-                wf_status = None
+                d = {}
+        if score is None and d:
+            p0 = (d.get("rankings") or [{}])[0] or {}
+            score = p0.get("ai_visibility_score")
+            ts = p0.get("tier_scores") or ts
+        wf_status = (d.get("website_facts") or {}).get("status")
+        results[run_id] = d
         out.append({
             "run_id": run_id, "entity_name": name, "location": loc, "specialty": spec, "entity_type": et,
             "service_line": sl, "parent_system": ps, "generated_at": str(gen)[:10] if gen else None,
@@ -252,7 +251,19 @@ def members(group_id: str) -> list[dict]:
     unscored = [m for m in out if m["score"] is None]
     for m in unscored:
         m["rank"] = None
-    return members_scored + prospects_scored + unscored
+    ranked = members_scored + prospects_scored + unscored
+    # Delivery check: what each latest report is missing before it goes out.
+    from .delivery import check_result, spotcheck_required
+    g = get_group(group_id) or {}
+    bench_ready = bool(g.get("show_on_pdf")) and len(members_scored) >= GROUP_MIN
+    need_sc = spotcheck_required(g)
+    for m in ranked:
+        d = results.get(m["run_id"]) or {}
+        if not d:
+            d = {"entity_type": m.get("entity_type"), "specialty": m.get("specialty"), "generated_at": m.get("generated_at"),
+                 "rankings": [{"ai_visibility_score": m.get("score")}] if m.get("score") is not None else []}
+        m["flags"] = check_result(d, group=g, benchmark_ready=bench_ready and m["status"] == "member", require_spotcheck=need_sc)
+    return ranked
 
 
 def member_history(group_id: str, run_id: str) -> dict:

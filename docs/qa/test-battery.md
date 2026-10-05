@@ -3796,3 +3796,16 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Upload a list from a group page and let it finish | Completion panel: a primary "▦ View in <group name>" button first; subtitle ends "· added to <group name>"; the CSV download is secondary; the reset button says "New upload". Clicking the group button opens that group's page with the new reports listed. [ui] |
 | T2 | Same as T1 on a single-group (narrowed) account | No "View in History" button on the completion panel (that account has no History page). [ui] |
 | R1 | Regression | An upload with no group selected shows the original panel: CSV primary, "View in History", "New Event", no group button. |
+
+## GROUPS-DELIVERY-CHECK — delivery check badges on the group page (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Open a group with members | Each member whose latest report is missing something shows a ⚠ badge in the Evidence column: red when a fix is needed (no score, site blocks AI, hospital rubric in a practice group), amber otherwise; one flag prints its label ("⚠ No spot check"), several print "⚠ N to check". Hovering lists every flag with a one-line reason. [ui] |
+| T2 | Summary strip | A "Needs attention" tile shows how many reports are flagged ("N to fix · click to filter"); clicking it, or the "⚠ Needs attention (N)" toolbar button, shows only flagged rows (button turns amber); clicking again shows all. The search box still works on top of the filter. [ui] |
+| T3 | Click a flagged organization's name | The expanded detail ends with "Before sending (delivery check)" listing each flag and reason; an unflagged organization shows "✓ Nothing flagged". [ui] |
+| T4 | ⬇ CSV | A "Needs attention" column lists the flag labels, semicolon-separated. [api] |
+| T5 | Group on a preset whose spot check is hidden | "No spot check" is not raised for that group's reports. [code] |
+| T6 | Group with 10+ members and benchmark on | Members whose report predates the benchmark are flagged "Benchmark not printed"; a re-run clears it. [ui] |
+| R1 | Regression | Ranking, median, prospects (amber rows, "would be N"), Re-run, Mark prospect/Remove and the member score history are unchanged; the old "site blocks AI" and "hospital rubric" badges are now flags in the ⚠ badge. |
+| R2 | Unit | `tests/test_delivery.py` (7 tests) passes: complete report → no flags; each missing piece named; website levels; rubric/benchmark/score; fix-first ordering; preset waiver; summary counts. |

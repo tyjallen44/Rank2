@@ -1317,7 +1317,9 @@ async def groups_detail(group_id: str, payload: dict = Depends(get_current_user_
         if j.get("group_id") == group_id and j.get("status", "running") == "running":
             running.append({"job_id": jid, "entity_name": j.get("entity_name") or j.get("label") or "",
                             "started_at": j.get("started_at"), "email": j.get("email") or ""})
-    return {"group": g, "members": members(group_id), "benchmark": benchmark(group_id), "running": running}
+    from perception.delivery import summarize as _delivery_summary
+    ms = members(group_id)
+    return {"group": g, "members": ms, "benchmark": benchmark(group_id), "running": running, "delivery": _delivery_summary(ms)}
 
 
 @app.get("/api/groups/{group_id}/member")
@@ -1335,13 +1337,14 @@ async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_pay
     g = _group_visible(payload, group_id)
     buf = _io.StringIO(); w = _csv.writer(buf)
     w.writerow(["Rank", "Status", "Organization", "Location", "Specialty", "Type", "Pulse Score", "Pillar 1", "Pillar 2", "Pillar 3", "Pillar 4",
-                "Evidence", "Website access", "Report date", "Run by", "Run id"])
+                "Evidence", "Website access", "Needs attention", "Report date", "Run by", "Run id"])
     for m in members(group_id):
         p = m["pillars"]
         w.writerow([m.get("rank") or (f"would rank {m['would_rank']}" if m.get("would_rank") else ""), m.get("status") or "member",
                     m["entity_name"], m["location"], m.get("specialty") or "", m.get("entity_type") or "",
                     m.get("score") if m.get("score") is not None else "", p.get("clinical_outcomes_safety"), p.get("credentials_recognition"),
                     p.get("patient_experience_reviews"), p.get("access_fit"), m.get("confidence") or "", m.get("website_status") or "",
+                    "; ".join(f["label"] for f in (m.get("flags") or [])),
                     m.get("generated_at") or "", m.get("ran_by") or "", m["run_id"]])
     safe = re.sub(r"[^A-Za-z0-9]+", "-", g["name"]).strip("-")[:40] or "group"
     return Response(buf.getvalue(), media_type="text/csv",
