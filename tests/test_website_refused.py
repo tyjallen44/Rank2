@@ -35,3 +35,31 @@ def test_checklist_rows_for_refused():
     rows = {x["id"]: x for x in build_checklist(r)}
     assert rows["ai_access"]["status"] == "partial" and "Claude" in rows["ai_access"]["detail"]
     assert rows["robots"]["status"] == "na"
+
+
+def test_challenge_wall_or_failed_live_fetch_is_blocked(monkeypatch):
+    """A JavaScript challenge page shuts out every non-JS reader (AI crawlers included) → blocked; a bare
+    refusal of our hosting stays 'refused' only while an AI assistant's own live fetch still succeeds."""
+    from perception.data import website_facts as wf
+    import perception.content_analyzer as ca
+    monkeypatch.setattr(ca, "_crawl_site", lambda client, url, budget, browser: {"reachable": False, "fetch_status": "blocked"})
+    class _B:
+        def close(self): pass
+    monkeypatch.setattr(ca, "_BrowserFetcher", _B)
+    probe_wall = {"results": [], "blocked": ["GPTBot", "ClaudeBot"], "allowed": [], "browser_blocked": True, "browser_challenge": True, "where": "firewall"}
+    monkeypatch.setattr(wf, "probe_ai_crawlers", lambda url, timeout=15.0: dict(probe_wall))
+    monkeypatch.setattr(wf, "assistant_fetch_check", lambda url: {"assistant": "Claude", "ok": True, "note": "read"})
+    f = wf.fetch_website_facts("https://www.usahealthsystem.com/")
+    assert f["status"] == "blocked" and "challenge" in f["note"]
+    a = wf.ai_access_problem(f)
+    assert a and a["level"] == "critical" and "JavaScript challenge" in a["points"][0]
+    # bare refusal + Claude refused too → blocked
+    probe_bare = dict(probe_wall, browser_challenge=False)
+    monkeypatch.setattr(wf, "probe_ai_crawlers", lambda url, timeout=15.0: dict(probe_bare))
+    monkeypatch.setattr(wf, "assistant_fetch_check", lambda url: {"assistant": "Claude", "ok": False, "note": "refused"})
+    f2 = wf.fetch_website_facts("https://www.dmos.com/")
+    assert f2["status"] == "blocked" and "live fetch" in f2["note"] and "live fetch was turned away" in wf.ai_access_problem(f2)["points"][0]
+    # bare refusal + Claude read it → refused (unverified), no alert
+    monkeypatch.setattr(wf, "assistant_fetch_check", lambda url: {"assistant": "Claude", "ok": True, "note": "read"})
+    f3 = wf.fetch_website_facts("https://www.dmos.com/")
+    assert f3["status"] == "refused" and wf.ai_access_problem(f3) is None

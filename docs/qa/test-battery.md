@@ -3864,3 +3864,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Group page | Members with listing problems carry a ⚠ "Listing details disagree" flag (red when a closed profile is still live, amber otherwise); hover shows the first three problems. [ui] |
 | T4 | Scores | Pulse Score and pillar scores are unchanged by any of this — listing quality is evidence only. [pdf] |
 | R1 | Regression | Hospital reports unaffected (no listing quality block); `tests/test_listing_quality.py` (3 tests) passes. |
+
+## FIX-CHALLENGE-WALL — a JavaScript challenge page counts as an AI-access block (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Run any report (Deep Diagnostic or Hospital Network) on a site behind a Cloudflare "Just a moment…" challenge, e.g. USA Health | Website status is **blocked**: the red "URGENT: AI assistants cannot read your website" box prints on page 1 with "What we found: your site answers every automated request with a JavaScript challenge page…"; the checklist row fails; practice reports get the Identity cap. Previously such sites were classed "refused/unverified" and the box was missing while the content analysis still flagged CIK-001. [pdf] |
+| T2 | A site that refuses only our hosting (bare 403, no challenge page) while Claude's live fetch reads it | Still "refused" — no red box, checklist PARTIAL. [pdf] |
+| T3 | A site that refuses our hosting AND Claude's live fetch | Now **blocked** ("the site refused our server and an AI assistant's own live fetch"). [pdf] |
+| R1 | Unit | `tests/test_website_refused.py` (3 tests) passes. |

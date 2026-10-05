@@ -39,7 +39,7 @@ def probe_ai_crawlers(url: str, timeout: float = 15.0) -> dict:
      "browser_blocked": bool, "where": "firewall" | "robots" | "open"}.
     outcome: allowed | blocked | error. Fail-soft: never raises."""
     import httpx
-    out = {"results": [], "blocked": [], "allowed": [], "browser_blocked": False, "where": "open"}
+    out = {"results": [], "blocked": [], "allowed": [], "browser_blocked": False, "browser_challenge": False, "where": "open"}
     if not (url or "").strip():
         return out
     u = url if "://" in url else "https://" + url
@@ -49,14 +49,17 @@ def probe_ai_crawlers(url: str, timeout: float = 15.0) -> dict:
             with httpx.Client(timeout=timeout, follow_redirects=True, headers={"User-Agent": ua, "Accept": "text/html,*/*"}) as c:
                 r = c.get(u)
             body = (r.text or "")[:4000].lower()
-            challenged = r.status_code in _BLOCK_CODES or any(k in body for k in ("verify you are human", "just a moment", "attention required", "cf-browser-verification", "access denied"))
+            wall = any(k in body for k in ("verify you are human", "just a moment", "attention required", "cf-browser-verification",
+                                           "cf-chl", "challenge-platform", "enable javascript and cookies", "access denied"))
+            challenged = r.status_code in _BLOCK_CODES or wall
             outcome = "blocked" if challenged else ("allowed" if r.status_code < 400 else "error")
-            out["results"].append({"name": name, "status": r.status_code, "outcome": outcome})
+            out["results"].append({"name": name, "status": r.status_code, "outcome": outcome, "challenge_page": wall})
         except Exception as exc:
             out["results"].append({"name": name, "status": None, "outcome": "error", "note": type(exc).__name__})
-            outcome = "error"
+            outcome = "error"; wall = False
         if name == "Browser":
             out["browser_blocked"] = outcome == "blocked"
+            out["browser_challenge"] = bool(wall)      # a JavaScript / bot challenge page — AI crawlers cannot execute it
         elif name == "Google-Extended":
             # Google-Extended is a robots.txt product token, not a crawler user agent (Google's
             # own docs: it has no separate request UA). A 403 on that string is generic
@@ -117,12 +120,22 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
         if snap.get("fetch_status") == "blocked":
             probe = probe_ai_crawlers(url)
             if probe.get("browser_blocked") or not probe.get("blocked"):
-                # Our plain-browser request was refused too (or nothing was blocked by name): the
-                # site is refusing our hosting (IP / ASN rule), which says nothing about AI crawlers.
+                # Our plain-browser request was turned away too. Two very different situations:
+                #  - a JavaScript / bot challenge PAGE (Cloudflare "Just a moment…"): every non-JS reader
+                #    is shut out, AI crawlers included → blocked, and the live-fetch second opinion confirms;
+                #  - a bare refusal of our hosting (IP / ASN rule): says nothing about AI crawlers → refused,
+                #    unless an AI assistant's own live fetch fails as well.
+                af = assistant_fetch_check(url)
+                if probe.get("browser_challenge") or (af is not None and af.get("ok") is False):
+                    return {"status": "blocked", "url": url, "pages": 0, "points": 0, "breakdown": {}, "crawler_probe": probe,
+                            "assistant_fetch": af,
+                            "note": ("the site shows a JavaScript / bot challenge page to every automated reader — AI crawlers cannot "
+                                     "execute it" if probe.get("browser_challenge") else
+                                     "the site refused our server and an AI assistant's own live fetch — nothing automated gets through")}
                 f = {"status": "refused", "url": url, "pages": 0, "points": 0, "breakdown": {}, "crawler_probe": probe,
                      "note": "the site refused every request from our server, a normal browser request included — "
                              "a firewall rule against our hosting, not evidence about AI crawlers"}
-                f["assistant_fetch"] = assistant_fetch_check(url)
+                f["assistant_fetch"] = af
                 return f
             return {"status": "blocked", "url": url, "pages": 0, "points": 0, "breakdown": {}, "crawler_probe": probe,
                     "note": "site admits a browser but turns away the AI crawlers by name (firewall / bot-management rule)"}
@@ -409,9 +422,17 @@ def ai_access_problem(f: Optional[dict]) -> Optional[dict]:
         pr = f.get("crawler_probe") or {}
         blocked = pr.get("blocked") or []
         points = []
-        if blocked:
+        af = f.get("assistant_fetch") or {}
+        if pr.get("browser_challenge"):
+            points.append("What we found: your site answers every automated request with a JavaScript challenge page (\"Just a moment…\"). "
+                          "AI crawlers do not execute JavaScript, so " + (", ".join(blocked) if blocked else "each of them") + " got the challenge, not your pages"
+                          + ("; Claude's own live fetch was turned away too." if af.get("ok") is False else "."))
+        elif blocked:
             points.append(f"What we found: we asked for your homepage as {', '.join(blocked)} and each was turned away"
-                          f"{', as was a normal browser' if pr.get('browser_blocked') else ''}.")
+                          f"{', as was a normal browser' if pr.get('browser_blocked') else ''}"
+                          + ("; Claude's own live fetch was turned away too." if af.get("ok") is False else "."))
+        elif af.get("ok") is False:
+            points.append("What we found: the site refused our server and an AI assistant's own live fetch of the homepage.")
         points += [
             "What it means: AI assistants describe you from other people's pages and your competitors' content fills the gap. "
             "Your services, physicians, credentials, hours, insurance and awards never reach them.",
