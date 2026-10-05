@@ -3823,3 +3823,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T7 | Trends → Find more | Still works (same Google snowball, now shared with the resolver). [ui] |
 | R1 | Regression | Confirmed rosters from the form (checkboxes) and service-line scoping are unchanged; hospital reports unaffected; practice profile audit no longer stops at 25 offices. |
 | R2 | Unit | `tests/test_location_resolver.py` (7 tests): text + schema.org address parsing, same-office matching, brand matching incl. acronyms/DBAs, pin + gap flags + anchor exclusion, model as last resort only, registry round-trip keeps sources. |
+
+## FIX-RERUN-ROSTER — group Re-run resolves the office roster afresh (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | ↻ Re-run a practice from a group whose old report listed one or a few locations | The progress log shows "Finding every <org> location" (website → NPPES → Google), not "Using confirmed roster"; the new report's Locations table has every office with Found-on marks. [ui][pdf] |
+| R1 | Regression | Re-run still keeps type, specialty, website, anchor listing and physicians; `tests/test_group_rerun.py` passes. |

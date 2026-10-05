@@ -1245,11 +1245,9 @@ def _rerun_request_from_result(result, group_id: str) -> "AnalyzeRequest":
             nm = re.sub(r"^(dr\.?|md|do)\s+", "", str(ph.get("physician_name") or ""), flags=re.I).strip()
             if nm:
                 physicians.append({"name": nm, "npi": ph.get("npi"), "specialty": ph.get("specialty"), "credential": ph.get("credential")})
+    # The roster is NOT carried over: a re-run resolves every office afresh (website → NPPES → Google,
+    # perception/location_resolver.py) rather than re-using the names the old report happened to list.
     siblings = None
-    if p is not None and p.consolidated_locations:
-        anchor_lc = (result.entity_name or "").strip().lower()
-        siblings = [{"name": l.name, "address": l.address or "", "city": city.strip(), "state": state.strip()}
-                    for l in p.consolidated_locations if (l.name or "").strip().lower() != anchor_lc] or None
     roster = ([{"name": result.entity_name, "entity_type": "practice", "is_anchor": True, "city": city.strip(), "state": state.strip(),
                 "address": (anchor or {}).get("address") or "", "place_id": (anchor or {}).get("place_id"),
                 "rating": (anchor or {}).get("rating"), "review_count": (anchor or {}).get("review_count"),
@@ -1263,7 +1261,7 @@ def _rerun_request_from_result(result, group_id: str) -> "AnalyzeRequest":
         practice_profile=(result.practice_profile or "practice_procedural") if is_practice else None,
         service_line=result.service_line if et == "service_line" or result.service_line else None,
         parent_system=result.parent_system or None,
-        confirmed_siblings=siblings if is_practice else None, anchor_listing=anchor if is_practice else None,
+        confirmed_siblings=None, anchor_listing=anchor if is_practice else None,
         website=website, content_urls=[website] if website else [],
         practice_composite=is_practice, practice_roster=roster,
         physician_composite=bool(physicians), physician_roster={result.entity_name: physicians} if physicians else {},
