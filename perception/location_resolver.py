@@ -245,7 +245,11 @@ def website_locations(site_url: Optional[str], brand: str, *, fetcher: Optional[
     pages_read = 0
     best_page = None
     try:
-        home = f.html(url)
+        # Start at the site root even when the listing links a deep page (a location or doctor
+        # page): the root's navigation is where the Locations page is linked from.
+        home = f.html(origin + "/")
+        if home is None and urlparse(url).path not in ("", "/"):
+            home = f.html(url)
         if home is None:
             return {"status": "unreachable", "url": url, "locations": []}
         pages_read += 1
@@ -269,6 +273,8 @@ def website_locations(site_url: Optional[str], brand: str, *, fetcher: Optional[
         for p in _LOC_PATHS:
             if origin + p not in cands:
                 cands.append(origin + p)
+        if urlparse(url).path not in ("", "/") and url not in cands:
+            cands.insert(0, url)          # the deep page the listing pointed at may itself be an office page
         seen = {_norm_url(url)}
         index_pages = 0
         for href in cands:

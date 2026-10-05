@@ -17,7 +17,8 @@ def test_rerun_request_rebuilds_settings():
     req = server._rerun_request_from_result(r, "g1")
     assert req.city == "Des Moines" and req.state == "IA" and req.entity_type == "practice" and req.specialty == "Orthopedics"
     assert req.website == "https://www.dmos.com" and req.content_urls == ["https://www.dmos.com"]
-    assert req.anchor_listing["place_id"] == "pid1" and req.confirmed_siblings == [{"name": "DMOS West", "address": "2 West St", "city": "Des Moines", "state": "IA"}]
+    assert req.anchor_listing["place_id"] == "pid1"
+    assert req.confirmed_siblings is None          # the roster is resolved afresh on re-run, not carried over
     assert req.physician_composite and req.physician_roster["DMOS Orthopaedic Centers"][0]["name"] == "Jane Doe"
     assert req.spotcheck and req.force_rerun and req.group_id == "g1" and req.practice_composite
     h = AnalysisResult(run_id="r2", location="Mobile, AL", generated_at=date.today(), individual_report=True, entity_name="USA Health",
