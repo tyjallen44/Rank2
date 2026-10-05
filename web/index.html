@@ -2702,9 +2702,10 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
             <div style="font-size:20px;font-weight:700;color:var(--teal);margin-bottom:8px" id="ev-complete-title">Analysis Complete</div>
             <div id="ev-complete-sub" style="font-size:14px;color:var(--muted);margin-bottom:24px"></div>
             <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+              <button class="btn btn-primary hidden" id="ev-complete-group-btn" title="Open the group — every report from this upload is listed and ranked there">▦ View in group</button>
               <button class="btn btn-primary" onclick="evDownloadCsv()" id="ev-dl-btn">↓ Download Enriched CSV</button>
-              <button class="btn btn-secondary" onclick="navigate('history')">View in History</button>
-              <button class="btn btn-ghost" onclick="evReset()">New Event</button>
+              <button class="btn btn-secondary" id="ev-complete-history-btn" onclick="navigate('history')">View in History</button>
+              <button class="btn btn-ghost" id="ev-complete-reset-btn" onclick="evReset()">New Event</button>
             </div>
           </div>
         </div>
@@ -13414,8 +13415,21 @@ function evShowComplete() {
   step4.scrollIntoView({ behavior: 'smooth', block: 'start' });
   document.getElementById('ev-complete-title').textContent =
     document.getElementById('ev-name').value.trim() + ' — Complete';
+  const gid = (document.getElementById('ev-group') || {}).value || '';
+  const g   = gid ? (_groupsCache || []).find(x => x.id === gid) : null;
   document.getElementById('ev-complete-sub').textContent =
-    `${_evDone} report${_evDone !== 1 ? 's' : ''} generated · ${_evSkipped} skipped`;
+    `${_evDone} report${_evDone !== 1 ? 's' : ''} generated · ${_evSkipped} skipped` +
+    (gid ? ` · added to ${g ? g.name : 'the group'}` : '');
+  // Started from a group: lead with a link back to it, where the new reports are listed and ranked.
+  const gBtn = document.getElementById('ev-complete-group-btn');
+  if (gBtn) {
+    gBtn.classList.toggle('hidden', !gid);
+    gBtn.textContent = g ? `▦ View in ${g.name}` : '▦ View in group';
+    gBtn.onclick = () => openGroupPage(gid);
+  }
+  const dl = document.getElementById('ev-dl-btn'); if (dl) dl.className = 'btn ' + (gid ? 'btn-secondary' : 'btn-primary');
+  const hb = document.getElementById('ev-complete-history-btn'); if (hb) hb.classList.toggle('hidden', !_pageAllowed('history'));
+  const rb = document.getElementById('ev-complete-reset-btn'); if (rb) rb.textContent = gid ? 'New upload' : 'New Event';
 }
 
 async function evDownloadCsv() {

@@ -3788,3 +3788,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Change the group select on the page to "— none —" / another group | Wording and banner follow the selection (event wording returns when no group). [ui] |
 | T3 | Narrowed account's sidebar | Says "Upload a list" instead of "Event Preparation". [ui] |
 | R1 | Regression | Opening Event Preparation from the sidebar with no group picked shows the original event wording. |
+
+## EVENT-UPLOAD-GROUP-DONE — upload completion links back to the group (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Upload a list from a group page and let it finish | Completion panel: a primary "▦ View in <group name>" button first; subtitle ends "· added to <group name>"; the CSV download is secondary; the reset button says "New upload". Clicking the group button opens that group's page with the new reports listed. [ui] |
+| T2 | Same as T1 on a single-group (narrowed) account | No "View in History" button on the completion panel (that account has no History page). [ui] |
+| R1 | Regression | An upload with no group selected shows the original panel: CSV primary, "View in History", "New Event", no group button. |
