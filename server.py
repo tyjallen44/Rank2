@@ -1264,7 +1264,8 @@ def _rerun_request_from_result(result, group_id: str) -> "AnalyzeRequest":
         confirmed_siblings=None, anchor_listing=anchor if is_practice else None,
         website=website, content_urls=[website] if website else [],
         practice_composite=is_practice, practice_roster=roster,
-        physician_composite=bool(physicians), physician_roster={result.entity_name: physicians} if physicians else {},
+        # Physicians are resolved afresh too (website directory → NPI registry), not copied from the old table.
+        physician_composite=is_practice or bool(physicians), physician_roster={} if is_practice else ({result.entity_name: physicians} if physicians else {}),
         spotcheck=(et != "community_health"), force_rerun=True, group_id=group_id,
     )
 
@@ -6293,6 +6294,25 @@ class PhysicianDiscoverRequest(BaseModel):
     state: str
 
 
+class PhysicianResolveRequest(BaseModel):
+    entity_name: str
+    city: str
+    state: str
+    website: Optional[str] = None
+
+
+@app.post("/api/physician/resolve")
+async def physician_resolve(req: PhysicianResolveRequest, _: str = Depends(require_auth)):
+    """Every physician of a practice with sources (website directory / NPI registry / model) and gap flags —
+    the Physicians step of the Specialty Practice form (perception.physician_resolver)."""
+    from perception.physician_resolver import resolve_physicians
+    try:
+        res = resolve_physicians(req.entity_name.strip(), _normalize_input(req.city), req.state.strip().upper(), website=req.website)
+        return {"physicians": res["physicians"], "resolution": res["resolution"], "count": len(res["physicians"])}
+    except Exception as exc:
+        raise HTTPException(500, f"Physician discovery error: {exc}")
+
+
 @app.post("/api/physician/discover")
 async def physician_discover(
     req: PhysicianDiscoverRequest,
@@ -6590,6 +6610,7 @@ def _run_event_job(
                             # single Deep Diagnostic does; the composite table then covers the whole roster.
                             "confirmed_siblings": None,
                             "practice_composite": entity_type == "practice",
+                            "physician_composite": entity_type == "practice",   # every physician: Google + platforms
                         }
                         _agg = auto_practice_composite if entity_type == "fqhc" else True
                         _quiet = lambda _e: None

@@ -239,9 +239,12 @@ def _physician_facts(ctx: "_Ctx") -> Optional[dict]:
             return {"status": "skipped", "note": "no physicians found for this practice"}
         locs = list(ctx.aggregate_siblings or []) + ([{"address": getattr(ctx.read, "formatted_address", "")}] if ctx.read is not None else [])
         pages = (getattr(ctx, "website_facts", None) or {}).get("site_pages") or []
-        ctx.emit({"type": "phase", "name": "physicians", "text": f"Checking {min(len(phys), _pf._SAMPLE)} physicians against the NPI registry and the website"})
+        # Practices are never sampled — every physician is checked; hospitals keep a cap.
+        from ..physician_resolver import HOSPITAL_CAP
+        sample = len(phys) if ctx.entity_type in ("practice", "service_line") else HOSPITAL_CAP
+        ctx.emit({"type": "phase", "name": "physicians", "text": f"Checking {min(len(phys), sample)} physicians against the NPI registry and the website"})
         _site = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)
-        f = _pf.verify_physicians(phys, locs, ctx.state, pages, site_url=_site)
+        f = _pf.verify_physicians(phys, locs, ctx.state, pages, sample=sample, site_url=_site)
         ctx.evidence_text += _pf.evidence_lines(f)
         s = _pf.summary(f)
         if s:
@@ -509,6 +512,28 @@ class PracticeAdapter(_Adapter):
                          if ctx.aggregate_siblings is not None else "")
         # Website facts verified by crawl (identity sub-score + quality claims).
         ctx.website_facts = _website_facts(ctx, "practice")
+        # Physician roster: website directory → NPPES → model, every physician (no sample) — unless
+        # the form confirmed one. Specialty practices only; service lines keep the registry path.
+        _have_roster = any((lst or []) for lst in (ctx.physician_roster or {}).values())
+        if ctx.entity_type == "practice" and not _have_roster:
+            try:
+                from .physician_resolver import resolve_physicians
+                _site = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)
+                _hints = [p.get("url") for p in ((getattr(ctx, "website_facts", None) or {}).get("site_pages") or []) if p.get("url")]
+                emit({"type": "phase", "name": "physicians", "text": f"Finding every {ctx.entity_name} physician"})
+                _pr = resolve_physicians(ctx.entity_name, ctx.city, ctx.state, website=_site, hint_urls=_hints, emit=emit)
+                ctx.physician_roster = {ctx.entity_name: _pr["physicians"]}
+                ctx.physician_resolution = _pr["resolution"]
+                if _pr["physicians"] and ctx.practice_composite:
+                    ctx.physician_composite = True      # every physician gets a Google / platform lookup
+            except Exception as _exc:
+                console.print(f"[yellow]⚠[/yellow] Physician resolver failed ({type(_exc).__name__}: {_exc}); using the registry path.")
+        elif _have_roster and ctx.entity_type == "practice":
+            _all = [p for lst in ctx.physician_roster.values() for p in (lst or [])]
+            ctx.physician_resolution = {"total": len(_all), "confirmed": True,
+                                        "website_only": [p.get("name") for p in _all if p.get("npi_missing")],
+                                        "registry_only": [p.get("name") for p in _all if p.get("website_missing")],
+                                        "both": sum(1 for p in _all if "website" in (p.get("sources") or []) and "nppes" in (p.get("sources") or []))}
         # Physician facts: NPI-registry linkage + certification statements on the site.
         ctx.physician_facts = _physician_facts(ctx)
 
@@ -882,6 +907,8 @@ def run_individual(
         result.physician_facts = ctx.physician_facts
     if getattr(ctx, "location_resolution", None):
         result.location_resolution = ctx.location_resolution
+    if getattr(ctx, "physician_resolution", None):
+        result.physician_resolution = ctx.physician_resolution
     if getattr(ctx, "website_facts", None):
         result.website_facts = {k: v for k, v in ctx.website_facts.items() if k != "site_pages"}
         if getattr(ctx, "identity_override", None):

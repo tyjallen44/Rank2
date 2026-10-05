@@ -68,6 +68,9 @@ def verify_physicians(physicians: list, roster_locations: list, state: str, site
         if not name:
             continue
         row = {"name": name, "npi": ph.get("npi"), "registry": "not found", "linked": None, "cert_stated": None}
+        for k in ("sources", "website_missing", "npi_missing", "bio_url", "credential", "specialty"):
+            if ph.get(k) not in (None, "", []):
+                row[k] = ph[k]
         try:
             recs = _nppes_lookup_physician(name, state)
             if ph.get("npi"):

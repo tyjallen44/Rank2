@@ -3830,3 +3830,15 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 |---|---|---|
 | T1 | ↻ Re-run a practice from a group whose old report listed one or a few locations | The progress log shows "Finding every <org> location" (website → NPPES → Google), not "Using confirmed roster"; the new report's Locations table has every office with Found-on marks. [ui][pdf] |
 | R1 | Regression | Re-run still keeps type, specialty, website, anchor listing and physicians; `tests/test_group_rerun.py` passes. |
+
+## PHYSICIANS-RESOLVER — every practice physician from verified sources (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic → Specialty Practice → pick a practice with a website | A **Physicians** step appears under Locations (visible on association accounts too — it is not inside Advanced options): every doctor from the website's provider directory and the NPI registry, each with chips **website** / **NPI** and amber **no NPI match** / **not on website** where relevant; a "Sources:" line with counts; a count badge; "re-discover physicians". Advanced practitioners / staff (PA, NP, PT…) are counted but not listed. [ui] |
+| T2 | Run with all physicians checked | The PDF Physicians table lists every checked physician (no 12-physician sample): **Found on** column (W/N/M), NPI registry / linked / certification columns, a **Google** column (rating + count or "no listing"), all-platform rating. Intro says how many came from the website, the registry, both, and how many have a Google listing. A "Listing gaps" note names website physicians with no Google listing, website names with no NPI match, and registry physicians not on the website. [pdf] |
+| T3 | Practice with no website and nothing in the registry | Model recall is used as a last resort; chips say "model recall"; PDF marks M. [ui][pdf] |
+| T4 | Event Prep / group upload of practices | Each bulk report resolves the full physician roster in-pipeline and scores every physician (Google + platforms) — same table as a form run. [pdf] |
+| T5 | Group ↻ Re-run of a practice | Physicians are resolved afresh (not copied from the old table). [code] |
+| T6 | Hospital Deep Diagnostic with Practice Composite + physicians | Still capped at 50 physicians (log line "capped at 50 of N"); physician facts check 50. [ui] |
+| R1 | Regression | Hospital Service Line and Community Health forms unchanged (no Physicians step); hospital physician opt-in unchanged; `tests/test_physician_resolver.py` passes. |

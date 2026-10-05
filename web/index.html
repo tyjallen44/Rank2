@@ -1757,6 +1757,21 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
           <div id="ir-siblings-err" class="err hidden mt8"></div>
         </div>
 
+        <!-- Physicians (specialty practice): every doctor from the website directory + NPI registry, reviewed before Run -->
+        <div id="ir-physicians-section" class="hidden" style="margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);margin-bottom:8px">Physicians <span id="ir-physicians-badge"></span></div>
+          <div id="ir-phy-loading" style="padding:8px 0 12px;text-align:center">
+            <span class="spinner" style="display:block;margin:0 auto 10px"></span>
+            <div style="font-size:13px;font-weight:600;color:var(--teal);margin-bottom:4px">Finding every physician at <span id="ir-phy-org-name"></span>…</div>
+            <div style="font-size:11px;color:var(--muted)">Website provider directory, then the NPI registry. 15–40 seconds.</div>
+          </div>
+          <div id="ir-phy-content" class="hidden">
+            <div id="ir-phy-count" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
+            <div id="ir-phy-list"></div>
+          </div>
+          <div id="ir-phy-err" class="err hidden mt8"></div>
+        </div>
+
         <details id="ir-advanced" style="margin-bottom:6px">
           <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--teal);user-select:none">Advanced options</summary>
           <div style="margin-top:10px;padding-left:2px">
@@ -6200,6 +6215,79 @@ function _irCityFromAddr(addr) {
 // same-brand listings at other streets are real locations of this practice /
 // service line. They carry place_id so the server pins each to its own profile.
 let _irResolution = null;   // how the office list was found (website / NPPES / Google / model), from /api/practice/siblings
+let _irPhysicians = [];      // resolved physician roster for the Physicians step (specialty practice)
+let _irPhyResolution = null;
+let _irPhyKey = '';          // entity|website the current roster was resolved for (skip a duplicate resolve)
+async function irResolvePhysicians(force) {
+  const sec = document.getElementById('ir-physicians-section'); if (!sec || !_irSelected) return;
+  const website = _irSelected.website || (document.getElementById('ir-website')?.value || '').trim() || '';
+  const key = `${_irSelected.name}|${_irResolvedCity}|${_irResolvedState}|${website}`;
+  if (!force && key === _irPhyKey && _irPhysicians.length) { sec.classList.remove('hidden'); return; }
+  _irPhyKey = key;
+  sec.classList.remove('hidden');
+  document.getElementById('ir-phy-org-name').textContent = _irSelected.name;
+  document.getElementById('ir-phy-loading').classList.remove('hidden');
+  document.getElementById('ir-phy-content').classList.add('hidden');
+  document.getElementById('ir-phy-err').classList.add('hidden');
+  try {
+    const r = await api('/api/physician/resolve', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_name: _irSelected.name, city: _irResolvedCity, state: _irResolvedState, website: website || undefined }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Physician discovery failed'));
+    const d = await r.json();
+    if (key !== _irPhyKey) return;
+    _irPhysicians = d.physicians || []; _irPhyResolution = d.resolution || null;
+    renderIrPhysicians();
+  } catch (e) {
+    document.getElementById('ir-phy-loading').classList.add('hidden');
+    showErr(document.getElementById('ir-phy-err'), e.message);
+  }
+}
+function _phySourceChips(p) {
+  const src = p.sources || [];
+  const chip = (t, tip, warn) => `<span title="${tip}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:${warn ? '#fdf3dc' : '#e6f3f4'};color:${warn ? '#7a5a00' : 'var(--teal)'};margin-left:4px;white-space:nowrap">${t}</span>`;
+  let out = '';
+  if (src.includes('website')) out += chip('website', 'Listed on the practice website\'s provider directory');
+  if (src.includes('nppes'))   out += chip('NPI', p.npi ? 'NPI registry record ' + p.npi : 'NPI registry record');
+  if (src.includes('model'))   out += chip('model recall', 'No verified source listed physicians; this came from model recall — check it', true);
+  if (p.npi_missing)           out += chip('no NPI match', 'On the website but no NPI record could be matched by name', true);
+  else if (p.website_missing)  out += chip('not on website', 'Registered at the practice\'s addresses but not on the website directory', true);
+  return out;
+}
+function renderIrPhysicians() {
+  document.getElementById('ir-phy-loading').classList.add('hidden');
+  document.getElementById('ir-phy-content').classList.remove('hidden');
+  const ps = _irPhysicians, r = _irPhyResolution || {};
+  const badge = document.getElementById('ir-physicians-badge');
+  if (badge) badge.innerHTML = `<span style="font-weight:700;background:var(--teal);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px;letter-spacing:0">${ps.length}</span>`;
+  const w = r.website || {}, n = r.nppes || {};
+  const parts = [];
+  if (w.status === 'measured') parts.push(`${w.count} on the website directory${w.midlevels ? ` (+${w.midlevels} advanced practitioners / staff, not scored)` : ''}`);
+  else if (w.status === 'none') parts.push('no provider directory readable on the website');
+  else if (w.status === 'unreachable') parts.push('website unreachable');
+  else if (w.status === 'skipped') parts.push('no website known');
+  if (n.count) parts.push(`${n.count} in the NPI registry at the practice\'s addresses`);
+  if (r.both) parts.push(`${r.both} confirmed by both`);
+  if ((r.model || {}).used) parts.push('model recall used as a last resort');
+  document.getElementById('ir-phy-count').innerHTML = (ps.length
+    ? 'Every checked physician is verified against the NPI registry and the website, looked up on Google and the rating platforms, and printed in the report. Uncheck any who do not belong.'
+    : 'No physicians were found for this practice; the report will say so.')
+    + (parts.length ? `<div style="margin-top:4px">Sources: ${parts.join(' · ')}.</div>` : '')
+    + ` <a href="#" onclick="irResolvePhysicians(true);return false" style="font-size:11px">re-discover physicians</a>`;
+  document.getElementById('ir-phy-list').innerHTML = ps.map((p, i) => {
+    const cred = p.credential ? ` <span style="font-size:11px;color:var(--muted)">${_learnEsc(p.credential)}</span>` : '';
+    const spec = p.specialty ? `<span style="font-size:11px;color:var(--muted)">${_learnEsc(p.specialty)}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#fff;border:1.5px solid var(--border);border-radius:6px;margin-bottom:5px">
+      <input type="checkbox" id="ir-phy-${i}" checked style="accent-color:var(--teal);flex-shrink:0;width:15px;height:15px">
+      <label for="ir-phy-${i}" style="flex:1;min-width:0;cursor:pointer;margin:0;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${_learnEsc(p.name)}</span>${cred}${spec}${_phySourceChips(p)}
+      </label></div>`;
+  }).join('');
+}
+function _irConfirmedPhysicians() {
+  if (!_irSelected || !_irPhysicians.length) return null;
+  const chosen = _irPhysicians.filter((_, i) => { const cb = document.getElementById(`ir-phy-${i}`); return cb ? cb.checked : true; });
+  return chosen.length ? { [_irSelected.name]: chosen } : {};
+}
 function _sourceChips(s) {
   const src = s.sources || [];
   if (!src.length) return '';
@@ -6380,6 +6468,7 @@ function renderIrSiblings(siblings) {
   if (_ti) _ti.value = _irReportTitle;
   _irSyncTitleDisplay();
 
+  if (_irIsPractice() && _irType !== 'service_line') irResolvePhysicians(false);
   const badgeEl = document.getElementById('ir-locations-badge');
   if (badgeEl) badgeEl.innerHTML = `<span style="font-weight:700;background:var(--teal);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px;letter-spacing:0">${totalLoc}</span>`;
   const countEl = document.getElementById('ir-siblings-count');
@@ -6542,12 +6631,13 @@ function irResetSearch() {
   _irPracticeProfile = null;
   _irDiscoveredSiblings = [];
   _irConfirmedSiblings = [];
+  _irPhysicians = []; _irPhyResolution = null; _irPhyKey = '';
   _irOrgName = null;
   _irServiceLine = null;
   _pendingServiceLine = null;
   _fqhcIntake = {};
   _fqhcSiteRoster = [];
-  ['ir-step2','ir-step3','ir-step-fqhc-intake','ir-profile-inline','ir-locations-section','ir-composite-section'].forEach(id => {
+  ['ir-step2','ir-step3','ir-step-fqhc-intake','ir-profile-inline','ir-locations-section','ir-physicians-section','ir-composite-section'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
   });
@@ -6974,15 +7064,18 @@ async function runIndividual() {
                      address: _irSelected.address || '', place_id: _irSelected.place_id || null,
                      rating: _irSelected.rating ?? null, review_count: _irSelected.review_count ?? null,
                      maps_url: _irSelected.maps_url || null };
-    const confirmedPhysicians = {};
-    const orgName = _irSelected?.name;
-    document.querySelectorAll('#ir-pd-tbody input[data-ph]').forEach(cb => {
-      if (!cb.checked || !orgName) return;
-      const pi = parseInt(cb.dataset.ph);
-      const roster = _physicianRoster[orgName] || [];
-      if (!roster[pi]) return;
-      (confirmedPhysicians[orgName] = confirmedPhysicians[orgName] || []).push(roster[pi]);
-    });
+    let confirmedPhysicians = _irConfirmedPhysicians();   // the Physicians step (every doctor, reviewed) when it ran
+    if (confirmedPhysicians === null) {
+      confirmedPhysicians = {};
+      const orgName = _irSelected?.name;
+      document.querySelectorAll('#ir-pd-tbody input[data-ph]').forEach(cb => {
+        if (!cb.checked || !orgName) return;
+        const pi = parseInt(cb.dataset.ph);
+        const roster = _physicianRoster[orgName] || [];
+        if (!roster[pi]) return;
+        (confirmedPhysicians[orgName] = confirmedPhysicians[orgName] || []).push(roster[pi]);
+      });
+    }
     await _submitIndividual(true, [anchor], confirmedPhysicians);
     return;
   }
@@ -7033,7 +7126,10 @@ async function _submitIndividual(practiceComposite = false, practiceRoster = [],
   const skip_pdf           = document.getElementById('ir-skip-pdf-toggle').checked;
   const teaser_report      = document.getElementById('ir-teaser')?.checked || false;   // opt-in (off by default since 2026-10-01)
   const override_today_lock = document.getElementById('ir-force-rerun')?.checked || false;
-  const physician_composite = practiceComposite && document.getElementById('ir-physician-composite')?.checked;
+  // Specialty practices: every physician is scored whenever a roster exists (the hidden Advanced
+  // checkbox no longer gates it); hospitals keep the explicit opt-in.
+  const physician_composite = practiceComposite && ((_irIsPractice() && Object.keys(physicianRoster || {}).length > 0)
+                                                    || document.getElementById('ir-physician-composite')?.checked);
   const briefing_variant = null;   // Pulse Briefing retired 2026-09-24 (unused); backend keeps the renderer for old files
 
   const body = {

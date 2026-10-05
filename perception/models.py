@@ -300,6 +300,7 @@ class AnalysisResult(BaseModel):
     executive_summary_structured: Optional[dict] = None  # {"headline", "bullets"} — Deep Diagnostic Executive Summary box (perception.plain)
     group_context: Optional[dict] = None   # group membership + benchmark printed on the PDF (perception/groups.py context_for_pdf)
     location_resolution: Optional[dict] = None  # how the office roster was found (website / NPPES / Google / model) + gaps (perception/location_resolver.py)
+    physician_resolution: Optional[dict] = None # how the physician roster was found (website directory / NPPES / model) + gaps (perception/physician_resolver.py)
     top_recommendation: str = ""
     practical_advice: list[str] = Field(default_factory=list)
     improvement_sections: list[ImprovementSection] = Field(default_factory=list)

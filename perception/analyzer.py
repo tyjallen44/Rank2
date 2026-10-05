@@ -1033,6 +1033,11 @@ def _collect_physician_composite(result, entity_name: str, city: str, state: str
     )
     if target_row:
         physicians = all_confirmed or discover_physicians(entity_name, city, state, on_event=emit)
+        if (getattr(result, "entity_type", None) or "hospital") not in ("practice", "service_line"):
+            from .physician_resolver import HOSPITAL_CAP
+            if len(physicians) > HOSPITAL_CAP:
+                emit({"type": "text", "text": f"Hospital report: physician reputation capped at {HOSPITAL_CAP} of {len(physicians)}"})
+                physicians = physicians[:HOSPITAL_CAP]
         if physicians:
             ph_results = collect_physician_data(
                 physicians, entity_name, city, state, on_event=emit

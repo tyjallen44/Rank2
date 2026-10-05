@@ -620,6 +620,29 @@ def _physicians_section(result: AnalysisResult) -> str:
     has_facts = pf.get("status") == "measured" and any(r.get("facts") for r in rows)
     has_comp = any(r.get("composite") for r in rows)
     intro = f"{len(rows)} physician{'s' if len(rows) != 1 else ''} associated with this organization."
+    pr = getattr(result, "physician_resolution", None) or {}
+    has_sources = any((r.get("facts") or {}).get("sources") for r in rows)
+    if has_sources and pr and not pr.get("confirmed"):
+        w, n = pr.get("website") or {}, pr.get("nppes") or {}
+        parts = []
+        if w.get("status") == "measured":
+            parts.append(f"{w.get('count', 0)} on the website's provider directory"
+                         + (f" (plus {w['midlevels']} advanced practitioners and staff, not scored)" if w.get("midlevels") else ""))
+        elif w.get("status") in ("none", "unreachable"):
+            parts.append("no provider directory could be read from the website")
+        if n.get("count"):
+            parts.append(f"{n['count']} MD/DO records in the NPI registry at the practice's addresses")
+        if pr.get("both"):
+            parts.append(f"{pr['both']} confirmed by both")
+        if (pr.get("model") or {}).get("used"):
+            parts.append("no verified source listed physicians, so the roster is model-recalled and marked M")
+        if parts:
+            intro += " Sources: " + "; ".join(parts) + "."
+        if pr.get("capped"):
+            intro += f" Capped at {pr.get('cap')} for a hospital report."
+    g_found = sum(1 for r in rows if (r.get("composite") or {}).get("google_rating") is not None)
+    if has_comp:
+        intro += f" Google listing found for {g_found} of {len(rows)}."
     if has_facts:
         lp = (f"{pf['linkage_pct']}% ({pf['linked']} of {pf['checked']})" if pf.get("linkage_pct") is not None else "not measurable")
         cs = f"{pf['cert_stated']} of {pf['cert_checked']}" if pf.get("cert_checked") else "no pages read"
@@ -631,11 +654,13 @@ def _physicians_section(result: AnalysisResult) -> str:
     if has_comp:
         intro += " Rating = review-count-weighted average across the platforms found."
     th = ["<th>Physician</th>"]
+    if has_sources:
+        th += ['<th style="text-align:center" title="W = on the website directory, N = NPI registry, M = model recall">Found on</th>']
     if has_facts:
         th += ['<th style="text-align:center">NPI registry</th>', '<th style="text-align:center">Linked to a confirmed location</th>',
                '<th style="text-align:center">Certification stated on site</th>']
     if has_comp:
-        th += ['<th style="text-align:center">Rating</th>', '<th style="text-align:right">Reviews</th>', '<th>Platforms found</th>']
+        th += ['<th style="text-align:center">Google</th>', '<th style="text-align:center">Rating</th>', '<th style="text-align:right">Reviews</th>', '<th>Platforms found</th>']
     try:
         from .holds import is_held as _is_held
     except Exception:
@@ -646,6 +671,8 @@ def _physicians_section(result: AnalysisResult) -> str:
         if not any(raw.lower().startswith(t) for t in ("dr.", "pa-", "np ", "rn ", "do ", "md ")):
             raw = "Dr. " + raw
         tds = [f"<td>{_e(raw)}</td>"]
+        if has_sources:
+            tds.append(f'<td style="text-align:center">{_phys_sources_cell(r.get("facts") or {})}</td>')
         if has_facts:
             f = r.get("facts")
             if f:
@@ -666,15 +693,53 @@ def _physicians_section(result: AnalysisResult) -> str:
                 except Exception:
                     held = False
             if c and held:
-                tds += ['<td colspan="3" style="color:#7a9095;font-style:italic">◐ Partial — identity verification pending</td>']
+                tds += ['<td colspan="4" style="color:#7a9095;font-style:italic">◐ Partial — identity verification pending</td>']
             elif c:
-                tds += [f'<td style="text-align:center">{_rating_cell(c)}</td>',
+                gr, gc = c.get("google_rating"), c.get("google_count")
+                google = (f'{gr:.1f}★ <span style="font-size:7.5pt;color:#7a8a9a">({gc:,})</span>' if (gr is not None and gc) else
+                          (f"{gr:.1f}★" if gr is not None else '<span style="color:#991b1b;font-size:8pt">no listing</span>'))
+                tds += [f'<td style="text-align:center">{google}</td>',
+                        f'<td style="text-align:center">{_rating_cell(c)}</td>',
                         f'<td style="text-align:right">{c.get("total_reviews") or "—"}</td>',
                         f'<td style="font-size:8.5pt">{_platforms_cell(c)}</td>']
             else:
-                tds += ['<td style="text-align:center;color:#b0b8c0">—</td>', '<td style="text-align:right;color:#b0b8c0">—</td>', '<td></td>']
+                tds += ['<td style="text-align:center;color:#b0b8c0">—</td>', '<td style="text-align:center;color:#b0b8c0">—</td>',
+                        '<td style="text-align:right;color:#b0b8c0">—</td>', '<td></td>']
         trs += f"<tr>{''.join(tds)}</tr>"
-    return _table_section("Physicians", intro, th, trs, len(rows))
+    gaps = ""
+    if has_sources:
+        no_google = [r["name"] for r in rows if has_comp and r.get("composite") and r["composite"].get("google_rating") is None
+                     and "website" in ((r.get("facts") or {}).get("sources") or [])]
+        no_npi = [r["name"] for r in rows if (r.get("facts") or {}).get("npi_missing")]
+        not_on_site = [r["name"] for r in rows if (r.get("facts") or {}).get("website_missing")]
+        items = []
+        if no_google:
+            items.append(f"<li><strong>{len(no_google)} physician{'s' if len(no_google) != 1 else ''} on the website with no Google listing we could verify:</strong> "
+                         f"{_e(', '.join(no_google[:15]))}{'…' if len(no_google) > 15 else ''}. Patients asking an assistant for a named doctor get no profile to cite.</li>")
+        if no_npi:
+            items.append(f"<li><strong>{len(no_npi)} on the website with no NPI record we could match:</strong> {_e(', '.join(no_npi[:15]))}{'…' if len(no_npi) > 15 else ''}. "
+                         f"Usually a name that differs from the registry (nickname, maiden name) or a non-physician listed among the doctors.</li>")
+        if not_on_site:
+            items.append(f"<li><strong>{len(not_on_site)} registered at the practice's addresses but not on the website:</strong> {_e(', '.join(not_on_site[:15]))}{'…' if len(not_on_site) > 15 else ''}. "
+                         f"A departed physician still registered here, or a current one missing a bio page.</li>")
+        if items:
+            gaps = (f'<div class="pxcontent" style="margin-top:6px"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing gaps</p>'
+                    f'<ul style="font-size:8.5pt;margin:0 0 0 14px;padding:0">{"".join(items)}</ul></div>')
+    return _table_section("Physicians", intro, th, trs, len(rows)) + gaps
+
+
+def _phys_sources_cell(f: dict) -> str:
+    marks = []
+    src = f.get("sources") or []
+    for key, letter, tip in (("website", "W", "on the website directory"), ("nppes", "N", "NPI registry"), ("model", "M", "model recall")):
+        if key in src:
+            marks.append(f'<span title="{tip}" style="display:inline-block;min-width:13px;padding:0 3px;border-radius:3px;font-size:7.5pt;font-weight:700;'
+                         f'background:{"#e6f3f4" if key != "model" else "#fdf3dc"};color:{"#1f6f73" if key != "model" else "#7a5a00"};margin:0 1px">{letter}</span>')
+    if f.get("npi_missing"):
+        marks.append('<span style="font-size:7.5pt;color:#7a5a00;margin-left:3px">no NPI</span>')
+    elif f.get("website_missing"):
+        marks.append('<span style="font-size:7.5pt;color:#7a5a00;margin-left:3px">not on site</span>')
+    return "".join(marks) or '<span style="color:#b0b8c0">—</span>'
 
 
 # ── Evidence behind the score ─────────────────────────────────────────────────
