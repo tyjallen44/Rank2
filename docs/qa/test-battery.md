@@ -3765,3 +3765,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Ambiguous row → change the listing | Website follows the chosen listing unless the user edited it. [ui] |
 | T3 | Group picked that already contains some rows | Badges + amber outline on those rows; bar with the count; ticking Skip unticks and disables them; Run count drops; the run excludes them. Picking "— none —" clears the badges. [ui] |
 | T4 | All rows already in the group + Skip ticked | Run refuses with "Every organization on this list is already in the group — nothing to run." [api] |
+
+## FIX-EVENT-SPECIALTY — bulk practice runs carry a specialty (2026-10-05)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Upload into The OrthoForum (default specialty Orthopedics) with no specialty column | Each practice report's cover says Orthopedics, the spot check uses the orthopedics question bank, History shows the specialty. [ui][pdf] |
+| T2 | Spreadsheet with a specialty column ("ortho", "Sports Med") | Row's specialty wins, canonicalized (Orthopedics / Sports Medicine). [pdf] |
+| R1 | Regression | Hospital / FQHC uploads unaffected (no specialty). |

@@ -6565,6 +6565,13 @@ def _run_event_job(
         init_db()
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+        _group_default_specialty = None
+        if group_id:
+            try:
+                from perception.groups import get_group as _gg0
+                _group_default_specialty = ((_gg0(group_id) or {}).get("default_specialty") or "").strip() or None
+            except Exception:
+                _group_default_specialty = None
         # Dedicated subfolder for this event — all files (PDFs, CSV, ZIP) go here
         event_dir = REPORTS_DIR / "events" / event_id
         event_dir.mkdir(parents=True, exist_ok=True)
@@ -6633,10 +6640,13 @@ def _run_event_job(
                         }
                         _agg = auto_practice_composite if entity_type == "fqhc" else True
                         _quiet = lambda _e: None
+                        _spec = None
+                        if entity_type == "practice":
+                            _spec = (entity.get("input_specialty") or "").strip() or _group_default_specialty or None
                         result = _analyze_with_retry(
                             _run_type_analyzer,
                             dict(etype=_etype, job=_ejob, entity_name=resolved_name, city=city, state=state,
-                                 specialty=None, aggregate=_agg, radius_miles=None, emit=_quiet, output_dir=event_dir),
+                                 specialty=_spec, aggregate=_agg, radius_miles=None, emit=_quiet, output_dir=event_dir),
                             resolved_name, base_wait=base_wait)
                         try:
                             _plain_ensure(result, _ejob)
