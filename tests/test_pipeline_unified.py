@@ -371,3 +371,17 @@ def test_server_dispatch_honours_pipeline_flag(monkeypatch):
     _server._run_type_analyzer("community_health", job, "E", "C", "NC", None, False, None, lambda e: None)
     assert set(seen) == {"legacy_hospital", "legacy_practice", "legacy_fqhc"}
     assert seen["legacy_hospital"]["individual_report"] is True
+
+
+def test_cache_is_stale_for_pre_resolver_practice_results():
+    import json
+    from perception.pipeline import cache_is_stale
+    old = json.dumps({"entity_type": "practice", "rankings": []})
+    assert cache_is_stale(old, "practice") is True
+    cur = json.dumps({"entity_type": "practice", "location_resolution": {"total": 3}, "physician_resolution": {"total": 10}})
+    assert cache_is_stale(cur, "practice") is False
+    half = json.dumps({"entity_type": "practice", "location_resolution": {"total": 3}})
+    assert cache_is_stale(half, "practice") is True            # offices resolved, physicians not yet
+    sl = json.dumps({"entity_type": "service_line", "location_resolution": {"total": 2}})
+    assert cache_is_stale(sl, "practice") is False             # service lines keep the registry physician path
+    assert cache_is_stale(old, "hospital") is False and cache_is_stale(None, "practice") is False

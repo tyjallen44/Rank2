@@ -6772,6 +6772,18 @@ def _run_event_job(
                                 _profile_audit(result, _ejob, _quiet)
                             except Exception:
                                 pass
+                            # No website from the list or the listing: the pinned Google profiles usually agree on
+                            # one domain — use it for the website facts and the content analysis below.
+                            if not _site and ((getattr(result, "profile_audit", None) or {}).get("domain")):
+                                _site = "https://" + result.profile_audit["domain"]
+                                emit({"type": "log", "text": f"  {resolved_name}: website taken from its Google profiles — {_site}"})
+                                try:
+                                    from perception.data.website_facts import fetch_website_facts as _fwf
+                                    _f = _fwf(_site)
+                                    if _f and _f.get("status") not in (None, "skipped"):
+                                        result.website_facts = {k: v for k, v in _f.items() if k != "site_pages"}
+                                except Exception:
+                                    pass
                         try:
                             _wf = getattr(result, "website_facts", None) or {}
                             from perception.data.website_facts import ai_access_problem as _aap
@@ -6856,7 +6868,8 @@ def _run_event_job(
                             combined_ok = True
                         except Exception as _ce:
                             emit({"type": "log", "text":
-                                  f"⚠ Content analysis failed for {resolved_name} ({type(_ce).__name__}); base report kept"})
+                                  f"⚠ Content analysis failed for {resolved_name} ({type(_ce).__name__}: {str(_ce)[:160]}); base report kept"})
+                            print(f"[event][content] {resolved_name}: {type(_ce).__name__}: {_ce}", flush=True)
 
                     if not _legacy:
                         try:

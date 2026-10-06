@@ -3915,3 +3915,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Expand an organization | "Before sending — your action" lists report problems; a separate "Findings for the organization (in their PDF)" list follows. [ui] |
 | T4 | ⬇ CSV | "Needs attention" holds report problems; a new "Findings" column holds organization findings. [api] |
 | R1 | Unit | `tests/test_delivery.py` passes (kinds and counts). |
+
+## FIX-STALE-CACHE — pre-resolver practice results are not republished (2026-10-06)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Upload a list (or run the form) for a practice whose last run predates the resolvers (e.g. Nebraska Orthopaedic Center, cached 10/04) | The log says "Cached result … predates the location / physician resolvers — running fresh"; the new PDF has the full Locations (Found-on marks) and Physicians tables, Listing gaps/quality, content analysis and today's data date — not a republished 5-location / 12-physician sample. [pdf] |
+| T2 | Practice with no website on its list row or Google listing but whose pinned profiles share a domain | Log "website taken from its Google profiles — https://…"; website facts and the content analysis use it. [ui][pdf] |
+| T3 | Content analysis failure in a bulk run | The log line names the exception and message (not just the type). [ui] |
+| R1 | Regression | Practice results produced since the resolvers (location_resolution + physician_resolution present) still hit the 30-day cache; hospital and service-line caching unchanged. `tests/test_pipeline_unified.py::test_cache_is_stale_for_pre_resolver_practice_results` passes. |

@@ -108,6 +108,23 @@ def _website_facts(ctx: "_Ctx", kind: str) -> Optional[dict]:
         return {"status": "unreachable", "url": None, "note": f"{type(exc).__name__}"}
 
 
+def cache_is_stale(result_json, type_key: str) -> bool:
+    """A stored practice result is only reusable when it was produced with the current report shape:
+    every office and physician resolved from verified sources (location_resolution / physician_resolution
+    present). Older results would republish a single-location, 12-physician sample report."""
+    if type_key != "practice" or not result_json:
+        return False
+    try:
+        d = json.loads(result_json) if isinstance(result_json, str) else dict(result_json)
+    except Exception:
+        return False
+    if (d.get("entity_type") or "practice") not in ("practice", "service_line"):
+        return False
+    if d.get("confirmed_siblings_used") or d.get("location_resolution") is not None:
+        return d.get("physician_resolution") is None and d.get("entity_type") == "practice"
+    return True
+
+
 def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: str, skip_pdf: bool,
                       emit, console, composite: Optional[dict] = None) -> AnalysisResult:
     """Serve a cached analysis as today's report: new run_id + History row, generated today
@@ -842,6 +859,9 @@ def run_individual(
     if not override_today_lock:
         from .db import get_recent_run
         _today = get_recent_run(entity_name, _loc_key, days=0, entity_type=adapter.type_key, aggregate=aggregate)
+        if _today and cache_is_stale(_today.get("result_json"), adapter.type_key):
+            emit({"type": "text", "text": f"Today's stored result for {entity_name} predates the location / physician resolvers — running fresh"})
+            _today = None
         if _today:
             emit({"type": "phase", "name": "cached", "text": f"Returning today's cached result for {entity_name}"})
             return _republish_cached(AnalysisResult.model_validate_json(_today["result_json"]), adapter,
@@ -849,6 +869,9 @@ def run_individual(
                                      composite=_composite_req)
         if not force_rerun:
             _cached = get_recent_run(entity_name, _loc_key, days=30, entity_type=adapter.type_key, aggregate=aggregate)
+            if _cached and cache_is_stale(_cached.get("result_json"), adapter.type_key):
+                emit({"type": "text", "text": f"Cached result for {entity_name} predates the location / physician resolvers — running fresh"})
+                _cached = None
             if _cached:
                 emit({"type": "phase", "name": "cached", "text": f"Returning cached result for {entity_name}"})
                 return _republish_cached(AnalysisResult.model_validate_json(_cached["result_json"]), adapter,
