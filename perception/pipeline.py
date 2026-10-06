@@ -257,7 +257,7 @@ def _physician_facts(ctx: "_Ctx") -> Optional[dict]:
         locs = list(ctx.aggregate_siblings or []) + ([{"address": getattr(ctx.read, "formatted_address", "")}] if ctx.read is not None else [])
         pages = (getattr(ctx, "website_facts", None) or {}).get("site_pages") or []
         # Practices are never sampled — every physician is checked; hospitals keep a cap.
-        from ..physician_resolver import HOSPITAL_CAP
+        from .physician_resolver import HOSPITAL_CAP
         sample = len(phys) if ctx.entity_type in ("practice", "service_line") else HOSPITAL_CAP
         ctx.emit({"type": "phase", "name": "physicians", "text": f"Checking {min(len(phys), sample)} physicians against the NPI registry and the website"})
         _site = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)

@@ -6484,7 +6484,7 @@ class EventRunRequest(BaseModel):
     include_teaser: bool = False
     override_cache: bool = False           # bypass same-day lock + 90-day score cache
     auto_practice_composite: bool = False  # FQHC only: discover all sites & build aggregate
-    practice_content: bool = False         # Practice only: content analysis + prescription (combined report)
+    practice_content: bool = True          # Practice only: content analysis + prescription (combined report) — always on for practices
     group_id: Optional[str] = None         # attach every report of this upload to a group
     spotcheck: bool = False                # ask the AI assistants ~30 questions per entity (same section as a single run)
     group_role: Optional[str] = None       # 'member' | 'prospect' for every report of this upload
@@ -6770,8 +6770,12 @@ def _run_event_job(
                         if _etype in ("practice", "service_line"):
                             try:
                                 _profile_audit(result, _ejob, _quiet)
-                            except Exception:
-                                pass
+                                _pa = getattr(result, "profile_audit", None) or {}
+                                print(f"[event][audit] {resolved_name}: profiles checked={((_pa.get('summary') or {}).get('checked'))} "
+                                      f"listing_quality={'yes' if getattr(result, 'listing_quality', None) else 'no'} "
+                                      f"offices={len(((getattr(result, 'location_resolution', None) or {}).get('siblings')) or [])}", flush=True)
+                            except Exception as _pax:
+                                print(f"[event][audit] {resolved_name}: failed {type(_pax).__name__}: {_pax}", flush=True)
                             # No website from the list or the listing: the pinned Google profiles usually agree on
                             # one domain — use it for the website facts and the content analysis below.
                             if not _site and ((getattr(result, "profile_audit", None) or {}).get("domain")):
@@ -6853,7 +6857,9 @@ def _run_event_job(
                             emit({"type": "log", "text": f"  {resolved_name}: spot check failed ({type(_sx).__name__})"})
                     if group_id:
                         _group_attach(result, {"group_id": group_id, "group_role": group_role, "email": (_jobs.get(job_id) or {}).get("email")}, emit)
-                    if practice_content and entity_type == "practice":
+                    # Practice attendees always get the combined report (content analysis + drafted prescription).
+                    if entity_type == "practice":
+                        print(f"[event][content] start {resolved_name} (flag={practice_content})", flush=True)
                         _ca_job = {
                             "teaser_report": include_teaser,
                             "content_urls": [entity.get("input_url")] if (entity.get("input_url") or "").strip() else ([_site] if (not _legacy and _site) else []),
@@ -6866,6 +6872,7 @@ def _run_event_job(
                             _finalize_practice_combined(result, resolved_name, city, state,
                                                         brand, _ca_job, _ca_emit)
                             combined_ok = True
+                            print(f"[event][content] done {resolved_name} → {result.pdf_path}", flush=True)
                         except Exception as _ce:
                             emit({"type": "log", "text":
                                   f"⚠ Content analysis failed for {resolved_name} ({type(_ce).__name__}: {str(_ce)[:160]}); base report kept"})

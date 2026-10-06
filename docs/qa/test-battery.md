@@ -3924,3 +3924,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Practice with no website on its list row or Google listing but whose pinned profiles share a domain | Log "website taken from its Google profiles — https://…"; website facts and the content analysis use it. [ui][pdf] |
 | T3 | Content analysis failure in a bulk run | The log line names the exception and message (not just the type). [ui] |
 | R1 | Regression | Practice results produced since the resolvers (location_resolution + physician_resolution present) still hit the 30-day cache; hospital and service-line caching unchanged. `tests/test_pipeline_unified.py::test_cache_is_stale_for_pre_resolver_practice_results` passes. |
+
+## FIX-BULK-PHYSICIAN-FACTS-AND-CONTENT — bulk practice reports: physician facts restored, content analysis unconditional (2026-10-06)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Upload a practice list | Each report's Physicians table has the NPI registry / linked / certification columns and Found-on marks again (a relative-import error had silently killed physician facts: "Physician facts failed (ImportError…)" in the server log). [pdf] |
+| T2 | Same upload | Every practice report ends with the content analysis + drafted prescription, regardless of any form flag; server log shows "[event][content] start <org>" and "done <org> → <pdf>" per practice, and "[event][audit] <org>: profiles checked=N listing_quality=yes offices=M". [pdf][log] |
+| R1 | Regression | Hospital and FQHC uploads unchanged. |
