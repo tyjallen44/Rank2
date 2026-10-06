@@ -103,19 +103,27 @@ def update_last_login(user_id: str) -> None:
 def list_users() -> list[dict]:
     con = get_connection()
     con.execute("""
-        SELECT id, email, name, role, auth_type, is_active, created_at, last_login, brand, preset, indicators_json
+        SELECT id, email, name, role, auth_type, is_active, created_at, last_login, brand, preset, indicators_json, groups_json
         FROM users ORDER BY created_at DESC
     """)
     rows = con.fetchall()
-    cols = ["id", "email", "name", "role", "auth_type", "is_active", "created_at", "last_login", "brand", "preset", "indicators_json"]
+    cols = ["id", "email", "name", "role", "auth_type", "is_active", "created_at", "last_login", "brand", "preset", "indicators_json", "groups_json"]
     con.close()
     return [dict(zip(cols, r)) for r in rows]
 
 
-def update_user_access(user_id: str, preset: Optional[str], indicators_json: Optional[str]) -> None:
-    """Assign an access preset and/or per-user report indicators (NULL = unrestricted / use preset)."""
+_KEEP = object()
+
+
+def update_user_access(user_id: str, preset: Optional[str], indicators_json: Optional[str], groups_json=_KEEP) -> None:
+    """Assign an access preset and/or per-user report indicators (NULL = unrestricted / use preset), and
+    optionally the groups the account is assigned to (JSON list of ids; NULL = by preset)."""
     con = get_connection()
-    con.execute("UPDATE users SET preset=?, indicators_json=? WHERE id=?", [preset or None, indicators_json or None, user_id])
+    if groups_json is _KEEP:
+        con.execute("UPDATE users SET preset=?, indicators_json=? WHERE id=?", [preset or None, indicators_json or None, user_id])
+    else:
+        con.execute("UPDATE users SET preset=?, indicators_json=?, groups_json=? WHERE id=?",
+                    [preset or None, indicators_json or None, groups_json or None, user_id])
     con.close()
 
 

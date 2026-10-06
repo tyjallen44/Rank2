@@ -4629,7 +4629,7 @@ async function _refreshCaps() {
     const d = await r.json();
     if (d && d.capabilities) {
       _caps = d.capabilities; localStorage.setItem('rk2_caps', JSON.stringify(_caps)); applyCaps();
-      if (!_caps.unrestricted) loadGroupsList(true).then(() => { applyCaps(); if (_soleGroup() && document.getElementById('page-home')?.classList.contains('active')) navigate('groups'); });
+      if (!_caps.unrestricted || _caps.groups_only) loadGroupsList(true).then(() => { applyCaps(); if (_soleGroup() && document.getElementById('page-home')?.classList.contains('active')) navigate('groups'); });
     }
     if (d && d.email) localStorage.setItem('rk2_email', d.email);
   } catch (e) { /* keep the cached copy */ }
@@ -4680,6 +4680,8 @@ function applyCaps(scope) {
                        community_health: 'Run a diagnostic on a community health center: its Pulse Score, what AI assistants currently see, and what to fix first.' };
     const tt = document.getElementById('ir-page-title-text'), th = document.getElementById('ir-title-help'), ts = document.getElementById('ir-page-sub');
     const slRow = document.getElementById('ir-sl-help-row'), tw = document.getElementById('ir-type-wrap');
+    // Assigned to groups (or a narrowed preset): no creating groups from the pickers either.
+    document.querySelectorAll('button[onclick^="groupCreateInline"]').forEach(b => { b.style.display = _groupScoped() ? 'none' : ''; });
     const adv = document.getElementById('ir-advanced'), gw = document.getElementById('ir-group-wrap');
     if (adv && gw) {
       if (single) {
@@ -7881,7 +7883,8 @@ function groupToggleFlagOnly() {
 }
 // A narrowed account that belongs to exactly one group: that group is its whole world —
 // no group list, no History (the group page lists its reports), the form picker locked.
-function _soleGroup() { return !!(_caps && !_caps.unrestricted && Array.isArray(_groupsCache) && _groupsCache.length === 1) ? _groupsCache[0] : null; }
+function _groupScoped() { return !!(_caps && (!_caps.unrestricted || _caps.groups_only)); }   // narrowed preset OR assigned to groups
+function _soleGroup() { return !!(_groupScoped() && Array.isArray(_groupsCache) && _groupsCache.length === 1) ? _groupsCache[0] : null; }
 let _groupOpenId = null;
 let _groupMembersById = {};        // run_id → member row (flags for the expanded detail)
 let _groupFlagOnly = false;        // "Show flagged only" toggle on the group page
@@ -7890,7 +7893,7 @@ async function loadGroupsPage() {
   const host = document.getElementById('groups-body'); if (!host) return;
   _groupStopPoll(); _groupOpenId = null;
   _groupStatusFilter = 'all'; _groupFlagOnly = false;
-  const restricted = !!(_caps && !_caps.unrestricted);
+  const restricted = _groupScoped();
   const nb = document.getElementById('groups-new-btn'); if (nb) nb.style.display = restricted ? 'none' : '';
   const _token_ = (loadGroupsPage._seq = (loadGroupsPage._seq || 0) + 1);
   const groups = await loadGroupsList(true);
@@ -10932,10 +10935,11 @@ async function loadAdminUsers() {
   const el = document.getElementById('admin-users-table');
   el.innerHTML = '<div class="empty" style="padding:20px 0"><div>Loading…</div></div>';
   try {
-    const [r, rc] = await Promise.all([api('/api/admin/users'), api('/api/admin/access-catalog')]);
+    const [r, rc, rg] = await Promise.all([api('/api/admin/users'), api('/api/admin/access-catalog'), api('/api/groups')]);
     if (!r.ok) throw new Error(await errDetail(r, 'Failed to load users'));
     const users = await r.json();
     _adminCatalog = rc.ok ? await rc.json() : { reports: [], options: [], presets: [] };
+    _adminGroups = rg.ok ? await rg.json() : [];
     _adminUsers = users;
     if (!users.length) {
       el.innerHTML = '<div class="empty" style="padding:20px 0"><div>No users yet.</div></div>';
@@ -10970,7 +10974,7 @@ async function loadAdminUsers() {
                   <option value="" ${!u.preset?'selected':''}>Unrestricted</option>
                   ${_adminCatalog.presets.map(p => `<option value="${p.id}" ${p.id===u.preset?'selected':''}>${_learnEsc(p.label)}</option>`).join('')}
                 </select>
-                <button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="adminToggleAccess('${u.id}')">${u.indicators_json ? 'Indicators ✎' : 'Indicators…'}</button>
+                <button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="adminToggleAccess('${u.id}')">${u.indicators_json || u.groups_json ? 'Access ✎' : 'Access…'}</button>${u.groups_json ? `<div style="font-size:11px;color:var(--teal);margin-top:2px">▦ ${_adminGroupNames(u.groups_json)}</div>` : ''}
               </td>
               <td><span class="badge badge-${u.auth_type}">${u.auth_type}</span></td>
               <td><span class="badge badge-${u.is_active?'active':'inactive'}">${u.is_active?'Active':'Inactive'}</span></td>
@@ -11004,6 +11008,11 @@ async function adminUpdatePreset(id, preset) {
     loadAdminUsers();
   } catch (e) { alert(e.message); }
 }
+let _adminGroups = null;
+function _adminGroupNames(raw) {
+  let ids = []; try { ids = JSON.parse(raw || '[]'); } catch (e) { ids = []; }
+  return ids.map(i => { const g = (_adminGroups || []).find(x => x.id === i); return _learnEsc(g ? g.name : i); }).join(', ');
+}
 function adminToggleAccess(id) {
   const row = document.getElementById('access-row-' + id); if (!row) return;
   if (!row.classList.contains('hidden')) { row.classList.add('hidden'); return; }
@@ -11015,10 +11024,14 @@ function adminToggleAccess(id) {
   _adminCatalog.reports.forEach(r => { (groups[r.group] = groups[r.group] || []).push(r); });
   const cols = Object.entries(groups).map(([g, rs]) => `<div style="min-width:200px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">${_learnEsc(g)}</div>
       ${rs.map(r => `<label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:3px 0"><input type="checkbox" data-ind="${r.id}" ${ticked.has(r.id) ? 'checked' : ''}> ${_learnEsc(r.label)}</label>`).join('')}</div>`).join('');
+  let assigned = []; try { assigned = u.groups_json ? JSON.parse(u.groups_json) : []; } catch (e) { assigned = []; }
+  const grpBox = `<div style="min-width:220px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Groups</div>
+      ${(_adminGroups || []).length ? (_adminGroups || []).map(g => `<label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:3px 0"><input type="checkbox" data-grp="${g.id}" ${assigned.includes(g.id) ? 'checked' : ''}> ${_learnEsc(g.name)} <span style="color:var(--muted);font-size:11px">(${g.member_count})</span></label>`).join('') : '<div style="font-size:12px;color:var(--muted)">No groups yet.</div>'}
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Ticked: the account sees only these groups, cannot create groups, and lands on its group when there is one. None ticked: groups by preset.</div></div>`;
   const opts = preset ? `<div style="font-size:12px;color:var(--muted);margin-top:8px">Options from the preset <strong>${_learnEsc(preset.label)}</strong>: ${Object.entries(preset.options || {}).map(([k, v]) => `${k.replace(/_/g, ' ')} = ${v}`).join(' · ')}${preset.history_scope === 'preset' ? ' · History scoped to accounts on this preset' : ''}</div>` : '';
   row.firstElementChild.innerHTML = `<div style="font-size:13px;margin-bottom:8px"><strong>Report indicators for ${_learnEsc(u.email || '')}</strong> — tick what this account may run. ${own ? 'Custom list (overrides the preset).' : (preset ? 'Showing the preset\'s list; saving makes it a custom list.' : 'Unrestricted today; saving narrows the account to the ticked reports.')}</div>
-    <div style="display:flex;gap:24px;flex-wrap:wrap">${cols}</div>${opts}
-    <div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="adminSaveAccess('${id}')">Save indicators</button>
+    <div style="display:flex;gap:24px;flex-wrap:wrap">${cols}${grpBox}</div>${opts}
+    <div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="adminSaveAccess('${id}')">Save</button>
       ${own ? `<button class="btn btn-ghost btn-sm" onclick="adminClearIndicators('${id}')">Use the preset's list${preset ? '' : ' (unrestricted)'}</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="adminToggleAccess('${id}')">Close</button></div>`;
   row.classList.remove('hidden');
@@ -11027,10 +11040,11 @@ async function adminSaveAccess(id) {
   const u = _adminUsers.find(x => x.id === id) || {};
   const row = document.getElementById('access-row-' + id);
   const indicators = [...row.querySelectorAll('input[data-ind]')].filter(c => c.checked).map(c => c.dataset.ind);
+  const groups = [...row.querySelectorAll('input[data-grp]')].filter(c => c.checked).map(c => c.dataset.grp);
   try {
-    const r = await api(`/api/admin/users/${id}/access`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preset: u.preset || null, indicators }) });
+    const r = await api(`/api/admin/users/${id}/access`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preset: u.preset || null, indicators, groups }) });
     if (!r.ok) throw new Error(await errDetail(r, 'Could not save'));
-    _flash('Indicators saved'); loadAdminUsers();
+    _flash('Access saved'); loadAdminUsers();
   } catch (e) { alert(e.message); }
 }
 async function adminClearIndicators(id) {

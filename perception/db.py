@@ -323,6 +323,7 @@ def _init_db_impl() -> None:
         ("notify_complete", "BOOLEAN DEFAULT TRUE"),   # email when a long run finishes
         ("preset", "VARCHAR"),                         # access preset id (perception/presets.py); NULL = unrestricted
         ("indicators_json", "VARCHAR"),                # per-user report indicators (JSON list); NULL = use the preset
+        ("groups_json", "VARCHAR"),                    # groups this account is assigned to (JSON list of ids); NULL = by preset
     ]:
         if col not in existing_user_cols:
             con.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")

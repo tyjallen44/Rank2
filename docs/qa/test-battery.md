@@ -3896,3 +3896,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 |---|---|---|
 | T1 | Admin → group page → Remove on an organization that has been re-run (several runs in the group) | Confirm dialog names the organization; after Remove the row is gone (flash "Removed <org> (N runs)"). Previously only the latest run's membership was deleted, the older run surfaced, and the row appeared not to disappear. [ui] |
 | R1 | API | `DELETE /api/groups/{id}/runs/{run_id}?whole_org=0` still removes just that one run. `tests/test_groups.py::test_remove_run_takes_the_whole_organization` passes. |
+
+## USERS-GROUP-ASSIGNMENT — admin assigns an account to specific groups (2026-10-06)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Admin → Users → **Access…** on an account | The panel now has a **Groups** column listing every group with member counts; tick one or more and **Save**. The user row shows "▦ <group names>" under the preset select. [ui] |
+| T2 | Sign in as that account → Groups | Only the assigned group(s) are listed; with exactly one, the page lands on it directly (no list, no "← All groups"); **+ New group** is hidden and the "New group…" buttons on the Deep Diagnostic / upload group pickers are hidden; the group pickers list only the assigned groups. `POST /api/groups` returns 403 for the account. Report access (preset / indicators) is unchanged by the assignment. [ui][api] |
+| T3 | Untick all groups and Save | Visibility falls back to the preset rule (association accounts see their preset's groups; unrestricted accounts see all). [ui] |
+| R1 | Regression | Admins see everything regardless of assignment; existing preset-scoped accounts behave as before; `tests/test_presets.py` passes. |

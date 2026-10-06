@@ -96,9 +96,13 @@ def capabilities(user: Optional[dict]) -> dict:
     preset_id = (user or {}).get("preset") or None
     preset = PRESETS.get(preset_id) if preset_id else None
     indicators = _parse_indicators((user or {}).get("indicators_json"))
+    groups = _parse_groups((user or {}).get("groups_json"))
+    # Assigned groups: the account sees those groups only, cannot create groups, and lands on its group.
+    # Report access is still the preset's / indicators'.
+    scope = {"groups": groups, "groups_only": bool(groups)}
     if preset is None and indicators is None:
         return {"preset": None, "unrestricted": True, "reports": {r: True for r in REPORT_IDS},
-                "options": {}, "history_scope": "all"}
+                "options": {}, "history_scope": "all", **scope}
     allowed = set(indicators if indicators is not None else (preset or {}).get("reports", []))
     return {
         "preset": preset_id if preset else None,
@@ -107,7 +111,18 @@ def capabilities(user: Optional[dict]) -> dict:
         "reports": {r: (r in allowed) for r in REPORT_IDS},
         "options": dict((preset or {}).get("options", {})),
         "history_scope": (preset or {}).get("history_scope", "all"),
+        **scope,
     }
+
+
+def _parse_groups(raw) -> list[str]:
+    if raw is None or raw == "":
+        return []
+    try:
+        v = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return []
+    return [str(x) for x in v if str(x).strip()] if isinstance(v, list) else []
 
 
 def report_allowed(caps: dict, report_id: str) -> bool:

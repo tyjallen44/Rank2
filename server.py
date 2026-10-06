@@ -1146,6 +1146,10 @@ def _group_attach(result, job: dict, emit=None) -> None:
 def _visible_groups(payload: dict, include_archived: bool = False) -> list:
     from perception.groups import list_groups
     caps = _caps_for_payload(payload)
+    if caps.get("groups"):
+        # Assigned to specific groups: those and nothing else (whatever the preset says).
+        want = set(caps["groups"])
+        return [g for g in list_groups(None, include_archived) if g["id"] in want]
     if caps.get("unrestricted"):
         return list_groups(None, include_archived)
     return list_groups(caps.get("preset") or "__none__", include_archived)
@@ -1157,6 +1161,10 @@ def _group_visible(payload: dict, group_id: str) -> dict:
     if not g:
         raise HTTPException(404, "Group not found")
     caps = _caps_for_payload(payload)
+    if caps.get("groups"):
+        if group_id not in set(caps["groups"]):
+            raise HTTPException(403, "That group is not available to your account")
+        return g
     if not caps.get("unrestricted") and g.get("preset") != caps.get("preset"):
         raise HTTPException(403, "That group is not available to your account")
     return g
@@ -1198,6 +1206,8 @@ async def groups_create(req: GroupRequest, payload: dict = Depends(get_current_u
     if not (req.name or "").strip():
         raise HTTPException(400, "Give the group a name.")
     caps = _caps_for_payload(payload)
+    if caps.get("groups_only"):
+        raise HTTPException(403, "Your account is assigned to a group and cannot create groups")
     preset = req.preset if caps.get("unrestricted") else caps.get("preset")
     from perception.groups import update_group
     from perception.specialties import normalize_specialty
@@ -4996,6 +5006,7 @@ async def admin_access_catalog(_: dict = Depends(require_admin)):
 class UpdateAccessRequest(BaseModel):
     preset: Optional[str] = None            # preset id or null (unrestricted unless indicators given)
     indicators: Optional[list[str]] = None  # report indicator ids; null = use the preset's list
+    groups: Optional[list[str]] = None      # group ids this account is assigned to; null = leave as is; [] = clear
 
 
 @app.put("/api/admin/users/{user_id}/access")
@@ -5009,7 +5020,12 @@ async def admin_update_access(user_id: str, req: UpdateAccessRequest, _: dict = 
     ind = None
     if req.indicators is not None:
         ind = json.dumps([i for i in req.indicators if i in REPORT_IDS])
-    update_user_access(user_id, req.preset or None, ind)
+    if req.groups is None:
+        update_user_access(user_id, req.preset or None, ind)
+    else:
+        from perception.groups import get_group
+        ids = [g for g in req.groups if get_group(g)]
+        update_user_access(user_id, req.preset or None, ind, groups_json=(json.dumps(ids) if ids else None))
     return {"status": "updated"}
 
 

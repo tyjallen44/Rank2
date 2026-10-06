@@ -74,3 +74,13 @@ def test_route_guard_and_history_scope(monkeypatch):
     assert [r["run_id"] for r in out] == ["1", "3"]
     # unrestricted / password session: everything
     assert server._scope_history_rows(rows, {"role": "partner"}) == rows
+
+
+def test_assigned_groups_scope_without_changing_report_access():
+    from perception.presets import capabilities
+    c = capabilities({"preset": None, "indicators_json": None, "groups_json": '["g1","g2"]'})
+    assert c["unrestricted"] is True and c["groups"] == ["g1", "g2"] and c["groups_only"] is True
+    c2 = capabilities({"preset": "association_specialty_practice", "indicators_json": None, "groups_json": '["g1"]'})
+    assert c2["unrestricted"] is False and c2["groups"] == ["g1"] and c2["groups_only"] is True and c2["reports"]["deep_practice"]
+    c3 = capabilities({"preset": None, "indicators_json": None, "groups_json": None})
+    assert c3["groups"] == [] and c3["groups_only"] is False
