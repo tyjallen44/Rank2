@@ -80,4 +80,12 @@ def test_summarize_counts():
     ms = [{"flags": []}, {"flags": [{"id": "stale", "level": "warn"}]},
           {"flags": [{"id": "website", "level": "fix"}, {"id": "stale", "level": "warn"}]}]
     s = D.summarize(ms)
-    assert s == {"flagged": 2, "fix": 1, "by_flag": {"stale": 2, "website": 1}}
+    assert s == {"flagged": 2, "fix": 1, "findings": 0, "by_flag": {"stale": 2, "website": 1}}
+
+
+def test_findings_are_not_coordinator_action():
+    fl = D.check_result(_ok_result(website_facts={"status": "blocked"}, spotcheck=None), group={"type_hint": "practice"})
+    kinds = {f["id"]: f["kind"] for f in fl}
+    assert kinds == {"website": "finding", "spotcheck": "report"}
+    s = D.summarize([{"flags": fl}, {"flags": [f for f in fl if f["id"] == "website"]}])
+    assert s["flagged"] == 1 and s["findings"] == 2        # only the report problem counts as needing attention

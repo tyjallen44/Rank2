@@ -3905,3 +3905,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Sign in as that account → Groups | Only the assigned group(s) are listed; with exactly one, the page lands on it directly (no list, no "← All groups"); **+ New group** is hidden and the "New group…" buttons on the Deep Diagnostic / upload group pickers are hidden; the group pickers list only the assigned groups. `POST /api/groups` returns 403 for the account. Report access (preset / indicators) is unchanged by the assignment. [ui][api] |
 | T3 | Untick all groups and Save | Visibility falls back to the preset rule (association accounts see their preset's groups; unrestricted accounts see all). [ui] |
 | R1 | Regression | Admins see everything regardless of assignment; existing preset-scoped accounts behave as before; `tests/test_presets.py` passes. |
+
+## GROUPS-DELIVERY-SPLIT — report problems vs organization findings (2026-10-06)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page, Evidence column | Two kinds of chip: ⚠ (red/amber) only for **report problems the coordinator can act on** (no spot check, physician rows, summary shape, specialty, rubric, benchmark, over 90 days, roster drift) — hover says "your action (↻ Re-run or Fix roster)"; a neutral grey **ⓘ N findings** chip for organization findings (website unreadable by AI, listing details disagree) — hover says they are in the PDF and nothing to do here. [ui] |
+| T2 | Summary strip and toolbar | "Needs attention" counts and filters only report problems; a group where every report is complete shows 0 even if many organizations have findings. [ui] |
+| T3 | Expand an organization | "Before sending — your action" lists report problems; a separate "Findings for the organization (in their PDF)" list follows. [ui] |
+| T4 | ⬇ CSV | "Needs attention" holds report problems; a new "Findings" column holds organization findings. [api] |
+| R1 | Unit | `tests/test_delivery.py` passes (kinds and counts). |

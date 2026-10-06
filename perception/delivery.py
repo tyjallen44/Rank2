@@ -35,6 +35,9 @@ LABELS: dict[str, str] = {
     "stale":        f"Over {STALE_DAYS} days old",
 }
 
+# Findings about the organization (for them to fix) vs problems with the report (for the coordinator).
+KIND: dict[str, str] = {"website": "finding", "listing_quality": "finding"}
+
 
 def _is_practice(d: dict) -> bool:
     return (d.get("entity_type") or "hospital") in ("practice", "service_line")
@@ -77,7 +80,9 @@ def check_result(d: dict, *, group: Optional[dict] = None, benchmark_ready: bool
     practice = _is_practice(d)
 
     def add(fid: str, level: str, detail: str) -> None:
-        flags.append({"id": fid, "label": LABELS[fid], "detail": detail, "level": level})
+        # kind: "report" = the coordinator can act (re-run / fix roster); "finding" = the organization's
+        # problem, already written up in the PDF — informational on the group page, never "needs attention".
+        flags.append({"id": fid, "label": LABELS[fid], "detail": detail, "level": level, "kind": KIND.get(fid, "report")})
 
     if _score(d) is None:
         add("no_score", FIX, "The run finished without a Pulse Score; re-run it.")
@@ -165,15 +170,19 @@ def spotcheck_required(group: Optional[dict]) -> bool:
 
 
 def summarize(members: list[dict]) -> dict:
-    """Counts for the group page strip: reports with any flag, with a 'fix' flag, and per flag id."""
+    """Counts for the group page strip: reports with a report-level flag (coordinator action), with a 'fix'
+    flag, organizations with findings, and per flag id."""
     per: dict[str, int] = {}
-    any_n = fix_n = 0
+    any_n = fix_n = findings_n = 0
     for m in members:
         fl = m.get("flags") or []
-        if fl:
+        rep = [f for f in fl if f.get("kind", "report") == "report"]
+        if rep:
             any_n += 1
-        if any(f["level"] == FIX for f in fl):
+        if any(f["level"] == FIX for f in rep):
             fix_n += 1
+        if any(f.get("kind") == "finding" for f in fl):
+            findings_n += 1
         for f in fl:
             per[f["id"]] = per.get(f["id"], 0) + 1
-    return {"flagged": any_n, "fix": fix_n, "by_flag": per}
+    return {"flagged": any_n, "fix": fix_n, "findings": findings_n, "by_flag": per}
