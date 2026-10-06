@@ -1376,13 +1376,15 @@ async def groups_set_status(group_id: str, run_id: str, req: GroupStatusRequest,
 
 
 @app.delete("/api/groups/{group_id}/runs/{run_id}")
-async def groups_remove_run(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
+async def groups_remove_run(group_id: str, run_id: str, whole_org: int = 1, payload: dict = Depends(get_current_user_payload)):
+    """Admin: take an organization out of the group — every run of it in this group (whole_org=1, default),
+    or just this one run (whole_org=0)."""
     from perception.groups import remove_run
     _group_visible(payload, group_id)
     if payload.get("role") != "admin":
         raise HTTPException(403, "Only an administrator can remove a report from a group")
-    remove_run(group_id, run_id)
-    return {"status": "removed"}
+    n = remove_run(group_id, run_id, whole_org=bool(whole_org))
+    return {"status": "removed", "memberships_removed": n}
 
 
 def _content_report_paths(result, ca_id: str) -> tuple[Path, Path]:

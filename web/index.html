@@ -7983,7 +7983,7 @@ async function openGroupPage(id, highlightRunId) {
       <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Download this organization's latest report">⬇ PDF</a>` : ''}
         <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member: it joins the ranking and the median' : 'Mark as a prospect: shown in amber with the rank it would hold, left out of the median and ranks'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')" title="Take this report out of the group; the report stays in History">Remove</button>` : ''}</td></tr>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')" title="Take this organization out of the group — every run of it in this group; the reports stay in History">Remove</button>` : ''}</td></tr>
       <tr id="gdet-${m.run_id}" class="hidden"><td colspan="8" style="background:#f6fafa;padding:10px 14px"></td></tr>`;
   }).join('');
   const bench = b.scored ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px">
@@ -8245,7 +8245,9 @@ async function groupRename(id, current) { const n = prompt('New name:', current)
 async function groupTogglePdf(id, on) { await _groupPut(id, { name: '', show_on_pdf: on }, on ? 'Benchmark will print on members\' reports' : 'Benchmark hidden on reports'); openGroupPage(id); }
 async function groupArchive(id) { if (!confirm('Archive this group? Its members keep their reports; the group disappears from pickers.')) return; await _groupPut(id, { name: '', archived: true }, 'Archived'); loadGroupsPage(); }
 async function groupRemoveRun(gid, runId) {
-  try { const r = await api(`/api/groups/${gid}/runs/${runId}`, { method: 'DELETE' }); if (!r.ok) throw new Error(await errDetail(r, 'Could not remove')); openGroupPage(gid); }
+  const m = _groupMembersById[runId] || {};
+  if (!confirm(`Remove ${m.entity_name || 'this organization'} from the group? Every run of it in this group is removed; the reports stay in History.`)) return;
+  try { const r = await api(`/api/groups/${gid}/runs/${runId}`, { method: 'DELETE' }); if (!r.ok) throw new Error(await errDetail(r, 'Could not remove')); const d = await r.json(); _flash(`Removed ${m.entity_name || 'organization'}${d.memberships_removed > 1 ? ` (${d.memberships_removed} runs)` : ''}`); openGroupPage(gid); }
   catch (e) { alert(e.message); }
 }
 

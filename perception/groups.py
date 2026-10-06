@@ -155,10 +155,27 @@ def set_status(group_id: str, run_id: str, status: str) -> None:
     con.close()
 
 
-def remove_run(group_id: str, run_id: str) -> None:
+def remove_run(group_id: str, run_id: str, *, whole_org: bool = True) -> int:
+    """Take a report out of the group. By default every run of the same organization in this group
+    goes too (re-runs attach a new run and leave the earlier memberships in place, so removing only
+    the latest would just reveal the previous one). Returns the number of memberships removed."""
     con = get_connection()
-    con.execute("DELETE FROM group_runs WHERE group_id = ? AND run_id = ?", [group_id, run_id])
-    con.close()
+    try:
+        ids = [run_id]
+        if whole_org:
+            row = con.execute("SELECT entity_name, location FROM analysis_runs WHERE run_id = ?", [run_id]).fetchone()
+            if row:
+                ids = [r[0] for r in con.execute(
+                    """SELECT g.run_id FROM group_runs g JOIN analysis_runs a ON a.run_id = g.run_id
+                       WHERE g.group_id = ? AND LOWER(COALESCE(a.entity_name,'')) = LOWER(?) AND LOWER(COALESCE(a.location,'')) = LOWER(?)""",
+                    [group_id, row[0] or "", row[1] or ""]).fetchall()] or [run_id]
+        n = 0
+        for rid in ids:
+            con.execute("DELETE FROM group_runs WHERE group_id = ? AND run_id = ?", [group_id, rid])
+            n += 1
+        return n
+    finally:
+        con.close()
 
 
 def delete_group(group_id: str) -> int:

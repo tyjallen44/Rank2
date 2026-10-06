@@ -3889,3 +3889,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 |---|---|---|
 | T1 | Hospital Network report for a system whose entity result was cached today with a non-measured website status (USA Health) | The run re-crawls the site; the red "URGENT: AI assistants cannot read your website" box prints on page 1 with the JavaScript-challenge wording. Previously the cached "refused" facts were reused and the box was missing even after the classification fix. [pdf] |
 | R1 | Regression | A cached entity result with a measured crawl is not re-crawled by the network run. |
+
+## FIX-GROUP-REMOVE — Remove takes the whole organization out of a group (2026-10-06)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Admin → group page → Remove on an organization that has been re-run (several runs in the group) | Confirm dialog names the organization; after Remove the row is gone (flash "Removed <org> (N runs)"). Previously only the latest run's membership was deleted, the older run surfaced, and the row appeared not to disappear. [ui] |
+| R1 | API | `DELETE /api/groups/{id}/runs/{run_id}?whole_org=0` still removes just that one run. `tests/test_groups.py::test_remove_run_takes_the_whole_organization` passes. |

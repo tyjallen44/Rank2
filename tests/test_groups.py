@@ -69,3 +69,22 @@ def test_prospect_gets_would_rank_and_pdf_wording(monkeypatch):
                        entity_type="practice", rankings=[RankedProvider(rank=1, name="New Ortho", ai_visibility_score=78)], group_context=c | {"median": 67, "total": 10})
     assert _group_summary_bullet(r).startswith("Would rank 4th of 10 members of Iowa Ortho")
     assert "Prospect for Iowa Ortho" in _group_cover_line(r) and "would rank 4th of 10" in _group_cover_line(r)
+
+
+def test_remove_run_takes_the_whole_organization(monkeypatch):
+    """Re-runs leave earlier memberships behind; Remove drops every run of the organization."""
+    calls = []
+    class _Con:
+        def execute(self, sql, params=None):
+            calls.append((sql.strip()[:6], params))
+            class R:
+                def fetchone(self_inner): return ("Orthosouth", "Memphis, TN")
+                def fetchall(self_inner): return [("r-new",), ("r-old",)]
+            return R()
+        def close(self): pass
+    monkeypatch.setattr(G, "get_connection", lambda: _Con())
+    assert G.remove_run("g", "r-new") == 2
+    deleted = [p[1] for s, p in calls if s.startswith("DELETE")]
+    assert deleted == ["r-new", "r-old"]
+    calls.clear()
+    assert G.remove_run("g", "r-new", whole_org=False) == 1 and [p[1] for s, p in calls if s.startswith("DELETE")] == ["r-new"]
