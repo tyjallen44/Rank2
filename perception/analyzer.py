@@ -928,6 +928,7 @@ def _sync_entity_scores(rankings: list, city: str, state: str, run_profile: str 
     from .db import get_entity_score as _get_es, upsert_entity_score as _put_es
     _loc = f"{city}, {state}"
     _run_family = "practice" if (run_profile or "").startswith("practice_") else "hospital"
+    _deep = source == "deep_diagnostic"
     _adopted = False
     for prov in rankings:
         _canon = None if override_today_lock else _get_es(prov.name, _loc, days=30)
@@ -935,7 +936,10 @@ def _sync_entity_scores(rankings: list, city: str, state: str, run_profile: str 
         # Only adopt a canonical score computed under the SAME rubric — the
         # practice and hospital rubrics reuse the same four slots with different
         # pillar meanings, so a cross-rubric adoption would mislabel the values.
-        if _canon and _canon.get("pulse_score") is not None and _cf == _run_family:
+        # A Deep Diagnostic (evidence-grounded) adopts only an earlier Deep Diagnostic, never a
+        # market pass, and its own score replaces the canonical; market runs adopt whatever is canonical.
+        _ok_source = (not _deep) or (_canon or {}).get("source") == "deep_diagnostic"
+        if _canon and _canon.get("pulse_score") is not None and _cf == _run_family and _ok_source:
             prov.ai_visibility_score = _canon["pulse_score"]
             for _k, _v in (_canon.get("tier_scores") or {}).items():
                 if hasattr(prov.tier_scores, _k):
@@ -949,7 +953,7 @@ def _sync_entity_scores(rankings: list, city: str, state: str, run_profile: str 
             _put_es(prov.name, _loc, prov.ai_visibility_score,
                     prov.tier_scores.as_dict(), overall_rating=_code,
                     band_label=_band, ai_says=getattr(prov, "ai_says", "") or "",
-                    source=source, run_id=run_id, overwrite=override_today_lock,
+                    source=source, run_id=run_id, overwrite=(override_today_lock or _deep),
                     weighting_profile=getattr(prov, "weighting_profile", None) or run_profile)
     if _adopted:
         rankings.sort(key=lambda p: (p.ai_visibility_score is None, -(p.ai_visibility_score or 0)))

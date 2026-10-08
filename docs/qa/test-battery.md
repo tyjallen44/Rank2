@@ -3932,3 +3932,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Upload a practice list | Each report's Physicians table has the NPI registry / linked / certification columns and Found-on marks again (a relative-import error had silently killed physician facts: "Physician facts failed (ImportError…)" in the server log). [pdf] |
 | T2 | Same upload | Every practice report ends with the content analysis + drafted prescription, regardless of any form flag; server log shows "[event][content] start <org>" and "done <org> → <pdf>" per practice, and "[event][audit] <org>: profiles checked=N listing_quality=yes offices=M". [pdf][log] |
 | R1 | Regression | Hospital and FQHC uploads unchanged. |
+
+## SCORE-SYNC-DEEP-WINS — the Deep Diagnostic score is canonical across reports (2026-10-07)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Run a Competitor Rankings market first, then a Deep Diagnostic on one of its practices, then Rankings again | The Deep Diagnostic keeps its own evidence-based score (it does not adopt the market number) and replaces the cached score; the second Rankings shows the practice at the Deep Diagnostic's exact Pulse Score and pillars. [pdf] |
+| T2 | Deep Diagnostic re-run within 30 days with the same roster | Adopts the earlier Deep Diagnostic's score (stable); a different roster re-scores and overwrites. [pdf] |
+| T3 | Hospital Deep Diagnostic after a Hospital Market report | Same rule: the Deep Diagnostic wins; the later Market / Network report shows it. [pdf] |
+| R1 | Unit | `tests/test_score_sync.py` (3 tests) passes; market runs still seed the cache without overwriting. |

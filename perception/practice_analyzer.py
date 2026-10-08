@@ -886,7 +886,11 @@ def _sync_practice_entity_score(rankings: list, city: str, state: str, run_id: s
     # AND for the same confirmed roster — a cached score for a different set
     # of locations must not overwrite this run's pillar values.
     _same_roster = (_canon or {}).get("roster_key", "") == (roster_fp or "")
-    if _canon and _canon.get("pulse_score") is not None and _cf == "practice" and _same_roster:
+    # The Deep Diagnostic is the evidence-grounded score, so it is authoritative: it adopts only an
+    # earlier Deep Diagnostic of the same roster (stable re-runs) — never a market pass — and
+    # otherwise its own score REPLACES the canonical so Rankings / Compare Two show the same number.
+    _from_deep = (_canon or {}).get("source") == "deep_diagnostic"
+    if _canon and _canon.get("pulse_score") is not None and _cf == "practice" and _same_roster and _from_deep:
         _anchor.ai_visibility_score = _canon["pulse_score"]
         for _k, _v in (_canon.get("tier_scores") or {}).items():
             if hasattr(_anchor.tier_scores, _k):
@@ -899,7 +903,7 @@ def _sync_practice_entity_score(rankings: list, city: str, state: str, run_id: s
         _put_es(_anchor.name, _loc, _anchor.ai_visibility_score,
                 _anchor.tier_scores.as_dict(), overall_rating=_code,
                 band_label=_band, ai_says=getattr(_anchor, "ai_says", "") or "",
-                source="deep_diagnostic", run_id=run_id, overwrite=override_today_lock,
+                source="deep_diagnostic", run_id=run_id, overwrite=True,
                 weighting_profile=getattr(_anchor, "weighting_profile", None) or run_profile,
                 roster_key=roster_fp or "")
 
