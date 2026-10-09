@@ -131,10 +131,10 @@ _RUN_SQL = """
 """
 
 # The caller's own runs only, in all three tables. See the ownership note in
-# _pulse_history: the history helper in perception/db.py filters on user_role, and
-# our role mapping puts
-# every AE, BDR and sales lead into the single string "salesteam", so a role-wide
-# read would show one rep every other rep's runs.
+# _pulse_history: since 2026-10-01 the history helper in perception/db.py returns
+# every run to every signed-in role (_ISOLATED_ROLES is empty), which is right for
+# a browser user looking at one shared Pulse and wrong for a per-person connector
+# whose answers land in one rep's chat.
 #
 # The analysis filter is his own History filter verbatim: a comparison's side
 # runs have no PDF of their own and are hidden, while a run that carries a PDF
@@ -255,6 +255,47 @@ def _connect() -> Any:
     database call in this codebase, so nothing connects at import time."""
     from perception.db import get_connection
     return get_connection()
+
+
+def _session_payload(identity: PulseIdentity) -> dict:
+    """The payload his own login puts in this person's session token
+    (``_create_token(user["role"], uid=user["id"], email=..., name=..., brand=...)``).
+
+    Built in one place because two things must see exactly what the browser
+    login would: ``srv._caps_for_payload``, which reads the account's access
+    through ``uid`` and treats a payload without one as unrestricted, and every
+    download token this module mints."""
+    return {"role": identity.account_role, "uid": identity.uid, "email": identity.email,
+            "name": identity.name, "brand": identity.brand}
+
+
+def _mint_link_token(srv: Any, identity: PulseIdentity) -> tuple[str, int]:
+    """A short-lived session token for this caller, and its lifetime in seconds.
+
+    The one mint site for all three run tools; see ``_pdf_links`` for why the
+    role is ``account_role``, why ``uid`` rides along, and why ``exp`` is
+    overridden."""
+    ttl = _pdf_ttl()
+    claims = _session_payload(identity)
+    role = claims.pop("role")
+    return srv._create_token(role, **claims, exp=int(time.time()) + ttl), ttl
+
+
+async def _report_refusal(srv: Any, identity: PulseIdentity, report_id: str) -> Optional[str]:
+    """None if this caller's account may run ``report_id``, else the refusal.
+
+    The same rule his routes apply through ``_require_report`` (Admin -> Users:
+    a preset or per-account report indicators; an account with neither is
+    unrestricted, and a Pulse admin is never narrowed), read through his own
+    ``_caps_for_payload`` so the MCP follows that rule when he changes it. Off
+    the event loop because it reads the users row."""
+    from perception.presets import REPORTS, report_allowed
+    caps = await anyio.to_thread.run_sync(srv._caps_for_payload, _session_payload(identity))
+    if report_allowed(caps, report_id):
+        return None
+    label = next((label for rid, label, _group in REPORTS if rid == report_id), report_id)
+    return (f"Refused: your Pulse account does not include {label}. Ask a Pulse "
+            f"administrator to add it.")
 
 
 # ── Input cleaning ────────────────────────────────────────────────────────────
@@ -590,22 +631,21 @@ def _pdf_links(srv: Any, identity: PulseIdentity, run: dict, run_id: str) -> lis
     avoid and the caller must therefore be given in the smallest possible size:
 
     * the role it carries is ``identity.account_role``, the caller's own Pulse
-      ``users.role``, NEVER the mapped RLDatix group. ``download_pdf`` resolves
-      the run through the role-scoped history helper in ``perception/db.py``,
-      which filters on ``user_role``, and the run was stamped with the same
-      ``account_role`` (see the ``_new_job`` call sites) — so the two agree
-      and neither exceeds what that person's own Pulse login already grants.
-      Minting the mapped group handed a Google-approved account whose Pulse role
-      is ``user`` a working ``salesteam`` credential, and with it every
-      salesteam run, its ``ran_by`` emails and its PDFs.
+      ``users.role``, NEVER the mapped RLDatix group, so it never exceeds what
+      that person's own Pulse login already grants. Minting the mapped group
+      handed a Google-approved account whose Pulse role is ``user`` a working
+      ``salesteam`` credential.
+    * it carries ``uid``, exactly as his login does. ``download_pdf`` resolves
+      the run through ``_scope_history_rows``, which narrows an association
+      account (preset History scope) to its own preset's runs by reading the
+      account through ``uid``; a token without one reads as unrestricted, so an
+      MCP link would reach PDFs that person's browser cannot.
     * ``exp`` is overridden to ``_pdf_ttl()`` (ten minutes) because
       ``_create_token`` builds ``{"role": ..., "exp": ..., **extra}`` and an
       ``exp`` in extra wins, so the link does not inherit the thirty-day session
       default. A link leaked from a chat transcript is ten minutes of that
       person's Pulse access, not a month of it."""
-    ttl = _pdf_ttl()
-    token = srv._create_token(identity.account_role, email=identity.email, name=identity.name,
-                              brand=identity.brand, exp=int(time.time()) + ttl)
+    token, ttl = _mint_link_token(srv, identity)
     base = getattr(srv, "APP_URL", "")
     out = []
     for label, column, path in (("Full report", "pdf_path", "pdf"),
@@ -654,13 +694,31 @@ def _score_block(run: dict) -> list[str]:
     return lines
 
 
-def _canonical_note(run: dict) -> list[str]:
-    """Cross-check the run's score against the canonical entity_scores row.
+def _canonical_note(run: dict, run_id: str) -> list[str]:
+    """Cross-check the run's score against the shared entity-score cache.
 
-    Not a substitute for it: ``entity_scores`` is what makes a market report and
-    a network report agree on one entity, so a disagreement is a fact worth
-    printing rather than a tie to break silently."""
-    from perception.db import get_entity_score
+    ``entity_scores`` is what makes a Competitors Rankings, Market, Network or
+    Compare Two report show one entity at one number. Since 2026-10-07 a Deep
+    Diagnostic is AUTHORITATIVE in it (``analyzer._sync_entity_scores`` and
+    ``practice_analyzer._sync_practice_entity_score``): it never adopts a
+    market-pass score, it adopts only an earlier Deep Diagnostic, and otherwise
+    its own score replaces the canonical row. So a difference means one of
+    three different things, and each is said as what it is rather than as a
+    tie to break:
+
+    * the canonical row is THIS run's own and still differs — a real
+      inconsistency, so both numbers are printed;
+    * the canonical row is a DIFFERENT Deep Diagnostic of the same entity —
+      this run's score stands for this run, and the other one is now what
+      market reports show;
+    * the canonical row came from a market or network pass — this run, a Deep
+      Diagnostic, outranks it.
+
+    A canonical score under a different rubric (hospital, practice, community)
+    is not compared at all: his own adoption rule refuses cross-rubric scores
+    because the four slots mean different pillars. The other run's id is never
+    printed — it may be somebody else's."""
+    from perception.db import get_entity_score, rubric_for_profile
     try:
         canonical = get_entity_score(run.get("entity_name") or "", run.get("location") or "")
     except Exception as exc:
@@ -668,15 +726,32 @@ def _canonical_note(run: dict) -> list[str]:
         return []
     if not canonical or canonical.get("pulse_score") is None:
         return []
+    canonical_profile = canonical.get("weighting_profile") or ""
+    if canonical_profile and (rubric_for_profile(canonical_profile)
+                              != rubric_for_profile(run.get("weighting_profile"))):
+        return []
     score = run.get("ai_visibility_score")
     canonical_score = int(canonical["pulse_score"])
     day = canonical.get("generated_at") or ""
+    source = str(canonical.get("source") or "").strip()
     if score is not None and int(score) == canonical_score:
         return ["", f"Canonical score for this entity and location on {day}: "
                     f"{canonical_score} (matches)."]
-    return ["", f"Canonical score for this entity and location on {day}: {canonical_score} — "
-                f"this run reports {'nothing' if score is None else int(score)}. "
-                f"Both are shown because the two rows disagree."]
+    if score is None or canonical.get("run_id") == run_id:
+        return ["", f"Canonical score for this entity and location on {day}: "
+                    f"{canonical_score} — this run reports "
+                    f"{'nothing' if score is None else int(score)}. "
+                    f"Both are shown because the two rows disagree."]
+    if source == "deep_diagnostic":
+        return ["", f"Canonical score for this entity and location on {day}: "
+                    f"{canonical_score}, from a different Deep Diagnostic of this "
+                    f"organization. This run's own score is {int(score)}; market, network "
+                    f"and comparison reports now show {canonical_score}."]
+    kind = {"market": "market", "network": "network"}.get(source, "non-Deep-Diagnostic")
+    return ["", f"Canonical score for this entity and location on {day}: "
+                f"{canonical_score}, from a {kind} pass. This run is a Deep Diagnostic, "
+                f"which outranks a {kind} pass, so its own score of {int(score)} is the "
+                f"one to quote for this run."]
 
 
 def _render_run(srv: Any, identity: PulseIdentity, run_id: str, run: dict) -> str:
@@ -697,7 +772,7 @@ def _render_run(srv: Any, identity: PulseIdentity, run_id: str, run: dict) -> st
         "",
     ]
     lines += _score_block(run)
-    lines += _canonical_note(run)
+    lines += _canonical_note(run, run_id)
     links = _pdf_links(srv, identity, run, run_id)
     if links:
         lines += [""] + links
@@ -846,16 +921,18 @@ async def _pulse_content_check(srv: Any, identity: PulseIdentity, organization: 
 @_tool
 async def _pulse_run_report(srv: Any, identity: PulseIdentity, organization: str, city: str,
                             state: str, report_type: str = "hospital", specialty: str = "",
-                            aggregate: bool = True, briefing: str = "") -> str:
+                            aggregate: bool = True) -> str:
     """Start and finish one organization's report inside this call. Counts 1
-    against the daily cap, reserved before the run starts."""
+    against the daily cap, reserved before the run starts.
+
+    There is no briefing argument: his Pulse Briefing was retired on 2026-09-24
+    and POST /api/analyze now sets ``briefing_variant`` to None whatever the
+    request says, so a parameter here would be one the model sets and nothing
+    reads."""
     kinds = {"hospital": "hospital", "practice": "practice", "fqhc": "community_health"}
     kind = (report_type or "hospital").strip().lower()
     if kind not in kinds:
         return 'Refused: report_type must be "hospital", "practice" or "fqhc".'
-    variant = (briefing or "").strip().lower()
-    if variant not in ("", "sales", "cs"):
-        return 'Refused: briefing must be empty, "sales" or "cs".'
 
     name = _clean_org(srv, organization)
     state = _clean_state(state)
@@ -864,6 +941,18 @@ async def _pulse_run_report(srv: Any, identity: PulseIdentity, organization: str
         return "Refused: city is required."
     entity_type = kinds[kind]
     specialty_value = _clean_specialty(srv, specialty)
+    if specialty_value and entity_type == "practice":
+        # The same canonical label POST /api/analyze gives a practice specialty,
+        # so an MCP run and a browser run of one practice share his caches.
+        from perception.specialties import normalize_specialty
+        specialty_value = normalize_specialty(specialty_value)
+
+    # Before the reservation: an account that may not run this report must not
+    # be charged for asking.
+    from perception.presets import deep_report_id
+    refusal = await _report_refusal(srv, identity, deep_report_id(entity_type))
+    if refusal:
+        return refusal
 
     _sweep_mcp_jobs(srv)
     cap = mcp_usage.daily_cap()
@@ -887,7 +976,7 @@ async def _pulse_run_report(srv: Any, identity: PulseIdentity, organization: str
         "individual_report": True,
         "entity_type": entity_type,
         "specialty": specialty_value,
-        "briefing_variant": variant or None,
+        "briefing_variant": None,
         "force_rerun": False,
         "override_today_lock": False,
         "skip_pdf": False,
@@ -968,6 +1057,9 @@ async def _pulse_compare(srv: Any, identity: PulseIdentity, organization_a: str,
     # Cleaned before the reservation: a refused argument must not cost a run.
     clean_specialty_a = _clean_specialty(srv, specialty_a)
     clean_specialty_b = _clean_specialty(srv, specialty_b)
+    refusal = await _report_refusal(srv, identity, "compare")
+    if refusal:
+        return refusal
 
     _sweep_mcp_jobs(srv)
     cap = mcp_usage.daily_cap()
@@ -1053,11 +1145,8 @@ def _render_comparison(srv: Any, identity: PulseIdentity, comparison_id: str,
         lines.append("")
 
     if pdf_path:
-        # account_role, never the mapped group — see _pdf_links for why.
-        ttl = _pdf_ttl()
-        token = srv._create_token(identity.account_role, email=identity.email,
-                                  name=identity.name, brand=identity.brand,
-                                  exp=int(time.time()) + ttl)
+        # account_role and uid, never the mapped group — see _pdf_links for why.
+        token, ttl = _mint_link_token(srv, identity)
         lines += [f"Download (link expires in {ttl // 60} minutes):",
                   f"  {getattr(srv, 'APP_URL', '')}/api/compare/{comparison_id}/pdf?token={token}"]
     return "\n".join(lines)
@@ -1077,6 +1166,10 @@ async def _pulse_network_report(srv: Any, identity: PulseIdentity, network_name:
     source = _clean_url(source_url, field="source_url")
     roster = _clean_facilities(srv, facilities)
     discovered_note = ""
+    # Before discovery, which is itself a billed model call.
+    refusal = await _report_refusal(srv, identity, "network")
+    if refusal:
+        return refusal
 
     # Discovery is a real Claude call and, when GEMINI_API_KEY is set, a real
     # Gemini call as well (network_analyzer.discover_hospitals_by_name). Both
@@ -1159,10 +1252,8 @@ async def _pulse_network_report(srv: Any, identity: PulseIdentity, network_name:
         lines.append(f"AI Visibility Score: {int(score)}  (Grade {result.get('grade') or '—'}"
                      + (f", {result['grade_band']}" if result.get("grade_band") else "") + ")")
 
-    # account_role, never the mapped group — see _pdf_links for why.
-    ttl = _pdf_ttl()
-    token = srv._create_token(identity.account_role, email=identity.email, name=identity.name,
-                              brand=identity.brand, exp=int(time.time()) + ttl)
+    # account_role and uid, never the mapped group — see _pdf_links for why.
+    token, ttl = _mint_link_token(srv, identity)
     base = getattr(srv, "APP_URL", "")
     links = [f"  {label + ':':<14}{base}/api/network/{run_id}/{path}?token={token}"
              for label, key, path in (("Full report", "pdf_path", "pdf"),
@@ -1195,12 +1286,13 @@ async def _pulse_history(srv: Any, identity: PulseIdentity, days: int = 45,
                          organization: str = "", limit: int = 25) -> str:
     """The caller's own runs, newest first. Free.
 
-    Scoped on ``ran_by``, never role-wide. perception/db.py's own history helper
-    filters on ``user_role`` instead, and our role mapping puts every AE, BDR and
-    sales lead into the single string "salesteam", so a role-wide read would show
-    one rep every other rep's runs — precisely the leak this endpoint exists to
-    avoid. That is why this SQL is written here rather than reusing it; see
-    docs/mcp.md section 6, which names both helpers."""
+    Scoped on ``ran_by``, never wider. perception/db.py's own history helper
+    returns every run to every signed-in role since 2026-10-01 (its
+    _ISOLATED_ROLES set is empty), so reusing it would show one rep every other
+    rep's runs in their own chat — precisely what a per-person connector exists
+    to avoid. That is why this SQL is written here; see docs/mcp.md section 6,
+    which names both helpers. His History also narrows association accounts to
+    their preset; this is narrower still."""
     from datetime import date, timedelta
 
     days = _clean_int(days, 45, 1, 365, field="days")
@@ -1281,7 +1373,7 @@ async def _pulse_trend(srv: Any, identity: PulseIdentity, organization: str, cit
 
     lines = [f"Score trend — {name}" + (f" ({city}, {state})" if city and state else ""), ""]
     scores: list[int] = []
-    first_day = last_day = ""
+    first_day = ""
     for run_id, generated_at, score, tier_scores, footprint, location, profile in rows:
         try:
             tiers = json.loads(tier_scores or "{}")
@@ -1294,7 +1386,6 @@ async def _pulse_trend(srv: Any, identity: PulseIdentity, organization: str, cit
         if score is not None:
             scores.append(int(score))
         first_day = first_day or str(generated_at)
-        last_day = str(generated_at)
         lines.append(f"{generated_at}  run {run_id}  {location}")
         lines.append(f"  Score {'—' if score is None else int(score)}")
         for key, label in _tier_labels(profile).items():
@@ -1390,8 +1481,8 @@ async def _pulse_content_draft(srv: Any, identity: PulseIdentity, run_id: str) -
     lines += [
         "Every [VERIFY: ...] placeholder is a fact a human must confirm before publishing; "
         "the drafting prompt emits them deliberately and they are left exactly as written.",
-        f"The drafts are saved against this run. To get them in a PDF, open the run in Pulse "
-        f"and use the Content Analysis panel.",
+        "The drafts are saved against this run. To get them in a PDF, open the run in Pulse "
+        "and use the Content Analysis panel.",
     ]
     return "\n".join(lines)
 
@@ -1437,13 +1528,13 @@ def build_mcp(srv: Any) -> MCPServer:
     @mcp.tool(name="pulse_run_report", structured_output=False)
     async def pulse_run_report(organization: str, city: str, state: str,
                                report_type: str = "hospital", specialty: str = "",
-                               aggregate: bool = True, briefing: str = "") -> str:
+                               aggregate: bool = True) -> str:
         """Run a full Pulse report for one organization and return its score,
         pillars and PDF links. report_type is hospital, practice or fqhc. Blocks
         for several minutes and counts against the daily cap."""
         return await call(_pulse_run_report,
             organization=organization, city=city, state=state, report_type=report_type,
-            specialty=specialty, aggregate=aggregate, briefing=briefing)
+            specialty=specialty, aggregate=aggregate)
 
     @mcp.tool(name="pulse_get_report", structured_output=False)
     async def pulse_get_report(run_id: str) -> str:

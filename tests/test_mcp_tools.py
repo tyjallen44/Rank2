@@ -21,6 +21,7 @@ from perception.mcp_auth import PulseAuthError, PulseIdentity
 from tests._mcp_fakes import FakeServer, install_fake_db
 
 CALLER = "rep@example.com"
+CALLER_UID = "u-rep"
 #: Captured before the autouse stub below replaces it, so one test can still
 #: exercise the real resolver.
 REAL_RESOLVE = mcp_server._resolve_addresses
@@ -38,7 +39,39 @@ def identity():
     Pulse account is created with role "user" (server.py's oauth callback) —
     because every test that confuses the two passes when they are equal."""
     return PulseIdentity(email=CALLER, role="salesteam", account_role="user",
-                         name="Sample Rep", brand="original", source="oauth")
+                         uid=CALLER_UID, name="Sample Rep", brand="original",
+                         source="oauth")
+
+
+def users_row(**overrides):
+    """The caller's Pulse users row as perception.auth.get_user_by_id returns it
+    (``SELECT *``: his CREATE TABLE columns plus the ALTERs in init_db).
+    preset / indicators_json / groups_json NULL is an unrestricted account."""
+    row = {"id": CALLER_UID, "email": CALLER, "name": "Sample Rep", "role": "user",
+           "auth_type": "google", "password_hash": None, "password_salt": None,
+           "is_active": True, "created_at": None, "last_login": None, "invited_by": None,
+           "brand": "original", "notify_complete": True, "preset": None,
+           "indicators_json": None, "groups_json": None}
+    row.update(overrides)
+    return row
+
+
+@pytest.fixture(autouse=True)
+def account(monkeypatch):
+    """The users row his real _caps_for_payload reads through the caller's uid.
+
+    Faked one level BELOW his rule, at perception.auth.get_user_by_id, so every
+    report-access test exercises his actual presets/indicators logic. A test that
+    narrows the account replaces `account["row"]`. `account["looked_up"]` records
+    every id the rule asked for."""
+    state = {"row": users_row(), "looked_up": []}
+
+    def lookup(user_id):
+        state["looked_up"].append(user_id)
+        return dict(state["row"]) if state["row"] and user_id == state["row"]["id"] else None
+
+    monkeypatch.setattr("perception.auth.get_user_by_id", lookup)
+    return state
 
 
 @pytest.fixture
@@ -111,7 +144,7 @@ async def test_no_tool_accepts_a_free_text_notes_parameter(srv):
         "organization", "organization_a", "organization_b", "city", "city_a", "city_b",
         "state", "state_a", "state_b", "zip_code", "specialty", "specialty_a",
         "specialty_b", "entity_kind", "entity_type_a", "entity_type_b", "report_type",
-        "aggregate", "briefing", "website_url", "attach_to_run_id", "run_id", "days",
+        "aggregate", "website_url", "attach_to_run_id", "run_id", "days",
         "limit", "network_name", "hq_location", "facility_type", "facilities", "source_url",
     }
     mcp = mcp_server.build_mcp(srv)
@@ -602,8 +635,13 @@ async def test_get_report_uses_practice_labels_for_practice_profile(srv, identit
 
 
 async def test_get_report_flags_entity_scores_disagreement(srv, identity, monkeypatch):
-    canonical = ("Intermountain Medical Center", 66, TIERS, "B−", "Good", "", "report",
-                 "run-0", "2026-09-18", "procedural", "")
+    """Through his real get_entity_score. Since 2026-10-07 a Deep Diagnostic
+    writes its own score over the canonical row, so a canonical row carrying
+    THIS run's id and a different number is a real inconsistency: both are
+    printed. ("report" was never a source his code writes; the sources are
+    deep_diagnostic, market and network. Section 11 covers the other two.)"""
+    canonical = ("Intermountain Medical Center", 66, TIERS, "B−", "Good", "",
+                 "deep_diagnostic", "run-1", "2026-09-18", "procedural", "")
     install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()]),
                                   ("FROM entity_scores", [canonical])])
     out = await mcp_server._pulse_get_report(srv, identity, "run-1")
@@ -612,8 +650,8 @@ async def test_get_report_flags_entity_scores_disagreement(srv, identity, monkey
 
 
 async def test_get_report_notes_a_matching_canonical_score(srv, identity, monkeypatch):
-    canonical = ("Intermountain Medical Center", 71, TIERS, "B", "Good", "", "report",
-                 "run-1", "2026-09-18", "procedural", "")
+    canonical = ("Intermountain Medical Center", 71, TIERS, "B", "Good", "",
+                 "deep_diagnostic", "run-1", "2026-09-18", "procedural", "")
     install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()]),
                                   ("FROM entity_scores", [canonical])])
     out = await mcp_server._pulse_get_report(srv, identity, "run-1")
@@ -674,8 +712,13 @@ async def test_every_minted_link_carries_the_account_role(srv, identity, monkeyp
     pulse_network_report each call _create_token themselves, and a fix applied to
     one of them is a fix applied to none of them."""
     def roles_in(text):
-        return [srv._verify_token_full(part.split("?token=")[1].split()[0])["role"]
-                for part in text.splitlines() if "?token=" in part]
+        payloads = [srv._verify_token_full(part.split("?token=")[1].split()[0])
+                    for part in text.splitlines() if "?token=" in part]
+        # The uid rides along at every site too: his _scope_history_rows reads
+        # the account's access through it, and a token without one reads as
+        # unrestricted.
+        assert all(payload["uid"] == CALLER_UID for payload in payloads), payloads
+        return [payload["role"] for payload in payloads]
 
     install_fake_db(monkeypatch, [
         ("FROM comparison_runs WHERE id = ?",
@@ -1192,3 +1235,230 @@ async def test_content_draft_reports_a_failed_model_call(srv, identity, monkeypa
     out = await mcp_server._pulse_content_draft(srv, identity, "run-1")
     assert out.startswith("Refused: drafting produced no content")
     assert written == [], "nothing may be saved when drafting produced nothing"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. His Admin -> Users access rules, the retired briefing, and the score cache
+#     (main since 2026-09-16)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _count_runner_calls(srv):
+    return [call for call in srv.calls if call and call[0] != "_new_job"]
+
+
+@pytest.mark.parametrize("report_type,report_label", [
+    ("hospital", "Deep Diagnostic — Hospital"),
+    ("practice", "Deep Diagnostic — Specialty Practice"),
+    ("fqhc", "Deep Diagnostic — Community Health (FQHC)"),
+])
+async def test_run_report_refuses_a_report_the_account_does_not_include(
+        srv, identity, monkeypatch, reserved, account, report_type, report_label):
+    """POST /api/analyze answers this account with a 403 from _require_report.
+    The MCP must not be the side door: refused before the cap is touched, before
+    a job exists, before a runner starts — in his own words."""
+    account["row"] = users_row(indicators_json=json.dumps(["network"]))
+    for name in ("_job_run_single", "_job_run_practice", "_job_run_fqhc"):
+        setattr(srv, name, srv.runner(name, result={"run_id": "run-1"}))
+    out = await mcp_server._pulse_run_report(srv, identity, "Some Clinic", "Murray", "UT",
+                                             report_type=report_type)
+    assert out == (f"Refused: your Pulse account does not include {report_label}. Ask a "
+                   f"Pulse administrator to add it.")
+    assert reserved == [], "a refused report must not cost a run"
+    assert srv._jobs == {} and _count_runner_calls(srv) == []
+    assert account["looked_up"] == [CALLER_UID]
+
+
+async def test_run_report_follows_an_association_preset(srv, identity, monkeypatch,
+                                                         reserved, account):
+    """The Association - Specialty Practice preset allows practice Deep
+    Diagnostics only. Read through his own PRESETS, not restated here."""
+    from perception.presets import PRESETS
+    assert PRESETS["association_specialty_practice"]["reports"] == ["deep_practice"]
+    account["row"] = users_row(preset="association_specialty_practice")
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    for name in ("_job_run_single", "_job_run_practice"):
+        setattr(srv, name, srv.runner(name, result={"run_id": "run-1"}))
+
+    refused = await mcp_server._pulse_run_report(srv, identity, "Some Hospital", "Murray", "UT")
+    assert refused.startswith("Refused: your Pulse account does not include Deep Diagnostic")
+    assert srv.arguments_for("_job_run_single") is None
+
+    allowed = await mcp_server._pulse_run_report(srv, identity, "Some Clinic", "Murray", "UT",
+                                                 report_type="practice")
+    assert srv.arguments_for("_job_run_practice") is not None, allowed
+    assert len(reserved) == 1
+
+
+async def test_a_pulse_admin_account_is_never_narrowed(srv, identity, monkeypatch, reserved,
+                                                       account):
+    """His _caps_for_payload returns the unrestricted set for role "admin"
+    whatever the row says. The account role decides that, never the mapped group."""
+    admin = PulseIdentity(email=CALLER, role="rldatix", account_role="admin", uid=CALLER_UID,
+                          name="Sample Rep", brand="original", source="oauth")
+    account["row"] = users_row(role="admin", indicators_json=json.dumps(["network"]))
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    srv._job_run_single = _done_runner(srv)
+    out = await mcp_server._pulse_run_report(srv, admin, "Intermountain Medical Center",
+                                             "Murray", "UT")
+    assert out.startswith("Report complete"), out
+
+
+async def test_compare_refuses_without_compare_two(srv, identity, reserved, account):
+    account["row"] = users_row(indicators_json=json.dumps(["deep_hospital"]))
+    srv._job_run_comparison = srv.runner("compare", result={"run_id": "cmp-1"})
+    out = await mcp_server._pulse_compare(srv, identity, "Alpha", "Murray", "UT",
+                                          "Beta", "Provo", "UT")
+    assert out == ("Refused: your Pulse account does not include Compare Two. Ask a Pulse "
+                   "administrator to add it.")
+    assert reserved == [] and srv.arguments_for("compare") is None
+
+
+async def test_network_refuses_without_hospital_network_before_discovery(
+        srv, identity, monkeypatch, reserved, account):
+    """Discovery is itself a billed model call, so the access check comes first."""
+    account["row"] = users_row(preset="association_specialty_practice")
+    discovered = []
+    monkeypatch.setattr("perception.network_analyzer.discover_hospitals_by_name",
+                        lambda *args, **kwargs: discovered.append(args) or {"facilities": []})
+    srv._job_network_analyze = srv.runner("network", result=NETWORK_RESULT)
+    out = await mcp_server._pulse_network_report(srv, identity, "Alpha Health System")
+    assert out == ("Refused: your Pulse account does not include Hospital Network. Ask a "
+                   "Pulse administrator to add it.")
+    assert discovered == [] and reserved == []
+    assert srv.arguments_for("network") is None
+
+
+async def test_minted_link_is_scoped_like_the_callers_own_login(srv, identity, monkeypatch,
+                                                                account):
+    """The end-to-end reason uid rides in the token. An association account's
+    History is narrowed to its own preset by his _scope_history_rows, which
+    download_pdf runs on the presented token. Feed the MCP-minted token to his
+    real function: it must narrow exactly as his own login token would. Without
+    uid it reads as unrestricted and hands back every run."""
+    import server
+    account["row"] = users_row(preset="association_specialty_practice")
+    monkeypatch.setattr("perception.auth.emails_on_preset",
+                        lambda preset: ["colleague@association.example"])
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    out = await mcp_server._pulse_get_report(srv, identity, "run-1")
+    token = out.split("/api/reports/run-1/pdf?token=")[1].split()[0]
+    payload = srv._verify_token_full(token)
+
+    rows = [{"run_id": "mine", "ran_by": CALLER},
+            {"run_id": "colleague", "ran_by": "colleague@association.example"},
+            {"run_id": "stranger", "ran_by": "someone.else@example.com"}]
+    visible = [row["run_id"] for row in server._scope_history_rows(rows, payload)]
+    assert visible == ["mine", "colleague"]
+
+    login_token = server._create_token("user", uid=CALLER_UID, email=CALLER,
+                                       name="Sample Rep", brand="original")
+    login_visible = [row["run_id"] for row in
+                     server._scope_history_rows(rows, server._verify_token_full(login_token))]
+    assert visible == login_visible
+
+
+async def test_run_report_takes_no_briefing_and_sets_none(srv, identity, monkeypatch,
+                                                          reserved):
+    """His Pulse Briefing was retired 2026-09-24 and POST /api/analyze sets
+    briefing_variant to None whatever the request says. A tool argument nothing
+    reads would be a lie the model acts on."""
+    mcp = mcp_server.build_mcp(srv)
+    run_tool = [tool for tool in await mcp.list_tools() if tool.name == "pulse_run_report"][0]
+    assert "briefing" not in (run_tool.input_schema.get("properties") or {})
+
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    srv._job_run_single = _done_runner(srv)
+    await mcp_server._pulse_run_report(srv, identity, "Intermountain Medical Center",
+                                       "Murray", "UT")
+    assert list(srv._jobs.values())[0]["briefing_variant"] is None
+
+
+async def test_practice_specialty_is_normalized_like_his_route(srv, identity, monkeypatch,
+                                                               reserved):
+    """POST /api/analyze runs a practice specialty through normalize_specialty,
+    so an MCP run and a browser run of one practice share his caches. The
+    expected value comes from his function, not a literal."""
+    from perception.specialties import normalize_specialty
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    srv._job_run_practice = srv.runner("_job_run_practice", result={"run_id": "run-1"})
+    await mcp_server._pulse_run_report(srv, identity, "Some Clinic", "Murray", "UT",
+                                       report_type="practice", specialty="ortho")
+    arguments = srv.arguments_for("_job_run_practice")
+    assert arguments[4] == normalize_specialty("Ortho")
+    assert list(srv._jobs.values())[0]["specialty"] == normalize_specialty("Ortho")
+
+
+def canonical_row(**overrides):
+    """perception.db.get_entity_score's return shape, key for key."""
+    row = {"display_name": "Intermountain Medical Center", "pulse_score": 71,
+           "tier_scores": {}, "overall_rating": "B", "band_label": "Q2", "ai_says": "",
+           "source": "deep_diagnostic", "run_id": "run-1", "generated_at": "2026-09-18",
+           "weighting_profile": "procedural", "roster_key": ""}
+    row.update(overrides)
+    return row
+
+
+@pytest.fixture
+def canonical(monkeypatch):
+    state = {"row": None}
+    monkeypatch.setattr("perception.db.get_entity_score",
+                        lambda name, location, days=30: state["row"])
+    return state
+
+
+async def test_canonical_note_matches(srv, identity, monkeypatch, canonical):
+    canonical["row"] = canonical_row()
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    out = await mcp_server._pulse_get_report(srv, identity, "run-1")
+    assert ("Canonical score for this entity and location on 2026-09-18: 71 (matches)."
+            in out)
+
+
+async def test_canonical_note_own_row_disagreeing_prints_both(srv, identity, monkeypatch,
+                                                              canonical):
+    """This run wrote the canonical row and the two still differ: a real
+    inconsistency, so both numbers are printed and neither is chosen."""
+    canonical["row"] = canonical_row(pulse_score=64, run_id="run-1")
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    out = await mcp_server._pulse_get_report(srv, identity, "run-1")
+    assert ("Canonical score for this entity and location on 2026-09-18: 64 — this run "
+            "reports 71. Both are shown because the two rows disagree.") in out
+
+
+async def test_canonical_note_names_a_different_deep_diagnostic(srv, identity, monkeypatch,
+                                                                canonical):
+    """A Deep Diagnostic's own score replaces the canonical, so another Deep
+    Diagnostic of the same organization can hold it. This run's score stands,
+    and the other run's id is never printed (it may be somebody else's)."""
+    canonical["row"] = canonical_row(pulse_score=66, run_id="someone-elses-run",
+                                     generated_at="2026-10-08")
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    out = await mcp_server._pulse_get_report(srv, identity, "run-1")
+    assert ("Canonical score for this entity and location on 2026-10-08: 66, from a "
+            "different Deep Diagnostic of this organization. This run's own score is 71; "
+            "market, network and comparison reports now show 66.") in out
+    assert "someone-elses-run" not in out
+    assert "disagree" not in out
+
+
+@pytest.mark.parametrize("source,kind", [("market", "market"), ("network", "network"),
+                                         ("", "non-Deep-Diagnostic")])
+async def test_canonical_note_says_the_deep_diagnostic_outranks_a_pass(
+        srv, identity, monkeypatch, canonical, source, kind):
+    canonical["row"] = canonical_row(pulse_score=58, source=source, run_id="mkt-9")
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    out = await mcp_server._pulse_get_report(srv, identity, "run-1")
+    assert (f"Canonical score for this entity and location on 2026-09-18: 58, from a {kind} "
+            f"pass. This run is a Deep Diagnostic, which outranks a {kind} pass, so its own "
+            f"score of 71 is the one to quote for this run.") in out
+
+
+async def test_canonical_note_skips_a_score_under_another_rubric(srv, identity, monkeypatch,
+                                                                 canonical):
+    """His adoption rule refuses a cross-rubric canonical because the four slots
+    mean different pillars; printing one would invite quoting it."""
+    canonical["row"] = canonical_row(pulse_score=40, weighting_profile="practice_procedural")
+    install_fake_db(monkeypatch, [("FROM analysis_runs a", [run_row()])])
+    out = await mcp_server._pulse_get_report(srv, identity, "run-1")
+    assert "Canonical score" not in out
+    assert "AI Visibility Score: 71" in out

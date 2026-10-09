@@ -26,11 +26,18 @@ TWO ROLES, AND WHY. ``PulseIdentity`` carries both:
   their own browser login is minted with at ``server.py``'s Google and native
   sign-in. Everything that GRANTS is stamped with ``account_role``: the run's
   ``analysis_runs.user_role`` and the short-lived download token the report
-  tools mint. Those two must agree (``download_pdf`` looks a run up through
-  ``query_history(role)``, which filters on ``user_role``), and neither may
-  exceed what the person already holds in Pulse. Using the mapped group for
-  either would hand a Google-approved account whose Pulse role is ``user`` a
-  working ``salesteam`` session credential.
+  tools mint, and neither may exceed what the person already holds in Pulse.
+  Using the mapped group for either would hand a Google-approved account whose
+  Pulse role is ``user`` a working ``salesteam`` session credential, and a
+  ``require_admin`` route answers to the token's role alone.
+
+``uid`` is the ``users.id`` of that same row, and it is the third thing his own
+login puts in a session token. ``server._caps_for_payload`` reads the account's
+access (``perception/presets.py``: report indicators, preset, History scope and
+assigned groups) through it, and treats a token with no ``uid`` as
+UNRESTRICTED. So every report-kind check and every minted download token goes
+through ``uid``, or an account an administrator has narrowed would be wider on
+the MCP than in its own browser.
 
 THE RULES THAT MATTER IN ``JwtVerifier``, and why each is written this way:
 
@@ -137,11 +144,16 @@ class PulseIdentity:
     (``analysis_runs.user_role``) and what a minted download token carries —
     both deliberately bounded by what that person's Pulse login already grants.
     It is a required field: an identity with no answer to "what does this person
-    hold in Pulse" must not be constructible."""
+    hold in Pulse" must not be constructible.
+
+    ``uid`` is the caller's ``users.id``, required for the same reason: it is how
+    ``server._caps_for_payload`` finds what an administrator has narrowed this
+    account to, and a payload without it reads as unrestricted."""
 
     email: str
     role: str
     account_role: str
+    uid: str
     name: str
     brand: str
     source: str          # "oauth" | "pulse-session"
@@ -491,15 +503,15 @@ def _authenticate_oauth(token: str) -> PulseIdentity:
 
     user = _require_active_user(email)
 
-    # Verbatim, not lower-cased: this value is compared byte-for-byte against
-    # analysis_runs.user_role by query_history, and his own login mints
-    # _create_token(user["role"]) with exactly these bytes.
+    # Verbatim, not lower-cased: his own login mints _create_token(user["role"])
+    # with exactly these bytes, and set_run_role stores them as user_role.
     account_role = str(user.get("role") or "").strip() or pulse_role
 
     return PulseIdentity(
         email=email,
         role=pulse_role,
         account_role=account_role,
+        uid=_user_id(user, email),
         name=user.get("name") or email.split("@")[0],
         brand=user.get("brand") or "original",
         source="oauth",
@@ -524,6 +536,20 @@ def _require_active_user(email: str) -> dict:
     if not user.get("is_active"):
         raise PulseAuthError(f"The Pulse account for {email} is deactivated.", status=403)
     return user
+
+
+def _user_id(user: dict, email: str) -> str:
+    """The row's ``users.id``, or a refusal.
+
+    ``id`` is the table's primary key, so a row without one is not a row his
+    code ever writes. Refusing rather than carrying an empty uid matters: a
+    session payload with no ``uid`` is one ``server._caps_for_payload`` treats
+    as unrestricted, which would widen an account an administrator narrowed."""
+    uid = str(user.get("id") or "").strip()
+    if not uid:
+        raise PulseAuthError(f"The Pulse account for {email} could not be resolved. Ask a "
+                             f"Pulse admin to check it.", status=403)
+    return uid
 
 
 def _authenticate_pulse_session(token: str, srv: Any) -> PulseIdentity:
@@ -551,15 +577,17 @@ def _authenticate_pulse_session(token: str, srv: Any) -> PulseIdentity:
             f"cap. Sign in at {app_url} with your own Google account or email and "
             "password, and use that token.")
 
-    _require_active_user(email)
+    user = _require_active_user(email)
 
     # His own role passes through unmapped on this path — the token IS his
-    # identity — so the gate and the grant are the same value here.
+    # identity — so the gate and the grant are the same value here. The uid is
+    # the row's, not the token's: it is the row the access rules hang off.
     role = str(payload.get("role") or "user")
     return PulseIdentity(
         email=email,
         role=role,
         account_role=role,
+        uid=_user_id(user, email),
         name=payload.get("name") or email.split("@")[0],
         brand=payload.get("brand") or "original",
         source="pulse-session",

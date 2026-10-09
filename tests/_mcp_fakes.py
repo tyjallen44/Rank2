@@ -116,7 +116,9 @@ class FakeServer(types.SimpleNamespace):
 
     The token functions are the REAL ones, imported from server.py, so the PDF
     link and legacy-token tests exercise his actual HMAC signing rather than a
-    re-implementation that could agree with a bug."""
+    re-implementation that could agree with a bug. So is ``_caps_for_payload``,
+    his Admin -> Users access rule: a test sets the account it reads by faking
+    ``perception.auth.get_user_by_id`` underneath it, never the rule itself."""
 
     def __init__(self, **overrides):
         import server
@@ -127,6 +129,7 @@ class FakeServer(types.SimpleNamespace):
             _normalize_input=server._normalize_input,
             _create_token=server._create_token,
             _verify_token_full=server._verify_token_full,
+            _caps_for_payload=server._caps_for_payload,
             _zip_to_city_state=lambda zip_code: ("Murray", "UT"),
             calls=[],
             **overrides,

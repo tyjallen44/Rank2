@@ -163,7 +163,7 @@ def active_user(monkeypatch):
     (server.py's oauth callback), and it is deliberately NOT the group an "ae"
     maps to: every test that confuses the access gate with the grant passes when
     those two strings are equal."""
-    row = {"email": "rep@example.com", "name": "Sample Rep",
+    row = {"id": "u-rep", "email": "rep@example.com", "name": "Sample Rep",
            "is_active": True, "brand": "rldatix", "role": "user"}
     monkeypatch.setattr("perception.auth.get_user_by_email", lambda email: dict(row))
     return row
@@ -174,7 +174,7 @@ def active_session_user(monkeypatch):
     """The users row behind a Pulse session token. Both paths read the row now,
     so a session-token test without this one would open Postgres."""
     monkeypatch.setattr("perception.auth.get_user_by_email",
-                        lambda email: {"email": email, "name": "Pulse Admin",
+                        lambda email: {"id": "u-admin", "email": email, "name": "Pulse Admin",
                                        "is_active": True, "role": "admin",
                                        "brand": "original"})
 
@@ -218,7 +218,8 @@ def test_account_role_falls_back_to_the_mapped_group_when_the_row_has_none(
     """A row with no role at all is the only case where the mapped group is the
     best answer available — and it is stated, not silently defaulted."""
     monkeypatch.setattr("perception.auth.get_user_by_email",
-                        lambda email: {"email": email, "is_active": True, "role": None})
+                        lambda email: {"id": "u-1", "email": email, "is_active": True,
+                                       "role": None})
     identity = mcp_auth.authenticate(key.sign(claims(role="ae")), srv)
     assert identity.account_role == "salesteam"
 
@@ -228,10 +229,45 @@ def test_account_role_is_not_case_folded(key, oauth_env, srv, monkeypatch):
     _create_token(user["role"]) verbatim, so lower-casing here would file MCP
     runs somewhere his browser reads cannot find them."""
     monkeypatch.setattr("perception.auth.get_user_by_email",
-                        lambda email: {"email": email, "is_active": True,
+                        lambda email: {"id": "u-1", "email": email, "is_active": True,
                                        "role": "CustomerSuccess"})
     identity = mcp_auth.authenticate(key.sign(claims(role="ae")), srv)
     assert identity.account_role == "CustomerSuccess"
+
+
+def test_identity_carries_the_users_row_id(key, oauth_env, active_user, srv):
+    """server._caps_for_payload reads the account's Admin -> Users access
+    (preset, report indicators, assigned groups) through the token's `uid`, and
+    a payload without one reads as UNRESTRICTED. The identity must therefore
+    carry the row's id, or every narrowed account is wide open on the MCP."""
+    identity = mcp_auth.authenticate(key.sign(claims(role="ae")), srv)
+    assert identity.uid == "u-rep"
+
+
+def test_session_token_uid_comes_from_the_row_not_the_token(srv, monkeypatch):
+    """The row is what the access rules hang off. A token whose uid disagrees
+    with the row for its email is not one his login mints, and the row wins."""
+    monkeypatch.setattr("perception.auth.get_user_by_email",
+                        lambda email: {"id": "u-row", "email": email, "name": "Pulse Admin",
+                                       "is_active": True, "role": "admin",
+                                       "brand": "original"})
+    token = srv._create_token("admin", uid="u-token", email="admin@example.com")
+    assert mcp_auth.authenticate(token, srv).uid == "u-row"
+
+
+@pytest.mark.parametrize("path", ["oauth", "pulse-session"])
+def test_a_users_row_without_an_id_is_refused(key, oauth_env, srv, monkeypatch, path):
+    """users.id is the primary key, so this row is not one his code writes. An
+    empty uid would read as unrestricted to _caps_for_payload, so it is a 403
+    rather than an identity."""
+    monkeypatch.setattr("perception.auth.get_user_by_email",
+                        lambda email: {"email": email, "is_active": True, "role": "user"})
+    token = (key.sign(claims(role="ae")) if path == "oauth"
+             else srv._create_token("user", email="rep@example.com"))
+    with pytest.raises(PulseAuthError) as excinfo:
+        mcp_auth.authenticate(token, srv)
+    assert excinfo.value.status == 403
+    assert "could not be resolved" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("rldatix_role,pulse_role", [
@@ -253,8 +289,9 @@ def test_rldatix_admin_never_becomes_pulse_admin(key, oauth_env, active_user, sr
 
 def test_stored_role_never_overrides_the_mapped_group(key, oauth_env, monkeypatch, srv):
     monkeypatch.setattr("perception.auth.get_user_by_email",
-                        lambda email: {"email": email, "name": "T", "is_active": True,
-                                       "role": "admin", "brand": "original"})
+                        lambda email: {"id": "u-1", "email": email, "name": "T",
+                                       "is_active": True, "role": "admin",
+                                       "brand": "original"})
     identity = mcp_auth.authenticate(key.sign(claims(role="ae")), srv)
     assert identity.role == "salesteam"
 

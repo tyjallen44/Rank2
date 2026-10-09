@@ -133,6 +133,24 @@ mapped group would have handed that person a working `salesteam` credential and,
 it, every salesteam run's history, `ran_by` emails and PDFs. Nothing the MCP mints or
 writes can now exceed what that person's own Pulse login already gives them.
 
+**Your Admin -> Users access rules apply unchanged.** The identity also carries the
+row's `users.id` (`uid`), the third thing your own login puts in a session token.
+Before a run is reserved against the cap, `pulse_run_report`, `pulse_compare` and
+`pulse_network_report` ask your own `_caps_for_payload` + `report_allowed` the same
+question `_require_report` asks on `POST /api/analyze`, `/api/compare` and
+`/api/network/analyze`: Deep Diagnostic (hospital, practice or community health),
+Compare Two, or Hospital Network. An account with a preset or report indicators that
+exclude the report is refused with the same wording your routes use; an account with
+neither stays unrestricted, and a Pulse admin is never narrowed, exactly as in the
+browser. The free tools (`pulse_find_entity`, `pulse_content_check`) and the reads
+follow your routes too: `/api/search/entity` and `/api/content-analysis/*` carry no
+report check, and History is always available.
+
+**Groups.** An account assigned to groups (`users.groups_json`) sees only those groups
+in your UI. The MCP neither reads nor writes groups: it sets no `group_id` on a run,
+and its reads are the caller's own runs, which group assignment does not narrow in
+your code either. So a group restriction is never exceeded here.
+
 **(b) Your own session tokens.** `_verify_token_full`, unchanged, so your team can
 use the MCP with the token their browser already holds, and their role passes
 through unmapped — that IS your identity rather than a mapping of ours. The `users`
@@ -223,16 +241,18 @@ insensitively: `pulse_get_report`, `pulse_history`, `pulse_trend` and
 
 Two functions are deliberately NOT used:
 
-- **`query_history(role)`** filters on `user_role`, and our role mapping puts every
-  AE, BDR and sales lead into the single string `salesteam` — a role-wide read would
-  show one rep every other rep's runs.
+- **`query_history(role)`** has returned every run to every signed-in role since
+  2026-10-01 (`_ISOLATED_ROLES` is empty). That is right for a person looking at one
+  shared Pulse in a browser and wrong for a per-person connector whose answers land in
+  one rep's chat.
 - **`get_entity_trend(entity_name)`** has no per-user filter at all.
 
-A run started over MCP is still visible in the web UI to that rep's whole role group,
-because `set_run_role` writes `user_role` as well as `ran_by` — and the role it writes
-is the caller's own Pulse `users.role`, so the run lands in exactly the group that
-person's browser session already reads. That is your existing model, unchanged.
-**The MCP is simply stricter than the web UI, never looser.**
+A run started over MCP is still visible in the web UI exactly as a browser run is:
+`set_run_role` writes `ran_by` and the caller's own Pulse `users.role` as `user_role`,
+so your History shows it to everyone it shows a browser run to, and an association
+account's preset-scoped History (`_scope_history_rows`) treats it the same way. That
+is your existing model, unchanged. **The MCP is simply stricter than the web UI, never
+looser.**
 
 "Someone else's run" and "no such run" return the identical message, so a caller
 cannot probe for which run ids exist.
@@ -270,10 +290,15 @@ are.
 
 The report tools do not re-implement anything. They build a job record exactly the
 way `POST /api/analyze` does and call `_job_run_single` / `_job_run_practice` /
-`_job_run_fqhc` / `_job_run_comparison` / `_job_network_analyze`. So they inherit
-`_backfill_teaser_pdf`, `set_run_role`, `_run_confidence`,
-`_finalize_hospital_combined`, `_finalize_practice_combined`, `_notify_run_complete`
-and every cache rule — and they keep inheriting them when you change those functions.
+`_job_run_fqhc` / `_job_run_comparison` / `_job_network_analyze`. Every individual
+report now runs through your `_job_run_individual`, so they inherit its post-run hooks
+(`set_run_role`, `_run_confidence`, the plain-language pass, the teaser, the profile
+audit, the entity graph, `_finalize_hospital_combined` /
+`_finalize_practice_combined`, `_notify_run_complete`) and every cache rule — and they
+keep inheriting them when you change those functions. A practice specialty is
+normalized with your `normalize_specialty`, as `POST /api/analyze` does, so an MCP run
+and a browser run share caches. `briefing_variant` is `None`, as on your route since
+the Pulse Briefing was retired; the tool takes no briefing argument.
 `force_rerun` and `override_today_lock` are `False` unconditionally: the same-day and
 90-day caches are the main brake on repeat spend, and no MCP caller gets to bypass
 them.
@@ -296,12 +321,14 @@ what its role can do, not just fetch the one PDF. There is no run-scoped alterna
 in the codebase today, so the mitigations are the two below, and they are why the
 default TTL is ten minutes rather than an hour.
 
-1. **The role is the caller's own Pulse `users.role`, never the mapped RLDatix group.**
-   `download_pdf` resolves a run through `query_history(role)`, which filters on
-   `user_role`, and the run was stamped with the same value — so the two agree and the
-   link grants no more than that person's own Pulse login already does. Before this
-   was pinned, an account whose Pulse role is `user` got a `salesteam` credential
-   printed in plain text into a chat transcript.
+1. **The token carries what that person's own login token carries: their Pulse
+   `users.role` (never the mapped RLDatix group), their `uid`, email, name and brand.**
+   The role bounds the `require_admin` / `require_integration_admin` routes. The `uid`
+   is what `download_pdf` and its siblings read the account's access through
+   (`_scope_history_rows` -> `_caps_for_payload`); a token without one reads as
+   unrestricted, so an association account's link would reach PDFs its own browser
+   cannot. Before the role was pinned, an account whose Pulse role is `user` got a
+   `salesteam` credential printed in plain text into a chat transcript.
 2. **`exp` is overridden to `PULSE_MCP_PDF_LINK_TTL_SECONDS`** (default 600).
    `_create_token` builds `{"role": ..., "exp": ..., **extra}`, so an `exp` in `extra`
    wins and the link does not inherit the thirty-day session default. A link leaked
@@ -313,8 +340,7 @@ Worth knowing, though it is your existing behaviour and not something this PR
 introduces: `_signing_key()` derives from the full `ACCESS_PASSWORD` set, so rotating
 any shared password invalidates outstanding links early. Also existing behaviour:
 `/api/network/{run_id}/pdf` and its two siblings authorize with `require_auth` alone
-and do not scope on `user_role` at all, so any valid session token can fetch any
-network PDF by id. The MCP does not widen that and does not rely on it.
+and do not scope at all, so any valid session token can fetch any network PDF by id. The MCP does not widen that and does not rely on it.
 
 ---
 
@@ -364,7 +390,7 @@ matches the convention in your own `tests/` docstrings.
    is a separate conversation and is not in this PR — though `mcp_daily_usage` is the
    table that would carry it.
 4. **PDF links carry a Pulse session token in the URL** — see section 8, which is the
-   paragraph to read before Monday. They are short-lived (ten minutes) and bounded by
+   paragraph to read first. They are short-lived (ten minutes) and bounded by
    the caller's own Pulse role, and the MCP endpoint itself never accepts a query
    token. Streaming PDF bytes through a tool result would be worse for both cost and
    context; a genuinely run-scoped download token would be better than either, and
@@ -377,5 +403,12 @@ matches the convention in your own `tests/` docstrings.
 One more, on the score: it is not in `job["result"]` for hospital, practice or FQHC
 runs, so `pulse_get_report` reads it from `ranked_providers` (`ai_visibility_score`
 and `tier_scores` on the rank-1 row) joined to `analysis_runs`, and cross-checks it
-against `entity_scores`. If those two ever disagree the tool prints both rather than
-picking one.
+against `entity_scores`. Since your 2026-10-07 change a Deep Diagnostic is
+authoritative there (it never adopts a market-pass score, and its own score replaces
+the canonical), so the cross-check says which of three things a difference is: this
+run's own canonical row disagreeing with it (both printed, a real inconsistency), a
+different Deep Diagnostic of the same organization now holding the canonical score
+(this run's score stands for this run), or a market / network pass (the Deep
+Diagnostic outranks it). A canonical score under a different rubric is not compared,
+for the same reason your adoption rule refuses it. The other run's id is never
+printed.

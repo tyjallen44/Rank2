@@ -49,7 +49,7 @@ def pulse_account(monkeypatch):
     Both token paths check the row now, so without this the endpoint would open
     a real Postgres connection — which no test in this family may do."""
     monkeypatch.setattr("perception.auth.get_user_by_email",
-                        lambda email: {"email": email, "name": "Pulse Admin",
+                        lambda email: {"id": "u-admin", "email": email, "name": "Pulse Admin",
                                        "is_active": True, "role": "admin",
                                        "brand": "original"})
 
