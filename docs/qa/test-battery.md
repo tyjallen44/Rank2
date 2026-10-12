@@ -3946,8 +3946,8 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 
 | # | Test | Acceptance |
 |---|---|---|
-| T1 | Sign-in page | Under "New to Pulse?" a 16:9 thumbnail (RLDatix "AI understands" frame) with a play circle and the label "PulseAI Video · 2 min". Nothing from Vimeo loads until it is clicked. [ui] |
+| T1 | Sign-in page | Above the sign-in card, and wider than it (640px on desktop, full width on phones), a 16:9 thumbnail (RLDatix "AI understands" frame) with a play circle and the label "PulseAI Video · 2 min". Nothing from Vimeo loads until it is clicked. [ui] |
 | T2 | Click it | A black overlay fills the whole browser viewport (and asks for browser fullscreen where allowed) and the Vimeo player starts with sound; "✕ Close" top right. Esc or ✕ dismisses at any time and returns to the sign-in form exactly as it was (typed email kept). [ui] |
-| T3 | Let it play to the end | A "Close and return to sign in" button appears at the bottom; clicking it dismisses the overlay. Re-opening starts the video from the beginning. [ui] |
+| T3 | Let it play to the end | Just before the last frame the player pauses and rewinds to the start (Vimeo's end screen with other videos from the account never appears) and a "Close and return to sign in" button appears; clicking it dismisses the overlay. Pressing play again plays from the beginning. [ui] |
 | T4 | Mobile Safari | Overlay fills the screen (true fullscreen is not available there); native player controls work; ✕ closes. [ui] |
 | R1 | Regression | Google and email sign-in, Request Access and Forgot Password unchanged; `/assets/pulseai-video-thumb.jpg` served with a day's cache. |

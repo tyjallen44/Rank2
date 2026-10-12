@@ -132,10 +132,11 @@ html, body {
 
 /* ── Login ───────────────────────────────────────────────────── */
 #login-screen {
-  height: 100vh; display: flex;
-  align-items: center; justify-content: center;
+  min-height: 100vh; display: flex; flex-direction: column; gap: 22px;
+  align-items: center; justify-content: center; padding: 28px 16px; box-sizing: border-box;
   background: linear-gradient(135deg, #0F4146 0%, #1a6068 100%);
 }
+.video-hero { width: min(640px, 100%); }
 .login-card {
   width: 380px; background: #fff;
   border-radius: 16px;
@@ -143,13 +144,13 @@ html, body {
 }
 .login-logo { text-align: center; margin-bottom: 34px; }
 /* PulseAI Video — thumbnail teaser on the login card + full-viewport player overlay */
-.video-teaser { display:block; width:100%; margin-top:16px; padding:0; border:0; background:none; cursor:pointer; text-align:left; border-radius:10px; overflow:hidden; position:relative; }
-.video-teaser img { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:10px; }
+.video-teaser { display:block; width:100%; margin:0; padding:0; border:0; background:none; cursor:pointer; text-align:left; border-radius:14px; overflow:hidden; position:relative; box-shadow:0 8px 40px rgba(0,0,0,.35); }
+.video-teaser img { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:14px; }
 .video-teaser .play { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,.05)); color:#fff; border-radius:10px; transition:background .15s; }
 .video-teaser:hover .play { background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,.15)); }
-.video-teaser .play .icon { width:54px; height:54px; border-radius:50%; background:rgba(255,255,255,.92); color:var(--teal); display:flex; align-items:center; justify-content:center; font-size:22px; padding-left:4px; box-shadow:0 4px 16px rgba(0,0,0,.3); }
-.video-teaser .label { position:absolute; left:12px; right:12px; bottom:10px; color:#fff; font-size:13px; font-weight:700; letter-spacing:.02em; display:flex; justify-content:space-between; align-items:baseline; text-shadow:0 1px 3px rgba(0,0,0,.6); }
-.video-teaser .label span { font-weight:400; font-size:12px; opacity:.9; }
+.video-teaser .play .icon { width:72px; height:72px; border-radius:50%; background:rgba(255,255,255,.92); color:var(--teal); display:flex; align-items:center; justify-content:center; font-size:30px; padding-left:6px; box-shadow:0 4px 16px rgba(0,0,0,.3); }
+.video-teaser .label { position:absolute; left:16px; right:16px; bottom:14px; color:#fff; font-size:17px; font-weight:700; letter-spacing:.02em; display:flex; justify-content:space-between; align-items:baseline; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+.video-teaser .label span { font-weight:400; font-size:14px; opacity:.9; }
 #video-overlay { position:fixed; inset:0; z-index:10000; background:#000; display:none; flex-direction:column; }
 #video-overlay.open { display:flex; }
 #video-overlay .frame { flex:1; min-height:0; }
@@ -998,6 +999,14 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
 
 <!-- ── Login ──────────────────────────────────────────────────────────────── -->
 <div id="login-screen">
+  <!-- PulseAI Video: above and wider than the sign-in card; opens full-screen; nothing loads until clicked -->
+  <div class="video-hero">
+    <button class="video-teaser" type="button" onclick="openPulseVideo()" aria-label="Play the PulseAI Video (2 minutes)" title="What these reports show and why it matters — 2 minutes">
+      <img src="/assets/pulseai-video-thumb.jpg" alt="">
+      <div class="play"><div class="icon">▶</div></div>
+      <div class="label">PulseAI Video <span>2 min</span></div>
+    </button>
+  </div>
   <div class="login-card">
     <div class="login-logo">
       <div class="wordmark">PULSE</div>
@@ -1046,13 +1055,6 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <a href="/learn" style="font-size:13px;color:var(--muted);text-decoration:none">New to Pulse? Learn what it does &rarr;</a>
     </div>
 
-    <!-- PulseAI Video: opens full-screen over the page; nothing loads until clicked -->
-    <button class="video-teaser" type="button" onclick="openPulseVideo()" aria-label="Play the PulseAI Video (2 minutes)" title="What these reports show and why it matters — 2 minutes">
-      <img src="/assets/pulseai-video-thumb.jpg" alt="" loading="lazy">
-      <div class="play"><div class="icon">▶</div></div>
-      <div class="label">PulseAI Video <span>2 min</span></div>
-    </button>
-
     <!-- Legacy access-password bypass (hidden by default) -->
     <div id="admin-pw-section" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
       <div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-align:center;letter-spacing:0.08em">ACCESS PASSWORD</div>
@@ -1082,7 +1084,26 @@ function openPulseVideo() {
   // Browser fullscreen where allowed (user gesture); the overlay already fills the viewport if refused.
   try { if (ov.requestFullscreen) ov.requestFullscreen().catch(() => {}); } catch (e) {}
   // Vimeo player API: show the Close prompt when the video ends.
-  const wire = () => { try { _pulsePlayer = new Vimeo.Player(host.querySelector('iframe')); _pulsePlayer.on('ended', () => ov.classList.add('ended')); } catch (e) {} };
+  // Just before the last frame, pause and rewind to the start (as the homepage video does) so Vimeo's
+  // end screen — with other videos from the account — never appears; our Close prompt shows instead.
+  let _rewound = false;
+  const wire = () => {
+    try {
+      _pulsePlayer = new Vimeo.Player(host.querySelector('iframe'));
+      _pulsePlayer.on('play', () => { _rewound = false; ov.classList.remove('ended'); });
+      _pulsePlayer.on('timeupdate', d => {
+        if (!_rewound && d && d.duration && d.seconds >= d.duration - 0.4) {
+          _rewound = true;
+          _pulsePlayer.pause().then(() => _pulsePlayer.setCurrentTime(0)).catch(() => {});
+          ov.classList.add('ended');
+        }
+      });
+      _pulsePlayer.on('ended', () => {   // fallback if the frame slipped through: reset to the poster, no end screen
+        ov.classList.add('ended');
+        _pulsePlayer.unload().catch(() => {});
+      });
+    } catch (e) {}
+  };
   if (window.Vimeo && window.Vimeo.Player) wire();
   else { const s = document.createElement('script'); s.src = 'https://player.vimeo.com/api/player.js'; s.onload = wire; document.head.appendChild(s); }
 }
