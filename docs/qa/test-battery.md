@@ -3941,3 +3941,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Deep Diagnostic re-run within 30 days with the same roster | Adopts the earlier Deep Diagnostic's score (stable); a different roster re-scores and overwrites. [pdf] |
 | T3 | Hospital Deep Diagnostic after a Hospital Market report | Same rule: the Deep Diagnostic wins; the later Market / Network report shows it. [pdf] |
 | R1 | Unit | `tests/test_score_sync.py` (3 tests) passes; market runs still seed the cache without overwriting. |
+
+## LOGIN-PULSEAI-VIDEO — PulseAI Video on the sign-in page, full-screen player (2026-10-12)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Sign-in page | Under "New to Pulse?" a 16:9 thumbnail (RLDatix "AI understands" frame) with a play circle and the label "PulseAI Video · 2 min". Nothing from Vimeo loads until it is clicked. [ui] |
+| T2 | Click it | A black overlay fills the whole browser viewport (and asks for browser fullscreen where allowed) and the Vimeo player starts with sound; "✕ Close" top right. Esc or ✕ dismisses at any time and returns to the sign-in form exactly as it was (typed email kept). [ui] |
+| T3 | Let it play to the end | A "Close and return to sign in" button appears at the bottom; clicking it dismisses the overlay. Re-opening starts the video from the beginning. [ui] |
+| T4 | Mobile Safari | Overlay fills the screen (true fullscreen is not available there); native player controls work; ✕ closes. [ui] |
+| R1 | Regression | Google and email sign-in, Request Access and Forgot Password unchanged; `/assets/pulseai-video-thumb.jpg` served with a day's cache. |

@@ -142,6 +142,24 @@ html, body {
   padding: 44px; box-shadow: 0 8px 40px rgba(0,0,0,0.22);
 }
 .login-logo { text-align: center; margin-bottom: 34px; }
+/* PulseAI Video — thumbnail teaser on the login card + full-viewport player overlay */
+.video-teaser { display:block; width:100%; margin-top:16px; padding:0; border:0; background:none; cursor:pointer; text-align:left; border-radius:10px; overflow:hidden; position:relative; }
+.video-teaser img { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:10px; }
+.video-teaser .play { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,.05)); color:#fff; border-radius:10px; transition:background .15s; }
+.video-teaser:hover .play { background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,.15)); }
+.video-teaser .play .icon { width:54px; height:54px; border-radius:50%; background:rgba(255,255,255,.92); color:var(--teal); display:flex; align-items:center; justify-content:center; font-size:22px; padding-left:4px; box-shadow:0 4px 16px rgba(0,0,0,.3); }
+.video-teaser .label { position:absolute; left:12px; right:12px; bottom:10px; color:#fff; font-size:13px; font-weight:700; letter-spacing:.02em; display:flex; justify-content:space-between; align-items:baseline; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+.video-teaser .label span { font-weight:400; font-size:12px; opacity:.9; }
+#video-overlay { position:fixed; inset:0; z-index:10000; background:#000; display:none; flex-direction:column; }
+#video-overlay.open { display:flex; }
+#video-overlay .frame { flex:1; min-height:0; }
+#video-overlay iframe { width:100%; height:100%; border:0; display:block; }
+#video-overlay .bar { position:absolute; top:0; left:0; right:0; display:flex; justify-content:flex-end; align-items:center; gap:10px; padding:12px 16px; background:linear-gradient(to bottom, rgba(0,0,0,.6), rgba(0,0,0,0)); pointer-events:none; }
+#video-overlay .bar button { pointer-events:auto; background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.35); border-radius:20px; padding:7px 16px; font-size:14px; font-weight:600; cursor:pointer; backdrop-filter:blur(4px); }
+#video-overlay .bar button:hover { background:rgba(255,255,255,.28); }
+#video-overlay .done { position:absolute; left:0; right:0; bottom:0; display:none; justify-content:center; padding:18px; background:linear-gradient(to top, rgba(0,0,0,.7), rgba(0,0,0,0)); }
+#video-overlay.ended .done { display:flex; }
+#video-overlay .done button { background:var(--teal); color:#fff; border:0; border-radius:24px; padding:12px 28px; font-size:15px; font-weight:700; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.4); }
 .wordmark {
   font-family: 'Barlow Condensed', Impact, sans-serif;
   font-size: 36px; font-weight: 700;
@@ -1028,6 +1046,13 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
       <a href="/learn" style="font-size:13px;color:var(--muted);text-decoration:none">New to Pulse? Learn what it does &rarr;</a>
     </div>
 
+    <!-- PulseAI Video: opens full-screen over the page; nothing loads until clicked -->
+    <button class="video-teaser" type="button" onclick="openPulseVideo()" aria-label="Play the PulseAI Video (2 minutes)" title="What these reports show and why it matters — 2 minutes">
+      <img src="/assets/pulseai-video-thumb.jpg" alt="" loading="lazy">
+      <div class="play"><div class="icon">▶</div></div>
+      <div class="label">PulseAI Video <span>2 min</span></div>
+    </button>
+
     <!-- Legacy access-password bypass (hidden by default) -->
     <div id="admin-pw-section" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
       <div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-align:center;letter-spacing:0.08em">ACCESS PASSWORD</div>
@@ -1037,6 +1062,42 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
     </div>
   </div>
 </div>
+
+<!-- ── PulseAI Video overlay (full viewport; ✕ / Esc / Close when it ends) ───── -->
+<div id="video-overlay" role="dialog" aria-modal="true" aria-label="PulseAI Video">
+  <div class="frame" id="video-frame"></div>
+  <div class="bar"><button type="button" onclick="closePulseVideo()" aria-label="Close video">✕ Close</button></div>
+  <div class="done"><button type="button" onclick="closePulseVideo()">Close and return to sign in</button></div>
+</div>
+<script>
+const _PULSE_VIDEO_ID = '1235182980', _PULSE_VIDEO_H = 'ab7660e1f5';
+let _pulsePlayer = null;
+function openPulseVideo() {
+  const ov = document.getElementById('video-overlay'), host = document.getElementById('video-frame');
+  ov.classList.remove('ended');
+  host.innerHTML = `<iframe title="PulseAI Video" src="https://player.vimeo.com/video/${_PULSE_VIDEO_ID}?h=${_PULSE_VIDEO_H}&autoplay=1&dnt=1&title=0&byline=0&portrait=0" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>`;
+  ov.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  document.addEventListener('keydown', _pulseVideoEsc);
+  // Browser fullscreen where allowed (user gesture); the overlay already fills the viewport if refused.
+  try { if (ov.requestFullscreen) ov.requestFullscreen().catch(() => {}); } catch (e) {}
+  // Vimeo player API: show the Close prompt when the video ends.
+  const wire = () => { try { _pulsePlayer = new Vimeo.Player(host.querySelector('iframe')); _pulsePlayer.on('ended', () => ov.classList.add('ended')); } catch (e) {} };
+  if (window.Vimeo && window.Vimeo.Player) wire();
+  else { const s = document.createElement('script'); s.src = 'https://player.vimeo.com/api/player.js'; s.onload = wire; document.head.appendChild(s); }
+}
+function closePulseVideo() {
+  const ov = document.getElementById('video-overlay');
+  ov.classList.remove('open', 'ended');
+  document.getElementById('video-frame').innerHTML = '';     // stops playback and frees the player
+  _pulsePlayer = null;
+  document.body.style.overflow = '';
+  document.removeEventListener('keydown', _pulseVideoEsc);
+  try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); } catch (e) {}
+}
+function _pulseVideoEsc(e) { if (e.key === 'Escape') closePulseVideo(); }
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.getElementById('video-overlay')?.classList.contains('open')) { /* left browser fullscreen: keep the overlay; ✕ closes it */ } });
+</script>
 
 <!-- ── Request Access ──────────────────────────────────────────────────────── -->
 <div id="request-access-screen">
