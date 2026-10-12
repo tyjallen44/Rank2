@@ -3961,3 +3961,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Emails (run complete, trend report, network request) | Subjects and bodies say "AI Visibility". [email] |
 | T4 | Admin → Operations → Maintenance → `rebrand-learn` | Dry run counts live Learn / Methodology rows still saying "AI Reputation"; Apply rewrites them to "AI Visibility" (idempotent). [ui] |
 | R1 | Regression | `tests/test_rebrand.py` passes; Pulse Score, file names and report ids unchanged. |
+
+## FIX-DEEP-PDF-MARGINS — page margins on every page; gap boxes inside the margins (2026-10-12)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic PDF whose Physicians table runs over several pages (OrthoSouth) | Every continuation page has a top margin (~½ in) above the repeated table header; sections that start a page (What to do first, What AI assistants said, Evidence) sit below the top edge. The cover still bleeds to the page edge. [pdf] |
+| T2 | Same PDF, Locations / Physicians sections | "Listing gaps" and "Listing quality" print in the body font inside the page margins (previously in a smaller font hanging into the left gutter). [pdf] |
+| T3 | Deep Diagnostic run from the form with a confirmed roster ("From your confirmed roster") | Locations and Physicians still show the confirmed list only, but now with Found-on marks, Google place ids, Listing gaps and Listing quality; offices or physicians the resolver found beyond the form's list are reported as drift, not added. [pdf] |
+| R1 | Regression | Network, Compare, Content and Trend PDFs unchanged (their renderers are separate). |

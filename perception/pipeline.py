@@ -563,10 +563,24 @@ class PracticeAdapter(_Adapter):
                 console.print(f"[yellow]⚠[/yellow] Physician resolver failed ({type(_exc).__name__}: {_exc}); using the registry path.")
         elif _have_roster and ctx.entity_type == "practice":
             _all = [p for lst in ctx.physician_roster.values() for p in (lst or [])]
-            ctx.physician_resolution = {"total": len(_all), "confirmed": True,
-                                        "website_only": [p.get("name") for p in _all if p.get("npi_missing")],
-                                        "registry_only": [p.get("name") for p in _all if p.get("website_missing")],
-                                        "both": sum(1 for p in _all if "website" in (p.get("sources") or []) and "nppes" in (p.get("sources") or []))}
+            if not any((p.get("sources") for p in _all)):
+                # Confirmed on the form from an older roster (no sources): the resolver enriches it — NPI,
+                # bio page, sources, gap flags — without adding anyone the form did not list.
+                try:
+                    from .physician_resolver import resolve_physicians, apply_confirmed_physicians
+                    _site = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)
+                    _hints = [p.get("url") for p in ((getattr(ctx, "website_facts", None) or {}).get("site_pages") or []) if p.get("url")]
+                    _pr = resolve_physicians(ctx.entity_name, ctx.city, ctx.state, website=_site, hint_urls=_hints, emit=emit)
+                    _all, _drift = apply_confirmed_physicians(_all, _pr["physicians"], hard=True)
+                    ctx.physician_roster = {ctx.entity_name: _all}
+                    ctx.physician_resolution = {**_pr["resolution"], "confirmed": {"by": "form", "count": len(_all), "hard": True}, "drift": _drift, "total": len(_all)}
+                except Exception as _exc:
+                    console.print(f"[yellow]⚠[/yellow] Physician enrichment skipped ({type(_exc).__name__}: {_exc})")
+            if not getattr(ctx, "physician_resolution", None):
+                ctx.physician_resolution = {"total": len(_all), "confirmed": True,
+                                            "website_only": [p.get("name") for p in _all if p.get("npi_missing")],
+                                            "registry_only": [p.get("name") for p in _all if p.get("website_missing")],
+                                            "both": sum(1 for p in _all if "website" in (p.get("sources") or []) and "nppes" in (p.get("sources") or []))}
         # Physician facts: NPI-registry linkage + certification statements on the site.
         ctx.physician_facts = _physician_facts(ctx)
 

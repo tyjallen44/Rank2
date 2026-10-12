@@ -737,6 +737,28 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
                 _location_roster = [entity_name] + [s["name"] for s in confirmed_siblings]
                 emit({"type": "phase", "name": "discovery",
                       "text": f"Using confirmed roster: {len(_location_roster)} locations"})
+                # The confirmed list is the roster; the resolver still runs so the report carries each
+                # office's sources, Google place ids, gap flags, duplicates and listing quality.
+                if not (service_line and parent_system):
+                    try:
+                        from .location_resolver import resolve_locations, apply_confirmed_locations
+                        _res = resolve_locations(entity_name, city, state, website=website, anchor_listing=anchor_listing,
+                                                 emit=emit, force_rerun=force_rerun)
+                        _merged, _drift = apply_confirmed_locations(list(confirmed_siblings), _res["siblings"], hard=True)
+                        for _m in _merged:          # keep what the form confirmed (names, place ids) on top
+                            _m["sources"] = [x for x in _m.get("sources") or [] if x != "confirmed"] or _m.get("sources") or []
+                        _aggregate_siblings = _merged
+                        if report is not None:
+                            report.update(_res.get("resolution") or {})
+                            report["confirmed"] = {"by": "form", "at": None, "count": len(confirmed_siblings), "hard": True}
+                            report["drift"] = _drift
+                            report["siblings"] = [{k: m.get(k) for k in ("name", "city", "state", "address", "place_id", "sources",
+                                                                             "google_missing", "website_missing", "phone")} for m in _merged]
+                        if _drift.get("new"):
+                            emit({"type": "text", "text": f"{len(_drift['new'])} further office{'s' if len(_drift['new']) != 1 else ''} found that the form did not list: "
+                                                          + ", ".join(_drift["new"][:6]) + " — reported as drift, not added"})
+                    except Exception as _rx:
+                        emit({"type": "text", "text": f"Office enrichment skipped ({type(_rx).__name__})"})
             else:
                 emit({"type": "phase", "name": "discovery",
                       "text": f"Single-location run for {entity_name}"})

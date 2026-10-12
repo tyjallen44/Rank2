@@ -590,7 +590,7 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
         if goog_only:
             items.append(f"<li><strong>{len(goog_only)} Google listing{'s' if len(goog_only) != 1 else ''} for the practice not on the website's office list:</strong> "
                          f"{_e(', '.join(goog_only[:12]))}{'…' if len(goog_only) > 12 else ''}. Either an office the site forgot, or a stale or duplicate profile to claim and fix.</li>")
-        gaps = (f'<div class="pxcontent" style="margin-top:6px"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing gaps</p>'
+        gaps = (f'<div class="gaps-box"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing gaps</p>'
                 f'<ul style="font-size:8.5pt;margin:0 0 0 14px;padding:0">{"".join(items)}</ul></div>')
     quality = ""
     lq = getattr(result, "listing_quality", None) or {}
@@ -598,7 +598,7 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
         from .listing_quality import issues as _lq_issues, summary_line as _lq_line
         line, items = _lq_line(lq), _lq_issues(lq)
         if line or items:
-            quality = (f'<div class="pxcontent" style="margin-top:6px"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing quality</p>'
+            quality = (f'<div class="gaps-box"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing quality</p>'
                        + (f'<p style="font-size:8.5pt;margin:0 0 3px">Measured across the offices above: {_e(line)}.</p>' if line else "")
                        + (f'<ul style="font-size:8.5pt;margin:0 0 0 14px;padding:0">{"".join(f"<li>{_e(i)}</li>" for i in items)}</ul>' if items
                           else '<p style="font-size:8.5pt;margin:0;color:#2e9e5b">Phone, address and category agree across the website, Google and the NPI registry; no duplicate or closed profiles.</p>')
@@ -734,7 +734,7 @@ def _physicians_section(result: AnalysisResult) -> str:
             items.append(f"<li><strong>{len(not_on_site)} registered at the practice's addresses but not on the website:</strong> {_e(', '.join(not_on_site[:15]))}{'…' if len(not_on_site) > 15 else ''}. "
                          f"A departed physician still registered here, or a current one missing a bio page.</li>")
         if items:
-            gaps = (f'<div class="pxcontent" style="margin-top:6px"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing gaps</p>'
+            gaps = (f'<div class="gaps-box"><p style="font-size:9pt;font-weight:700;margin:0 0 3px">Listing gaps</p>'
                     f'<ul style="font-size:8.5pt;margin:0 0 0 14px;padding:0">{"".join(items)}</ul></div>')
     return _table_section("Physicians", intro, th, trs, len(rows)) + gaps
 
@@ -1010,7 +1010,11 @@ def build_deep_html(result: AnalysisResult, brand_cfg: dict, content_findings=No
     tr {{ break-inside: avoid; page-break-inside: avoid; }}
     thead {{ display: table-header-group; }}
     img, svg {{ break-inside: avoid; page-break-inside: avoid; }}
-    @page {{ size: Letter; }}
+    /* Page margins live in @page so every page that a long table or section flows onto keeps a top
+       margin (Playwright's own top margin is 0 so the cover can bleed to the edge; :first keeps that). */
+    @page {{ size: Letter; margin: 0.5in 0 0.6in 0; }}
+    @page :first {{ margin-top: 0; }}
+    .gaps-box {{ margin-top: 6px; break-inside: avoid; page-break-inside: avoid; }}
 {_network_css(primary, pale, accent)}
 {_deep_extra_css(primary, accent, pale)}
 {extra_css}
