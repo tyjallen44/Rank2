@@ -1,4 +1,4 @@
-"""Branded PDF for a Student Health Clinics AI-reputation ranking.
+"""Branded PDF for a Student Health Clinics AI-visibility ranking.
 
 Input is the stored result dict:
   {group_label, mode, rows: [{rank, school, clinic_name, city, state, url,
@@ -54,7 +54,7 @@ def _logo_html() -> str:
 
 
 def render_student_health_pdf(result: dict, pdf_path: str) -> None:
-    _rebrand_for_display(result)   # display-time AI Reputation naming
+    _rebrand_for_display(result)   # display-time AI Visibility naming
     from playwright.sync_api import sync_playwright
     html_str = _build_html(result)
     with sync_playwright() as p:
@@ -72,7 +72,7 @@ def render_student_health_pdf(result: dict, pdf_path: str) -> None:
                 '<div style="width:100%;font-family:Arial,Helvetica,sans-serif;'
                 'font-size:8px;color:#8a9aaa;display:flex;justify-content:space-between;'
                 'align-items:center;padding:0 40px 10px;box-sizing:border-box">'
-                '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+                '<span style="letter-spacing:0.05em">Prepared by PulseAI | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
                 '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
                 '</div>'
             ),
@@ -141,10 +141,10 @@ def _build_html(result: dict) -> str:
       .note b {{ color:{_TEAL}; }}
     </style></head><body>
       <div class="band">
-        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">STUDENT HEALTH<br>AI REPUTATION RANKING</div></div>
+        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">STUDENT HEALTH<br>AI VISIBILITY RANKING</div></div>
         <div class="kick">Competitors Rankings &middot; Student Health</div>
         <h1>{_e(group)}</h1>
-        <div class="sub">On-campus student health clinics, ranked by AI Reputation</div>
+        <div class="sub">On-campus student health clinics, ranked by AI Visibility</div>
       </div>
       <div class="meta">
         <div><b>{len(rows)}</b><br>clinics</div>

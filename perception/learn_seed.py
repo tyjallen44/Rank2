@@ -13,7 +13,7 @@ STARTER_ARTICLES: list[dict] = [
         "category": "Overview",
         "title": "What is Pulse?",
         "body": (
-            'Pulse is the **AI Reputation Analysis Platform** for healthcare. It measures how your organization shows up when patients and consumers ask AI assistants — like ChatGPT, Gemini, Claude, and Copilot — for help choosing where to get care, and it tells you exactly what to change.\n'
+            'Pulse is the **AI Visibility Analysis Platform** for healthcare. It measures how your organization shows up when patients and consumers ask AI assistants — like ChatGPT, Gemini, Claude, and Copilot — for help choosing where to get care, and it tells you exactly what to change.\n'
             '\n'
             'Every report produces a **Pulse Score** (0–100) and a **national quartile** (1st through 4th), built from four pillars. For hospitals and health systems they are:\n'
             '\n'
@@ -29,7 +29,7 @@ STARTER_ARTICLES: list[dict] = [
     },
     {
         "category": "Overview",
-        "title": "Why AI reputation matters",
+        "title": "Why AI visibility matters",
         "body": (
             "Patients no longer start with a search box. They ask an AI assistant: "
             "*\"Who's the best orthopedic surgeon near me?\"* or *\"Which hospital should "
@@ -80,7 +80,7 @@ STARTER_ARTICLES: list[dict] = [
         "category": "The Reports",
         "title": "Hospital Network",
         "body": (
-            'An AI Reputation report for a **multi-facility or multi-state hospital system**, designed for C-suite audiences and industry benchmarking.\n'
+            'An AI Visibility report for a **multi-facility or multi-state hospital system**, designed for C-suite audiences and industry benchmarking.\n'
             '\n'
             '**What it shows**\n'
             '\n'
@@ -97,14 +97,14 @@ STARTER_ARTICLES: list[dict] = [
             '\n'
             'From the completion screen, **Track in Trends** follows the system score month by month over the same fixed roster (see *Trends*).\n'
             '\n'
-            '**Best for:** health systems that need to see their AI reputation across every facility at once and spot which locations need attention.'
+            '**Best for:** health systems that need to see their AI visibility across every facility at once and spot which locations need attention.'
         ),
     },
     {
         "category": "The Reports",
         "title": "Hospital Network — Bulk List Scoring",
         "body": (
-            "*Admin-only feature.* Score an entire list of hospital systems at once, instead of one report at a time. Upload a spreadsheet of health systems and get the same file back with each system's **Pulse Score (AI Reputation)**, national quartile, and all four pillar scores filled in.\n"
+            "*Admin-only feature.* Score an entire list of hospital systems at once, instead of one report at a time. Upload a spreadsheet of health systems and get the same file back with each system's **Pulse Score (AI Visibility)**, national quartile, and all four pillar scores filled in.\n"
             '\n'
             '**What it shows**\n'
             '\n'
@@ -129,7 +129,7 @@ STARTER_ARTICLES: list[dict] = [
         "category": "The Reports",
         "title": "Competitors Rankings",
         "body": (
-            'Ranks the providers in a market from strongest to weakest AI reputation, exactly as they surface when patients ask.\n'
+            'Ranks the providers in a market from strongest to weakest AI visibility, exactly as they surface when patients ask.\n'
             '\n'
             '**Pick the analysis type, then the market**\n'
             '\n'
@@ -165,7 +165,7 @@ STARTER_ARTICLES: list[dict] = [
         "category": "The Reports",
         "title": "Event Preparation",
         "body": (
-            'Generates an AI Reputation diagnostic for **every organization on an attendee list** in one batch.\n'
+            'Generates an AI Visibility diagnostic for **every organization on an attendee list** in one batch.\n'
             '\n'
             '**What you get**\n'
             '\n'
@@ -177,7 +177,7 @@ STARTER_ARTICLES: list[dict] = [
             '\n'
             '**Setting it up:** upload the CSV (name, city, state; an optional *specialty* column). The entity type is detected from the file on the Confirm step — rows with a specialty are analyzed as practices — and can be changed there. Event name and date are optional.\n'
             '\n'
-            "**Best for:** conferences and events — walk in already knowing every attendee's AI reputation and what you'd tell them to fix."
+            "**Best for:** conferences and events — walk in already knowing every attendee's AI visibility and what you'd tell them to fix."
         ),
     },
     # ── Who It's For ──────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-"""AI Reputation Trend Report — a customer-facing PDF for one tracked entity.
+"""AI Visibility Trend Report — a customer-facing PDF for one tracked entity.
 
 Built from the tracked entity record + its snapshot history (get_entity_trend).
 Charts are inline SVG generated here (no CDN, deterministic), the page is rendered
@@ -258,7 +258,7 @@ def analyst_paragraph(entity: dict, stats: dict) -> str:
             model="claude-opus-5",
             max_tokens=600,
             output_config={"effort": "low"},
-            system=("You write the executive summary paragraph of an AI Reputation Trend Report for a "
+            system=("You write the executive summary paragraph of an AI Visibility Trend Report for a "
                     "healthcare organization. Use ONLY the numbers provided — never invent causes, events, "
                     "or data. 3–4 sentences, plain business English, no bullet points, no headings, no "
                     "hedging boilerplate. Name the direction of travel, the pillar that moved most, and "
@@ -617,7 +617,7 @@ def build_trend_html(entity: dict, points: list[dict], *, analyst: Optional[str]
       .chart, .tile, .analyst, .note, .fact {{ break-inside:avoid; page-break-inside:avoid; }}
     </style></head><body>
       <div class="band">
-        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI REPUTATION TREND REPORT<br><span style="letter-spacing:0;color:#CFEAE6">Prepared {_e(today)}{(" for " + _e(prepared_for)) if prepared_for else ""}</span></div></div>
+        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI VISIBILITY TREND REPORT<br><span style="letter-spacing:0;color:#CFEAE6">Prepared {_e(today)}{(" for " + _e(prepared_for)) if prepared_for else ""}</span></div></div>
         <div class="kick">{_e(PRODUCT_SUBTITLE)}</div>
         <h1>{_e(entity.get("display_name") or entity.get("entity_name"))}</h1>
         <div class="sub">{sub}{(" &nbsp;·&nbsp; tracked as " + _e(entity.get("entity_name"))) if entity.get("display_name") and str(entity.get("display_name")).strip().lower() != str(entity.get("entity_name") or "").strip().lower() else ""}</div>
@@ -707,7 +707,7 @@ def render_trend_report_pdf(entity: dict, points: list[dict], pdf_path: str, *,
             footer_template=(
                 '<div style="width:100%;font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#8a9aaa;'
                 'display:flex;justify-content:space-between;align-items:center;padding:0 40px 10px;box-sizing:border-box">'
-                '<span>Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+                '<span>Prepared by PulseAI | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
                 '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>'
             ),
         )

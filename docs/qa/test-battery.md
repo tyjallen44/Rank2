@@ -3951,3 +3951,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Let it play to the end | Just before the last frame the player pauses and rewinds to the start (Vimeo's end screen with other videos from the account never appears) and a "Close and return to sign in" button appears; clicking it dismisses the overlay. Pressing play again plays from the beginning. [ui] |
 | T4 | Mobile Safari | Overlay fills the screen (true fullscreen is not available there); native player controls work; ✕ closes. [ui] |
 | R1 | Regression | Google and email sign-in, Request Access and Forgot Password unchanged; `/assets/pulseai-video-thumb.jpg` served with a day's cache. |
+
+## REBRAND-AI-VISIBILITY — "AI Reputation" → "AI Visibility", PULSEAI wordmark (2026-10-12)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Sign-in page | Wordmark **PULSEAI**, subtitle **AI Visibility Analysis Platform**; the sidebar and home kicker say PULSEAI too. [ui] |
+| T2 | Any PDF (Deep Diagnostic, Network, Compare, Trend, Content) | Cover and score labels say "AI Visibility" (e.g. "AI VISIBILITY SCORE", "AI Visibility Report"), methodology box "Methodology — Pulse AI Visibility", footer "Prepared by PulseAI \| RLDatix". Model-written text that still says "AI Reputation" is rewritten at render time. "Pulse Score" is unchanged. [pdf] |
+| T3 | Emails (run complete, trend report, network request) | Subjects and bodies say "AI Visibility". [email] |
+| T4 | Admin → Operations → Maintenance → `rebrand-learn` | Dry run counts live Learn / Methodology rows still saying "AI Reputation"; Apply rewrites them to "AI Visibility" (idempotent). [ui] |
+| R1 | Regression | `tests/test_rebrand.py` passes; Pulse Score, file names and report ids unchanged. |

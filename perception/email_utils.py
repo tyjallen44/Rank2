@@ -132,16 +132,16 @@ def send_public_report_ready(email: str, name: Optional[str], organization: str,
     """Deliver a requested Hospital Network report as a secure download link."""
     display = name or "there"
     body = f"""
-    <h2 style="margin:0 0 12px;font-size:20px;">Your AI Reputation Report is ready</h2>
+    <h2 style="margin:0 0 12px;font-size:20px;">Your AI Visibility Report is ready</h2>
     <p>Hi {display},</p>
-    <p style="margin-bottom:8px">Your Hospital Network AI Reputation report for
+    <p style="margin-bottom:8px">Your Hospital Network AI Visibility report for
     <strong>{organization}</strong> has been generated. Use the secure link below to
     download it:</p>
     <p style="margin:20px 0">{_btn(download_url, "Download Your Report")}</p>
     <p style="font-size:12px;color:#5A6E72;margin-bottom:0">This link is unique to you and
     will expire in 14 days. If you have questions about your results, just reply to this email.</p>
     """
-    _send(email, "Your AI Reputation Report", _wrap(body))
+    _send(email, "Your AI Visibility Report", _wrap(body))
 
 
 def send_public_report_followup(email: str, name: Optional[str], organization: str) -> None:
@@ -151,7 +151,7 @@ def send_public_report_followup(email: str, name: Optional[str], organization: s
     body = f"""
     <h2 style="margin:0 0 12px;font-size:20px;">We're preparing your report</h2>
     <p>Hi {display},</p>
-    <p style="margin-bottom:8px">Thanks for requesting a Hospital Network AI Reputation
+    <p style="margin-bottom:8px">Thanks for requesting a Hospital Network AI Visibility
     report for <strong>{organization}</strong>. To make sure it reaches the right person,
     a specialist from our team will follow up with you shortly to confirm a few details
     and deliver your report.</p>
@@ -178,7 +178,7 @@ def notify_admin_public_request(organization: str, requester_email: str,
 def send_trend_report(email: str, entity_name: str, pdf_path: str, *, latest_score=None,
                       delta=None, snapshots: int = 0, sender: str = "",
                       period: tuple = ("", "")) -> None:
-    """Email the AI Reputation Trend Report PDF (attached). Written for an OUTSIDE reader:
+    """Email the AI Visibility Trend Report PDF (attached). Written for an OUTSIDE reader:
     the attachment is the deliverable, the sender is named, and the app sign-in is only a
     quiet footer line for Pulse users — no call-to-action button (recipients usually have
     no Pulse login and would land on the login screen)."""
@@ -199,8 +199,8 @@ def send_trend_report(email: str, entity_name: str, pdf_path: str, *, latest_sco
         score_line = (f'<p style="margin:10px 0 14px;font-size:15px"><strong>Latest Pulse Score: '
                       f'{latest_score}</strong>{d}</p>')
     body = f"""
-    <h2 style="margin:0 0 12px;font-size:20px;">AI Reputation Trend Report — {ent}</h2>
-    <p style="margin-bottom:6px">Attached is the AI Reputation Trend Report for <strong>{ent}</strong>{span}
+    <h2 style="margin:0 0 12px;font-size:20px;">AI Visibility Trend Report — {ent}</h2>
+    <p style="margin-bottom:6px">Attached is the AI Visibility Trend Report for <strong>{ent}</strong>{span}
     {f"({snapshots} snapshots)" if snapshots else ""}. It shows how AI assistants currently present the
     organization, how that has moved over time, and which pillars are driving the change.</p>
     {score_line}
@@ -282,9 +282,9 @@ def send_trend_alert(email: str, entity_name: str, *, latest: int, previous: int
     <p style="margin:0 0 10px;font-size:15px"><strong style="color:{col}">{"▲" if up else "▼"} {abs(delta)}</strong> &nbsp; {previous} → <strong>{latest}</strong>
       <span style="color:#5A6E72">on {_html.escape(snapshot_date)}</span></p>
     {q}
-    <p style="margin:0 0 6px">This is the latest AI Reputation snapshot for <strong>{ent}</strong>. {"The Trend Report is attached." if pdf_path else "The Trend Report with the full history is available in Pulse."}</p>
+    <p style="margin:0 0 6px">This is the latest AI Visibility snapshot for <strong>{ent}</strong>. {"The Trend Report is attached." if pdf_path else "The Trend Report with the full history is available in Pulse."}</p>
     <hr style="border:0;border-top:1px solid #d7e7e2;margin:22px 0 12px">
     <p style="font-size:11px;color:#8a9aaa;margin:0">You receive this because change alerts are on for this entity in Pulse → Trends. Turn them off in the entity's configuration panel.</p>
     """
     atts = _attach([pdf_path]) if pdf_path else None
-    _send(email, f"{'▲' if up else '▼'} {abs(delta)} — {entity_name} AI Reputation score now {latest}", _wrap(body), attachments=atts)
+    _send(email, f"{'▲' if up else '▼'} {abs(delta)} — {entity_name} AI Visibility score now {latest}", _wrap(body), attachments=atts)

@@ -5,7 +5,7 @@ Do NOT import in scoring, evidence-collection, or analysis logic.
 """
 
 PRODUCT_NAME     = "Pulse"
-PRODUCT_SUBTITLE = "AI Reputation Analysis Platform"
+PRODUCT_SUBTITLE = "AI Visibility Analysis Platform"
 
 # ── Report-type display names (sidebar nav, page titles, completion back-buttons) ──
 REPORT_MARKET     = "Market Pulse"
@@ -20,18 +20,18 @@ COVER_PATIENT_TEASER      = "Competitors Rankings — Request Full Report"
 COVER_INDIVIDUAL          = "Deep Diagnostic"
 COVER_INDIVIDUAL_TEASER   = "Deep Diagnostic Summary — Request Full Report"
 COVER_COMPARISON          = "Head-to-Head Comparison"
-COVER_REPORT_SUB          = "AI Reputation Report"   # small line under the cover title
+COVER_REPORT_SUB          = "AI Visibility Report"   # small line under the cover title
 
 # ── Section headers (presentation layer only — not used in prompts or extraction) ──
 SECTION_VERDICT                  = "Pulse Verdict"
 SECTION_ASSESSMENT               = "Diagnostic Assessment &amp; Roadmap"
 SECTION_COMPARISON_OVERVIEWS     = "Organization Overviews &amp; Pulse Verdicts"
-SECTION_COMPARISON_SCORE_LABEL   = "Pulse Score (AI Reputation)"
+SECTION_COMPARISON_SCORE_LABEL   = "Pulse Score (AI Visibility)"
 SECTION_COMPARISON_VERDICT_LABEL = "Pulse Verdict"
 
 # ── Score badge labels ───────────────────────────────────────────────────────────
 SCORE_LABEL      = "Pulse Score"    # displayed uppercase via CSS in PDF
-SCORE_DESCRIPTOR = "AI Reputation"  # sub-label line, also uppercase via CSS
+SCORE_DESCRIPTOR = "AI Visibility"  # sub-label line, also uppercase via CSS
 
 # ── Teaser / roadmap ────────────────────────────────────────────────────────────
 ROADMAP_TITLE = "Pulse Improvement Roadmap"
@@ -61,7 +61,7 @@ MARKET_ADVICE_CTA = (
     "to receive a personalized Deep Diagnostic for your organization, "
     "contact us for a full Deep Diagnostic. An individual report delivers a "
     "prioritized, action-ready roadmap specific to your digital footprint, naming "
-    "exactly what to fix, where to fix it, and which AI reputation channel each "
+    "exactly what to fix, where to fix it, and which AI visibility channel each "
     "action improves. Call us at 801.998.2830 or "
     "<a href='https://www.rldatix.com/en-nam/book-a-demo/' style='color:#2aa198'>"
     "Get Your Report</a>."
@@ -70,13 +70,13 @@ MARKET_ADVICE_CTA = (
 # ── Deep-dive section header inside the Head-to-Head Comparison PDF ─────────────
 DEEP_DIVE_HEADER_TPL = "Deep Diagnostic — {name}"
 
-# ── AI Reputation disclaimer ─────────────────────────────────────────────────────
+# ── AI Visibility disclaimer ─────────────────────────────────────────────────────
 # AIVS_DISCLAIMER: the closing Pulse Score definition sentence (one sentence, unchanged).
 # DATA_LIMITATIONS_BLOCK: the full context block that precedes it — hardcoded so it
 #   is never dependent on LLM generation and never silently discarded by the guard.
 # FULL_DISCLAIMER: the complete client-facing disclaimer used in every report.
 AIVS_DISCLAIMER = (
-    "The Pulse Score (0–100) is an AI-reputation measure reflecting how "
+    "The Pulse Score (0–100) is an AI-visibility measure reflecting how "
     "favorably this provider surfaces to today’s leading AI assistants — "
     "scored on the public sources those assistants state they weight when "
     "recommending providers, blended by each assistant’s usage. It is a "
@@ -141,13 +141,13 @@ def titlecase_filename(stem: str) -> str:
     return re.sub(r"[A-Za-z0-9]+", _cap, stem)
 
 
-# ── Display-time rebrand (AI Visibility → AI Reputation) ─────────────────────
+# ── Display-time rebrand (AI Reputation → AI Visibility) ─────────────────────
 # The LLM prompts are intentionally unchanged (their output is tuned), so any
-# "AI Visibility" phrasing the model still writes is swapped at render time.
+# "AI Reputation" phrasing the model still writes is swapped at render time.
 _REBRAND_PAIRS = (
-    ("AI Visibility", "AI Reputation"), ("AI-Visibility", "AI-Reputation"),
-    ("AI visibility", "AI reputation"), ("AI-visibility", "AI-reputation"),
-    ("ai visibility", "ai reputation"),
+    ("AI Reputation", "AI Visibility"), ("AI-Reputation", "AI-Visibility"),
+    ("AI reputation", "AI visibility"), ("AI-reputation", "AI-visibility"),
+    ("ai reputation", "ai visibility"),
 )
 _REBRAND_SKIP_FIELDS = {"run_id", "pdf_path", "teaser_pdf_path", "briefing_pdf_path",
                         "full_detail_pdf_path", "md_path", "maps_url", "website_url",
@@ -155,8 +155,8 @@ _REBRAND_SKIP_FIELDS = {"run_id", "pdf_path", "teaser_pdf_path", "briefing_pdf_p
 
 
 def rebrand_text(text):
-    """Return text with legacy 'AI Visibility' naming rewritten to 'AI Reputation'."""
-    if not isinstance(text, str) or "isibility" not in text:
+    """Return text with legacy 'AI Reputation' naming rewritten to 'AI Visibility'."""
+    if not isinstance(text, str) or "eputation" not in text:
         return text
     for a, b in _REBRAND_PAIRS:
         text = text.replace(a, b)

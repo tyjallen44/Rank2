@@ -16,7 +16,7 @@ _MODEL = "claude-opus-4-8"
 from .plain import PLAIN_TERMS, BULLETS_MAX, bullets_to_text, is_bullets
 
 _SYSTEM = (
-    "You write the 'What to do first' list for a practice's AI reputation report, read by the "
+    "You write the 'What to do first' list for a practice's AI visibility report, read by the "
     "practice's leadership (not marketing or web specialists). From the four-pillar read and the "
     "VERIFIED content findings you are given, write 3 to 5 bullets, ordered by impact. Each bullet is "
     "ONE action and ONE reason, at most 25 words, and where it rests on a finding it names that finding "

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pulse · AI Reputation Analysis Platform</title>
+<title>Pulse · AI Visibility Analysis Platform</title>
 <!-- Pulse browser-tab icon: teal tile + seafoam heartbeat (brand palette), inline so no static route is needed -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2714%27%20fill%3D%27%230F4146%27/%3E%3Cpath%20d%3D%27M7%2035%20H21%20L27%2020%20L36%2047%20L42%2035%20H57%27%20fill%3D%27none%27%20stroke%3D%27%2380F8E4%27%20stroke-width%3D%275%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1009,8 +1009,8 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
   </div>
   <div class="login-card">
     <div class="login-logo">
-      <div class="wordmark">PULSE</div>
-      <div class="sub">AI Reputation Analysis Platform</div>
+      <div class="wordmark">PULSEAI</div>
+      <div class="sub">AI Visibility Analysis Platform</div>
       <div class="accent-line"></div>
     </div>
     <div id="login-err" class="err hidden mt12"></div>
@@ -1203,8 +1203,8 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
 <div id="app">
   <nav id="sidebar">
     <div class="sb-logo">
-      <div class="wordmark">PULSE</div>
-      <div class="sub">AI Reputation Analysis Platform</div>
+      <div class="wordmark">PULSEAI</div>
+      <div class="sub">AI Visibility Analysis Platform</div>
       <div class="accent-line"></div>
     </div>
     <div class="sb-nav">
@@ -1215,7 +1215,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
       <button class="nav-btn nav-start" id="nav-start" onclick="openChooser(null, event)" title="Not sure which report? Answer two questions and Pulse opens the right one.">
         <span class="ni">✦</span><span class="nb-lbl">Start a report</span>
       </button>
-      <button class="nav-btn active" id="nav-network" onclick="navigate('network')" title="AI Reputation report for a multi-state hospital network">
+      <button class="nav-btn active" id="nav-network" onclick="navigate('network')" title="AI Visibility report for a multi-state hospital network">
         <span class="ni">🖧</span><span class="nb-lbl">Hospital Network</span>
       </button>
       <button class="nav-btn" id="nav-individual" onclick="navigate('individual')" title="Run a focused deep diagnostic for a hospital, hospital network, specialty practice within a hospital, or a medical practice">
@@ -1542,7 +1542,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
           <label class="fl">Report Format <a href="#" class="help-link" onclick="showHelp('report-format',event);return false">ⓘ Which format?</a></label>
           <div class="tg-group">
             <button class="tg-opt" id="pp-tg-enticement" onclick="setPpFormat('enticement')"
-              title="Compact scorecards ranked by AI reputation. Your chosen prospect is shown in full; every competitor is obscured. Built to hand to a prospect.">Enticement</button>
+              title="Compact scorecards ranked by AI visibility. Your chosen prospect is shown in full; every competitor is obscured. Built to hand to a prospect.">Enticement</button>
             <button class="tg-opt on" id="pp-tg-summary" onclick="setPpFormat('summary')"
               title="Compact scorecards for every provider in the market — nothing hidden, no target needed. A clean at-a-glance summary.">Market Summary</button>
             <button class="tg-opt" id="pp-tg-full" onclick="setPpFormat('full')"
@@ -2038,7 +2038,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
     <!-- ── Network Pulse ──────────────────────────────────────────────────── -->
     <div id="page-network" class="page">
       <div class="page-title">Hospital Network <a href="#" class="title-help" onclick="openChooser(null, event);return false">Not sure this is the right report?</a></div>
-      <div class="page-sub">AI Reputation report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
+      <div class="page-sub">AI Visibility report for multi-location healthcare networks. Designed for C-suite audiences and industry benchmarking.</div>
 
       <!-- Mode: single guided report vs bulk headless CSV scoring (admin only; shown by showApp) -->
       <div id="np-mode-toggle" style="display:none;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
@@ -2844,8 +2844,8 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
 
     <!-- ── Trends ─────────────────────────────────────────────────────────── -->
     <div id="page-track" class="page">
-      <div class="page-title">AI Reputation Trends</div>
-      <div class="page-sub">Track how a provider's AI reputation changes over time.</div>
+      <div class="page-title">AI Visibility Trends</div>
+      <div class="page-sub">Track how a provider's AI visibility changes over time.</div>
 
       <!-- Entity list view -->
       <div id="track-list-view" style="max-width:1180px">
@@ -3009,7 +3009,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
           <div><div style="font-size:20px;font-weight:700">Compare tracked entities</div><div id="track-compare-meta" style="font-size:13px;color:var(--muted);margin-top:2px"></div></div>
         </div>
         <div class="card" style="padding:20px 24px;margin-bottom:16px">
-          <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Pulse Score (AI Reputation) — all selected</div>
+          <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Pulse Score (AI Visibility) — all selected</div>
           <div style="position:relative;height:320px"><canvas id="chart-compare"></canvas></div>
           <div id="track-compare-legend" style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:12.5px"></div>
         </div>
@@ -3054,7 +3054,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
           <div id="trend-delta-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px"></div>
 
           <div class="card" style="margin-bottom:16px;padding:20px 24px">
-            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Pulse Score (AI Reputation)</div>
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">Pulse Score (AI Visibility)</div>
             <div style="position:relative;height:200px"><canvas id="chart-score"></canvas></div>
           </div>
 
@@ -3145,8 +3145,8 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
       <div class="home-hero">
         <div class="home-hero-text">
           <img class="home-rl-logo" src="/assets/logo-dark.svg" alt="RLDatix">
-          <div class="home-kicker"><span class="wordmark">PULSE</span></div>
-          <h1 class="home-h1">AI Reputation Analysis Platform</h1>
+          <div class="home-kicker"><span class="wordmark">PULSEAI</span></div>
+          <h1 class="home-h1">AI Visibility Analysis Platform</h1>
           <p class="home-lede">See how AI assistants describe, rank and recommend your hospitals and practices — scored on four pillars, benchmarked nationally, with the exact fixes that move the score.</p>
           <div class="home-cta">
             <button class="btn btn-light" onclick="openChooser(null, event)">Start a report →</button>
@@ -3283,8 +3283,8 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
           <div class="rn-heading new">Naming</div>
 
           <div class="rn-item">
-            <div class="rn-title">Reports Are Now AI Reputation Reports</div>
-            <div class="rn-body">Pulse is now the <strong>AI Reputation Analysis Platform</strong>. Every report, cover, scorecard, email and page that said "AI Visibility" now says <strong>AI Reputation</strong> &mdash; including the <strong>AI Reputation Score</strong> and <strong>Pulse Score (AI Reputation)</strong> labels. Scoring, pillars and methodology are unchanged; only the name moved. Reports generated before this release keep their original wording.</div>
+            <div class="rn-title">Reports Are Now AI Visibility Reports</div>
+            <div class="rn-body">Pulse is now the <strong>AI Visibility Analysis Platform</strong>. Every report, cover, scorecard, email and page that said "AI Visibility" now says <strong>AI Visibility</strong> &mdash; including the <strong>AI Visibility Score</strong> and <strong>Pulse Score (AI Visibility)</strong> labels. Scoring, pillars and methodology are unchanged; only the name moved. Reports generated before this release keep their original wording.</div>
           </div>
 
           <div class="rn-heading new">Trends</div>
@@ -4105,7 +4105,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
     </div>
     <div class="npa-p" style="margin-top:6px">
       Score an <strong>entire list of hospital systems at once</strong>, instead of one report at a time.
-      Upload a spreadsheet of health systems and get the same file back with an AI Reputation
+      Upload a spreadsheet of health systems and get the same file back with an AI Visibility
       <strong>Pulse Score</strong>, a <strong>national quartile</strong>, and all four pillar scores
       filled in for every entity — no individual reports to open, and nothing cluttering your report History.
     </div>
@@ -4127,7 +4127,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
     <table class="npa-tbl">
       <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td><strong>Pulse_Score</strong></td><td>Overall AI Reputation score, 0–100</td></tr>
+        <tr><td><strong>Pulse_Score</strong></td><td>Overall AI Visibility score, 0–100</td></tr>
         <tr><td><strong>Quartile</strong></td><td>National quartile (1st = top, 4th = bottom)</td></tr>
         <tr><td><strong>Outcomes &amp; Safety</strong></td><td>Clinical quality and safety signals AI can cite</td></tr>
         <tr><td><strong>Credentials &amp; Recognition</strong></td><td>Accreditations, awards, national rankings</td></tr>
@@ -4408,9 +4408,9 @@ function _storeSession(token, displayName, role, brand) {
 }
 
 const _BRAND_WORDMARKS = {
-  original:   {wordmark: 'PULSE',                          sub: 'AI Reputation Analysis Platform'},
-  extension1: {wordmark: 'Montecito<span> Medical</span>', sub: 'AI Reputation Analysis Platform'},
-  extension2: {wordmark: 'Ashleigh<span> Jane</span>',     sub: 'AI Reputation Analysis Platform'},
+  original:   {wordmark: 'PULSE',                          sub: 'AI Visibility Analysis Platform'},
+  extension1: {wordmark: 'Montecito<span> Medical</span>', sub: 'AI Visibility Analysis Platform'},
+  extension2: {wordmark: 'Ashleigh<span> Jane</span>',     sub: 'AI Visibility Analysis Platform'},
 };
 
 // Ashleigh Jane wordmark SVGs as URL-encoded data URIs
@@ -8961,7 +8961,7 @@ function caRenderResults(rec, caId, prefix) {
           <div style="font-weight:700;font-size:13px;color:var(--teal)">📊 Deep Dive <span style="font-size:11px;font-weight:600;color:var(--muted)">· Report 1</span></div>
           <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Full Pulse diagnostic — score, pillars &amp; executive summary</div>
         </div>
-        <button class="btn btn-gold btn-sm" title="Full Pulse deep-dive report: AI reputation score, four-pillar breakdown, and executive summary" onclick="_download('/api/content-analysis/${caId}/report1?token=${encodeURIComponent(_token)}')">⬇ Deep Dive</button>
+        <button class="btn btn-gold btn-sm" title="Full Pulse deep-dive report: AI visibility score, four-pillar breakdown, and executive summary" onclick="_download('/api/content-analysis/${caId}/report1?token=${encodeURIComponent(_token)}')">⬇ Deep Dive</button>
       </div>
       <div style="flex:1;min-width:240px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--pale)">
         <div>
@@ -13086,7 +13086,7 @@ function renderTrendCharts(dataPoints) {
   const _mixed = _rubrics.length > 1;
   const _PL = _pillarLabels(_mixed ? null : _rubrics[0]);
   const deltaMetrics = [
-    { label: 'Pulse Score (AI Reputation)', first: first.ai_visibility_score, last: last.ai_visibility_score, suffix: '/100' },
+    { label: 'Pulse Score (AI Visibility)', first: first.ai_visibility_score, last: last.ai_visibility_score, suffix: '/100' },
     { label: _PL[0],                first: first.tier_outcomes,        last: last.tier_outcomes,        suffix: '' },
     { label: 'Google Rating',       first: first.google_rating,        last: last.google_rating,        suffix: '★', decimals: 1 },
     { label: 'Reviews',             first: first.google_count,         last: last.google_count,         suffix: '' },
@@ -13114,7 +13114,7 @@ function renderTrendCharts(dataPoints) {
     },
   };
 
-  // AI Reputation Score chart
+  // AI Visibility Score chart
   _trackCharts.score = new Chart(document.getElementById('chart-score'), {
     type: 'line',
     data: {

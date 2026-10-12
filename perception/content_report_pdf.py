@@ -183,7 +183,7 @@ def render_content_report_pdf(entity_name: str, location: str, findings, pdf_pat
     page each finding lands on; the second fills those page numbers into the cover
     Contents list. The finding layout is identical between passes (only the tiny
     page-number strings change), so the located pages stay valid."""
-    _rebrand_for_display(findings)   # display-time AI Reputation naming
+    _rebrand_for_display(findings)   # display-time AI Visibility naming
     from playwright.sync_api import sync_playwright
     raw = list(getattr(findings, "findings", []) or [])
     items = [f.model_dump() if hasattr(f, "model_dump") else f for f in raw]
@@ -204,7 +204,7 @@ def render_content_report_pdf(entity_name: str, location: str, findings, pdf_pat
                     '<div style="width:100%;font-family:Arial,sans-serif;font-size:8px;'
                     'color:#8a9aaa;display:flex;justify-content:space-between;align-items:center;'
                     'padding:0 44px 10px;box-sizing:border-box">'
-                    '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+                    '<span style="letter-spacing:0.05em">Prepared by PulseAI | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
                     '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
                     '</div>'
                 ),
@@ -505,7 +505,7 @@ def _content_body_html(entity_name: str, location: str, findings, report_title: 
     return f"""
       <div class="pxhead">
       <div class="band">
-        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI REPUTATION<br>REPORT</div></div>
+        <div class="top">{_logo_html()}<div style="text-align:right;font-size:10px;letter-spacing:.1em;color:#9FD8CF">AI VISIBILITY<br>REPORT</div></div>
         <h1>Content Analysis &mdash; Detailed Findings and Improvement Prescriptions</h1>
         <div class="sub">{_e(title)}{(" &middot; " + _e(location)) if location else ""}</div>
       </div>

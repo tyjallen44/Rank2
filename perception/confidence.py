@@ -1,4 +1,4 @@
-"""Score confidence — how much public evidence sits behind an AI Reputation score.
+"""Score confidence — how much public evidence sits behind an AI Visibility score.
 
 A score built from two Google reviews and no CMS record is not the same as one built
 from 800 reviews across six confirmed locations. This is a small, deterministic read on

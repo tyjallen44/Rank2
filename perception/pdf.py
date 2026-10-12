@@ -289,8 +289,8 @@ def render_content_deep_dive(result: AnalysisResult, pdf_path: Path, findings,
     """Report 1 for the Content Analysis sandbox: the standard Deep Diagnostic
     with the Content Improvement Keys section appended. Reuses the shared HTML
     builder untouched and injects the section before </body>."""
-    _rebrand_for_display(result)   # display-time AI Reputation naming
-    _rebrand_for_display(findings)   # display-time AI Reputation naming
+    _rebrand_for_display(result)   # display-time AI Visibility naming
+    _rebrand_for_display(findings)   # display-time AI Visibility naming
     from playwright.sync_api import sync_playwright
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
     html = _build_html(result, cfg, content_keys=findings)
@@ -314,7 +314,7 @@ def render_content_deep_dive(result: AnalysisResult, pdf_path: Path, findings,
 
 def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") -> None:
     """Render a structured AnalysisResult to a branded PDF using Playwright."""
-    _rebrand_for_display(result)   # display-time AI Reputation naming
+    _rebrand_for_display(result)   # display-time AI Visibility naming
     from playwright.sync_api import sync_playwright
 
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])
@@ -354,8 +354,8 @@ def render_practice_combined(result: AnalysisResult, findings, pdf_path,
     by the embedded Content Report (contents index + every finding + drafted
     prescription). Two passes so the Contents-index page numbers reflect the final
     document (Chromium doesn't expose page numbers at build time)."""
-    _rebrand_for_display(result)   # display-time AI Reputation naming
-    _rebrand_for_display(findings)   # display-time AI Reputation naming
+    _rebrand_for_display(result)   # display-time AI Visibility naming
+    _rebrand_for_display(findings)   # display-time AI Visibility naming
     from playwright.sync_api import sync_playwright
     from .content_report_pdf import _page_map
 
@@ -415,7 +415,7 @@ def _report_footer(data_label: str) -> str:
     """Playwright footer shared by every report: prepared-by, data date, page x of y."""
     return ('<div style="width:100%;font-family:Arial,Helvetica,sans-serif;font-size:8px;color:#8a9aaa;'
             'display:flex;justify-content:space-between;align-items:center;padding:0 48px 10px;box-sizing:border-box">'
-            '<span style="letter-spacing:0.05em">Prepared by Pulse | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+            '<span style="letter-spacing:0.05em">Prepared by PulseAI | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
             f'<span>{data_label}</span>'
             '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>')
 
@@ -448,7 +448,7 @@ def _methodology_box_html(pillars: list[str], n_label: str = "four pillars", edi
     return (
         f'<div style="page-break-inside:avoid;background:{ALT};border:1px solid {BD};'
         f'border-radius:6px;padding:16px 20px;margin:22px 0;font-size:8.5pt;color:{TXT};line-height:1.55">'
-        f'<div style="font-size:9.5pt;font-weight:700;color:{T};margin-bottom:8px">Methodology &mdash; Pulse AI Reputation</div>'
+        f'<div style="font-size:9.5pt;font-weight:700;color:{T};margin-bottom:8px">Methodology &mdash; Pulse AI Visibility</div>'
         + p("What the score is.", f"The <strong>Pulse Score</strong> (0&ndash;100) measures how visibly and favorably an organization surfaces "
             f"when patients and referrers ask AI assistants (ChatGPT, Claude, Gemini) where to get care &mdash; a market-perception measure, "
             f"not a clinical-quality verdict. It is a weighted blend of {n_label}: {pill}. National quartiles: 1st (&#8805;75) &middot; "
@@ -701,7 +701,7 @@ def _tier_row(label: str, value: int | None) -> str:
 
 
 def _aivs_block(p: RankedProvider, methodology_note: bool = True, confidence: dict = None) -> str:
-    """AI Reputation score + computed letter grade + weighting profile + the four tier bars.
+    """AI Visibility score + computed letter grade + weighting profile + the four tier bars.
 
     `methodology_note=False` drops the "Scored per Appendix A methodology" footnote
     for the simplified summary view, which has no appendix."""
@@ -1306,7 +1306,7 @@ def _teaser_rankings_section(providers: list[RankedProvider], title: str, subtit
 
 
 def _simplified_card(p: RankedProvider, display_rank: int, obscure: bool = True) -> str:
-    """Compact Patient Pulse card showing ONLY the AI Reputation block (four tier
+    """Compact Patient Pulse card showing ONLY the AI Visibility block (four tier
     bars + score) and 'What AI Assistants Currently See'.
 
     obscure=True (Enticement): the target/prospect renders in full; every other
@@ -1429,7 +1429,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
         section_title = f"{result.specialty} Providers" if result.specialty else "Hospitals & Health Systems"
         rankings_html = _simplified_patient_section(
             all_ranked, section_title,
-            "Ranked by AI reputation — most to least visible",
+            "Ranked by AI visibility — most to least visible",
             obscure=result.obscure_competitors,
         )
     elif result.individual_report:
@@ -1571,7 +1571,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
     advice_title         = (
         ""
         if result.individual_report
-        else "Improve Your AI Reputation"
+        else "Improve Your AI Visibility"
     )
 
     def _paras(text: str) -> str:
@@ -2074,7 +2074,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
       text-decoration: underline;
     }}
 
-    /* ── Market overview + AI Reputation verdict ────── */
+    /* ── Market overview + AI Visibility verdict ────── */
     .overview p, .verdict p {{
       font-size: 9pt;
       color: {_TEAL};
@@ -2090,7 +2090,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
     }}
     .overview {{ margin-bottom: 22px; }}
 
-    /* ── AI Reputation score + tier bars ────────────── */
+    /* ── AI Visibility score + tier bars ────────────── */
     .aivs {{ display: flex; align-items: center; gap: 14px; margin: 2px 0 10px; }}
     .aivs > div:first-child {{ flex: 0 1 auto; max-width: 52%; }}   /* the pillar bars must keep their room */
     .aivs-score {{
@@ -2430,7 +2430,7 @@ def _build_html(result: AnalysisResult, brand_cfg: dict | None = None,
 # ── Comparison PDF ────────────────────────────────────────────────────────────
 
 def _comparison_overview_block(result: AnalysisResult, label: str, mixed_rubric_note: bool = False) -> str:
-    """Organization overview + AI Reputation verdict for one entity in the comparison.
+    """Organization overview + AI Visibility verdict for one entity in the comparison.
 
     Pillar labels are driven by each entity's own weighting profile so that
     practice-rubric entities show practice pillar names and hospital-rubric entities
@@ -2550,7 +2550,7 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
     from .deep_pdf import entity_summary_html
     card_html = entity_summary_html(result) if p else ""
 
-    # AI Reputation Assessment
+    # AI Visibility Assessment
     assessment_html = f"""
   <div class="recommendation" style="margin-top:20px">
     <div class="section-title" style="margin-bottom:10px">{_first_moves_title(result, SECTION_ASSESSMENT)}</div>
@@ -2579,7 +2579,7 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
 
         improvement_html = f"""
   <div class="advice" style="margin-top:20px">
-    <div class="section-title">AI Reputation Improvement Roadmap</div>
+    <div class="section-title">AI Visibility Improvement Roadmap</div>
     {improvement_body}
   </div>"""
 
@@ -2694,9 +2694,9 @@ def render_comparison_pdf(
     teaser: bool = False,
 ) -> None:
     """Render a comparison report PDF from two AnalysisResult objects."""
-    _rebrand_for_display(result_a)   # display-time AI Reputation naming
-    _rebrand_for_display(result_b)   # display-time AI Reputation naming
-    _rebrand_for_display(comparison)   # display-time AI Reputation naming
+    _rebrand_for_display(result_a)   # display-time AI Visibility naming
+    _rebrand_for_display(result_b)   # display-time AI Visibility naming
+    _rebrand_for_display(comparison)   # display-time AI Visibility naming
     from playwright.sync_api import sync_playwright
 
     cfg = _BRAND_CONFIGS.get(brand, _BRAND_CONFIGS["original"])

@@ -2,7 +2,7 @@
 (hospital, specialty practice or hospital service line).
 
 Reading order, one job per page: cover with the score → Executive Summary (headline +
-bullets) → AI Reputation (the four pillar bars of whichever rubric scored the entity,
+bullets) → AI Visibility (the four pillar bars of whichever rubric scored the entity,
 Score Evidence, "What AI assistants currently see", the website-access alert) → What to
 Do First → Locations (one merged table: confirmed locations + Google profile checks +
 composite ratings) → Physicians (one merged table: NPI/linkage/certification + composite
@@ -168,16 +168,16 @@ def _cover(result: AnalysisResult, p: Optional[RankedProvider], cfg: dict, logo_
 <div class="cover">
   <div class="cover-logo-header">
     {logo_html}
-    <div class="cover-report-type-label">Deep Diagnostic<br>AI Reputation Report</div>
+    <div class="cover-report-type-label">Deep Diagnostic<br>AI Visibility Report</div>
   </div>
-  <div class="cover-edition">{_e(ed["label"])} &middot; AI Reputation</div>
+  <div class="cover-edition">{_e(ed["label"])} &middot; AI Visibility</div>
   <div class="cover-network-name">{_e(name)}</div>
   <div class="cover-subtitle">{subtitle}</div>
   <div class="cover-confidential">Confidential &nbsp;·&nbsp; Prepared exclusively for {_e(name)}</div>
   {_group_cover_line(result)}
   <div class="cover-score-center">
     <div style="line-height:1"><span class="cover-score-num" style="color:{accent}">{score_str}</span><span class="cover-score-out-of">/100</span></div>
-    <div class="cover-score-lbl">AI Reputation Score</div>
+    <div class="cover-score-lbl">AI Visibility Score</div>
     <div class="cover-quartile-badge" style="border-left:4px solid {q_color}">
       <div class="cover-quartile-badge-lbl">National Quartile</div>
       <div class="cover-quartile-badge-val" style="color:{q_color}">{_e(_quartile_label(quartile))} <span style="font-size:11pt;font-weight:500;color:rgba(255,255,255,0.7)">&middot;&nbsp;{_e(q_band)}</span></div>
@@ -192,7 +192,7 @@ def _cover(result: AnalysisResult, p: Optional[RankedProvider], cfg: dict, logo_
     against ChatGPT, Claude, and Gemini.
   </div>
   <div class="cover-meta">
-    <span>Pulse | RLDatix &nbsp;·&nbsp; Deep Diagnostic &nbsp;·&nbsp; {_e(name)}</span>
+    <span>PulseAI | RLDatix &nbsp;·&nbsp; Deep Diagnostic &nbsp;·&nbsp; {_e(name)}</span>
     <span>Generated {generated}</span>
   </div>
 </div>"""
@@ -280,7 +280,7 @@ def _reputation_section(result: AnalysisResult, p: Optional[RankedProvider], ed:
             f' <span style="font-weight:400;letter-spacing:0;text-transform:none;color:#7a8a9a">&mdash; from training memory &amp; live retrieval &middot; Claude, ChatGPT, Gemini</span></div>'
             f'<div style="font-size:9.5pt;color:#3a4a5a">{_structured_html(getattr(p, "ai_says_structured", None), _strip_md(p.ai_says), primary=primary)}</div></div>')
     return f"""
-<h2>AI Reputation</h2>
+<h2>AI Visibility</h2>
 <p style="font-size:9pt;color:#4a5a6a;margin-top:-4px">How AI assistants view {_e(name)} &mdash; the four-pillar Pulse Score on the {_e(ed["rubric_label"])} ({_e(_profile_label(p, result))} weighting).</p>
 {site}
 <div class="score-breakdown">
@@ -862,7 +862,7 @@ def entity_summary_html(result: AnalysisResult) -> str:
 .cmp-entity .facility-table th{background:#0F4146;color:#fff;padding:6px 8px;text-align:left;font-size:7.5pt}
 .cmp-entity .facility-table td{padding:5px 8px;border-bottom:1px solid #dde3ea;vertical-align:middle}
 """
-    body = (_reputation_section(result, p, ed, cfg).replace("<h2>AI Reputation</h2>", "") + evidence_section_html(p)
+    body = (_reputation_section(result, p, ed, cfg).replace("<h2>AI Visibility</h2>", "") + evidence_section_html(p)
             + _locations_section(result, p, ed) + _physicians_section(result))
     return f'<style>{css}</style><div class="cmp-entity">{body}</div>'
 
@@ -940,7 +940,7 @@ def build_deep_html(result: AnalysisResult, brand_cfg: dict, content_findings=No
     """The Deep Diagnostic document. `content_findings` embeds the Content Report (practice
     combined report; `content_teaser` blurs it); `content_keys` appends the Content
     Improvement Keys box (hospital Deep Diagnostic). `result.teaser_report` blurs everything
-    below the AI Reputation section."""
+    below the AI Visibility section."""
     cfg = dict(brand_cfg or {})
     primary, accent, pale = cfg.get("primary", _TEAL), cfg.get("accent", _SEAFOAM), cfg.get("pale", _PALE_GREEN)
     p = _target(result)

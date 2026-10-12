@@ -439,13 +439,12 @@ async def admin_jobs(payload: dict = Depends(require_admin)):
             "version": _APP_VERSION, "workers": getattr(_pool, "_max_workers", None)}
 
 
-_MAINT_REBRAND_PAIRS = [("AI Visibility Intelligence", "AI Reputation Analysis Platform"),
-                        ("AI Reputation Intelligence", "AI Reputation Analysis Platform"),
-                        ("AI Visibility", "AI Reputation"), ("AI-Visibility", "AI-Reputation"),
-                        ("AI visibility", "AI reputation"), ("AI-visibility", "AI-reputation")]
+_MAINT_REBRAND_PAIRS = [("AI Visibility Intelligence", "AI Visibility Analysis Platform"), ("AI Reputation Analysis Platform", "AI Visibility Analysis Platform"),
+                        ("AI Reputation", "AI Visibility"), ("AI-Reputation", "AI-Visibility"),
+                        ("AI reputation", "AI visibility"), ("AI-reputation", "AI-visibility")]
 
 _MAINT_TASKS = {
-    "rebrand-learn": "Rename 'AI Visibility' → 'AI Reputation' in the live Learn / Methodology articles (idempotent).",
+    "rebrand-learn": "Rename 'AI Reputation' → 'AI Visibility' in the live Learn / Methodology articles (idempotent).",
     "backfill-comparisons": "Record History rows for Compare Two PDFs on disk that pre-date persisted comparisons.",
     "retrack-practices": "Tracked entities that have a specialty but are typed Hospital → type Specialty Practice so the next snapshot uses the practice rubric.",
     "apply-learn-content": "Sync the live Learn / Methodology articles to the reviewed seed (perception/learn_seed.py); custom articles are left alone.",
@@ -707,7 +706,7 @@ async def admin_maintenance(task: str, apply: bool = False, _: dict = Depends(re
             elif task == "apply-learn-content":
                 from perception.db import list_learn_articles, update_learn_article
                 from perception.learn_seed import STARTER_ARTICLES, METHODOLOGY_ARTICLES
-                renames = {"learn": {"Why AI visibility matters": "Why AI reputation matters"},
+                renames = {"learn": {"Why AI reputation matters": "Why AI visibility matters"},
                            "methodology": {"How AI assistants are queried": "How the score is produced"}}
                 changed = 0
                 for page, seed in (("learn", STARTER_ARTICLES), ("methodology", METHODOLOGY_ARTICLES)):
@@ -5260,10 +5259,10 @@ def _learn_grouped(articles: list[dict]) -> list[tuple[str, list[dict]]]:
     return [(c, groups[c]) for c in order]
 
 
-def _render_learn_page(articles: list[dict], *, title: str = "Learn about Pulse — AI Reputation Analysis Platform",
+def _render_learn_page(articles: list[dict], *, title: str = "Learn about Pulse — AI Visibility Analysis Platform",
                        heading: str = "Learn about Pulse",
                        lede: str = "What Pulse is, what its reports reveal, who they help, and how to get started.",
-                       desc: str = "Learn what Pulse is, what its AI-reputation reports show, who they help, and how to get started.",
+                       desc: str = "Learn what Pulse is, what its AI-visibility reports show, who they help, and how to get started.",
                        empty_msg: str = "Content is coming soon. Check back shortly.") -> str:
     """Server-render a standalone, publicly-indexable content page (Learn / Methodology)."""
     from perception.learn import render_markdown
@@ -5353,7 +5352,7 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
   <header class="top">
     <a class="signin" href="/">Sign In &rarr;</a>
     <div class="wm">PULSE</div>
-    <div class="sub">AI REPUTATION ANALYSIS PLATFORM</div>
+    <div class="sub">AI VISIBILITY ANALYSIS PLATFORM</div>
   </header>
   <div class="wrap">
     <nav class="toc">{{TOC}}</nav>
@@ -5363,7 +5362,7 @@ _LEARN_PAGE_TEMPLATE = """<!DOCTYPE html>
       {{BODY}}
     </main>
   </div>
-  <footer>Pulse &middot; AI Reputation Analysis Platform &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
+  <footer>Pulse &middot; AI Visibility Analysis Platform &nbsp;|&nbsp; <a href="/">Sign in to run reports</a></footer>
 <!-- video embeds: return to poster when a video ends -->
 <script>
 function _resetVideoEmbed(f){
@@ -5430,10 +5429,10 @@ async def methodology_public_page():
         articles = []
     return HTMLResponse(_render_learn_page(
         articles,
-        title="Methodology — Pulse AI Reputation Analysis Platform",
-        heading="Pulse AI Reputation Methodology",
-        lede="How Pulse measures AI reputation — the pillars, scoring rubric, national quartiles, data sources, and prompt battery behind every report.",
-        desc="The full methodology behind Pulse AI Reputation reports: pillars, scoring, quartiles, data sources, and prompt battery.",
+        title="Methodology — Pulse AI Visibility Analysis Platform",
+        heading="Pulse AI Visibility Methodology",
+        lede="How Pulse measures AI visibility — the pillars, scoring rubric, national quartiles, data sources, and prompt battery behind every report.",
+        desc="The full methodology behind Pulse AI Visibility reports: pillars, scoring, quartiles, data sources, and prompt battery.",
         empty_msg="The full methodology is being published. Check back shortly.",
     ))
 
@@ -5874,7 +5873,7 @@ async def track_annotation_delete(aid: str, payload: dict = Depends(get_current_
 
 @app.get("/api/track/entities/{entity_id}/report.pdf")
 async def track_report_pdf(entity_id: str, payload: dict = Depends(get_current_user_payload)):
-    """AI Reputation Trend Report for one tracked entity. Rendered on demand and cached
+    """AI Visibility Trend Report for one tracked entity. Rendered on demand and cached
     per latest snapshot (a new run invalidates the cache naturally via the filename)."""
     from perception.db import init_db, get_tracked_entity, get_entity_trend
     from perception.trend_pdf import render_trend_report_pdf
