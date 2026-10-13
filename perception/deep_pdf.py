@@ -373,13 +373,18 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
     from .location_resolver import street_key as _sk
 
     def row(name: str, address: str = "", place_id: str = "") -> dict:
-        """One row per OFFICE: matched by Google place id, then by street, then — only when neither side
-        has an address — by name. Same-named offices in different towns stay separate rows."""
+        """One row per OFFICE: matched by Google place id, then by street. A record with neither (a
+        name-only mention) attaches to the first office of that name rather than opening a new row;
+        same-named offices in different towns stay separate rows when their addresses are known."""
         clean = re.sub(r"\s*\((anchor listing|anchor)\)", "", name or "", flags=re.I).strip()
         nk, sk = _norm_name(name), _sk(address or "")
         k = (by_pid.get(place_id or "") or by_street.get(sk)) if (place_id or sk) else None
-        if k is None and not sk and nk in rows and not rows[nk].get("address"):
-            k = nk
+        if k is None:
+            same = [x for x in order if x.rsplit("|", 1)[-1] == nk]
+            if same and not (place_id or sk):
+                k = same[0]                                   # name only: join the existing office
+            elif same and not any(rows[x].get("address") or x.split("|", 1)[0] != nk for x in same):
+                k = same[0]                                   # the existing row had no address either: it is this office
         if k is None:
             k = (place_id or sk or nk) + "|" + nk
             rows[k] = {"name": clean}

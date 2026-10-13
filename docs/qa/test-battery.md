@@ -4016,3 +4016,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Deep Diagnostic / re-run of OrthoSouth (Memphis, TN) | Southaven and Hernando (MS) offices still resolve, because the website lists them / the NPI registry holds MS records. [pdf] |
 | T3 | Roster drift flag | No longer lists out-of-state clinics as "offices found that are not on the confirmed roster". [ui] |
 | R1 | Unit | `tests/test_location_resolver.py::test_snowball_keeps_only_allowed_states` passes; Trends "Find more" is scoped to the entity's state. |
+
+## FIX-LOCATION-ROWS-DUPES — one row per office, no duplicates (2026-10-13)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Re-run Advanced Orthopaedics and Sports Medicine (Houston) | The Locations table has one row per office (Cypress analyzed, Kingwood, Houston FM 1960, Tomball, the second Cypress profile) — not 15 rows with five identical "analyzed" lines and triplicated Kingwood. Each row shows its address and Google rating once. [pdf] |
+| R1 | Unit | `tests/test_groups.py::test_location_rows_one_per_office` passes. |

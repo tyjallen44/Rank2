@@ -108,3 +108,22 @@ def test_physician_roster_zip_is_the_last_five_digit_group():
     finally:
         PF._nppes_lookup_physician = orig
     assert f["rows"][0]["linked"] is True and f["linkage_pct"] == 100
+
+
+def test_location_rows_one_per_office():
+    from types import SimpleNamespace
+    from perception.deep_pdf import _location_rows
+    locs = [SimpleNamespace(name="Brand Ortho", address="", google_rating=None, google_review_count=None)]
+    p = SimpleNamespace(name="Brand Ortho", consolidated_locations=locs)
+    comp = [{"practice_name": "Brand Ortho", "is_anchor": True, "place_id": "pa", "address": "1 Anchor Way, Cypress, TX 77433, USA", "avg_rating": 4.8, "google_rating": 4.8, "total_reviews": 673},
+            {"practice_name": "Brand Ortho", "is_anchor": True, "place_id": "pa", "address": "1 Anchor Way, Cypress, TX 77433, USA", "avg_rating": 4.8, "google_rating": 4.8, "total_reviews": 673},
+            {"practice_name": "Brand & Ortho", "is_anchor": False, "place_id": "pk", "address": "601 Rockmead Dr, Kingwood, TX 77339, USA", "avg_rating": 4.6, "total_reviews": 197},
+            {"practice_name": "Brand & Ortho", "is_anchor": False, "place_id": "ph", "address": "11800 FM 1960 W, Houston, TX 77065, USA", "avg_rating": 3.0, "total_reviews": 2},
+            {"practice_name": "Brand & Ortho", "is_anchor": False, "place_id": "pk", "address": "601 Rockmead Dr, Kingwood, TX 77339, USA", "avg_rating": 4.6, "total_reviews": 197}]
+    audit = {"profiles": [{"found": True, "name": "Brand Ortho", "place_id": "pa", "address": "1 Anchor Way, Cypress, TX 77433, USA", "rating": 4.8, "review_count": 673},
+                          {"found": True, "name": "Brand & Ortho", "place_id": "pk", "address": "601 Rockmead Dr, Kingwood, TX 77339, USA", "rating": 4.6, "review_count": 197}]}
+    r = SimpleNamespace(entity_name="Brand Ortho", practice_composite_rows=comp, profile_audit=audit, location_resolution=None)
+    rows = _location_rows(r, p)
+    assert len(rows) == 3, [x["name"] + "|" + (x.get("address") or "") for x in rows]
+    assert rows[0].get("anchor") and rows[0]["address"].startswith("1 Anchor Way")
+    assert {x["address"].split(",")[0] for x in rows[1:]} == {"601 Rockmead Dr", "11800 FM 1960 W"}
