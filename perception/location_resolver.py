@@ -398,17 +398,24 @@ def pin_office_to_google(brand: str, office: dict, state: str, *, exclude: set[s
 
 
 def google_snowball(brand: str, city: str, state: str, *, seeds: Optional[list[str]] = None, exclude: Optional[set[str]] = None,
-                    max_queries: int = 14) -> dict:
+                    max_queries: int = 14, states: Optional[set] = None) -> dict:
     """Brand-name listings around the market: brand variants, then every city seen in a found address
-    (and the given seed cities) becomes its own query. Returns {"candidates", "queries"}."""
+    (and the given seed cities) becomes its own query. Listings outside `states` (default: the home
+    state) are dropped — a same-named practice in another state is not an office of this one.
+    Returns {"candidates", "queries"}."""
     btoks = _brand_tokens(brand)
     acronym = _acronym(brand)
     seen = set(exclude or ())
+    allowed = {s.upper() for s in (states or {state}) if s}
     out: list[dict] = []
 
     def _city_of(addr: str) -> str:
         parts = [p.strip() for p in str(addr or "").split(",")]
         return parts[-3] if len(parts) >= 3 else ""
+
+    def _state_of(c: dict) -> str:
+        st = c.get("resolved_state") or _city_state_of(c.get("address", ""))[1]
+        return (st or "").upper()
 
     def _take(cands):
         for c in cands:
@@ -416,6 +423,8 @@ def google_snowball(brand: str, city: str, state: str, *, seeds: Optional[list[s
             if not pid or pid in seen:
                 continue
             if not brand_matches(brand, c.get("name", "")):
+                continue
+            if allowed and _state_of(c) and _state_of(c) not in allowed:
                 continue
             seen.add(pid)
             out.append(c)
@@ -594,7 +603,11 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
             s["sources"].append("nppes")
         siblings.append(s)
     seeds = sorted({(o.get("city") or "") for o in offices} | {c for c, _ in npp})
-    snow = google_snowball(brand, city, state, seeds=seeds, exclude=used)
+    # Offices live in the home state, plus any state where the website lists an office or the NPI
+    # registry holds an organizational record (metro spill-over such as Memphis → Southaven, MS).
+    allowed_states = {(state or "").upper()} | {(o.get("state") or "").upper() for o in (web.get("locations") or [])} | {st.upper() for _, st in npp}
+    allowed_states.discard("")
+    snow = google_snowball(brand, city, state, seeds=seeds, exclude=used, states=allowed_states)
     duplicates: list[dict] = [{"name": c.get("name"), "place_id": c.get("place_id"), "address": c.get("address"), "of": "the analyzed listing"}
                               for c in snow["candidates"] if anchor_addr and same_office(c.get("address", ""), anchor_addr)]
     extra = [c for c in snow["candidates"] if not (anchor_addr and same_office(c.get("address", ""), anchor_addr))]

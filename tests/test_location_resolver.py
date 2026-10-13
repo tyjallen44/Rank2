@@ -141,3 +141,14 @@ def test_generic_healthcare_words_do_not_match_a_brand():
     assert LR.brand_matches("Advanced Orthopaedics and Sports Medicine", "AOSM Spine Services")        # acronym
     assert LR.brand_matches("Orthopedic Associates", "Orthopedic Associates of Memphis")                # no distinctive word: high overlap
     assert not LR.brand_matches("Orthopedic Associates", "Memphis Orthopedic Surgeons")
+
+
+def test_snowball_keeps_only_allowed_states(monkeypatch):
+    cands = [{"name": "Brand Ortho - Houston", "address": "1 Main St, Houston, TX 77002, USA", "place_id": "tx", "resolved_state": "TX"},
+             {"name": "Brand Ortho - Las Vegas", "address": "7195 Brand Way, Las Vegas, NV 89113, USA", "place_id": "nv", "resolved_state": "NV"},
+             {"name": "Brand Ortho - Southaven", "address": "7580 Cove, Southaven, MS 38671, USA", "place_id": "ms", "resolved_state": "MS"}]
+    monkeypatch.setattr(LR, "_search", lambda name, city, state, n=10: list(cands))
+    out = LR.google_snowball("Brand Ortho", "Houston", "TX")
+    assert [c["place_id"] for c in out["candidates"]] == ["tx"]
+    out2 = LR.google_snowball("Brand Ortho", "Memphis", "TN", states={"TN", "MS"})
+    assert [c["place_id"] for c in out2["candidates"]] == ["ms"]

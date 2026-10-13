@@ -4007,3 +4007,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 |---|---|---|
 | T1 | Group page → expand → ✎ Fix roster → **↻ Re-discover now** | Runs the location and physician resolvers live (website → NPI → Google, 20–60 s); results merge into the lists: existing entries gain source chips / NPIs, genuinely new offices or physicians appear with a "new" chip, unticked. Message reports counts. Save then confirms what is ticked. [ui] |
 | R1 | Regression | Re-discover never removes or unticks existing entries; Save / Cancel unchanged. |
+
+## FIX-RESOLVER-STATE-SCOPE — Google office search stays in the practice's states (2026-10-13)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Fix roster → ↻ Re-discover now on Advanced Orthopaedics and Sports Medicine (Houston) | Only Texas listings are offered; same-named practices in LA, NV, GA, FL, AZ no longer appear. [ui] |
+| T2 | Deep Diagnostic / re-run of OrthoSouth (Memphis, TN) | Southaven and Hernando (MS) offices still resolve, because the website lists them / the NPI registry holds MS records. [pdf] |
+| T3 | Roster drift flag | No longer lists out-of-state clinics as "offices found that are not on the confirmed roster". [ui] |
+| R1 | Unit | `tests/test_location_resolver.py::test_snowball_keeps_only_allowed_states` passes; Trends "Find more" is scoped to the entity's state. |
