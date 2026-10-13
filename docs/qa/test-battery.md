@@ -4031,3 +4031,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Group page while a re-run is in progress, with a row expanded | The page no longer flashes every 20 s; it re-renders only when a run starts or finishes, and the expanded rows stay expanded (their detail reloads). Polling stops when nothing is running or when you leave the group. [ui] |
 | T2 | Expanded row → "Findings for the organization (in their PDF)" | "Listing details disagree" lists each problem as its own sub-bullet (phone mismatches, NPI addresses, categories, closed/duplicate profiles, review recency, physician profiles elsewhere); long name lists show three names "and N more". [ui] |
 | R1 | Regression | Needs-attention badges, CSV, PDF Listing quality block unchanged apart from the shortened name lists. |
+
+## FIX-REGISTRY-STATE-TRIM — cached rosters lose out-of-state listings (2026-10-13)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic (form, not forced) on a practice whose 90-day roster cache predates the state rule (Advanced Orthopaedics, Houston) | Log: "Registry roster trimmed: N out-of-state listings dropped"; the roster-drift flag no longer lists them; the Sources line no longer says "58 Google listings verified". Verified multi-state offices (website / NPI) are kept. [ui][pdf] |
+| R1 | Unit | `tests/test_location_resolver.py::test_cached_roster_drops_out_of_state_listings` passes. |

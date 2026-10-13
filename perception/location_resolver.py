@@ -542,6 +542,18 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
         else:
             cached = get_registry_siblings(entity_name, city, state)
             if cached is not None and any(s.get("sources") for s in cached):
+                # A roster cached before the state rule may hold same-named practices in other states:
+                # keep the home state, plus offices a verified source (website / NPI registry) placed elsewhere.
+                home = (state or "").upper()
+                keep = [s for s in cached if (s.get("state") or "").upper() in ("", home)
+                        or {"website", "nppes", "confirmed"} & set(s.get("sources") or [])]
+                if len(keep) != len(cached):
+                    _emit(f"Registry roster trimmed: {len(cached) - len(keep)} out-of-state listing{'s' if len(cached) - len(keep) != 1 else ''} dropped")
+                    try:
+                        save_registry_siblings(entity_name, city, state, keep)
+                    except Exception:
+                        pass
+                cached = keep
                 _emit(f"Using registry: {len(cached)} locations for {entity_name} (resolved earlier)")
                 return {"siblings": cached, "parent_org_name": "",
                         "resolution": {"cached": True, "total": len(cached),

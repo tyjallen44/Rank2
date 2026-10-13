@@ -152,3 +152,17 @@ def test_snowball_keeps_only_allowed_states(monkeypatch):
     assert [c["place_id"] for c in out["candidates"]] == ["tx"]
     out2 = LR.google_snowball("Brand Ortho", "Memphis", "TN", states={"TN", "MS"})
     assert [c["place_id"] for c in out2["candidates"]] == ["ms"]
+
+
+def test_cached_roster_drops_out_of_state_listings(monkeypatch):
+    from perception import entity_registry as ER
+    cached = [{"name": "Brand – Kingwood", "city": "Kingwood", "state": "TX", "address": "601 Rockmead Dr, Kingwood, TX 77339", "sources": ["google"]},
+              {"name": "Brand – Las Vegas", "city": "Las Vegas", "state": "NV", "address": "7195 Way, Las Vegas, NV 89113", "sources": ["google"]},
+              {"name": "Brand – Southaven", "city": "Southaven", "state": "MS", "address": "7580 Cove, Southaven, MS 38671", "sources": ["website", "google"]}]
+    saved = {}
+    monkeypatch.setattr(ER, "get_registry_siblings", lambda n, c, s: list(cached))
+    monkeypatch.setattr(ER, "save_registry_siblings", lambda n, c, s, sib: saved.setdefault("sib", sib))
+    monkeypatch.setattr(ER, "expire_registry", lambda n, c, s: None)
+    res = LR.resolve_locations("Brand Ortho", "Houston", "TX", website=None)
+    assert [x["name"] for x in res["siblings"]] == ["Brand – Kingwood", "Brand – Southaven"] and res["resolution"]["cached"]
+    assert [x["name"] for x in saved["sib"]] == ["Brand – Kingwood", "Brand – Southaven"]
