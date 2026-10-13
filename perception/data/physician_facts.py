@@ -58,7 +58,11 @@ def verify_physicians(physicians: list, roster_locations: list, state: str, site
             pass
     roster_zips = set()
     for loc in roster_locations or []:
-        z = _zip5(loc.get("zip") or "") or _zip5(re.sub(r".*?(\d{5})(?:-\d{4})?\s*$", r"\1", loc.get("address") or ""))
+        z = _zip5(loc.get("zip") or "")
+        if len(z) != 5:
+            # the last five-digit group in the address ("…, Cypress, TX 77433, USA"), never the street number
+            zs = re.findall(r"\b(\d{5})(?:-\d{4})?\b", loc.get("address") or "")
+            z = zs[-1] if zs else ""
         if len(z) == 5:
             roster_zips.add(z)
     page_text = " ".join((p.get("text") or "") for p in (site_pages or []))

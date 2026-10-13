@@ -3989,3 +3989,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Re-run that organization (or any later report for it) | The cover shows a small "RLDATIX CUSTOMER" pill under the confidentiality line. Organizations not flagged show nothing. [pdf] |
 | T4 | ⬇ CSV | New "RLDatix customer" column (yes / blank). [api] |
 | R1 | Regression | Fix roster, Re-run, prospects, delivery badges unchanged; `tests/test_groups.py` passes. |
+
+## FIX-LOCATION-ROWS-AND-LEGEND — one row per office, Found-on legend, linkage ZIP, brand matching, name cleanup (2026-10-13)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Practice with several same-named offices (Advanced Orthopaedics and Sports Medicine, Houston) | The PDF Locations table has one row per office (matched by Google place id / street), so Kingwood, Houston, Tomball and Cypress each print — previously same-named offices collapsed into one row (5 in the roster, 3 in the PDF). [pdf] |
+| T2 | Locations and Physicians intros | A "Found on:" legend explains W / G / N / M and the "no Google", "not on site", "no NPI" notes. [pdf] |
+| T3 | Physicians intro "Linked to a confirmed location" | Uses the address ZIP (last five-digit group), not the street number: a practice whose physicians are registered at its offices shows a real percentage, not 0%. [pdf] |
+| T4 | Resolver / drift for a brand made of generic words ("Advanced Orthopaedics and Sports Medicine") | Google listings like "Austin Orthopedics and Sports Medicine" no longer count as the brand (a distinctive word, or the acronym, is required); the roster-drift flag no longer lists dozens of unrelated clinics. [ui] |
+| T5 | Physician directory parse | Link words are stripped from names ("Aaron Hanyu-Deutmeyer Click" → "Aaron Hanyu-Deutmeyer"), so no junk duplicate rows. [ui] |
+| R1 | Unit | `tests/test_location_resolver.py`, `test_physician_resolver.py`, `test_groups.py` pass. |

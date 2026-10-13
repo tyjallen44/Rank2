@@ -84,6 +84,7 @@ def _clean_name(raw: str) -> str:
     n = re.sub(r"\s*\(.*?\)\s*", " ", n)
     n = re.sub(r"\s+", " ", n).strip(" ,.-–—")
     n = _TRAILING_CRED.sub("", n).strip(" ,")                    # "Luke H. Balsamo MD" → "Luke H. Balsamo"
+    n = re.sub(r"(?:\s+(?:click|here|more|view|profile|bio|read|learn|details|schedule|book|appointment|website|email|call|now))+\s*$", "", n, flags=re.I).strip(" ,")
     if n.isupper():                                              # registry names arrive upper-case
         n = " ".join(w.capitalize() if not re.fullmatch(r"(II|III|IV)", w) else w for w in n.split())
         n = re.sub(r"\b(Mc|Mac|O')([a-z])", lambda m: m.group(1) + m.group(2).upper(), n)

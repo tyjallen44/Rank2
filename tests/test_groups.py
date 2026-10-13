@@ -95,3 +95,16 @@ def test_customer_cover_line():
     from perception.deep_pdf import _customer_cover_line
     assert "RLDatix customer" in _customer_cover_line(SimpleNamespace(rldatix_customer=True, entity_name="X", location="Memphis, TN"))
     assert _customer_cover_line(SimpleNamespace(rldatix_customer=False, entity_name="X", location="Memphis, TN")) == ""
+
+
+def test_physician_roster_zip_is_the_last_five_digit_group():
+    from perception.data import physician_facts as PF
+    rec = {"number": "1", "addresses": [{"address_purpose": "LOCATION", "postal_code": "774331234"}]}
+    monkeypatch_lookup = lambda name, state: [rec]
+    orig = PF._nppes_lookup_physician
+    PF._nppes_lookup_physician = monkeypatch_lookup
+    try:
+        f = PF.verify_physicians([{"name": "Jane Doe", "npi": "1"}], [{"address": "20203 Bridgeland Creek Pkwy Ste 200, Cypress, TX 77433, USA"}], "TX", [], sample=5)
+    finally:
+        PF._nppes_lookup_physician = orig
+    assert f["rows"][0]["linked"] is True and f["linkage_pct"] == 100

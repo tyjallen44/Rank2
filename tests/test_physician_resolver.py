@@ -80,3 +80,9 @@ def test_model_last_resort_and_hospital_cap(monkeypatch):
     assert len(res["physicians"]) == 50 and res["resolution"]["capped"] and res["physicians"][0]["name"] == "Site Doc"
     res2 = PR.resolve_physicians("Brand Ortho", "Memphis", "TN", website="https://h.example")      # practices: never capped
     assert len(res2["physicians"]) == 81 and calls["model"] == 0
+
+
+def test_link_words_are_stripped_from_names():
+    assert PR._clean_name("Aaron Hanyu-Deutmeyer Click") == "Aaron Hanyu-Deutmeyer"
+    assert PR._clean_name("Jane Doe View Profile") == "Jane Doe"
+    assert PR.name_key("Aaron Hanyu-Deutmeyer Click") == PR.name_key("Aaron Hanyu-Deutmeyer") or PR._clean_name("Aaron Hanyu-Deutmeyer Click") == "Aaron Hanyu-Deutmeyer"

@@ -368,18 +368,35 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
     """Union of confirmed locations, Google profile checks and composite practice rows, keyed by name."""
     rows: dict[str, dict] = {}
     order: list[str] = []
+    by_pid: dict[str, str] = {}
+    by_street: dict[str, str] = {}
+    from .location_resolver import street_key as _sk
 
-    def row(name: str) -> dict:
-        k = _norm_name(name)
-        if k not in rows:
-            rows[k] = {"name": re.sub(r"\s*\((anchor listing|anchor)\)", "", name, flags=re.I).strip()}
+    def row(name: str, address: str = "", place_id: str = "") -> dict:
+        """One row per OFFICE: matched by Google place id, then by street, then — only when neither side
+        has an address — by name. Same-named offices in different towns stay separate rows."""
+        clean = re.sub(r"\s*\((anchor listing|anchor)\)", "", name or "", flags=re.I).strip()
+        nk, sk = _norm_name(name), _sk(address or "")
+        k = (by_pid.get(place_id or "") or by_street.get(sk)) if (place_id or sk) else None
+        if k is None and not sk and nk in rows and not rows[nk].get("address"):
+            k = nk
+        if k is None:
+            k = (place_id or sk or nk) + "|" + nk
+            rows[k] = {"name": clean}
             order.append(k)
-        return rows[k]
+        if place_id:
+            by_pid[place_id] = k
+        if sk:
+            by_street[sk] = k
+        r = rows[k]
+        if address and not r.get("address"):
+            r["address"] = address
+        return r
 
     anchor_name = (result.entity_name or "")
     if p is not None:
         for loc in p.consolidated_locations or []:
-            r = row(loc.name)
+            r = row(loc.name, loc.address or "")
             r.setdefault("address", loc.address or "")
             if loc.google_rating is not None:
                 r.setdefault("google_rating", loc.google_rating)
@@ -388,7 +405,7 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
     for prof in (au.get("profiles") or []):
         if not prof.get("found"):
             continue
-        r = row(prof.get("name") or "")
+        r = row(prof.get("name") or "", prof.get("address") or "", prof.get("place_id") or "")
         r["audit"] = prof
         if prof.get("rating") is not None:
             r["google_rating"] = prof.get("rating")
@@ -396,7 +413,7 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
         if not r.get("address") and prof.get("city"):
             r["address"] = prof.get("city")
     for cr in result.practice_composite_rows or []:
-        r = row(cr.get("practice_name") or "")
+        r = row(cr.get("practice_name") or "", cr.get("address") or "", cr.get("place_id") or "")
         r["composite"] = cr
         if cr.get("sources"):
             r["sources"] = cr["sources"]
@@ -411,12 +428,12 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
             r["google_rating"] = cr.get("avg_rating")
             r["google_count"] = cr.get("total_reviews")
     # The analyzed entity is the anchor row even without a composite
-    if p is not None:
-        k = _norm_name(p.name)
-        if k in rows:
-            rows[k]["anchor"] = True
-        elif anchor_name and _norm_name(anchor_name) in rows:
-            rows[_norm_name(anchor_name)]["anchor"] = True
+    if p is not None and not any(r.get("anchor") for r in rows.values()):
+        want = {_norm_name(p.name), _norm_name(anchor_name)}
+        for k in order:
+            if k.rsplit("|", 1)[-1] in want:
+                rows[k]["anchor"] = True
+                break
     out = [rows[k] for k in order]
     out.sort(key=lambda r: (0 if r.get("anchor") else 1))
     return out
@@ -540,6 +557,9 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
             parts.append("no verified source listed offices, so the roster is model-recalled and marked M")
         if parts:
             intro += " Sources: " + "; ".join(parts) + "."
+    if has_sources:
+        intro += (" <em>Found on:</em> W = on the website, G = Google listing verified, N = NPI registry address in that city, "
+                  "M = model recall; “no Google” = on the website with no Google profile; “not on site” = a Google listing the website does not show.")
     if has_audit and sm.get("checked"):
         dom = au.get("domain") or "the practice site"
         intro += (f" {sm['checked']} Google Business Profile{'s' if sm['checked'] != 1 else ''} read directly from Google: "
@@ -673,6 +693,9 @@ def _physicians_section(result: AnalysisResult) -> str:
     g_found = sum(1 for r in rows if (r.get("composite") or {}).get("google_rating") is not None)
     if has_comp:
         intro += f" Google listing found for {g_found} of {len(rows)}."
+    if has_sources:
+        intro += (" <em>Found on:</em> W = on the website's provider directory, N = NPI registry, M = model recall; "
+                  "“no NPI” = on the website with no registry match; “not on site” = in the registry at the practice's addresses but not on the website.")
     if has_facts:
         lp = (f"{pf['linkage_pct']}% ({pf['linked']} of {pf['checked']})" if pf.get("linkage_pct") is not None else "not measurable")
         cs = f"{pf['cert_stated']} of {pf['cert_checked']}" if pf.get("cert_checked") else "no pages read"

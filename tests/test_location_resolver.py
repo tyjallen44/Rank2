@@ -133,3 +133,11 @@ def test_display_name_tells_offices_apart():
     assert LR.display_name("OrthoSouth", "OrthoSouth", None, "Covington") == "OrthoSouth – Covington"
     assert LR.display_name("Campbell Clinic", None, "Wolf River", "Germantown") == "Campbell Clinic – Wolf River"
     assert LR.display_name("Campbell Clinic", None, "Collierville", "Collierville") == "Campbell Clinic – Collierville"
+
+
+def test_generic_healthcare_words_do_not_match_a_brand():
+    assert not LR.brand_matches("Advanced Orthopaedics and Sports Medicine", "Austin Orthopedics and Sports Medicine")
+    assert LR.brand_matches("Advanced Orthopaedics and Sports Medicine", "Advanced Orthopaedics & Sports Medicine - Kingwood")
+    assert LR.brand_matches("Advanced Orthopaedics and Sports Medicine", "AOSM Spine Services")        # acronym
+    assert LR.brand_matches("Orthopedic Associates", "Orthopedic Associates of Memphis")                # no distinctive word: high overlap
+    assert not LR.brand_matches("Orthopedic Associates", "Memphis Orthopedic Surgeons")

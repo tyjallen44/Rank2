@@ -59,10 +59,26 @@ def _acronym(name: str) -> str:
     return "".join(w[0] for w in words).lower() if len(words) >= 3 else ""
 
 
+_GENERIC = {"orthopedic", "orthopedics", "orthopaedic", "orthopaedics", "ortho", "sports", "medicine", "medical", "spine", "joint", "joints",
+            "bone", "surgery", "surgical", "surgeons", "physicians", "doctors", "family", "pain", "hand", "foot", "ankle", "physical", "therapy",
+            "rehab", "rehabilitation", "urgent", "care", "primary", "pediatric", "pediatrics", "children", "womens", "dental", "eye", "vision",
+            "heart", "cancer", "oncology", "neurology", "neuro", "cardiology", "dermatology", "wellness", "regional", "community", "university"}
+
+
 def brand_matches(brand: str, listing_name: str, *, min_overlap: float = 0.5) -> bool:
     """Does a listing name belong to the brand? Token overlap, or the brand's acronym, or the
-    listing name starting with the brand's first distinctive word (DBAs like 'OrthoSouth Germantown')."""
+    listing name starting with the brand's first distinctive word (DBAs like 'OrthoSouth Germantown').
+    Generic healthcare words (orthopedics, sports, medicine…) never carry a match by themselves:
+    'Austin Orthopedics and Sports Medicine' is not 'Advanced Orthopaedics and Sports Medicine'."""
     bt, lt = _brand_tokens(brand), _brand_tokens(listing_name)
+    distinctive = bt - _GENERIC
+    if distinctive and not (distinctive & lt):
+        acr = _acronym(brand)
+        return bool(acr) and re.search(r"\b" + re.escape(acr) + r"\b", (listing_name or "").lower()) is not None
+    if not distinctive:
+        # A brand made only of generic words ("Orthopedic Associates"): every word of it must appear.
+        _words = lambda t: {w for w in re.findall(r"[a-z0-9]+", (t or "").lower()) if w not in {"the", "of", "and", "at", "for"}}
+        return bool(_words(brand)) and _words(brand) <= _words(listing_name)
     if bt and lt and len(bt & lt) / len(bt) >= min_overlap:
         return True
     acr = _acronym(brand)
