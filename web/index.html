@@ -8296,8 +8296,52 @@ function groupRosterRender(runId) {
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:6px 0 4px">Physicians (${d.physicians.length})</div>
       ${d.physicians.map((x, i) => row('phy', x, i)).join('') || '<div style="font-size:12px;color:var(--muted)">None found.</div>'}
       <div style="display:flex;gap:6px;margin:4px 0 8px"><input id="groster-addphy-${runId}" class="fi" placeholder="Add a physician: name, credential, NPI (optional)" style="flex:1;padding:6px 8px;font-size:12px"><button class="btn btn-ghost btn-sm" onclick="groupRosterAdd('${runId}','phy')">+ Add</button></div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="groupRosterSave('${runId}')">Save roster</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById('groster-${runId}').innerHTML=''">Cancel</button><span id="groster-msg-${runId}" style="font-size:12px;color:var(--muted)"></span></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="groupRosterSave('${runId}')">Save roster</button>
+        <button class="btn btn-secondary btn-sm" id="groster-rediscover-${runId}" onclick="groupRosterRediscover('${runId}')" title="Run the location and physician resolvers now (website → NPI registry → Google) and merge what they find into these lists; new items are marked 'new' and left unticked until you confirm them">↻ Re-discover now</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('groster-${runId}').innerHTML=''">Cancel</button><span id="groster-msg-${runId}" style="font-size:12px;color:var(--muted)"></span></div>
     </div>`;
+}
+function _rosterNameKey(n) {
+  const parts = String(n || '').replace(/[^A-Za-z \-']/g, ' ').split(/\s+/).filter(p => p && !/^(dr|md|do|mr|ms|mrs|jr|sr|ii|iii|iv|phd|dpm|pa|np|pa-c)\.?$/i.test(p));
+  return parts.length >= 2 ? `${parts[parts.length - 1].toLowerCase()} ${parts[0][0].toLowerCase()}` : String(n || '').trim().toLowerCase();
+}
+async function groupRosterRediscover(runId) {
+  const st = _grosterData[runId]; if (!st) return;
+  const btn = document.getElementById('groster-rediscover-' + runId), msg = document.getElementById('groster-msg-' + runId);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:10px;height:10px"></span> Re-discovering…'; }
+  if (msg) msg.textContent = 'Reading the website, the NPI registry and Google — 20–60 seconds.';
+  try {
+    const d = st.d;
+    let website = '';
+    try { const w = await api(`/api/org/website?name=${encodeURIComponent(d.name)}&city=${encodeURIComponent(d.city)}&state=${encodeURIComponent(d.state)}`); if (w.ok) { const wj = await w.json(); website = wj.website || ''; } } catch (e) {}
+    const body = JSON.stringify({ entity_name: d.name, city: d.city, state: d.state, website: website || undefined, force: true });
+    const [rl, rp] = await Promise.all([
+      api('/api/practice/siblings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }),
+      api('/api/physician/resolve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }),
+    ]);
+    if (!rl.ok) throw new Error(await errDetail(rl, 'Location discovery failed'));
+    if (!rp.ok) throw new Error(await errDetail(rp, 'Physician discovery failed'));
+    const locs = (await rl.json()).siblings || [], phys = (await rp.json()).physicians || [];
+    let addedL = 0, addedP = 0;
+    const lkeys = new Set(d.locations.map(l => l.place_id || '').filter(Boolean)), lnames = new Set(d.locations.map(l => String(l.name || '').toLowerCase()));
+    locs.forEach(l => {
+      const hit = d.locations.find(x => (l.place_id && x.place_id === l.place_id) || (String(x.name || '').toLowerCase() === String(l.name || '').toLowerCase()));
+      if (hit) { hit.sources = l.sources || hit.sources; if (!hit.address && l.address) hit.address = l.address; if (!hit.place_id && l.place_id) hit.place_id = l.place_id; return; }
+      d.locations.push({ ...l, confirmed: false, missing: false, new: true }); addedL++;
+    });
+    const pkeys = new Set(d.physicians.map(p => _rosterNameKey(p.name)));
+    phys.forEach(p => {
+      const hit = d.physicians.find(x => (p.npi && x.npi === p.npi) || _rosterNameKey(x.name) === _rosterNameKey(p.name));
+      if (hit) { hit.sources = p.sources || hit.sources; if (!hit.npi && p.npi) hit.npi = p.npi; if (!hit.credential && p.credential) hit.credential = p.credential; if (!hit.specialty && p.specialty) hit.specialty = p.specialty; hit.npi_missing = !!p.npi_missing; hit.website_missing = !!p.website_missing; return; }
+      d.physicians.push({ ...p, confirmed: false, missing: false, new: true }); addedP++;
+    });
+    groupRosterRender(runId);
+    const m2 = document.getElementById('groster-msg-' + runId);
+    if (m2) m2.textContent = `Re-discovered: ${locs.length} office${locs.length === 1 ? '' : 's'} and ${phys.length} physician${phys.length === 1 ? '' : 's'} found; ${addedL + addedP} new item${addedL + addedP === 1 ? '' : 's'} added (unticked). Tick what belongs, then Save.`;
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '↻ Re-discover now'; }
+    if (msg) msg.textContent = e.message;
+  }
 }
 function groupRosterAdd(runId, kind) {
   const st = _grosterData[runId]; if (!st) return;

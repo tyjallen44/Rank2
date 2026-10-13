@@ -4000,3 +4000,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Resolver / drift for a brand made of generic words ("Advanced Orthopaedics and Sports Medicine") | Google listings like "Austin Orthopedics and Sports Medicine" no longer count as the brand (a distinctive word, or the acronym, is required); the roster-drift flag no longer lists dozens of unrelated clinics. [ui] |
 | T5 | Physician directory parse | Link words are stripped from names ("Aaron Hanyu-Deutmeyer Click" → "Aaron Hanyu-Deutmeyer"), so no junk duplicate rows. [ui] |
 | R1 | Unit | `tests/test_location_resolver.py`, `test_physician_resolver.py`, `test_groups.py` pass. |
+
+## GROUPS-ROSTER-REDISCOVER — Re-discover inside Fix roster (2026-10-13)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → expand → ✎ Fix roster → **↻ Re-discover now** | Runs the location and physician resolvers live (website → NPI → Google, 20–60 s); results merge into the lists: existing entries gain source chips / NPIs, genuinely new offices or physicians appear with a "new" chip, unticked. Message reports counts. Save then confirms what is ticked. [ui] |
+| R1 | Regression | Re-discover never removes or unticks existing entries; Save / Cancel unchanged. |
