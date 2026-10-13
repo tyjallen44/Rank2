@@ -79,10 +79,13 @@ def check_result(d: dict, *, group: Optional[dict] = None, benchmark_ready: bool
     flags: list[dict] = []
     practice = _is_practice(d)
 
-    def add(fid: str, level: str, detail: str) -> None:
+    def add(fid: str, level: str, detail: str, items: Optional[list] = None) -> None:
         # kind: "report" = the coordinator can act (re-run / fix roster); "finding" = the organization's
         # problem, already written up in the PDF — informational on the group page, never "needs attention".
-        flags.append({"id": fid, "label": LABELS[fid], "detail": detail, "level": level, "kind": KIND.get(fid, "report")})
+        f = {"id": fid, "label": LABELS[fid], "detail": detail, "level": level, "kind": KIND.get(fid, "report")}
+        if items:
+            f["items"] = list(items)
+        flags.append(f)
 
     if _score(d) is None:
         add("no_score", FIX, "The run finished without a Pulse Score; re-run it.")
@@ -145,7 +148,7 @@ def check_result(d: dict, *, group: Optional[dict] = None, benchmark_ready: bool
         probs = _lq_issues(lq)
         if probs:
             closed = (lq.get("status") or {}).get("closed") or []
-            add("listing_quality", FIX if closed else WARN, " ".join(probs[:3]) + (" …" if len(probs) > 3 else ""))
+            add("listing_quality", FIX if closed else WARN, probs[0] + (f" (+{len(probs) - 1} more in the PDF)" if len(probs) > 1 else ""), items=probs)
 
     if benchmark_ready and not ((d.get("group_context") or {}).get("ready")):
         add("benchmark", WARN, "The group now prints a rank and median, but this report predates that; re-run to include the benchmark.")

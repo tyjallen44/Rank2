@@ -119,33 +119,38 @@ def audit(*, offices: list[dict], profiles: list[dict], nppes: list[dict], physi
     }
 
 
+def _names(xs: list, n: int = 3) -> str:
+    xs = [str(x) for x in xs if x]
+    return ", ".join(xs[:n]) + (f" and {len(xs) - n} more" if len(xs) > n else "")
+
+
 def issues(q: dict) -> list[str]:
     """Short plain sentences for the report and the group page; empty when everything checks out."""
     out: list[str] = []
     ph, ad, npi, cat, st, dup, rec, phy = (q.get(k) or {} for k in ("phone", "address", "npi", "category", "status", "duplicates", "recency", "physicians"))
     if ph.get("mismatch"):
         out.append(f"{len(ph['mismatch'])} office{'s' if len(ph['mismatch']) != 1 else ''} where the Google phone differs from the website: "
-                   + "; ".join(f"{m['name']} (site {m['website']}, Google {m['google']})" for m in ph["mismatch"][:4]) + ".")
+                   + "; ".join(f"{m['name']} (site {m['website']}, Google {m['google']})" for m in ph["mismatch"][:3]) + (f" and {len(ph['mismatch']) - 3} more" if len(ph["mismatch"]) > 3 else "") + ".")
     if ad.get("mismatch"):
         out.append(f"{len(ad['mismatch'])} office{'s' if len(ad['mismatch']) != 1 else ''} where the Google address differs from the website: "
-                   + "; ".join(m["name"] for m in ad["mismatch"][:6]) + ".")
+                   + _names([m["name"] for m in ad["mismatch"]]) + ".")
     if npi.get("missing") and npi.get("records"):
-        out.append(f"{len(npi['missing'])} office{'s' if len(npi['missing']) != 1 else ''} with no organizational NPI address in the registry: " + ", ".join(npi["missing"][:6]) + ".")
+        out.append(f"{len(npi['missing'])} office{'s' if len(npi['missing']) != 1 else ''} with no organizational NPI address in the registry: " + _names(npi["missing"]) + ".")
     if cat.get("counts") and not cat.get("consistent"):
         out.append("Offices use " + str(len(cat["counts"])) + " different Google categories (" + ", ".join(f"{k.replace('_', ' ')} ×{v}" for k, v in list(cat["counts"].items())[:4]) + ") — pick one.")
     if cat.get("generic"):
-        out.append(f"{len(cat['generic'])} office{'s' if len(cat['generic']) != 1 else ''} categorized generically on Google (" + ", ".join(cat["generic"][:5]) + ") rather than by specialty.")
+        out.append(f"{len(cat['generic'])} office{'s' if len(cat['generic']) != 1 else ''} categorized generically on Google (" + _names(cat["generic"]) + ") rather than by specialty.")
     if st.get("closed"):
-        out.append(f"{len(st['closed'])} Google profile{'s' if len(st['closed']) != 1 else ''} marked closed still live: " + ", ".join(st["closed"][:5]) + ".")
+        out.append(f"{len(st['closed'])} Google profile{'s' if len(st['closed']) != 1 else ''} marked closed still live: " + _names(st["closed"]) + ".")
     if isinstance(dup, list) and dup:
-        out.append(f"{len(dup)} second Google profile{'s' if len(dup) != 1 else ''} at an office's address: " + "; ".join(f"“{d.get('name')}” at {d.get('of')}" for d in dup[:4]) + ".")
+        out.append(f"{len(dup)} second Google profile{'s' if len(dup) != 1 else ''} at an office's address: " + "; ".join(f"“{d.get('name')}” at {d.get('of')}" for d in dup[:3]) + (f" and {len(dup) - 3} more" if len(dup) > 3 else "") + ".")
     if rec.get("stale"):
-        out.append(f"{len(rec['stale'])} office{'s' if len(rec['stale']) != 1 else ''} with no Google review in {rec.get('days', STALE_REVIEW_DAYS)} days: " + ", ".join(rec["stale"][:6]) + ".")
+        out.append(f"{len(rec['stale'])} office{'s' if len(rec['stale']) != 1 else ''} with no Google review in {rec.get('days', STALE_REVIEW_DAYS)} days: " + _names(rec["stale"]) + ".")
     if rec.get("no_reviews"):
-        out.append(f"{len(rec['no_reviews'])} office profile{'s' if len(rec['no_reviews']) != 1 else ''} with no reviews at all: " + ", ".join(rec["no_reviews"][:6]) + ".")
+        out.append(f"{len(rec['no_reviews'])} office profile{'s' if len(rec['no_reviews']) != 1 else ''} with no reviews at all: " + _names(rec["no_reviews"]) + ".")
     if phy.get("elsewhere"):
         out.append(f"{len(phy['elsewhere'])} physician Google profile{'s' if len(phy['elsewhere']) != 1 else ''} pointing at an address that is not one of the practice's offices: "
-                   + ", ".join(phy["elsewhere"][:6]) + ".")
+                   + _names(phy["elsewhere"]) + ".")
     return out
 
 

@@ -7949,6 +7949,7 @@ async function groupCreate() {
   } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
 }
 let _groupPoll = null;
+let _groupSig = '';                // signature of the last render (members + running jobs) for the quiet poll
 function _groupStopPoll() { if (_groupPoll) { clearInterval(_groupPoll); _groupPoll = null; } }
 function groupsFilter(q) {
   const needle = (q || '').trim().toLowerCase();
@@ -8125,9 +8126,20 @@ async function openGroupPage(id, highlightRunId) {
   groupsFilter(sb ? sb.value : '');
   if (highlightRunId) { const tr = document.getElementById('grow-' + highlightRunId); if (tr) tr.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   _groupStopPoll();
-  if (running.length) _groupPoll = setInterval(() => {
-    if (!document.getElementById('page-groups')?.classList.contains('active')) { _groupStopPoll(); return; }
-    openGroupPage(id);
+  // Re-runs in progress: poll quietly and re-render ONLY when a run finished or started (no flashing),
+  // keeping whichever rows the user had expanded open.
+  _groupSig = JSON.stringify([ms.map(m => [m.run_id, m.score, m.generated_at]), running.map(r => r.job_id)]);
+  if (running.length) _groupPoll = setInterval(async () => {
+    if (!document.getElementById('page-groups')?.classList.contains('active') || _groupOpenId !== id) { _groupStopPoll(); return; }
+    try {
+      const r = await api('/api/groups/' + encodeURIComponent(id)); if (!r.ok) return;
+      const d2 = await r.json();
+      const sig = JSON.stringify([(d2.members || []).map(m => [m.run_id, m.score, m.generated_at]), (d2.running || []).map(r => r.job_id)]);
+      if (sig === _groupSig) return;
+      const open = [...document.querySelectorAll('#groups-body tr[id^="gdet-"]:not(.hidden)')].map(tr => tr.id.replace(/^gdet-/, ''));
+      await openGroupPage(id);
+      for (const rid of open) { if (document.getElementById('gdet-' + rid)) groupToggleMember(id, rid); }
+    } catch (e) { /* next tick */ }
   }, 20000);
 }
 async function groupRerun(btn, gid, runId, name) {
@@ -8237,7 +8249,7 @@ async function groupToggleMember(gid, runId) {
     const deliver = H('Before sending (delivery check) — your action')
       + (fl.length ? UL(fl.map(f => `<li><strong style="color:${f.level === 'fix' ? '#991b1b' : '#7a5a00'}">${_learnEsc(f.label)}</strong><div style="color:#4a5a6a">${_learnEsc(f.detail)}</div></li>`))
                    : '<div style="font-size:13px;color:#2e9e5b">✓ Nothing flagged — the report has every section the group expects.</div>')
-      + (fnd.length ? H('Findings for the organization (in their PDF)') + UL(fnd.map(f => `<li><strong>${_learnEsc(f.label)}</strong><div>${_learnEsc(f.detail)}</div></li>`), '#4a5a6a') : '');
+      + (fnd.length ? H('Findings for the organization (in their PDF)') + UL(fnd.map(f => `<li><strong>${_learnEsc(f.label)}</strong>${(f.items || []).length ? `<ul class="gdet-list" style="margin-top:2px">${f.items.map(x => `<li>${_learnEsc(x)}</li>`).join('')}</ul>` : `<div>${_learnEsc(f.detail)}</div>`}</li>`), '#4a5a6a') : '');
     const m0 = _groupMembersById[runId] || {};
     const roster = (m0.entity_type === 'practice' || m0.entity_type === 'service_line')
       ? `<button class="btn btn-ghost btn-sm" onclick="groupRosterOpen('${gid}','${runId}')" title="Confirm this organization's locations and physicians once; every later run — form, upload, re-run — uses the confirmed roster and flags anything that drifts">✎ Fix roster</button>
