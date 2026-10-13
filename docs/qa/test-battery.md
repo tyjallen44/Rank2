@@ -3979,3 +3979,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Deep Diagnostic from the sidebar, then pick a group in "Add this report to a group" | Ticking a group turns the spot check on; the user can still untick it. Choosing "— none —" leaves it as it was. [ui] |
 | T3 | Deep Diagnostic from the sidebar with a group remembered from last time | Spot check is ticked on open. [ui] |
 | R1 | Regression | Upload-a-list into a group and group ↻ Re-run already ran the spot check; unchanged. Runs with no group keep the account's default. |
+
+## GROUPS-RLDATIX-CUSTOMER — customer flag + clearer expanded row (2026-10-13)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → click an organization → expanded row | Sections in order with headings: Score history · AI Readiness Checklist (pass count, then "To fix (N)" and "Partial (N)" as bullet lists) · Before sending — your action (bullets, label bold with the reason beneath) · Findings for the organization (bullets) · Organization (RLDatix customer checkbox, ✎ Fix roster). [ui] |
+| T2 | Tick "RLDatix customer" | Saves at once (flash), the row's new **RLDatix** column shows "✓ customer"; untick clears it. Survives reload and re-runs (stored on the organization, not the run). [ui] |
+| T3 | Re-run that organization (or any later report for it) | The cover shows a small "RLDATIX CUSTOMER" pill under the confidentiality line. Organizations not flagged show nothing. [pdf] |
+| T4 | ⬇ CSV | New "RLDatix customer" column (yes / blank). [api] |
+| R1 | Regression | Fix roster, Re-run, prospects, delivery badges unchanged; `tests/test_groups.py` passes. |

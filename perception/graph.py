@@ -80,7 +80,11 @@ def init_graph(con=None) -> None:
             removed_at    TIMESTAMP
         )""")
     for stmt in ("CREATE INDEX IF NOT EXISTS idx_org_locations_key ON org_locations (org_key)",
-                 "CREATE INDEX IF NOT EXISTS idx_org_physicians_key ON org_physicians (org_key)"):
+                 "CREATE INDEX IF NOT EXISTS idx_org_physicians_key ON org_physicians (org_key)",
+                 # RLDatix customer flag (set on the group page; printed on the report cover)
+                 "ALTER TABLE org_graph ADD COLUMN is_customer BOOLEAN",
+                 "ALTER TABLE org_graph ADD COLUMN customer_set_by VARCHAR",
+                 "ALTER TABLE org_graph ADD COLUMN customer_set_at TIMESTAMP"):
         try:
             con.execute(stmt)
         except Exception:
@@ -215,6 +219,54 @@ def get_org(name: str, city: str, state: str, *, confirmed_only: bool = True) ->
         # passed through a form run is soft — fresh findings still join it.
         org["hard"] = org.get("source") == "roster_edit"
         return org
+    finally:
+        con.close()
+
+
+def set_customer(name: str, city: str, state: str, flag: bool, by: str | None = None, entity_type: str = "practice") -> None:
+    """Mark (or unmark) the organization as an RLDatix customer. Creates an unconfirmed org row when none exists."""
+    key = org_key(name, city, state)
+    now = datetime.utcnow()
+    con = get_connection()
+    try:
+        init_graph(con)
+        if not con.execute("SELECT 1 FROM org_graph WHERE org_key = ?", [key]).fetchone():
+            con.execute("""INSERT INTO org_graph (org_key, name, entity_type, city, state, source, updated_at)
+                           VALUES (?, ?, ?, ?, ?, 'analysis', ?)""", [key, name, entity_type or "practice", city, state, now])
+        con.execute("UPDATE org_graph SET is_customer = ?, customer_set_by = ?, customer_set_at = ?, updated_at = ? WHERE org_key = ?",
+                    [bool(flag), by or "", now, now, key])
+    finally:
+        con.close()
+
+
+def is_customer(name: str, city: str, state: str) -> bool:
+    con = get_connection()
+    try:
+        init_graph(con)
+        row = con.execute("SELECT is_customer FROM org_graph WHERE org_key = ?", [org_key(name, city, state)]).fetchone()
+        return bool(row and row[0])
+    except Exception:
+        return False
+    finally:
+        con.close()
+
+
+def customer_flags(items: list) -> dict:
+    """{org_key: True} for every (name, city, state) in `items` that is flagged as a customer."""
+    keys = {org_key(n, c, s) for n, c, s in items if n}
+    if not keys:
+        return {}
+    con = get_connection()
+    try:
+        init_graph(con)
+        out = {}
+        for k in keys:
+            row = con.execute("SELECT is_customer FROM org_graph WHERE org_key = ?", [k]).fetchone()
+            if row and row[0]:
+                out[k] = True
+        return out
+    except Exception:
+        return {}
     finally:
         con.close()
 

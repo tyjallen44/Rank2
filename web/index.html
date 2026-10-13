@@ -359,6 +359,12 @@ input[type="url"]::placeholder, textarea::placeholder {
 .btn-ghost    { background: transparent;    color: var(--muted); border: 1.5px solid var(--border); }
 .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: #9abfc4; }
 .btn-ghost.on { background: #fdf3dc; color: #7a5a00; border-color: #e3c77a; }
+.gdet { display: flex; flex-direction: column; gap: 2px; }
+.gdet-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid var(--border); }
+.gdet-h:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.gdet-sub { font-size: 12px; font-weight: 700; margin: 6px 0 2px; }
+.gdet-list { margin: 0 0 4px; padding-left: 20px; font-size: 13px; line-height: 1.45; }
+.gdet-list li { margin: 2px 0; }
 .btn-sm       { padding: 6px 13px; font-size: 13px; }
 /* Location importer: two obvious ways in (SocialClimb export vs any list) */
 .li-mode { flex:1; min-width:220px; display:flex; gap:9px; align-items:flex-start; padding:9px 11px; border:1.5px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; }
@@ -8067,13 +8073,14 @@ async function openGroupPage(id, highlightRunId) {
       <td style="text-align:center;font-weight:800;font-size:16px;color:${_scoreColor(m.score)}">${m.score ?? '—'}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${pv.map((v, i) => `${pl[i]} <strong style="color:${_scoreColor(v)}">${v ?? '—'}</strong>`).join(' · ')}</td>
       <td>${_confChip(m.confidence, '')}${flagBadge}</td>
+      <td style="text-align:center" id="gcust-${m.run_id}">${m.rldatix_customer ? '<span class="badge bg-teal" style="font-size:10px" title="RLDatix customer">✓ customer</span>' : '<span style="color:#b0b8c0">—</span>'}</td>
       <td style="font-size:12px;color:var(--muted);white-space:nowrap">${m.generated_at || ''}</td>
       <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
       <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Download this organization's latest report">⬇ PDF</a>` : ''}
         <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member: it joins the ranking and the median' : 'Mark as a prospect: shown in amber with the rank it would hold, left out of the median and ranks'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')" title="Take this organization out of the group — every run of it in this group; the reports stay in History">Remove</button>` : ''}</td></tr>
-      <tr id="gdet-${m.run_id}" class="hidden"><td colspan="8" style="background:#f6fafa;padding:10px 14px"></td></tr>`;
+      <tr id="gdet-${m.run_id}" class="hidden"><td colspan="9" style="background:#f6fafa;padding:10px 14px"></td></tr>`;
   }).join('');
   const bench = b.scored ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px">
       <div><span style="color:var(--muted)">Organizations</span> <strong>${b.scored}</strong></div>
@@ -8113,7 +8120,7 @@ async function openGroupPage(id, highlightRunId) {
       <div id="ge-err" class="err hidden mt8"></div>
     </div>
     ${running.length ? `<div style="margin-top:10px;font-size:12px;color:var(--teal)"><span class="spinner" style="width:10px;height:10px"></span> ${running.length} re-run${running.length === 1 ? '' : 's'} in progress — this page refreshes every 20 seconds.</div>` : ''}
-    ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center" title="Rank among members by Pulse Score; ties share a rank; prospects show the rank they would hold">#</th><th title="Click a name to see its score history in this group and its latest checklist">Organization</th><th style="text-align:center" title="Pulse Score out of 100 from the latest report">Pulse Score</th><th title="The four pillar scores of the organization's rubric">Pillars</th><th title="How much public data sits behind the score, plus the delivery check: a ⚠ badge lists what the report is missing before it goes out">Evidence</th><th title="Date of the latest report">Report</th><th title="Who ran the latest report">Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center" title="Rank among members by Pulse Score; ties share a rank; prospects show the rank they would hold">#</th><th title="Click a name to see its score history in this group and its latest checklist">Organization</th><th style="text-align:center" title="Pulse Score out of 100 from the latest report">Pulse Score</th><th title="The four pillar scores of the organization's rubric">Pillars</th><th title="How much public data sits behind the score, plus the delivery check: a ⚠ badge lists what the report is missing before it goes out">Evidence</th><th style="text-align:center" title="Marked as an RLDatix customer (tick the box in the expanded row); printed on the report cover">RLDatix</th><th title="Date of the latest report">Report</th><th title="Who ran the latest report">Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
                : '<div class="empty" style="margin-top:12px"><div>No members yet. Pick this group on the Deep Diagnostic form or an Event Prep upload, or add runs from History.</div></div>'}`;
   groupsFilter(sb ? sb.value : '');
   if (highlightRunId) { const tr = document.getElementById('grow-' + highlightRunId); if (tr) tr.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -8210,26 +8217,35 @@ async function groupToggleMember(gid, runId) {
     if (!r.ok) throw new Error(await errDetail(r, 'Could not load'));
     const d = await r.json();
     const runs = d.runs || [];
-    const hist = runs.length ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px">Score history in this group</div>
+    const hist = runs.length ? `<div class="gdet-h">Score history in this group</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${runs.map(x => `<div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 10px;min-width:110px${x.run_id === runId ? ';border-color:var(--teal)' : ''}">
         <div style="font-size:11px;color:var(--muted)">${x.generated_at || ''}${x.ran_by ? ' · ' + _learnEsc(String(x.ran_by).split('@')[0]) : ''}</div>
         <div style="font-size:18px;font-weight:800;color:${_scoreColor(x.score)}">${x.score ?? '—'}${x.delta != null ? ` <span style="font-size:11px;color:${x.delta > 0 ? '#2e9e5b' : x.delta < 0 ? '#d94f4f' : 'var(--muted)'}">${x.delta > 0 ? '+' : ''}${x.delta}</span>` : ''}</div>
         <div style="font-size:10px;color:var(--muted)">${['clinical_outcomes_safety','credentials_recognition','patient_experience_reviews','access_fit'].map(k => x.pillars?.[k] ?? '—').join(' · ')}</div></div>`).join('')}</div>` : '';
+    const H = (t) => `<div class="gdet-h">${t}</div>`;
+    const UL = (items, color) => `<ul class="gdet-list"${color ? ` style="color:${color}"` : ''}>${items.join('')}</ul>`;
     const c = d.checklist;
-    const check = c ? `<div style="margin-top:10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px">AI Readiness Checklist (latest run)</div>
-      <div style="font-size:13px"><strong>${c.pass} of ${c.checked} checks pass</strong>${c.failing.length ? ` — to fix: ${c.failing.map(_learnEsc).join(', ')}` : ''}${c.partial.length ? ` · partial: ${c.partial.map(_learnEsc).join(', ')}` : ''}${c.na ? ` · ${c.na} not checked` : ''}</div>` : '';
+    let check = '';
+    if (c) {
+      const parts = [];
+      if (c.failing.length) parts.push(`<div class="gdet-sub" style="color:#991b1b">To fix (${c.failing.length})</div>` + UL(c.failing.map(x => `<li>${_learnEsc(x)}</li>`)));
+      if (c.partial.length) parts.push(`<div class="gdet-sub" style="color:#7a5a00">Partial (${c.partial.length})</div>` + UL(c.partial.map(x => `<li>${_learnEsc(x)}</li>`)));
+      check = H('AI Readiness Checklist (latest run)') + `<div style="font-size:13px;margin-bottom:4px"><strong>${c.pass} of ${c.checked} checks pass</strong>${c.na ? ` <span style="color:var(--muted)">· ${c.na} not checked</span>` : ''}</div>` + parts.join('');
+    }
     const allFl = (_groupMembersById[runId] || {}).flags || [];
     const fl = allFl.filter(f => (f.kind || 'report') === 'report'), fnd = allFl.filter(f => f.kind === 'finding');
-    const deliver = `<div style="margin-top:10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px">Before sending (delivery check) — your action</div>
-      ${fl.length ? `<ul style="margin:0;padding-left:18px;font-size:13px">${fl.map(f => `<li><strong style="color:${f.level === 'fix' ? '#991b1b' : '#7a5a00'}">${_learnEsc(f.label)}</strong> — ${_learnEsc(f.detail)}</li>`).join('')}</ul>`
-                  : '<div style="font-size:13px;color:#2e9e5b">✓ Nothing flagged — the report has every section the group expects.</div>'}
-      ${fnd.length ? `<div style="margin-top:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px">Findings for the organization (in their PDF)</div>
-      <ul style="margin:0;padding-left:18px;font-size:13px;color:#4a5a6a">${fnd.map(f => `<li><strong>${_learnEsc(f.label)}</strong> — ${_learnEsc(f.detail)}</li>`).join('')}</ul>` : ''}`;
+    const deliver = H('Before sending (delivery check) — your action')
+      + (fl.length ? UL(fl.map(f => `<li><strong style="color:${f.level === 'fix' ? '#991b1b' : '#7a5a00'}">${_learnEsc(f.label)}</strong><div style="color:#4a5a6a">${_learnEsc(f.detail)}</div></li>`))
+                   : '<div style="font-size:13px;color:#2e9e5b">✓ Nothing flagged — the report has every section the group expects.</div>')
+      + (fnd.length ? H('Findings for the organization (in their PDF)') + UL(fnd.map(f => `<li><strong>${_learnEsc(f.label)}</strong><div>${_learnEsc(f.detail)}</div></li>`), '#4a5a6a') : '');
     const m0 = _groupMembersById[runId] || {};
     const roster = (m0.entity_type === 'practice' || m0.entity_type === 'service_line')
-      ? `<div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="groupRosterOpen('${gid}','${runId}')" title="Confirm this organization's locations and physicians once; every later run — form, upload, re-run — uses the confirmed roster and flags anything that drifts">✎ Fix roster</button>
-         <span style="font-size:11px;color:var(--muted);margin-left:6px">Locations and physicians, confirmed once for every later run.</span></div><div id="groster-${runId}"></div>` : '';
-    cell.innerHTML = (hist + check + deliver + roster) || '<span style="color:var(--muted)">No detail available.</span>';
+      ? `<button class="btn btn-ghost btn-sm" onclick="groupRosterOpen('${gid}','${runId}')" title="Confirm this organization's locations and physicians once; every later run — form, upload, re-run — uses the confirmed roster and flags anything that drifts">✎ Fix roster</button>
+         <span style="font-size:11px;color:var(--muted);margin-left:6px">Locations and physicians, confirmed once for every later run.</span>` : '';
+    const org = H('Organization') + `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0 0 8px" title="Marks this organization as an RLDatix customer: a ✓ in the RLDatix column here and a small indicator on the cover of every later report">
+        <input type="checkbox" ${m0.rldatix_customer ? 'checked' : ''} onchange="groupSetCustomer('${gid}','${runId}',this.checked)" style="accent-color:var(--teal);width:15px;height:15px"> RLDatix customer</label>
+      ${roster}<div id="groster-${runId}"></div>`;
+    cell.innerHTML = `<div class="gdet">${hist}${check}${deliver}${org}</div>`;
   } catch (e) { cell.innerHTML = `<span class="err">${_learnEsc(e.message)}</span>`; }
 }
 async function groupFixRosterFromCompletion(gid, runId) {
@@ -8305,6 +8321,19 @@ async function groupRosterSave(runId) {
     if (msg) msg.innerHTML = `✓ Confirmed ${d.locations} location${d.locations === 1 ? '' : 's'} and ${d.physicians} physician${d.physicians === 1 ? '' : 's'}. Use ↻ Re-run to produce the report with this roster.`;
     _flash('Roster confirmed');
   } catch (e) { if (msg) msg.textContent = e.message; }
+}
+async function groupSetCustomer(gid, runId, flag) {
+  const m = _groupMembersById[runId] || {};
+  const lp = String(m.location || '').split(','); const city = (lp[0] || '').trim(), state = (lp[1] || '').trim();
+  try {
+    const r = await api('/api/org/customer', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: m.entity_name || '', city, state, customer: !!flag, entity_type: m.entity_type || 'practice', group_id: gid }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not save'));
+    m.rldatix_customer = !!flag;
+    const cell = document.getElementById('gcust-' + runId);
+    if (cell) cell.innerHTML = flag ? '<span class="badge bg-teal" style="font-size:10px" title="RLDatix customer">✓ customer</span>' : '<span style="color:#b0b8c0">—</span>';
+    _flash(flag ? `${m.entity_name || 'Organization'} marked as an RLDatix customer` : `${m.entity_name || 'Organization'} no longer marked as a customer`);
+  } catch (e) { alert(e.message); }
 }
 async function _groupPut(id, body, msg) {
   try {

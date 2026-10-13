@@ -88,3 +88,10 @@ def test_remove_run_takes_the_whole_organization(monkeypatch):
     assert deleted == ["r-new", "r-old"]
     calls.clear()
     assert G.remove_run("g", "r-new", whole_org=False) == 1 and [p[1] for s, p in calls if s.startswith("DELETE")] == ["r-new"]
+
+
+def test_customer_cover_line():
+    from types import SimpleNamespace
+    from perception.deep_pdf import _customer_cover_line
+    assert "RLDatix customer" in _customer_cover_line(SimpleNamespace(rldatix_customer=True, entity_name="X", location="Memphis, TN"))
+    assert _customer_cover_line(SimpleNamespace(rldatix_customer=False, entity_name="X", location="Memphis, TN")) == ""

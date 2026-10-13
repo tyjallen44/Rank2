@@ -269,6 +269,18 @@ def members(group_id: str) -> list[dict]:
     for m in unscored:
         m["rank"] = None
     ranked = members_scored + prospects_scored + unscored
+    # RLDatix customer flag (entity graph), keyed on name + "City, ST".
+    try:
+        from .graph import customer_flags, org_key as _ok
+        def _cs(m):
+            c, _, st = (m.get("location") or "").partition(",")
+            return (m.get("entity_name") or "", c.strip(), st.strip())
+        flags = customer_flags([_cs(m) for m in ranked])
+        for m in ranked:
+            m["rldatix_customer"] = bool(flags.get(_ok(*_cs(m))))
+    except Exception:
+        for m in ranked:
+            m["rldatix_customer"] = False
     # Delivery check: what each latest report is missing before it goes out.
     from .delivery import check_result, spotcheck_required
     g = get_group(group_id) or {}

@@ -175,6 +175,7 @@ def _cover(result: AnalysisResult, p: Optional[RankedProvider], cfg: dict, logo_
   <div class="cover-subtitle">{subtitle}</div>
   <div class="cover-confidential">Confidential &nbsp;·&nbsp; Prepared exclusively for {_e(name)}</div>
   {_group_cover_line(result)}
+  {_customer_cover_line(result)}
   <div class="cover-score-center">
     <div style="line-height:1"><span class="cover-score-num" style="color:{accent}">{score_str}</span><span class="cover-score-out-of">/100</span></div>
     <div class="cover-score-lbl">AI Visibility Score</div>
@@ -205,6 +206,24 @@ def _front_door_rating(p: Optional[RankedProvider]) -> str:
     if fd.verified and fd.rating is not None:
         return f"{fd.rating:.1f}★"
     return ""
+
+
+def _customer_cover_line(result: AnalysisResult) -> str:
+    """Small 'RLDatix customer' pill under the confidentiality line when the organization is flagged
+    (on the result, else looked up in the entity graph so every render path shows it)."""
+    flag = getattr(result, "rldatix_customer", None)
+    if flag is None:
+        try:
+            from .graph import is_customer
+            c, _, st = (result.location or "").partition(",")
+            flag = is_customer(result.entity_name or "", c.strip(), st.strip())
+        except Exception:
+            flag = False
+    if not flag:
+        return ""
+    return ('<div style="margin:-20px 0 24px"><span style="display:inline-block;font-size:7.5pt;font-weight:700;letter-spacing:0.1em;'
+            'text-transform:uppercase;color:#fff;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.45);'
+            'border-radius:12px;padding:3px 10px">RLDatix customer</span></div>')
 
 
 def _group_cover_line(result: AnalysisResult) -> str:

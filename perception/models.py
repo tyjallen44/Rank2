@@ -302,6 +302,7 @@ class AnalysisResult(BaseModel):
     location_resolution: Optional[dict] = None  # how the office roster was found (website / NPPES / Google / model) + gaps (perception/location_resolver.py)
     physician_resolution: Optional[dict] = None # how the physician roster was found (website directory / NPPES / model) + gaps (perception/physician_resolver.py)
     listing_quality: Optional[dict] = None      # NAP consistency, category, status, duplicates, review recency, physician↔office (perception/listing_quality.py)
+    rldatix_customer: Optional[bool] = None     # flagged on the group page; a small indicator on the cover (perception/graph.py set_customer)
     top_recommendation: str = ""
     practical_advice: list[str] = Field(default_factory=list)
     improvement_sections: list[ImprovementSection] = Field(default_factory=list)

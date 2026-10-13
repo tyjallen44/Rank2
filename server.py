@@ -1121,6 +1121,12 @@ def _group_attach(result, job: dict, emit=None) -> None:
         add_runs(gid, [result.run_id], (job or {}).get("email") or (job or {}).get("role") or "",
                  status=((job or {}).get("group_role") or "member"))
         ctx = context_for_pdf(gid, result.run_id, result.entity_name or "", result.location or "")
+        try:
+            from perception.graph import is_customer as _is_cust
+            _c, _, _st = (result.location or "").partition(",")
+            result.rldatix_customer = _is_cust(result.entity_name or "", _c.strip(), _st.strip())
+        except Exception:
+            pass
         if ctx:
             result.group_context = ctx
             try:
@@ -1345,7 +1351,7 @@ async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_pay
     g = _group_visible(payload, group_id)
     buf = _io.StringIO(); w = _csv.writer(buf)
     w.writerow(["Rank", "Status", "Organization", "Location", "Specialty", "Type", "Pulse Score", "Pillar 1", "Pillar 2", "Pillar 3", "Pillar 4",
-                "Evidence", "Website access", "Needs attention", "Findings", "Report date", "Run by", "Run id"])
+                "Evidence", "Website access", "Needs attention", "Findings", "RLDatix customer", "Report date", "Run by", "Run id"])
     for m in members(group_id):
         p = m["pillars"]
         w.writerow([m.get("rank") or (f"would rank {m['would_rank']}" if m.get("would_rank") else ""), m.get("status") or "member",
@@ -1354,6 +1360,7 @@ async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_pay
                     p.get("patient_experience_reviews"), p.get("access_fit"), m.get("confidence") or "", m.get("website_status") or "",
                     "; ".join(f["label"] for f in (m.get("flags") or []) if f.get("kind", "report") == "report"),
                     "; ".join(f["label"] for f in (m.get("flags") or []) if f.get("kind") == "finding"),
+                    "yes" if m.get("rldatix_customer") else "",
                     m.get("generated_at") or "", m.get("ran_by") or "", m["run_id"]])
     safe = re.sub(r"[^A-Za-z0-9]+", "-", g["name"]).strip("-")[:40] or "group"
     return Response(buf.getvalue(), media_type="text/csv",
@@ -6303,6 +6310,28 @@ async def org_roster_edit(name: str, city: str = "", state: str = "", run_id: st
         return {"name": nm, "city": ct, "state": st, "confirmed": confirmed, "hard": hard, "confirmed_by": org.get("confirmed_by"), "confirmed_at": org.get("confirmed_at"),
                 "entity_type": org.get("entity_type") or "practice", "locations": locs, "physicians": phys}
     return await asyncio.get_running_loop().run_in_executor(None, _go)
+
+
+class CustomerFlagRequest(BaseModel):
+    name: str
+    city: str
+    state: str
+    customer: bool
+    entity_type: str = "practice"
+    group_id: Optional[str] = None
+
+
+@app.put("/api/org/customer")
+async def org_customer_flag(req: CustomerFlagRequest, payload: dict = Depends(get_current_user_payload)):
+    """Mark an organization as an RLDatix customer (group page). Shown as a column on the group page and
+    as a small indicator on the cover of every later report."""
+    from perception.graph import set_customer
+    if req.group_id:
+        _group_visible(payload, req.group_id)
+    who = payload.get("email") or payload.get("name") or ""
+    await asyncio.get_running_loop().run_in_executor(None, lambda: set_customer(
+        _normalize_input(req.name), _normalize_input(req.city), (req.state or "").upper().strip(), req.customer, by=who, entity_type=req.entity_type))
+    return {"ok": True, "customer": req.customer}
 
 
 class RosterSaveRequest(BaseModel):
