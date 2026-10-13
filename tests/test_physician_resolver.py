@@ -86,3 +86,9 @@ def test_link_words_are_stripped_from_names():
     assert PR._clean_name("Aaron Hanyu-Deutmeyer Click") == "Aaron Hanyu-Deutmeyer"
     assert PR._clean_name("Jane Doe View Profile") == "Jane Doe"
     assert PR.name_key("Aaron Hanyu-Deutmeyer Click") == PR.name_key("Aaron Hanyu-Deutmeyer") or PR._clean_name("Aaron Hanyu-Deutmeyer Click") == "Aaron Hanyu-Deutmeyer"
+
+
+def test_button_words_in_front_of_names_are_stripped():
+    assert PR._clean_name("Now Darin Tessier") == "Darin Tessier"
+    assert PR._clean_name("Book Now Lydia Lee") == "Lydia Lee"
+    assert PR._clean_name("Darin Tessier") == "Darin Tessier"
