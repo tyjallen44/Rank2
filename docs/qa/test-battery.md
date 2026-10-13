@@ -3970,3 +3970,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Same PDF, Locations / Physicians sections | "Listing gaps" and "Listing quality" print in the body font inside the page margins (previously in a smaller font hanging into the left gutter). [pdf] |
 | T3 | Deep Diagnostic run from the form with a confirmed roster ("From your confirmed roster") | Locations and Physicians still show the confirmed list only, but now with Found-on marks, Google place ids, Listing gaps and Listing quality; offices or physicians the resolver found beyond the form's list are reported as drift, not added. [pdf] |
 | R1 | Regression | Network, Compare, Content and Trend PDFs unchanged (their renderers are separate). |
+
+## GROUPS-SPOTCHECK-DEFAULT — spot check on by default for group analyses (2026-10-13)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → "+ Add an organization" (any account) | The Deep Diagnostic form opens with the group selected AND "Ask the AI assistants what they actually say" ticked. [ui] |
+| T2 | Deep Diagnostic from the sidebar, then pick a group in "Add this report to a group" | Ticking a group turns the spot check on; the user can still untick it. Choosing "— none —" leaves it as it was. [ui] |
+| T3 | Deep Diagnostic from the sidebar with a group remembered from last time | Spot check is ticked on open. [ui] |
+| R1 | Regression | Upload-a-list into a group and group ↻ Re-run already ran the spot check; unchanged. Runs with no group keep the account's default. |

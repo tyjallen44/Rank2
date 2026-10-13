@@ -1867,7 +1867,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
             </label>
             <div style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" id="ir-group-wrap">
               <span class="agg-label" style="font-size:13px">Add this report to a group</span>
-              <select id="ir-group" class="fi" style="width:auto;min-width:220px;padding:6px 10px;font-size:13px" onchange="localStorage.setItem('rk2_last_group', this.value)"><option value="">— none —</option></select>
+              <select id="ir-group" class="fi" style="width:auto;min-width:220px;padding:6px 10px;font-size:13px" onchange="localStorage.setItem('rk2_last_group', this.value); _irGroupSpotcheck(this.value)"><option value="">— none —</option></select>
               <button class="btn btn-ghost btn-sm" onclick="groupCreateInline('ir-group')">New group…</button>
               <a href="#" class="help-link" onclick="showHelp('groups',event);return false">ⓘ What is this?</a>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer" title="Evaluate an organization that is not (yet) a member: it is shown separately in the group, left out of the group's median and ranks, and told where it would rank."><input type="checkbox" id="ir-group-prospect"> Not a member yet (prospect)</label>
@@ -4869,7 +4869,7 @@ function navigate(p) {
   document.getElementById('main').classList.toggle('patient-bg', p === 'patient');
   if (p === 'history') loadHistory();
   if (p === 'groups' && !_suppressGroupsLoad) { const lg = localStorage.getItem('rk2_last_group_open'); if (lg && _lastPage === 'groups') { localStorage.removeItem('rk2_last_group_open'); openGroupPage(lg); } else loadGroupsPage(); }
-  if (p === 'individual') _fillGroupSelect('ir-group');
+  if (p === 'individual') _fillGroupSelect('ir-group').then(() => _irGroupSpotcheck(document.getElementById('ir-group')?.value));
   if (p === 'events') _fillGroupSelect('ev-group').then(() => { const sel = document.getElementById('ev-group'); _evApplyGroupContext((_groupsCache || []).find(x => x.id === (sel ? sel.value : '')) || null); });
   if (p === 'admin') loadAdminPage();
   if (p === 'feedback') loadFeedback();
@@ -8178,10 +8178,16 @@ function _groupPrefillSpecialty(gid) {
   const sp = document.getElementById('ir-specialty');
   if (g && g.default_specialty && sp && !sp.value.trim()) sp.value = g.default_specialty;
 }
+// A report that joins a group always includes the spot check (what the assistants actually said) —
+// the group comparison depends on it. The user may still untick it.
+function _irGroupSpotcheck(gid) {
+  const cb = document.getElementById('ir-spotcheck');
+  if (gid && cb && !cb.disabled) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+}
 function groupRunReport(gid) {
   localStorage.setItem('rk2_last_group', gid);
   navigate('individual');
-  _fillGroupSelect('ir-group', gid).then(() => _groupPrefillSpecialty(gid));
+  _fillGroupSelect('ir-group', gid).then(() => { _groupPrefillSpecialty(gid); _irGroupSpotcheck(gid); });
   const first = ['specialty', 'hospital', 'service_line', 'community_health'].find(t => _irTypeAllowed(t));
   if (first && !_irTypeAllowed(_irType)) setIrType(first);
   document.getElementById('ir-name')?.focus();
