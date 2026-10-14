@@ -7968,6 +7968,7 @@ function groupsFilter(q) {
     const hit = (!needle || tr.dataset.search.includes(needle))
       && (_groupFilter !== 'flagged' || tr.dataset.flagged === '1')
       && (_groupFilter !== 'blocked' || tr.dataset.blocked === '1')
+      && (_groupFilter !== 'low' || tr.dataset.low === '1')
       && (_groupFilter !== 'prospect' || tr.dataset.status === 'prospect');
     tr.style.display = hit ? '' : 'none';
     if (hit) shown++;
@@ -7975,7 +7976,7 @@ function groupsFilter(q) {
   });
   const note = document.getElementById('group-filter-note');
   if (note) {
-    const label = { flagged: 'needs attention', blocked: 'site blocks AI', prospect: 'prospects' }[_groupFilter];
+    const label = { flagged: 'needs attention', blocked: 'site blocks AI', prospect: 'prospects', low: 'below 58' }[_groupFilter];
     note.innerHTML = (needle || _groupFilter)
       ? `Showing <strong>${shown}</strong> of ${rows.length}${label ? ` · ${label}` : ''} · <a href="#" onclick="groupClearFilter();return false">show all</a>`
       : `${rows.length} organization${rows.length === 1 ? '' : 's'}`;
@@ -8002,7 +8003,7 @@ function _groupScoped() { return !!(_caps && (!_caps.unrestricted || _caps.group
 function _soleGroup() { return !!(_groupScoped() && Array.isArray(_groupsCache) && _groupsCache.length === 1) ? _groupsCache[0] : null; }
 let _groupOpenId = null;
 let _groupMembersById = {};        // run_id → member row (flags for the expanded detail)
-let _groupFilter = null;           // group page table filter: null | 'flagged' | 'blocked' | 'prospect'
+let _groupFilter = null;           // group page table filter: null | 'flagged' | 'blocked' | 'prospect' | 'low'
 async function loadGroupsPage() {
   const host = document.getElementById('groups-body'); if (!host) return;
   _groupStopPoll(); _groupOpenId = null;
@@ -8077,6 +8078,7 @@ async function openGroupPage(id, highlightRunId) {
   const scoredMs = ms.filter(m => m.score != null && m.status !== 'prospect');
   const prospects = ms.filter(m => m.status === 'prospect');
   const blocked = ms.filter(m => m.website_status === 'blocked');
+  const low = scoredMs.filter(m => m.score < 58);
   // One benchmark box: row 1 is what prints on the PDFs (plus the score distribution), row 2 the
   // watch list — the Prospects / Site blocks AI / Needs attention counts double as the table filters.
   const cell = (l, v, tip, last) => `<div title="${_learnEsc(tip || '')}" style="padding:2px 14px;${last ? '' : 'border-right:1px solid var(--border);'}cursor:help;white-space:nowrap"><span style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">${l}</span> <strong style="font-size:17px;color:var(--teal);margin-left:6px">${v}</strong></div>`;
@@ -8101,8 +8103,8 @@ async function openGroupPage(id, highlightRunId) {
         ${dist}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:9px;padding-top:9px;border-top:1px solid var(--border)">
-        ${stat('Above median', `${scoredMs.filter(m => b.median != null && m.score > b.median).length} of ${scoredMs.length}`, 'Members scoring above the group median')}
-        ${stat('Top quartile (≥75)', `${scoredMs.filter(m => m.score >= 75).length} of ${scoredMs.length}`, 'Members in the national top quartile (Pulse Score 75 or more)')}
+        ${stat('Top quartile (≥75)', `${scoredMs.filter(m => m.score >= 75).length} of ${scoredMs.length}`, 'Members in the national top quartile (Pulse Score 75 or more) — the green band of the bar')}
+        ${stat('Below 58', `${low.length} of ${scoredMs.length}`, 'Members in the red band of the bar (Pulse Score under 58) — the organizations with the most to gain', low.length ? 'low' : null, true)}
         ${stat('Prospects', prospects.length, 'Organizations evaluated against the group that are not members; shown in amber where they would rank, left out of the median', prospects.length ? 'prospect' : null)}
         ${stat('Site blocks AI', blocked.length, 'Members whose website turns AI crawlers away at the firewall — nothing they publish reaches AI answers until it is fixed', blocked.length ? 'blocked' : null, true)}
         ${stat('⚠ Needs attention', dv.flagged + (dv.flagged && dv.fix ? ` <span style="font-weight:400;color:var(--muted)">(${dv.fix} to fix)</span>` : ''), 'Delivery check — YOUR action: reports missing something before they go out (no spot check, no physician rows, summary not in the fixed shape, unresolved specialty, benchmark not printed, over 90 days old, roster drift). Remedy: ↻ Re-run or Fix roster. Hover a row\'s ⚠ badge for the list. Findings about the organization itself (unreadable website, listing details that disagree) are the ⓘ chips and are not counted here — they are in the PDF for the organization to fix.', dv.flagged ? 'flagged' : null, true)}
@@ -8145,7 +8147,7 @@ async function openGroupPage(id, highlightRunId) {
       acts.push([isProspect ? '✓ Make member' : 'Mark as prospect', `groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')`]);
       acts.push(['<span style="color:var(--red)">Remove from group</span>', `groupRemoveRun('${g.id}','${m.run_id}')`]);
     }
-    return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by, isProspect ? 'prospect' : 'member'].filter(Boolean).join(' ').toLowerCase())}" data-flagged="${fl.length ? '1' : '0'}" data-findings="${fnd.length ? '1' : '0'}" data-blocked="${m.website_status === 'blocked' ? '1' : '0'}" data-status="${isProspect ? 'prospect' : 'member'}" ${isNew ? 'style="background:#eaf7ee"' : (isProspect ? 'style="background:#fdf6e3"' : (rr ? 'style="background:#f4f9f8"' : ''))}>
+    return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by, isProspect ? 'prospect' : 'member'].filter(Boolean).join(' ').toLowerCase())}" data-flagged="${fl.length ? '1' : '0'}" data-findings="${fnd.length ? '1' : '0'}" data-blocked="${m.website_status === 'blocked' ? '1' : '0'}" data-low="${(!isProspect && m.score != null && m.score < 58) ? '1' : '0'}" data-status="${isProspect ? 'prospect' : 'member'}" ${isNew ? 'style="background:#eaf7ee"' : (isProspect ? 'style="background:#fdf6e3"' : (rr ? 'style="background:#f4f9f8"' : ''))}>
       <td style="text-align:center;font-weight:700;width:44px">${isProspect ? `<span style="font-size:11px;color:#7a5a00;white-space:nowrap" title="Not a member: shown where it would rank among members; left out of the median">would be<br>${m.would_rank ?? '—'}</span>` : (m.rank ?? '—')}</td>
       <td style="min-width:220px"><div style="font-weight:600;cursor:pointer;line-height:1.3" onclick="groupToggleMember('${g.id}','${m.run_id}')" title="Show this organization's score history, checklist, delivery check, recipients and roster">${_learnEsc(m.entity_name || '')} <span style="font-size:11px;color:var(--muted)">▾</span></div>
         <div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>
