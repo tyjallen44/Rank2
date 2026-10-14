@@ -4122,3 +4122,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Group row → **✉ Send to recipients** (organization with recipients) | Confirm dialog; one email per recipient "<Organization> — <Month YYYY> AI Visibility reports" with the bundle zip attached and a secure 30-day link; flash lists what was included and any failures. Disabled with a hint when the organization has no recipients. [ui][email] |
 | T2 | Group header after a monthly run (or any upload) | "cost $X.XX" — the model/API cost recorded for that batch (Deep Diagnostics, spot checks, content analysis, Rankings run during delivery), summed across job tasks; `/api/event/{id}/status` returns `cost_usd`. [ui][api] |
 | R1 | Regression | Uploads unchanged apart from recording their cost; Admin → Operations cost summary now shows "event" rows. |
+
+## GROUPS-FAST — group page loads from stored run summaries (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Open a large group (The OrthoForum) | The page renders in well under 2 s after the first open (first open backfills a compact summary per older run, then it is fast on every later open). Scores, pillars, evidence chips, delivery flags, findings, recipients and customer marks are unchanged. [ui] |
+| T2 | Run or re-run any report | The new run's summary is written at save time; its row needs no backfill. [code] |
+| R1 | Unit | `tests/test_run_summary.py` proves the compact summary yields the same delivery flags as the full result; benchmark is computed from the same member list (not a second pass). |

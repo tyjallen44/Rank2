@@ -229,7 +229,8 @@ def members(group_id: str) -> list[dict]:
     rows = con.execute(
         """SELECT a.run_id, a.entity_name, a.location, a.specialty, a.entity_type, a.service_line, a.parent_system,
                   a.generated_at, a.created_at, a.ran_by, a.confidence, a.pdf_path,
-                  p.ai_visibility_score, p.tier_scores, a.result_json, COALESCE(g.member_status, 'member')
+                  p.ai_visibility_score, p.tier_scores,
+                  CASE WHEN a.summary_json IS NULL THEN a.result_json END, COALESCE(g.member_status, 'member'), a.summary_json
            FROM group_runs g
            JOIN analysis_runs a ON a.run_id = g.run_id
            LEFT JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
@@ -239,8 +240,9 @@ def members(group_id: str) -> list[dict]:
     seen: set = set()
     out: list[dict] = []
     results: dict[str, dict] = {}     # run_id → parsed result_json, for the delivery check below
+    from .run_summary import build_summary
     for r in rows:
-        (run_id, name, loc, spec, et, sl, ps, gen, created, ran_by, conf, pdf, score, ts_json, rj, status) = r
+        (run_id, name, loc, spec, et, sl, ps, gen, created, ran_by, conf, pdf, score, ts_json, rj, status, sj) = r
         key = f"{(name or '').strip().lower()}|{(loc or '').strip().lower()}"
         if key in seen:
             continue
@@ -251,9 +253,17 @@ def members(group_id: str) -> list[dict]:
         except Exception:
             ts = {}
         d: dict = {}
-        if rj:
+        if sj:
             try:
-                d = json.loads(rj) or {}
+                d = json.loads(sj) or {}
+            except Exception:
+                d = {}
+        elif rj:
+            # No summary yet (run predates summaries): build it from the full result once and store it.
+            try:
+                d = build_summary(json.loads(rj) or {})
+                from .db import set_run_summary
+                set_run_summary(run_id, d)
             except Exception:
                 d = {}
         if score is None and d:
@@ -306,17 +316,16 @@ def members(group_id: str) -> list[dict]:
     # group default), 25-mile radius, practice rubric — this month's run when there is one.
     try:
         from .analyzer import market_key
-        from .db import latest_market_run
+        from .db import latest_market_runs
         g0 = get_group(group_id) or {}
-        seen_mk: dict = {}
         for m in ranked:
             spec = (m.get("specialty") or g0.get("default_specialty") or "").strip()
             mk = market_key(spec or None, "practice", True, True)
             loc = (m.get("location") or "").strip()
             m["market"] = {"location": loc, "specialty": spec, "key": mk}
-            if (mk, loc.lower()) not in seen_mk:
-                seen_mk[(mk, loc.lower())] = latest_market_run(mk, loc)
-            r = seen_mk[(mk, loc.lower())]
+        found = latest_market_runs([(m["market"]["key"], m["market"]["location"]) for m in ranked])
+        for m in ranked:
+            r = found.get((m["market"]["key"].lower(), m["market"]["location"].lower()))
             m["rankings"] = ({"run_id": r["run_id"], "generated_at": r["generated_at"], "has_pdf": bool(r.get("pdf_path"))} if r else None)
     except Exception:
         for m in ranked:
@@ -398,9 +407,10 @@ def member_history(group_id: str, run_id: str) -> dict:
 
 
 def benchmark(group_id: str, run_id: Optional[str] = None, entity_name: Optional[str] = None,
-              location: Optional[str] = None) -> dict:
-    """Group statistics and, when a run / organization is given, its rank in the group."""
-    ms = members(group_id)
+              location: Optional[str] = None, ms: Optional[list] = None) -> dict:
+    """Group statistics and, when a run / organization is given, its rank in the group.
+    Pass `ms` (an already-built members list) to avoid computing the members twice."""
+    ms = ms if ms is not None else members(group_id)
     scores = [m["score"] for m in ms if m["score"] is not None and m["status"] == "member"]
     out: dict[str, Any] = {"members": sum(1 for m in ms if m["status"] == "member"), "prospects": sum(1 for m in ms if m["status"] != "member"),
                            "scored": len(scores), "ready": len(scores) >= GROUP_MIN,

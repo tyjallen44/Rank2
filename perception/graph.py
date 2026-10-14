@@ -280,20 +280,19 @@ def get_contacts(name: str, city: str, state: str) -> list:
 
 def contacts_for(items: list) -> dict:
     """{org_key: [{name, email}]} for every (name, city, state) in `items` that has recipients."""
-    keys = {org_key(n, c, s) for n, c, s in items if n}
+    keys = sorted({org_key(n, c, s) for n, c, s in items if n})
     if not keys:
         return {}
     con = get_connection()
     try:
         init_graph(con)
+        marks = ", ".join("?" for _ in keys)
         out = {}
-        for k in keys:
-            row = con.execute("SELECT contacts_json FROM org_graph WHERE org_key = ?", [k]).fetchone()
-            if row and row[0]:
-                try:
-                    out[k] = json.loads(row[0])
-                except Exception:
-                    pass
+        for k, cj in con.execute(f"SELECT org_key, contacts_json FROM org_graph WHERE contacts_json IS NOT NULL AND org_key IN ({marks})", keys).fetchall():
+            try:
+                out[k] = json.loads(cj)
+            except Exception:
+                pass
         return out
     except Exception:
         return {}
@@ -315,18 +314,14 @@ def is_customer(name: str, city: str, state: str) -> bool:
 
 def customer_flags(items: list) -> dict:
     """{org_key: True} for every (name, city, state) in `items` that is flagged as a customer."""
-    keys = {org_key(n, c, s) for n, c, s in items if n}
+    keys = sorted({org_key(n, c, s) for n, c, s in items if n})
     if not keys:
         return {}
     con = get_connection()
     try:
         init_graph(con)
-        out = {}
-        for k in keys:
-            row = con.execute("SELECT is_customer FROM org_graph WHERE org_key = ?", [k]).fetchone()
-            if row and row[0]:
-                out[k] = True
-        return out
+        marks = ", ".join("?" for _ in keys)
+        return {r[0]: True for r in con.execute(f"SELECT org_key FROM org_graph WHERE is_customer AND org_key IN ({marks})", keys).fetchall()}
     except Exception:
         return {}
     finally:

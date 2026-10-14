@@ -1343,7 +1343,7 @@ async def groups_detail(group_id: str, payload: dict = Depends(get_current_user_
         g = {**g, "monthly_cost_usd": event_cost(g.get("monthly_last_event_id") or "")}
     except Exception:
         pass
-    return {"group": g, "members": ms, "benchmark": benchmark(group_id), "running": running, "delivery": _delivery_summary(ms)}
+    return {"group": g, "members": ms, "benchmark": benchmark(group_id, ms=ms), "running": running, "delivery": _delivery_summary(ms)}
 
 
 @app.get("/api/groups/{group_id}/member")

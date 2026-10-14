@@ -1954,6 +1954,12 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
     # For market reports, write the synthetic market key as entity_name so that
     # get_recent_run() can find this row on subsequent same-day requests.
     db_entity_name = market_key if market_key else result.entity_name
+    _rj = result.model_dump_json()
+    try:                                   # compact fields for the group page, computed once here
+        from .run_summary import summary_from_json
+        _sj = json.dumps(summary_from_json(_rj) or {})
+    except Exception:
+        _sj = None
 
     con.execute(
         """
@@ -1961,8 +1967,8 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
             (run_id, location, specialty, aggregate, generated_at,
              weighting_profile, market_overview, ai_visibility_verdict, coverage_note,
              top_recommendation, practical_advice, disclaimer, report_markdown,
-             pdf_path, md_path, entity_name, individual_report, result_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             pdf_path, md_path, entity_name, individual_report, result_json, created_at, summary_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (run_id) DO UPDATE SET
             location              = EXCLUDED.location,
             specialty             = EXCLUDED.specialty,
@@ -1980,7 +1986,8 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
             md_path               = EXCLUDED.md_path,
             entity_name           = EXCLUDED.entity_name,
             individual_report     = EXCLUDED.individual_report,
-            result_json           = EXCLUDED.result_json
+            result_json           = EXCLUDED.result_json,
+            summary_json          = EXCLUDED.summary_json
         """,
         [
             result.run_id, result.location, result.specialty, result.aggregate,
@@ -1989,7 +1996,7 @@ def _save_to_db(result: AnalysisResult, market_key: str | None = None) -> None:
             result.top_recommendation, json.dumps(result.practical_advice),
             result.disclaimer, result.report_markdown, result.pdf_path, result.md_path,
             db_entity_name, result.individual_report,
-            result.model_dump_json(), datetime.utcnow(),
+            _rj, datetime.utcnow(), _sj,
         ],
     )
 

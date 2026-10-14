@@ -49,6 +49,8 @@ def _score(d: dict) -> Optional[int]:
 
 
 def _physician_count(d: dict) -> int:
+    if "physician_count" in d:                      # run summary (perception/run_summary.py)
+        return int(d.get("physician_count") or 0)
     pf = d.get("physician_facts") or {}
     n = len(pf.get("rows") or []) if pf.get("status") == "measured" else 0
     for cr in d.get("practice_composite_rows") or []:
@@ -144,8 +146,11 @@ def check_result(d: dict, *, group: Optional[dict] = None, benchmark_ready: bool
 
     lq = d.get("listing_quality") or {}
     if lq:
-        from .listing_quality import issues as _lq_issues
-        probs = _lq_issues(lq)
+        if "issues" in lq:                          # run summary: issues precomputed
+            probs = list(lq.get("issues") or [])
+        else:
+            from .listing_quality import issues as _lq_issues
+            probs = _lq_issues(lq)
         if probs:
             closed = (lq.get("status") or {}).get("closed") or []
             add("listing_quality", FIX if closed else WARN, probs[0] + (f" (+{len(probs) - 1} more in the PDF)" if len(probs) > 1 else ""), items=probs)

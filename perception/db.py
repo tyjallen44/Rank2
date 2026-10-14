@@ -267,6 +267,7 @@ def _init_db_impl() -> None:
         ("confidence", "VARCHAR"),       # evidence behind the score: high | medium | low
         ("confidence_note", "VARCHAR"),  # e.g. "312 reviews across 4 locations"
         ("spotcheck_json", "VARCHAR"),   # observed assistant check panel (JSON)
+        ("summary_json", "VARCHAR"),     # compact fields for the group page (perception/run_summary.py)
     ]:
         if col not in existing_run_cols:
             con.execute(f"ALTER TABLE analysis_runs ADD COLUMN {col} {definition}")
@@ -2317,6 +2318,33 @@ def list_all_trend_reports(limit: int = 500) -> list[dict]:
         d = dict(zip(_TR_COLS, r))
         d["sent_at"] = str(d["sent_at"]) if d.get("sent_at") else None
         out.append(d)
+    return out
+
+
+def set_run_summary(run_id: str, summary: dict) -> None:
+    import json as _json
+    con = get_connection()
+    con.execute("UPDATE analysis_runs SET summary_json = ? WHERE run_id = ?", [_json.dumps(summary), run_id])
+    con.close()
+
+
+def latest_market_runs(pairs: list) -> dict:
+    """{(market_key, location lower): {run_id, generated_at, pdf_path}} for this month, one query for all markets."""
+    keys = sorted({((k or "").lower(), (loc or "").lower()) for k, loc in pairs if k and loc})
+    if not keys:
+        return {}
+    con = get_connection()
+    marks = ", ".join("(?, ?)" for _ in keys)
+    params = [x for pair in keys for x in pair] + [cache_cutoff(30)]
+    rows = con.execute(
+        f"""SELECT LOWER(entity_name), LOWER(location), run_id, generated_at, pdf_path FROM analysis_runs
+            WHERE (LOWER(entity_name), LOWER(location)) IN ({marks}) AND generated_at >= ? AND result_json IS NOT NULL
+            ORDER BY generated_at DESC, run_id DESC""", params).fetchall()
+    con.close()
+    out: dict = {}
+    for k, loc, rid, gen, pdf in rows:
+        if (k, loc) not in out:
+            out[(k, loc)] = {"run_id": rid, "generated_at": str(gen)[:10] if gen else None, "pdf_path": pdf}
     return out
 
 
