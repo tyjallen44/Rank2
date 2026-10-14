@@ -4107,3 +4107,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 |---|---|---|
 | T1 | ⬇ Latest reports on a member whose market has no Competitor Rankings this month | The zip downloads at once; its README says "Competitor Rankings for <City, ST> · <Specialty> were started just now (about 10 minutes); download again then…"; a Rankings run appears in History; ~10 min later the zip includes it and the row shows ≡ Rankings. [ui] |
 | R1 | Regression | Members whose market already has this month's Rankings download the three reports as before; the emailed monthly bundle (public link) never starts runs. |
+
+## FIX-JOB-ZIP-AND-SCAN — job tasks write the event ZIP in memory; no auto scan in a task (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Upload in job mode → completion | The event ZIP downloads correctly (built in memory, written once — no GCS FUSE OutOfOrderError in the task log); the task log no longer shows "auto AI access scan failed: no running event loop". [log] |
+| R1 | Regression | Thread-mode uploads still start the automatic AI Website Access Scan; the ZIP contents are unchanged. |

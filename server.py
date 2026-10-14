@@ -7506,10 +7506,14 @@ def _run_event_job(
         zip_name = f"{safe_name}_EventReport-{ts}.zip"
         zip_path = event_dir / zip_name
         pdfs = sorted(event_dir.glob("*.pdf"))
-        with _zf.ZipFile(zip_path, "w", _zf.ZIP_DEFLATED) as zf:
+        # Build in memory and write once: the report volume is GCS FUSE, which refuses the
+        # non-sequential writes zipfile makes when streaming straight to a file.
+        _zbuf = _io2.BytesIO()
+        with _zf.ZipFile(_zbuf, "w", _zf.ZIP_DEFLATED) as zf:
             for pdf in pdfs:
                 zf.write(pdf, pdf.name)
             zf.write(csv_path, csv_name)   # include the CSV in the ZIP too
+        zip_path.write_bytes(_zbuf.getvalue())
 
         finalize_event_run(event_id, str(csv_path), str(zip_path))
         if (ev or {}).get("run_mode") == "monthly":
@@ -7523,7 +7527,7 @@ def _run_event_job(
         # scans list on History (labelled with the event name). Fail-soft.
         _scan_info = None
         try:
-            _scan_rows = _aas_parse_csv(csv_path.read_bytes())
+            _scan_rows = [] if task_mode else _aas_parse_csv(csv_path.read_bytes())   # the scan needs the web event loop; not in a job task
             if _scan_rows:
                 _scan_info = _start_ai_access_scan(
                     _scan_rows, f"{ev['event_name'] or 'Event'} (Event Prep {ts[:6]})",
