@@ -6014,7 +6014,10 @@ def _bundle_zip_bytes(group: dict, m: dict, by: str, brand: str = "original") ->
         if rrow and rrow[0] and Path(rrow[0]).exists():
             z.write(rrow[0], f"{slug}_Competitor_Rankings_{m['rankings'].get('generated_at') or ''}.pdf"); included.append("Competitor Rankings")
         else:
-            notes.append("No Competitor Rankings run for this market this month.")
+            mk = m.get("market") or {}
+            notes.append(m.get("_rankings_note") or
+                         f"No Competitor Rankings run for this market ({mk.get('location') or '?'} · {mk.get('specialty') or '?'}) this month yet. "
+                         "On the group page use '≡ Run Competitor Rankings' (one run per market, shared by its members); the monthly set runs it automatically on the 1st.")
         if m.get("trend_ready"):
             try:
                 city, _, state = (m.get("location") or "").partition(",")
@@ -6043,6 +6046,16 @@ async def groups_bundle_zip(group_id: str, run_id: str, payload: dict = Depends(
     m = next((x for x in members(group_id) if x["run_id"] == run_id), None)
     if not m:
         raise HTTPException(404, "That organization is not in this group")
+    if not m.get("rankings") and (m.get("market") or {}).get("specialty") and (m.get("market") or {}).get("location"):
+        # Nothing has run Rankings for this market this month: start it now so the next download has it.
+        mk = m["market"]; city, _, state = mk["location"].partition(",")
+        try:
+            await start_analysis(AnalyzeRequest(city=city.strip(), state=state.strip(), specialty=mk["specialty"], aggregate=True, patient_perspective=True,
+                                                simplified_patient=True, obscure_competitors=False, entity_type="practice", radius_miles=25), payload)
+            m["_rankings_note"] = (f"Competitor Rankings for {mk['location']} · {mk['specialty']} were started just now (about 10 minutes); "
+                                   "download again then and this zip will include them.")
+        except HTTPException as exc:
+            m["_rankings_note"] = f"Competitor Rankings for {mk['location']} · {mk['specialty']} could not be started: {exc.detail}"
     data, slug, _, _ = await asyncio.get_running_loop().run_in_executor(
         None, lambda: _bundle_zip_bytes(g, m, payload.get("email") or payload.get("role") or "", payload.get("brand", "original")))
     from fastapi.responses import Response

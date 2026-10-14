@@ -4100,3 +4100,10 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Manual runs (form, upload, Re-run) | Send nothing — only the monthly set emails. [email] |
 | T5 | Public link after 30 days | 410 "This link has expired." [api] |
 | R1 | Unit | `tests/test_groups.py::test_monthly_entities_from_members` passes; groups without the switch are untouched by the scheduler. |
+
+## FIX-BUNDLE-STARTS-RANKINGS — Latest reports zip starts the missing Rankings run (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | ⬇ Latest reports on a member whose market has no Competitor Rankings this month | The zip downloads at once; its README says "Competitor Rankings for <City, ST> · <Specialty> were started just now (about 10 minutes); download again then…"; a Rankings run appears in History; ~10 min later the zip includes it and the row shows ≡ Rankings. [ui] |
+| R1 | Regression | Members whose market already has this month's Rankings download the three reports as before; the emailed monthly bundle (public link) never starts runs. |
