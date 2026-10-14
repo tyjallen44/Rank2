@@ -8065,27 +8065,44 @@ async function openGroupPage(id, highlightRunId) {
     const fl = allFl.filter(f => (f.kind || 'report') === 'report');          // your action: re-run / fix roster
     const fnd = allFl.filter(f => f.kind === 'finding');                        // the organization's problem, in the PDF
     const hasFix = fl.some(f => f.level === 'fix');
-    const flagBadge = (fl.length ? `<span class="badge" style="background:${hasFix ? '#fee2e2' : '#fdf3dc'};color:${hasFix ? '#991b1b' : '#7a5a00'};font-size:10px;margin-left:4px;cursor:help;white-space:nowrap" title="${_learnEsc('Report problems — your action (↻ Re-run or Fix roster):\n' + fl.map(f => '• ' + f.label + ' — ' + f.detail).join('\n') + '\n\nClick the organization name for detail.')}">⚠ ${fl.length === 1 ? _learnEsc(fl[0].label) : fl.length + ' to check'}</span>` : '')
-      + (fnd.length ? `<span class="badge" style="background:#eef2f5;color:#4a5a6a;font-size:10px;margin-left:4px;cursor:help;white-space:nowrap" title="${_learnEsc('Findings for the organization — already in their PDF, nothing for you to do here:\n' + fnd.map(f => '• ' + f.label + ' — ' + f.detail).join('\n'))}">ⓘ ${fnd.length === 1 ? _learnEsc(fnd[0].label) : fnd.length + ' findings'}</span>` : '');
+    const flagBadge = (fl.length ? `<span class="badge" style="background:${hasFix ? '#fee2e2' : '#fdf3dc'};color:${hasFix ? '#991b1b' : '#7a5a00'};font-size:10px;margin:2px 4px 0 0;cursor:help;white-space:nowrap;display:inline-block" title="${_learnEsc('Report problems — your action (↻ Re-run or Fix roster):\n' + fl.map(f => '• ' + f.label + ' — ' + f.detail).join('\n') + '\n\nClick the organization name for detail.')}">⚠ ${fl.length === 1 ? _learnEsc(fl[0].label) : fl.length + ' to check'}</span>` : '')
+      + (fnd.length ? `<span class="badge" style="background:#eef2f5;color:#4a5a6a;font-size:10px;margin:2px 4px 0 0;cursor:help;white-space:nowrap;display:inline-block" title="${_learnEsc('Findings for the organization — already in their PDF, nothing for you to do here:\n' + fnd.map(f => '• ' + f.label + ' — ' + f.detail).join('\n'))}">ⓘ ${fnd.length === 1 ? _learnEsc(fnd[0].label) : fnd.length + ' findings'}</span>` : '');
     const runBadge = rr ? `<div style="margin-top:3px;font-size:11px;color:var(--teal);display:flex;align-items:center;gap:6px"><span class="spinner" style="width:10px;height:10px"></span> Re-run in progress${_since(rr.started_at) ? ' · started ' + _since(rr.started_at) : ''}${rr.email ? ' · ' + _learnEsc(String(rr.email).split('@')[0]) : ''} · <a href="#" onclick="_lastPage='groups'; startProgress('${rr.job_id}', ${_jsq((m.entity_name || '') + ' — Deep Diagnostic')}, false); return false">View progress</a></div>` : '';
+    const chip = (t, bg, fg, tip, extra) => `<span class="badge" style="font-size:10px;background:${bg};color:${fg};margin-left:4px;white-space:nowrap" ${extra || ''} title="${_learnEsc(tip || '')}">${t}</span>`;
+    const nC = (m.contacts || []).length;
+    const chips = (isNew ? chip('new', 'var(--teal)', '#fff', 'Just added') : '')
+      + (isProspect ? chip('prospect', '#fdf3dc', '#7a5a00', 'Not a member: shown where it would rank; left out of the median') : '')
+      + `<span id="gcust-${m.run_id}">${m.rldatix_customer ? chip('✓ customer', '#e6f3f4', 'var(--teal)', 'RLDatix customer — printed on the report cover') : ''}</span>`
+      + `<span id="gcontacts-${m.run_id}">${nC ? chip('✉ ' + nC, '#eef2f5', '#4a5a6a', (m.contacts || []).map(c => (c.name ? c.name + ' <' + c.email + '>' : c.email)).join('\n')) : ''}</span>`
+      + (m.rankings ? chip('≡ Rankings', '#eef2f5', '#4a5a6a', `Competitor Rankings for ${(m.market || {}).location || ''} · ${(m.market || {}).specialty || ''} run ${m.rankings.generated_at} — in Actions`) : '')
+      + (m.trend_ready ? chip('📈 Trend', '#eef2f5', '#4a5a6a', `Trend report available — ${m.trend_points} monthly data points — in Actions`) : '');
+    const tok = encodeURIComponent(_token);
+    const files = [];   // [label, url] or [label, null] (info line)
+    if (m.has_pdf) files.push(['Deep Diagnostic (PDF)', `/api/reports/${m.run_id}/pdf?token=${tok}`]);
+    if (m.has_pdf) files.push(['Latest reports (zip: Deep Diagnostic + this month\'s Rankings + Trend)', `/api/groups/${g.id}/bundle/${m.run_id}.zip?token=${tok}`]);
+    if (m.rankings) files.push([`Competitor Rankings — ${_learnEsc((m.market || {}).location || '')} (PDF)`, `/api/reports/${m.rankings.run_id}/pdf?token=${tok}`]);
+    else files.push(['No Competitor Rankings for this market this month — the zip starts one', null]);
+    if (m.trend_ready) files.push([`Trend report — ${m.trend_points} data points (PDF)`, `/api/groups/${g.id}/trend/${m.run_id}.pdf?token=${tok}`]);
+    else files.push([_learnEsc(m.trend_note || 'Trend report after 3 monthly reports'), null]);
+    const acts = [];    // [label, onclickJs]
+    acts.push(rr ? ['⏳ Re-run in progress', 'void 0'] : ['↻ Re-run', `groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})`]);
+    acts.push(nC ? ['✉ Send to recipients', `groupSendBundle(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')}, ${nC})`] : ['✉ Send to recipients — add recipients first (expand the row)', 'void 0']);
+    if (m.entity_type === 'practice' || m.entity_type === 'service_line') acts.push(['✎ Fix roster', `groupFixRosterFromCompletion('${g.id}', '${m.run_id}')`]);
+    if (canEdit) {
+      acts.push([isProspect ? '✓ Make member' : 'Mark as prospect', `groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')`]);
+      acts.push(['<span style="color:var(--red)">Remove from group</span>', `groupRemoveRun('${g.id}','${m.run_id}')`]);
+    }
     return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by, isProspect ? 'prospect' : 'member'].filter(Boolean).join(' ').toLowerCase())}" data-flagged="${fl.length ? '1' : '0'}" data-findings="${fnd.length ? '1' : '0'}" data-status="${isProspect ? 'prospect' : 'member'}" ${isNew ? 'style="background:#eaf7ee"' : (isProspect ? 'style="background:#fdf6e3"' : (rr ? 'style="background:#f4f9f8"' : ''))}>
-      <td style="text-align:center;font-weight:700">${isProspect ? `<span style="font-size:11px;color:#7a5a00;white-space:nowrap" title="Not a member: shown where it would rank among members; left out of the median">would be<br>${m.would_rank ?? '—'}</span>` : (m.rank ?? '—')}</td>
-      <td><div style="font-weight:600;cursor:pointer" onclick="groupToggleMember('${g.id}','${m.run_id}')" title="Show this organization's score history and checklist">${_learnEsc(m.entity_name || '')} <span style="font-size:11px;color:var(--muted)">▾</span>${isNew ? ' <span class="badge bg-teal" style="font-size:10px">new</span>' : ''}${isProspect ? ' <span class="badge" style="font-size:10px;background:#fdf3dc;color:#7a5a00">prospect</span>' : ''}<span id="gcontacts-${m.run_id}">${(m.contacts || []).length ? ` <span class="badge" style="font-size:10px;background:#eef2f5;color:#4a5a6a" title="${_learnEsc((m.contacts || []).map(c => (c.name ? c.name + ' <' + c.email + '>' : c.email)).join('\n'))}">✉ ${(m.contacts || []).length}</span>` : ''}</span></div><div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>${runBadge}</td>
-      <td style="text-align:center;font-weight:800;font-size:16px;color:${_scoreColor(m.score)}">${m.score ?? '—'}</td>
-      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${pv.map((v, i) => `${pl[i]} <strong style="color:${_scoreColor(v)}">${v ?? '—'}</strong>`).join(' · ')}</td>
-      <td>${_confChip(m.confidence, '')}${flagBadge}</td>
-      <td style="text-align:center" id="gcust-${m.run_id}">${m.rldatix_customer ? '<span class="badge bg-teal" style="font-size:10px" title="RLDatix customer">✓ customer</span>' : '<span style="color:#b0b8c0">—</span>'}</td>
-      <td style="font-size:12px;color:var(--muted);white-space:nowrap">${m.generated_at || ''}</td>
-      <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
-      <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Download this organization's latest report">⬇ PDF</a>` : ''}
-        ${m.has_pdf ? `<a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/bundle/${m.run_id}.zip?token=${encodeURIComponent(_token)}" title="One zip with the latest Deep Diagnostic, this month's Competitor Rankings for its market${m.trend_ready ? ' and the Trend report' : ' (Trend report once it has 3 monthly data points)'}">⬇ Latest reports</a>` : ''}
-        ${m.rankings ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.rankings.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Competitor Rankings for ${_learnEsc((m.market || {}).location || '')} · ${_learnEsc((m.market || {}).specialty || '')} — run ${m.rankings.generated_at}">≡ Rankings</a>` : `<span style="font-size:11px;color:var(--muted);margin:0 6px" title="No Competitor Rankings run for this market this month — use 'Run Competitor Rankings' above">no Rankings this month</span>`}
-        ${m.trend_ready ? `<a class="btn btn-ghost btn-sm" href="/api/groups/${g.id}/trend/${m.run_id}.pdf?token=${encodeURIComponent(_token)}" title="Trend report: this organization's ${m.trend_points} monthly scores, with pillar movement and notes">📈 Trend</a>` : `<span style="font-size:11px;color:var(--muted);margin:0 6px" title="A Trend report needs three monthly data points; each monthly Deep Diagnostic adds one">${_learnEsc(m.trend_note || '')}</span>`}
-        <button class="btn btn-ghost btn-sm" ${(m.contacts || []).length ? `onclick="groupSendBundle(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')}, ${(m.contacts || []).length})" title="Email this organization's latest reports (PDFs attached + secure link) to its ${(m.contacts || []).length} recipient${(m.contacts || []).length === 1 ? '' : 's'} now"` : 'disabled title="Add report recipients in the expanded row first"'}>✉ Send to recipients</button>
-        <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
-        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member: it joins the ranking and the median' : 'Mark as a prospect: shown in amber with the rank it would hold, left out of the median and ranks'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')" title="Take this organization out of the group — every run of it in this group; the reports stay in History">Remove</button>` : ''}</td></tr>
-      <tr id="gdet-${m.run_id}" class="hidden"><td colspan="9" style="background:#f6fafa;padding:10px 14px"></td></tr>`;
+      <td style="text-align:center;font-weight:700;width:44px">${isProspect ? `<span style="font-size:11px;color:#7a5a00;white-space:nowrap" title="Not a member: shown where it would rank among members; left out of the median">would be<br>${m.would_rank ?? '—'}</span>` : (m.rank ?? '—')}</td>
+      <td style="min-width:220px"><div style="font-weight:600;cursor:pointer;line-height:1.3" onclick="groupToggleMember('${g.id}','${m.run_id}')" title="Show this organization's score history, checklist, delivery check, recipients and roster">${_learnEsc(m.entity_name || '')} <span style="font-size:11px;color:var(--muted)">▾</span></div>
+        <div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>
+        <div style="margin-top:3px;margin-left:-4px;line-height:1.9">${chips}</div>${runBadge}</td>
+      <td style="text-align:center;width:118px"><div style="font-weight:800;font-size:18px;color:${_scoreColor(m.score)};line-height:1.1">${m.score ?? '—'}</div>
+        <div style="font-size:10.5px;color:var(--muted);line-height:1.35;margin-top:3px;text-align:left;display:inline-block">${pv.map((v, i) => `${pl[i]} <strong style="color:${_scoreColor(v)}">${v ?? '—'}</strong>`).join('<br>')}</div></td>
+      <td style="min-width:150px">${_confChip(m.confidence, '')}<div style="margin-top:2px">${flagBadge}</div></td>
+      <td style="font-size:12px;color:var(--muted);white-space:nowrap;width:92px">${m.generated_at || ''}<div style="font-size:11px">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</div></td>
+      <td style="white-space:nowrap;width:120px;text-align:right">${_actMenu('g-' + m.run_id, files, acts)}</td></tr>
+      <tr id="gdet-${m.run_id}" class="hidden"><td colspan="6" style="background:#f6fafa;padding:10px 14px"></td></tr>`;
   }).join('');
   const bench = b.scored ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px">
       <div><span style="color:var(--muted)">Organizations</span> <strong>${b.scored}</strong></div>
@@ -8128,7 +8145,7 @@ async function openGroupPage(id, highlightRunId) {
       <div id="ge-err" class="err hidden mt8"></div>
     </div>
     ${running.length ? `<div style="margin-top:10px;font-size:12px;color:var(--teal)"><span class="spinner" style="width:10px;height:10px"></span> ${running.length} re-run${running.length === 1 ? '' : 's'} in progress — this page refreshes every 20 seconds.</div>` : ''}
-    ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center" title="Rank among members by Pulse Score; ties share a rank; prospects show the rank they would hold">#</th><th title="Click a name to see its score history in this group and its latest checklist">Organization</th><th style="text-align:center" title="Pulse Score out of 100 from the latest report">Pulse Score</th><th title="The four pillar scores of the organization's rubric">Pillars</th><th title="How much public data sits behind the score, plus the delivery check: a ⚠ badge lists what the report is missing before it goes out">Evidence</th><th style="text-align:center" title="Marked as an RLDatix customer (tick the box in the expanded row); printed on the report cover">RLDatix</th><th title="Date of the latest report">Report</th><th title="Who ran the latest report">Run by</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center" title="Rank among members by Pulse Score; ties share a rank; prospects show the rank they would hold">#</th><th title="Click a name to expand: score history, checklist, delivery check, recipients, roster. Chips: customer, recipients, Rankings / Trend available">Organization</th><th style="text-align:center" title="Pulse Score out of 100, with the four pillar scores beneath">Pulse Score</th><th title="How much public data sits behind the score, plus the delivery check (⚠ your action) and organization findings (ⓘ in the PDF)">Evidence</th><th title="Date of the latest report and who ran it">Report</th><th style="text-align:right" title="Downloads, re-run, send to recipients, fix roster, member / prospect, remove">Actions</th></tr></thead><tbody>${rows}</tbody></table>`
                : '<div class="empty" style="margin-top:12px"><div>No members yet. Pick this group on the Deep Diagnostic form or an Event Prep upload, or add runs from History.</div></div>'}`;
   groupsFilter(sb ? sb.value : '');
   if (highlightRunId) { const tr = document.getElementById('grow-' + highlightRunId); if (tr) tr.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -9764,6 +9781,14 @@ function _fmtRunDate(run) {
 //   uid   : unique id for this row
 //   files : [[label, url|null]]  (null url => plain info line)
 //   acts  : [[label, onclickJs]]
+function _actMenu(uid, files, acts) {
+  files = files || []; acts = acts || [];
+  const mid = 'dlm-' + uid;
+  const fileItems = files.map(([lbl, url]) => url ? `<a class="dlm-item" href="${url}">⬇ ${lbl}</a>` : `<div class="dlm-info">${lbl}</div>`).join('');
+  const sep = (files.length && acts.length) ? '<div class="dlm-sep"></div>' : '';
+  const actItems = acts.map(([lbl, fn]) => `<a class="dlm-item dlm-act" onclick="${fn};if(event){event.stopPropagation()}">${lbl}</a>`).join('');
+  return `<div class="dlm" id="${mid}"><button class="btn btn-secondary btn-sm" onclick="toggleDlm('${mid}',event)">Actions ▾</button><div class="dlm-pop hidden" style="min-width:300px;text-align:left">${fileItems}${sep}${actItems}</div></div>`;
+}
 function _dlMenu(uid, files, acts) {
   files = files || []; acts = acts || [];
   const nFiles = files.filter(f => f[1]).length;
@@ -9864,8 +9889,9 @@ function toggleDlm(mid, ev) {
   if (isOpen) return;
   const r = wrap.querySelector('button').getBoundingClientRect();
   pop.style.top = (r.bottom + 4) + 'px';
-  pop.style.left = Math.max(8, Math.min(r.right - 210, window.innerWidth - 220)) + 'px';
   pop.classList.remove('hidden');
+  const w = pop.offsetWidth || 210;                       // right-align the menu under its button, kept on screen
+  pop.style.left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + 'px';
 }
 document.addEventListener('click', () => document.querySelectorAll('.dlm-pop').forEach(p => p.classList.add('hidden')));
 window.addEventListener('scroll', () => document.querySelectorAll('.dlm-pop').forEach(p => p.classList.add('hidden')), true);

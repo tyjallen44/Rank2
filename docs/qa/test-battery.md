@@ -4130,3 +4130,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T1 | Open a large group (The OrthoForum) | The page renders in well under 2 s after the first open (first open backfills a compact summary per older run, then it is fast on every later open). Scores, pillars, evidence chips, delivery flags, findings, recipients and customer marks are unchanged. [ui] |
 | T2 | Run or re-run any report | The new run's summary is written at save time; its row needs no backfill. [code] |
 | R1 | Unit | `tests/test_run_summary.py` proves the compact summary yields the same delivery flags as the full result; benchmark is computed from the same member list (not a second pass). |
+
+## GROUPS-LAYOUT — six-column group table with an Actions menu (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Open a group | Columns: # · Organization · Pulse Score · Evidence · Report · Actions. Fits in ~900 px without horizontal scrolling at a normal laptop width. [ui] |
+| T2 | Organization cell | Name (click to expand), "City, ST · Specialty", then chips: new, prospect, ✓ customer, ✉ N recipients, ≡ Rankings (when this month's run exists), 📈 Trend (when 3+ points); the re-run-in-progress line still shows beneath. [ui] |
+| T3 | Pulse Score cell | Big score with the four pillars stacked beneath (Credentials / Reviews / Identity / Access, colored). [ui] |
+| T4 | Report cell | Date over "run by". [ui] |
+| T5 | **Actions ▾** | A right-aligned menu: ⬇ Deep Diagnostic (PDF) · ⬇ Latest reports (zip) · ⬇ Competitor Rankings (or the "no Rankings… the zip starts one" note) · ⬇ Trend report (or the "after 3" note) — then ↻ Re-run · ✉ Send to recipients (or "add recipients first") · ✎ Fix roster · Mark as prospect / Make member · Remove from group (admin, red). Menu closes on outside click / scroll; stays on screen near the right edge. [ui] |
+| R1 | Regression | Search, Needs-attention and member/prospect filters still work (row data attributes unchanged); customer / recipients chips update live after saves in the expanded row; CSV unchanged. |
