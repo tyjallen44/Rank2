@@ -4141,3 +4141,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Report cell | Date over "run by". [ui] |
 | T5 | **Actions ▾** | A right-aligned menu: ⬇ Deep Diagnostic (PDF) · ⬇ Latest reports (zip) · ⬇ Competitor Rankings (or the "no Rankings… the zip starts one" note) · ⬇ Trend report (or the "after 3" note) — then ↻ Re-run · ✉ Send to recipients (or "add recipients first") · ✎ Fix roster · Mark as prospect / Make member · Remove from group (admin, red). Menu closes on outside click / scroll; stays on screen near the right edge. [ui] |
 | R1 | Regression | Search, Needs-attention and member/prospect filters still work (row data attributes unchanged); customer / recipients chips update live after saves in the expanded row; CSV unchanged. |
+
+## GROUPS-HEADER — compact benchmark box, distribution bar, toolbar with Manage ▾ (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Open a group | Header is two lines: "← All groups · Group name · description" on the left, "Monthly reports: on/off · last run · cost" on the right. No "+ New group" button and no page-level search box while a group is open; both return on "← All groups". [ui] |
+| T2 | Benchmark box, row 1 | One bordered box: Organizations · Median · Quartiles q1 / med / q3 · Benchmark on reports (on / off / "after N more") as tight label+number cells, then a score-distribution bar filling the rest of the row: red band <58, amber 58–74, green ≥75; one teal dot per scored member, hollow amber dots for prospects; grey marks at Q1/Q3 and a teal mark at the median; hover a dot for "Name — score"; click a dot → the table scrolls to that row and highlights it (clearing any filter first). [ui] |
+| T3 | Benchmark box, row 2 | Pills: Above median N of M · Top quartile (≥75) N of M · Prospects N · Site blocks AI N · ⚠ Needs attention N (k to fix). The last three are clickable when non-zero: click → only those rows show and the pill gets a teal ring; click again or "show all" → every row returns. Only one filter active at a time. [ui] |
+| T4 | Toolbar | A grey bar directly above the table: search box + "Showing X of N · needs attention · show all" note on the left; "+ Add an organization" · "⬆ Upload a list" · "≡ Run Competitor Rankings (N markets)" · "⬇ CSV" · **Manage ▾** on the right. Manage ▾ (admin): ✎ Edit details · Show/Hide benchmark on reports · Run the monthly set now · Archive group (red) · Delete group (red). Non-admin members see no Manage button. [ui] |
+| T5 | Search survives refresh | Type in the toolbar search, let a re-run finish (page re-renders): the search text and filter stay applied. [ui] |
+| R1 | Regression | The old member / prospect button group and the header "Needs attention" button are gone; the completion panel's "Needs attention" shortcut still filters the table; the row Actions ▾ menu, expanded rows, chips and CSV are unchanged. |

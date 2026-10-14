@@ -458,6 +458,13 @@ input[type="url"]::placeholder, textarea::placeholder {
 .dlm-act { color: var(--teal); font-weight: 600; }
 .dlm-info { padding: 6px 10px; font-size: 12px; color: var(--muted); }
 .dlm-sep { height: 1px; background: var(--border); margin: 5px 4px; }
+/* Group page benchmark box: the watch-list pills; the clickable ones filter the table */
+.gstat { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: #fff; font-size: 12px; color: var(--muted); line-height: 1.4; white-space: nowrap; cursor: help; }
+.gstat strong { color: var(--teal); font-size: 13px; }
+.gstat.warn strong { color: #991b1b; }
+.gstat.click { cursor: pointer; color: var(--body); }
+.gstat.click:hover { border-color: var(--teal); }
+.gstat.on { border-color: var(--teal); box-shadow: 0 0 0 2px #cfe9e6; background: #f3fafa; }
 .badge {
   display: inline-block; padding: 2px 9px;
   border-radius: 20px; font-size: 11px; font-weight: 700;
@@ -7951,24 +7958,43 @@ async function groupCreate() {
 let _groupPoll = null;
 let _groupSig = '';                // signature of the last render (members + running jobs) for the quiet poll
 function _groupStopPoll() { if (_groupPoll) { clearInterval(_groupPoll); _groupPoll = null; } }
+// The group page's own search box when a group is open, else the list page's.
+function _groupSearchVal() { const g = document.getElementById('group-search'); if (g) return g.value; const s = document.getElementById('groups-search'); return s ? s.value : ''; }
 function groupsFilter(q) {
   const needle = (q || '').trim().toLowerCase();
-  document.querySelectorAll('#groups-body tr[data-search]').forEach(tr => {
-    const hit = (!needle || tr.dataset.search.includes(needle)) && (!_groupFlagOnly || tr.dataset.flagged === '1')
-      && (_groupStatusFilter === 'all' || !tr.dataset.status || tr.dataset.status === _groupStatusFilter);
+  const rows = [...document.querySelectorAll('#groups-body tr[data-search]')];
+  let shown = 0;
+  rows.forEach(tr => {
+    const hit = (!needle || tr.dataset.search.includes(needle))
+      && (_groupFilter !== 'flagged' || tr.dataset.flagged === '1')
+      && (_groupFilter !== 'blocked' || tr.dataset.blocked === '1')
+      && (_groupFilter !== 'prospect' || tr.dataset.status === 'prospect');
     tr.style.display = hit ? '' : 'none';
+    if (hit) shown++;
     if (!hit) { const det = document.getElementById('gdet-' + (tr.id || '').replace(/^grow-/, '')); if (det) det.classList.add('hidden'); }
   });
+  const note = document.getElementById('group-filter-note');
+  if (note) {
+    const label = { flagged: 'needs attention', blocked: 'site blocks AI', prospect: 'prospects' }[_groupFilter];
+    note.innerHTML = (needle || _groupFilter)
+      ? `Showing <strong>${shown}</strong> of ${rows.length}${label ? ` · ${label}` : ''} · <a href="#" onclick="groupClearFilter();return false">show all</a>`
+      : `${rows.length} organization${rows.length === 1 ? '' : 's'}`;
+  }
 }
-function groupSetStatusFilter(v) {
-  _groupStatusFilter = v;
-  document.querySelectorAll('#group-status-chips button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-  const sb = document.getElementById('groups-search'); groupsFilter(sb ? sb.value : '');
+// The benchmark box's Prospects / Site blocks AI / Needs attention counts are the filters: click one
+// to show only those rows, click it again (or "show all") to clear.
+function groupSetFilter(key) {
+  _groupFilter = (_groupFilter === key) ? null : key;
+  document.querySelectorAll('#groups-body .gstat.click').forEach(el => el.classList.toggle('on', !!_groupFilter && el.getAttribute('onclick') === `groupSetFilter('${_groupFilter}')`));
+  groupsFilter(_groupSearchVal());
 }
-function groupToggleFlagOnly() {
-  _groupFlagOnly = !_groupFlagOnly;
-  const b = document.getElementById('group-flag-only'); if (b) b.classList.toggle('on', _groupFlagOnly);
-  const sb = document.getElementById('groups-search'); groupsFilter(sb ? sb.value : '');
+function groupClearFilter() { _groupFilter = null; const g = document.getElementById('group-search'); if (g) g.value = ''; groupSetFilter(null); }
+function groupToggleFlagOnly() { groupSetFilter('flagged'); }   // kept for the completion panel's shortcut
+function groupJumpTo(runId) {
+  const tr = document.getElementById('grow-' + runId); if (!tr) return;
+  if (tr.style.display === 'none') groupClearFilter();
+  tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const prev = tr.style.background; tr.style.background = '#eaf7ee'; setTimeout(() => { tr.style.background = prev; }, 1800);
 }
 // A narrowed account that belongs to exactly one group: that group is its whole world —
 // no group list, no History (the group page lists its reports), the form picker locked.
@@ -7976,14 +8002,14 @@ function _groupScoped() { return !!(_caps && (!_caps.unrestricted || _caps.group
 function _soleGroup() { return !!(_groupScoped() && Array.isArray(_groupsCache) && _groupsCache.length === 1) ? _groupsCache[0] : null; }
 let _groupOpenId = null;
 let _groupMembersById = {};        // run_id → member row (flags for the expanded detail)
-let _groupFlagOnly = false;        // "Show flagged only" toggle on the group page
-let _groupStatusFilter = 'all';    // 'all' | 'member' | 'prospect' chips on the group page
+let _groupFilter = null;           // group page table filter: null | 'flagged' | 'blocked' | 'prospect'
 async function loadGroupsPage() {
   const host = document.getElementById('groups-body'); if (!host) return;
   _groupStopPoll(); _groupOpenId = null;
-  _groupStatusFilter = 'all'; _groupFlagOnly = false;
+  _groupFilter = null;
   const restricted = _groupScoped();
   const nb = document.getElementById('groups-new-btn'); if (nb) nb.style.display = restricted ? 'none' : '';
+  const sb0 = document.getElementById('groups-search'); if (sb0) sb0.style.display = '';
   const _token_ = (loadGroupsPage._seq = (loadGroupsPage._seq || 0) + 1);
   const groups = await loadGroupsList(true);
   if (_token_ !== loadGroupsPage._seq || _groupOpenId) return;   // superseded, or a group was opened meanwhile
@@ -8037,7 +8063,11 @@ async function openGroupPage(id, highlightRunId) {
   _groupMembersById = Object.fromEntries(ms.map(m => [m.run_id, m]));
   if (_role === 'admin' && !(_adminCatalog.presets || []).length) { try { const rc = await api('/api/admin/access-catalog'); if (rc.ok) _adminCatalog = await rc.json(); } catch (e) {} }
   if (_groupOpenId !== id) return;
-  const sb = document.getElementById('groups-search'); if (sb) sb.placeholder = 'Search organizations, locations, specialties…';
+  // The page-level search and "+ New group" belong to the list page; the group page has its own toolbar.
+  const _q = _groupSearchVal();
+  const sb = document.getElementById('groups-search'); if (sb) sb.style.display = 'none';
+  const nb = document.getElementById('groups-new-btn'); if (nb) nb.style.display = 'none';
+  document.getElementById('group-create')?.classList.add('hidden');
   const _runningFor = (m) => running.find(r => String(r.entity_name || '').trim().toLowerCase() === String(m.entity_name || '').trim().toLowerCase());
   const _since = (ts) => { if (!ts) return ''; const dt = new Date(ts * 1000); return isNaN(dt) ? '' : dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
   const canEdit = (_role === 'admin');   // group settings are an administrator's job; members only run and view
@@ -8046,14 +8076,37 @@ async function openGroupPage(id, highlightRunId) {
   const _days = (d) => { if (!d) return null; const t = new Date(d + 'T00:00:00Z'); return isNaN(t) ? null : Math.round((Date.now() - t.getTime()) / 86400000); };
   const scoredMs = ms.filter(m => m.score != null && m.status !== 'prospect');
   const prospects = ms.filter(m => m.status === 'prospect');
-  const strip = scoredMs.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px">
-      ${[['Organizations', scoredMs.length, '', 'Members with a score — each organization counted once, by its latest run'], ['Group median', b.median ?? '—', '', 'The middle Pulse Score of the members; prospects are left out'],
-         ['Above median', scoredMs.filter(m => b.median != null && m.score > b.median).length, 'of ' + scoredMs.length, 'Members scoring above the group median'],
-         ['Top quartile (≥75)', scoredMs.filter(m => m.score >= 75).length, 'of ' + scoredMs.length, 'Members in the national top quartile (Pulse Score 75 or more)'],
-         ['Prospects', prospects.length, prospects.length ? 'shown in amber, outside the median' : '', 'Organizations evaluated against the group that are not members; they do not affect the median or ranks'],
-         ['Site blocks AI', ms.filter(m => m.website_status === 'blocked').length, 'need the firewall fix', 'Members whose website turns AI crawlers away at the firewall — nothing they publish reaches AI answers until it is fixed'],
-         ['Needs attention', dv.flagged, dv.flagged ? (dv.fix ? `${dv.fix} to fix · click to filter` : 'click to filter') : 'all reports complete', 'Delivery check — YOUR action: reports missing something before they go out (no spot check, no physician rows, summary not in the fixed shape, unresolved specialty, benchmark not printed, over 90 days old, roster drift). Remedy: ↻ Re-run or Fix roster. Hover a row\'s ⚠ badge for the list; click to show only flagged rows. Findings about the organization itself (unreadable website, listing details that disagree) are the ⓘ chips and are not counted here — they are in the PDF for the organization to fix.', 'groupToggleFlagOnly()']]
-        .map(([l, v, sub, tip, click]) => `<div title="${_learnEsc(tip || '')}" ${click ? `onclick="${click}"` : ''} style="flex:1;min-width:140px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:${click ? 'pointer' : 'help'}${(click && _groupFlagOnly) ? ';border-color:var(--teal);box-shadow:0 0 0 2px #cfe9e6' : ''}"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">${l}</div><div style="font-size:20px;font-weight:800;color:var(--teal)">${v}</div>${sub ? `<div style="font-size:11px;color:var(--muted)">${sub}</div>` : ''}</div>`).join('')}
+  const blocked = ms.filter(m => m.website_status === 'blocked');
+  // One benchmark box: row 1 is what prints on the PDFs (plus the score distribution), row 2 the
+  // watch list — the Prospects / Site blocks AI / Needs attention counts double as the table filters.
+  const cell = (l, v, tip, last) => `<div title="${_learnEsc(tip || '')}" style="padding:2px 14px;${last ? '' : 'border-right:1px solid var(--border);'}cursor:help;white-space:nowrap"><span style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">${l}</span> <strong style="font-size:17px;color:var(--teal);margin-left:6px">${v}</strong></div>`;
+  const stat = (l, v, tip, key, warn) => `<span class="gstat${key ? ' click' : ''}${key && _groupFilter === key ? ' on' : ''}${warn && v ? ' warn' : ''}" ${key ? `onclick="groupSetFilter('${key}')"` : ''} title="${_learnEsc(tip || '')}${key ? (_groupFilter === key ? '\n\nClick to show every row again.' : '\n\nClick to show only these rows.') : ''}">${l} <strong>${v}</strong></span>`;
+  const dist = (() => {
+    if (!scoredMs.length) return '';
+    const dot = (m, pro) => `<span onclick="groupJumpTo('${m.run_id}')" title="${_learnEsc((m.entity_name || '') + ' — ' + m.score + (pro ? ' (prospect)' : ''))}" style="position:absolute;left:${Math.max(0, Math.min(100, m.score))}%;top:${pro ? '12px' : '7px'};width:7px;height:7px;margin-left:-3.5px;border-radius:50%;cursor:pointer;${pro ? 'background:#fff;border:1.5px solid #c9962a' : 'background:var(--teal);opacity:.75'}"></span>`;
+    const mark = (v, color, w, tip) => v == null ? '' : `<span title="${_learnEsc(tip)}" style="position:absolute;left:${v}%;top:1px;bottom:1px;width:${w}px;margin-left:-${w / 2}px;background:${color};border-radius:1px"></span>`;
+    return `<div style="flex:1;min-width:240px;padding:0 0 0 14px" title="Where every organization's Pulse Score falls: red below 58, amber to 74, green 75 and up. Marks: first quartile, median (teal), third quartile. Hollow amber dots are prospects. Click a dot to jump to its row.">
+      <div style="position:relative;height:24px;border-radius:4px;overflow:visible;background:linear-gradient(90deg,#fbe9e9 0 58%,#fdf3dc 58% 75%,#e6f3ea 75%)">
+        ${mark(b.q1, '#9aa7b1', 2, 'First quartile ' + b.q1)}${mark(b.q3, '#9aa7b1', 2, 'Third quartile ' + b.q3)}${mark(b.median, 'var(--teal)', 3, 'Median ' + b.median)}
+        ${scoredMs.map(m => dot(m, false)).join('')}${prospects.filter(m => m.score != null).map(m => dot(m, true)).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-top:2px"><span>0</span><span>58</span><span>75</span><span>100</span></div></div>`;
+  })();
+  const box = ms.length ? `<div style="border:1px solid var(--border);border-radius:8px;background:#fff;padding:10px 14px;margin-top:10px">
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px 0;margin-left:-14px">
+        ${cell('Organizations', b.scored || scoredMs.length, 'Members with a score — each organization counted once, by its latest run')}
+        ${cell('Median', b.median ?? '—', 'The middle Pulse Score of the members; prospects are left out')}
+        ${b.q1 != null ? cell('Quartiles', `<span style="font-size:14px">${b.q1} / ${b.median} / ${b.q3}</span>`, 'First quartile / median / third quartile of the members\' Pulse Scores') : ''}
+        ${cell('Benchmark on reports', `<span style="font-size:14px">${b.ready && g.show_on_pdf ? 'on' : (g.show_on_pdf ? `after ${Math.max(0, (b.min_members || 10) - (b.scored || 0))} more` : 'off')}</span>`, 'Whether each member\'s PDF prints its rank, the group size and the group median (needs 10 scored organizations and the switch on — Manage ▾)', !dist)}
+        ${dist}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:9px;padding-top:9px;border-top:1px solid var(--border)">
+        ${stat('Above median', `${scoredMs.filter(m => b.median != null && m.score > b.median).length} of ${scoredMs.length}`, 'Members scoring above the group median')}
+        ${stat('Top quartile (≥75)', `${scoredMs.filter(m => m.score >= 75).length} of ${scoredMs.length}`, 'Members in the national top quartile (Pulse Score 75 or more)')}
+        ${stat('Prospects', prospects.length, 'Organizations evaluated against the group that are not members; shown in amber where they would rank, left out of the median', prospects.length ? 'prospect' : null)}
+        ${stat('Site blocks AI', blocked.length, 'Members whose website turns AI crawlers away at the firewall — nothing they publish reaches AI answers until it is fixed', blocked.length ? 'blocked' : null, true)}
+        ${stat('⚠ Needs attention', dv.flagged + (dv.flagged && dv.fix ? ` <span style="font-weight:400;color:var(--muted)">(${dv.fix} to fix)</span>` : ''), 'Delivery check — YOUR action: reports missing something before they go out (no spot check, no physician rows, summary not in the fixed shape, unresolved specialty, benchmark not printed, over 90 days old, roster drift). Remedy: ↻ Re-run or Fix roster. Hover a row\'s ⚠ badge for the list. Findings about the organization itself (unreadable website, listing details that disagree) are the ⓘ chips and are not counted here — they are in the PDF for the organization to fix.', dv.flagged ? 'flagged' : null, true)}
+      </div>
     </div>` : '';
   const rows = ms.map(m => {
     const p = m.pillars || {}; const pl = pillarLabels(m);
@@ -8092,7 +8145,7 @@ async function openGroupPage(id, highlightRunId) {
       acts.push([isProspect ? '✓ Make member' : 'Mark as prospect', `groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')`]);
       acts.push(['<span style="color:var(--red)">Remove from group</span>', `groupRemoveRun('${g.id}','${m.run_id}')`]);
     }
-    return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by, isProspect ? 'prospect' : 'member'].filter(Boolean).join(' ').toLowerCase())}" data-flagged="${fl.length ? '1' : '0'}" data-findings="${fnd.length ? '1' : '0'}" data-status="${isProspect ? 'prospect' : 'member'}" ${isNew ? 'style="background:#eaf7ee"' : (isProspect ? 'style="background:#fdf6e3"' : (rr ? 'style="background:#f4f9f8"' : ''))}>
+    return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by, isProspect ? 'prospect' : 'member'].filter(Boolean).join(' ').toLowerCase())}" data-flagged="${fl.length ? '1' : '0'}" data-findings="${fnd.length ? '1' : '0'}" data-blocked="${m.website_status === 'blocked' ? '1' : '0'}" data-status="${isProspect ? 'prospect' : 'member'}" ${isNew ? 'style="background:#eaf7ee"' : (isProspect ? 'style="background:#fdf6e3"' : (rr ? 'style="background:#f4f9f8"' : ''))}>
       <td style="text-align:center;font-weight:700;width:44px">${isProspect ? `<span style="font-size:11px;color:#7a5a00;white-space:nowrap" title="Not a member: shown where it would rank among members; left out of the median">would be<br>${m.would_rank ?? '—'}</span>` : (m.rank ?? '—')}</td>
       <td style="min-width:220px"><div style="font-weight:600;cursor:pointer;line-height:1.3" onclick="groupToggleMember('${g.id}','${m.run_id}')" title="Show this organization's score history, checklist, delivery check, recipients and roster">${_learnEsc(m.entity_name || '')} <span style="font-size:11px;color:var(--muted)">▾</span></div>
         <div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>
@@ -8104,33 +8157,37 @@ async function openGroupPage(id, highlightRunId) {
       <td style="white-space:nowrap;width:120px;text-align:right">${_actMenu('g-' + m.run_id, files, acts)}</td></tr>
       <tr id="gdet-${m.run_id}" class="hidden"><td colspan="6" style="background:#f6fafa;padding:10px 14px"></td></tr>`;
   }).join('');
-  const bench = b.scored ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px">
-      <div><span style="color:var(--muted)">Organizations</span> <strong>${b.scored}</strong></div>
-      <div><span style="color:var(--muted)">Median</span> <strong>${b.median}</strong></div>
-      ${b.q1 != null ? `<div><span style="color:var(--muted)">Quartiles</span> <strong>${b.q1} / ${b.median} / ${b.q3}</strong></div>` : ''}
-      <div><span style="color:var(--muted)">Benchmark on reports</span> <strong>${b.ready && g.show_on_pdf ? 'on' : (g.show_on_pdf ? `after ${b.min_members - b.scored} more` : 'off')}</strong></div></div>` : '';
-  host.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-      <div>${_soleGroup() ? '' : `<button class="btn btn-ghost btn-sm" onclick="loadGroupsPage()">← All groups</button>`}
-        <div style="font-size:20px;font-weight:700;margin-top:6px">${_learnEsc(g.name)}</div>
-        ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}
-        <div style="font-size:12px;color:var(--muted);margin-top:4px" title="Monthly reports: on the 1st, every member gets a Deep Diagnostic, Competitor Rankings for its market and (after 3 data points) a Trend report, emailed to its recipients">Monthly reports: <strong>${g.monthly_reports ? 'on' : 'off'}</strong>${g.monthly_last_run_at ? ` · last run ${_learnEsc(String(g.monthly_last_run_at).slice(0, 10))}` : ''}${g.monthly_last_status ? ` · ${_learnEsc(g.monthly_last_status)}` : ''}${g.monthly_cost_usd != null ? ` · <span title="Model and API cost recorded for the last monthly run (Deep Diagnostics, spot checks, content analysis, Rankings)">cost $${Number(g.monthly_cost_usd).toFixed(2)}</span>` : ''}${_role === 'admin' ? ` · <a href="#" onclick="groupMonthlyRunNow('${g.id}');return false" title="Run this month's set for every member now — the same thing the scheduler does on the 1st">run the monthly set now</a>` : ''}</div>${bench}${strip}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+  // Group management lives in one Manage ▾ menu (destructive items last); the work buttons stay visible in the toolbar.
+  const manage = [];
+  if (canEdit) {
+    manage.push(['✎ Edit details', `groupShowEdit('${g.id}')`]);
+    manage.push([g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports', `groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})`]);
+  }
+  if (_role === 'admin') manage.push(['Run the monthly set now', `groupMonthlyRunNow('${g.id}')`]);
+  if (canEdit) manage.push(['<span style="color:var(--red)">Archive group</span>', `groupArchive('${g.id}')`]);
+  if (_role === 'admin') manage.push(['<span style="color:var(--red)">Delete group</span>', `groupDelete('${g.id}', ${_jsq(g.name)}, ${ms.length})`]);
+  const marketsLeft = new Set(ms.filter(m => !m.rankings && m.market).map(m => (m.market.key || '') + '|' + (m.market.location || '').toLowerCase())).size;
+  const toolbar = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding:8px 10px;background:#f4f7f8;border:1px solid var(--border);border-radius:8px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input id="group-search" class="fi" type="search" placeholder="Search organizations, locations, specialties…" value="${_learnEsc(_q)}" title="Filters the table as you type — organization, location, specialty or who ran it" style="width:260px;padding:6px 10px;font-size:13px;margin:0" oninput="groupsFilter(this.value)">
+        <span id="group-filter-note" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')" title="Run a Deep Diagnostic on one organization; the report joins this group when it finishes">+ Add an organization</button>
         ${_capReport('events') ? `<button class="btn btn-secondary btn-sm" onclick="groupUploadList('${g.id}')" title="Upload a spreadsheet (name, city, state, optional website) and run a report for every row; all of them join this group">⬆ Upload a list</button>` : ''}
-        ${_capReport('rankings') ? `<button class="btn btn-secondary btn-sm" onclick="groupRunRankings('${g.id}', this)" title="Competitor Rankings for every market in this group (each row's city/state, the group specialty, 25 miles) that has no run this month — one run per market, shared by its members">≡ Run Competitor Rankings${ms.filter(m => !m.rankings).length ? ` (${new Set(ms.filter(m => !m.rankings && m.market).map(m => (m.market.key || '') + '|' + (m.market.location || '').toLowerCase())).size} markets)` : ''}</button>` : ''}
+        ${_capReport('rankings') ? `<button class="btn btn-secondary btn-sm" onclick="groupRunRankings('${g.id}', this)" title="Competitor Rankings for every market in this group (each row's city/state, the group specialty, 25 miles) that has no run this month — one run per market, shared by its members">≡ Run Competitor Rankings${marketsLeft ? ` (${marketsLeft} market${marketsLeft === 1 ? '' : 's'})` : ''}</button>` : ''}
         <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/export.csv?token=${encodeURIComponent(_token)}" title="Download the ranked table: rank, status, scores, pillars, evidence, website access, what needs attention, dates and who ran each report">⬇ CSV</a>
-        ${dv.flagged ? `<button class="btn btn-ghost btn-sm${_groupFlagOnly ? ' on' : ''}" id="group-flag-only" onclick="groupToggleFlagOnly()" title="Show only the reports the delivery check flagged — missing spot check, physician rows, fixed-shape summary, readable website, resolved specialty, printed benchmark, or over 90 days old">⚠ Needs attention (${dv.flagged})</button>` : ''}
-        ${prospects.length ? `<span id="group-status-chips" style="display:inline-flex;gap:4px;align-items:center" title="Show members, prospects, or both">
-          <button class="btn btn-ghost btn-sm${_groupStatusFilter === 'all' ? ' on' : ''}" data-v="all" onclick="groupSetStatusFilter('all')">All (${ms.length})</button>
-          <button class="btn btn-ghost btn-sm${_groupStatusFilter === 'member' ? ' on' : ''}" data-v="member" onclick="groupSetStatusFilter('member')" title="Organizations counted in the ranking and the median">Members (${ms.length - prospects.length})</button>
-          <button class="btn btn-ghost btn-sm${_groupStatusFilter === 'prospect' ? ' on' : ''}" data-v="prospect" onclick="groupSetStatusFilter('prospect')" title="Organizations evaluated against the group but not members">Prospects (${prospects.length})</button></span>` : ''}
-        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupShowEdit('${g.id}')" title="Edit name, description, type, default specialty, visibility and the benchmark-on-reports switch">✎ Edit details</button>
-        <button class="btn btn-ghost btn-sm" onclick="groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})" title="Whether each member's PDF prints its rank, the group size and the group median (only once the group has 10 organizations)">${g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports'}</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupArchive('${g.id}')" title="Hide the group from lists and pickers without losing anything; memberships and reports are kept and an administrator can restore it">Archive</button>` : ''}
-        ${_role === 'admin' ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupDelete('${g.id}', ${_jsq(g.name)}, ${ms.length})" title="Remove the group and its memberships for good; the member reports themselves are kept in History">Delete</button>` : ''}
+        ${manage.length ? _actMenu('g-manage', [], manage, 'Manage ▾') : ''}
       </div>
+    </div>`;
+  host.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">${_soleGroup() ? '' : `<button class="btn btn-ghost btn-sm" onclick="loadGroupsPage()">← All groups</button>`}
+        <div style="font-size:20px;font-weight:700">${_learnEsc(g.name)}</div>
+        ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}</div>
+      <div style="font-size:12px;color:var(--muted);text-align:right;padding-top:6px" title="Monthly reports: on the 1st, every member gets a Deep Diagnostic, Competitor Rankings for its market and (after 3 data points) a Trend report, emailed to its recipients">Monthly reports: <strong>${g.monthly_reports ? 'on' : 'off'}</strong>${g.monthly_last_run_at ? ` · last run ${_learnEsc(String(g.monthly_last_run_at).slice(0, 10))}` : ''}${g.monthly_last_status ? ` · ${_learnEsc(g.monthly_last_status)}` : ''}${g.monthly_cost_usd != null ? ` · <span title="Model and API cost recorded for the last monthly run (Deep Diagnostics, spot checks, content analysis, Rankings)">cost $${Number(g.monthly_cost_usd).toFixed(2)}</span>` : ''}</div>
     </div>
+    ${box}
     <div id="group-edit" class="card hidden" style="margin:12px 0;max-width:680px">
       <div class="fg"><label class="fl">Name</label><input id="ge-name" class="fi" value="${_learnEsc(g.name)}"></div>
       <div class="fg"><label class="fl">Description</label><input id="ge-desc" class="fi" value="${_learnEsc(g.description || '')}"></div>
@@ -8145,9 +8202,10 @@ async function openGroupPage(id, highlightRunId) {
       <div id="ge-err" class="err hidden mt8"></div>
     </div>
     ${running.length ? `<div style="margin-top:10px;font-size:12px;color:var(--teal)"><span class="spinner" style="width:10px;height:10px"></span> ${running.length} re-run${running.length === 1 ? '' : 's'} in progress — this page refreshes every 20 seconds.</div>` : ''}
-    ${ms.length ? `<table class="admin-tbl" style="margin-top:12px"><thead><tr><th style="text-align:center" title="Rank among members by Pulse Score; ties share a rank; prospects show the rank they would hold">#</th><th title="Click a name to expand: score history, checklist, delivery check, recipients, roster. Chips: customer, recipients, Rankings / Trend available">Organization</th><th style="text-align:center" title="Pulse Score out of 100, with the four pillar scores beneath">Pulse Score</th><th title="How much public data sits behind the score, plus the delivery check (⚠ your action) and organization findings (ⓘ in the PDF)">Evidence</th><th title="Date of the latest report and who ran it">Report</th><th style="text-align:right" title="Downloads, re-run, send to recipients, fix roster, member / prospect, remove">Actions</th></tr></thead><tbody>${rows}</tbody></table>`
+    ${toolbar}
+    ${ms.length ? `<table class="admin-tbl" style="margin-top:10px"><thead><tr><th style="text-align:center" title="Rank among members by Pulse Score; ties share a rank; prospects show the rank they would hold">#</th><th title="Click a name to expand: score history, checklist, delivery check, recipients, roster. Chips: customer, recipients, Rankings / Trend available">Organization</th><th style="text-align:center" title="Pulse Score out of 100, with the four pillar scores beneath">Pulse Score</th><th title="How much public data sits behind the score, plus the delivery check (⚠ your action) and organization findings (ⓘ in the PDF)">Evidence</th><th title="Date of the latest report and who ran it">Report</th><th style="text-align:right" title="Downloads, re-run, send to recipients, fix roster, member / prospect, remove">Actions</th></tr></thead><tbody>${rows}</tbody></table>`
                : '<div class="empty" style="margin-top:12px"><div>No members yet. Pick this group on the Deep Diagnostic form or an Event Prep upload, or add runs from History.</div></div>'}`;
-  groupsFilter(sb ? sb.value : '');
+  groupsFilter(_q);
   if (highlightRunId) { const tr = document.getElementById('grow-' + highlightRunId); if (tr) tr.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   _groupStopPoll();
   // Re-runs in progress: poll quietly and re-render ONLY when a run finished or started (no flashing),
@@ -9781,13 +9839,13 @@ function _fmtRunDate(run) {
 //   uid   : unique id for this row
 //   files : [[label, url|null]]  (null url => plain info line)
 //   acts  : [[label, onclickJs]]
-function _actMenu(uid, files, acts) {
+function _actMenu(uid, files, acts, label) {
   files = files || []; acts = acts || [];
   const mid = 'dlm-' + uid;
   const fileItems = files.map(([lbl, url]) => url ? `<a class="dlm-item" href="${url}">⬇ ${lbl}</a>` : `<div class="dlm-info">${lbl}</div>`).join('');
   const sep = (files.length && acts.length) ? '<div class="dlm-sep"></div>' : '';
   const actItems = acts.map(([lbl, fn]) => `<a class="dlm-item dlm-act" onclick="${fn};if(event){event.stopPropagation()}">${lbl}</a>`).join('');
-  return `<div class="dlm" id="${mid}"><button class="btn btn-secondary btn-sm" onclick="toggleDlm('${mid}',event)">Actions ▾</button><div class="dlm-pop hidden" style="min-width:300px;text-align:left">${fileItems}${sep}${actItems}</div></div>`;
+  return `<div class="dlm" id="${mid}"><button class="btn btn-secondary btn-sm" onclick="toggleDlm('${mid}',event)">${label || 'Actions ▾'}</button><div class="dlm-pop hidden" style="min-width:${files.length ? 300 : 220}px;text-align:left">${fileItems}${sep}${actItems}</div></div>`;
 }
 function _dlMenu(uid, files, acts) {
   files = files || []; acts = acts || [];
