@@ -106,6 +106,11 @@ if [[ "${1:-}" == "setup" ]]; then
   echo ""
   echo "Setup complete. Now add your secrets:"
   echo ""
+  # The service launches the worker job (Cloud Run Jobs API) as the compute service account: it needs
+  # run.developer (jobs.run + overrides) and actAs on itself. One-time, idempotent.
+  SA="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')-compute@developer.gserviceaccount.com"
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SA" --role="roles/run.developer" --quiet >/dev/null || true
+  gcloud iam service-accounts add-iam-policy-binding "$SA" --member="serviceAccount:$SA" --role="roles/iam.serviceAccountUser" --project "$PROJECT_ID" --quiet >/dev/null || true
   echo "  gcloud secrets create ANTHROPIC_API_KEY     --data-file=- <<< 'your-anthropic-key'"
   echo "  gcloud secrets create GOOGLE_PLACES_API_KEY --data-file=- <<< 'your-places-key'"
   echo "  gcloud secrets create ACCESS_PASSWORD        --data-file=- <<< 'your-access-password'"
