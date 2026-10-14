@@ -7,6 +7,8 @@ prefix is a convention; Python does not enforce it).
 """
 from __future__ import annotations
 
+from .db import local_today as _local_today
+
 import json
 import re
 import sys
@@ -1309,8 +1311,8 @@ def analyze_practice(
         individual_report=True,
         entity_name=entity_name,
         report_title=report_title,
-        generated_at=date.today(),
-        data_collected_at=date.today(),
+        generated_at=_local_today(),
+        data_collected_at=_local_today(),
         weighting_profile=run_profile,
         entity_type="practice",
         rubric_version=_RUBRIC_VERSION,

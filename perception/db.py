@@ -1,8 +1,43 @@
 from __future__ import annotations
 
 import threading
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime as _dt_cls
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
+
+# ── Calendar-month caching ────────────────────────────────────────────────────
+# Every report cache (Deep Diagnostic result, canonical entity score, Rankings market, content
+# findings, student-clinic score) is valid for the CALENDAR MONTH it was produced in, measured in
+# US Central time — the associations' "1st of the month". A report run on the 2nd is reused until
+# month-end; one run on the 31st is fresh again on the 1st. The same-day lock keys on the local day.
+APP_TZ = ZoneInfo("America/Chicago")
+CACHE_WINDOW = "month"        # "month" (calendar month) or "days" (rolling window)
+
+
+def local_today() -> date:
+    return _dt_cls.now(APP_TZ).date()
+
+
+def month_start(d: date | None = None) -> date:
+    d = d or local_today()
+    return d.replace(day=1)
+
+
+def next_month_start(d: date | None = None) -> date:
+    d = month_start(d)
+    return (d.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+
+def cache_cutoff(days: int) -> str:
+    """ISO date a cached row must be on/after. days=0 → today (same-day lock); the standard
+    30-day window → the first of the current month when CACHE_WINDOW is 'month'; other windows
+    stay rolling."""
+    today = local_today()
+    if days <= 0:
+        return today.isoformat()
+    if CACHE_WINDOW == "month" and days == 30:
+        return month_start(today).isoformat()
+    return (today - timedelta(days=days)).isoformat()
 
 import psycopg
 from psycopg_pool import ConnectionPool
@@ -1459,7 +1494,7 @@ def create_student_health_run(run_id: str, group_label: str, mode: str,
 def get_cached_clinic_score(clinic_key: str, days: int = 30) -> Optional[dict]:
     """Most recent cached score for a clinic within `days`, or None."""
     import json
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    cutoff = cache_cutoff(days)
     con = get_connection()
     row = con.execute(
         "SELECT result_json FROM student_clinic_cache "
@@ -1481,7 +1516,7 @@ def upsert_cached_clinic_score(clinic_key: str, result_json: str) -> None:
         "INSERT INTO student_clinic_cache (clinic_key, generated_at, result_json) "
         "VALUES (?, ?, ?) ON CONFLICT (clinic_key, generated_at) "
         "DO UPDATE SET result_json = EXCLUDED.result_json",
-        [clinic_key, date.today().isoformat(), result_json],
+        [clinic_key, local_today().isoformat(), result_json],
     )
     con.close()
 
@@ -1552,7 +1587,7 @@ def save_content_findings(run_id: str, norm_entity: str, source_snapshot: dict,
         "generated_at=EXCLUDED.generated_at, schema_version=EXCLUDED.schema_version, "
         "source_snapshot=EXCLUDED.source_snapshot, findings=EXCLUDED.findings, "
         "status=EXCLUDED.status",
-        [run_id, norm_entity, date.today().isoformat(), schema_version,
+        [run_id, norm_entity, local_today().isoformat(), schema_version,
          json.dumps(source_snapshot or {}), json.dumps(findings or []), status],
     )
     con.close()
@@ -1586,7 +1621,7 @@ def get_recent_content_findings(norm_entity: str, days: int = 30) -> Optional[di
     ne = _norm_entity_name(norm_entity)
     if not ne:
         return None
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    cutoff = cache_cutoff(days)
     con = get_connection()
     r = con.execute(
         "SELECT run_id, norm_entity, generated_at, schema_version, source_snapshot, "
@@ -1660,7 +1695,7 @@ def save_service_line_analysis(system_norm: str, system_name: str, data_json: st
 
 def get_recent_service_line_analysis(system_norm: str, days: int = 30) -> Optional[str]:
     """Return the cached service-line analysis JSON for a system if fresh, else None."""
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    cutoff = cache_cutoff(days)
     con = get_connection()
     row = con.execute(
         "SELECT data_json FROM service_line_analysis WHERE system_norm = ? AND created_at >= ?",
@@ -1728,7 +1763,7 @@ def count_public_requests_today(requester_email: str) -> int:
     r = con.execute(
         "SELECT COUNT(*) FROM public_report_requests "
         "WHERE lower(requester_email) = lower(?) AND created_at >= ?",
-        [requester_email, date.today().isoformat()],
+        [requester_email, local_today().isoformat()],
     ).fetchone()
     con.close()
     return int(r[0]) if r else 0
@@ -2115,8 +2150,9 @@ def _next_run_at(schedule: str, from_dt=None):
     if schedule == "weekly":
         return base + timedelta(weeks=1)
     if schedule == "monthly":
-        # Advance by ~30 days
-        return base + timedelta(days=30)
+        # The 1st of next month, 08:00 UTC (02:00–03:00 US Central) — a calendar month, not 30 days.
+        nm = next_month_start(base.date())
+        return _dt_cls(nm.year, nm.month, 1, 8, 0, 0)
     return None  # 'manual' — no auto-schedule
 
 
@@ -2158,7 +2194,7 @@ def create_comparison_run(cid: str, run_id_a: str, run_id_b: str, entity_a: str,
                                         specialty, pdf_path, teaser, user_role, ran_by, generated_at, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [cid, run_id_a, run_id_b, entity_a, entity_b, location_a, location_b, specialty, pdf_path,
-         bool(teaser), user_role, ran_by, _date.today(), datetime.utcnow()])
+         bool(teaser), user_role, ran_by, _local_today(), datetime.utcnow()])
     # Side runs that exist only to feed this comparison (no PDF of their own) are tagged so
     # History shows the comparison row instead of two empty clinic rows.
     for rid in (run_id_a, run_id_b):
@@ -2489,7 +2525,7 @@ def get_recent_run(
 
     Returns a dict with keys run_id, generated_at, result_json, or None.
     """
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    cutoff = cache_cutoff(days)
     con = get_connection()
 
     if entity_type == "practice":
@@ -2535,7 +2571,7 @@ def get_recent_network_run(network_name: str, days: int = 0) -> dict | None:
     Pass days=0 for same-day cache (today only).
     Returns dict with keys run_id, generated_at, result_json, or None.
     """
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    cutoff = cache_cutoff(days)
     with get_connection() as con:
         row = con.execute(
             """SELECT run_id, generated_at, result_json
@@ -2604,7 +2640,7 @@ def get_entity_score(name: str, location: str, days: int = 30) -> dict | None:
     nl = _norm_location(location)
     if not nn:
         return None
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    cutoff = cache_cutoff(days)
     con = get_connection()
     row = con.execute(
         """SELECT display_name, pulse_score, tier_scores, overall_rating, band_label,
@@ -2648,7 +2684,7 @@ def upsert_entity_score(name: str, location: str, pulse_score: int | None,
     nl = _norm_location(location)
     if not nn:
         return
-    today = date.today().isoformat()
+    today = local_today().isoformat()
     conflict = (
         "DO UPDATE SET display_name=EXCLUDED.display_name, pulse_score=EXCLUDED.pulse_score, "
         "tier_scores=EXCLUDED.tier_scores, overall_rating=EXCLUDED.overall_rating, "
@@ -2881,7 +2917,7 @@ def recent_runs_matching(kind: str, name: str, name_b: str = "", role: str = Non
     from datetime import date, timedelta
     if not name:
         return []
-    since = date.today() - timedelta(days=days)
+    since = local_today() - timedelta(days=days)
     role = _history_role(role)
     role_sql, role_args = ("", []) if role in (None, "", "admin") else (" AND COALESCE(user_role, 'admin') IN (?, 'admin')", [role])
     con = get_connection()
@@ -2916,7 +2952,7 @@ def recent_runs_matching(kind: str, name: str, name_b: str = "", role: str = Non
         out = [{"run_id": r[0], "title": r[1], "location": r[2], "date": str(r[3]), "ran_by": r[4],
                 "has_pdf": bool(r[5]), "url": f"/api/reports/{r[0]}/pdf"} for r in rows]
     con.close()
-    today = date.today()
+    today = local_today()
     for o in out:
         try:
             o["days_ago"] = (today - date.fromisoformat(o["date"][:10])).days
@@ -3049,7 +3085,7 @@ def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = Non
     if len(q) < 2:
         return []
     ql = q.lower()
-    today = _date.today()
+    today = _local_today()
     out = []
     for o in _suggest_index(role):
         if ql not in o["_hay"]:

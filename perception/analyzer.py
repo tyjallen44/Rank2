@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .db import local_today as _local_today
+
 import json
 import re
 import sys
@@ -696,7 +698,7 @@ def _apply_format(result, *, simplified, obscure_competitors, target_entity,
     result.target_entity = target_entity
     result.teaser_report = teaser_report
     result.patient_perspective = patient_perspective or teaser_report or simplified
-    result.generated_at = date.today()
+    result.generated_at = _local_today()
     # Normalize any target marking / fallback from the source cache, then apply
     # this request's target (Enticement only).
     result.rankings = [p for p in result.rankings if getattr(p, "rank", 0) != 999]
@@ -1423,8 +1425,8 @@ def analyze_location(
         individual_report=individual_report,
         entity_name=entity_name if individual_report else None,
         report_title=report_title if individual_report else None,
-        generated_at=date.today(),
-        data_collected_at=date.today(),
+        generated_at=_local_today(),
+        data_collected_at=_local_today(),
         weighting_profile=run_profile,
         entity_type=entity_type,
         market_overview=_clean(structured_data.get("market_overview", "")),

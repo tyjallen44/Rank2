@@ -4038,3 +4038,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 |---|---|---|
 | T1 | Deep Diagnostic (form, not forced) on a practice whose 90-day roster cache predates the state rule (Advanced Orthopaedics, Houston) | Log: "Registry roster trimmed: N out-of-state listings dropped"; the roster-drift flag no longer lists them; the Sources line no longer says "58 Google listings verified". Verified multi-state offices (website / NPI) are kept. [ui][pdf] |
 | R1 | Unit | `tests/test_location_resolver.py::test_cached_roster_drops_out_of_state_listings` passes. |
+
+## MONTH-CACHE — every report cache follows the calendar month, US Central (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Run a Deep Diagnostic on the 2nd, run it again on the 30th of the same month | Second run republishes the cached result (same score, same data date). [ui] |
+| T2 | Run on the last day of a month, run again on the 1st | The run on the 1st is fresh (new analysis, new data date) — no 30-day carry-over. [ui] |
+| T3 | Competitor Rankings and Deep Diagnostic in the same month for the same practice | Identical Pulse Score and pillars (shared canonical score within the month). [pdf] |
+| T4 | Trends entity on the monthly schedule | "Next run" shows the 1st of next month (02:00–03:00 Central), not +30 days. [ui] |
+| T5 | Report dates | A run started late evening Central shows that Central date as its generated / data date. [pdf] |
+| R1 | Unit | `tests/test_month_cache.py` (3 tests) passes; 90-day roster cache unchanged. |

@@ -33,6 +33,8 @@ Reconciliations versus the legacy functions (deliberate):
 """
 from __future__ import annotations
 
+from .db import local_today as _local_today
+
 import json
 import os
 import uuid
@@ -138,7 +140,7 @@ def _republish_cached(res: AnalysisResult, adapter, *, output_dir: Path, brand: 
     old_generated = res.generated_at
     res.run_id = str(uuid.uuid4())
     res.data_collected_at = res.data_collected_at or old_generated
-    res.generated_at = date.today()
+    res.generated_at = _local_today()
     res.teaser_report = False
     res.teaser_pdf_path = None
 
@@ -942,8 +944,8 @@ def run_individual(
         individual_report=True,
         entity_name=entity_name,
         report_title=ctx.report_title,
-        generated_at=date.today(),
-        data_collected_at=date.today(),
+        generated_at=_local_today(),
+        data_collected_at=_local_today(),
         weighting_profile=ctx.run_profile,
         market_overview=_clean(structured.get("market_overview", "")),
         ai_visibility_verdict=_verdict,
