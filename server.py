@@ -1351,7 +1351,7 @@ async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_pay
     g = _group_visible(payload, group_id)
     buf = _io.StringIO(); w = _csv.writer(buf)
     w.writerow(["Rank", "Status", "Organization", "Location", "Specialty", "Type", "Pulse Score", "Pillar 1", "Pillar 2", "Pillar 3", "Pillar 4",
-                "Evidence", "Website access", "Needs attention", "Findings", "RLDatix customer", "Recipients", "Report date", "Run by", "Run id"])
+                "Evidence", "Website access", "Needs attention", "Findings", "RLDatix customer", "Recipients", "Rankings this month", "Trend points", "Report date", "Run by", "Run id"])
     for m in members(group_id):
         p = m["pillars"]
         w.writerow([m.get("rank") or (f"would rank {m['would_rank']}" if m.get("would_rank") else ""), m.get("status") or "member",
@@ -1362,6 +1362,7 @@ async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_pay
                     "; ".join(f["label"] for f in (m.get("flags") or []) if f.get("kind") == "finding"),
                     "yes" if m.get("rldatix_customer") else "",
                     "; ".join(f"{c.get('name')} <{c.get('email')}>" if c.get("name") else c.get("email", "") for c in (m.get("contacts") or [])),
+                    ((m.get("rankings") or {}).get("generated_at") or ""), m.get("trend_points", 0),
                     m.get("generated_at") or "", m.get("ran_by") or "", m["run_id"]])
     safe = re.sub(r"[^A-Za-z0-9]+", "-", g["name"]).strip("-")[:40] or "group"
     return Response(buf.getvalue(), media_type="text/csv",
@@ -5910,6 +5911,86 @@ async def trend_reports_all(_: str = Depends(require_auth)):
         r["has_pdf"] = bool(r.get("pdf_path") and Path(r["pdf_path"]).exists())
         r.pop("pdf_path", None)
     return rows
+
+
+@app.post("/api/groups/{group_id}/rankings")
+async def groups_run_rankings(group_id: str, payload: dict = Depends(get_current_user_payload)):
+    """Competitor Rankings for every distinct market in the group (row city/state + specialty, 25 miles,
+    practice rubric) that has no run this month. Each market is one run shared by its members."""
+    from perception.groups import members
+    g = _group_visible(payload, group_id)
+    started, skipped, markets = 0, 0, set()
+    for m in members(group_id):
+        mk = m.get("market") or {}
+        loc, spec = (mk.get("location") or "").strip(), (mk.get("specialty") or "").strip()
+        if not loc or not spec or (mk.get("key"), loc.lower()) in markets:
+            continue
+        markets.add((mk.get("key"), loc.lower()))
+        if m.get("rankings"):
+            skipped += 1
+            continue
+        city, _, state = loc.partition(",")
+        req = AnalyzeRequest(city=city.strip(), state=state.strip(), specialty=spec, aggregate=True, patient_perspective=True,
+                             simplified_patient=True, obscure_competitors=False, entity_type="practice", radius_miles=25)
+        try:
+            await start_analysis(req, payload)
+            started += 1
+        except HTTPException as exc:
+            print(f"[groups][rankings] {loc} / {spec}: {exc.detail}", flush=True)
+    return {"started": started, "already_this_month": skipped, "markets": len(markets)}
+
+
+@app.get("/api/groups/{group_id}/bundle/{run_id}.zip")
+async def groups_bundle_zip(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
+    """The organization's latest reports in one zip: Deep Diagnostic, this month's Competitor Rankings for
+    its market, and the Trend report when it has enough data points."""
+    import io, zipfile
+    from perception.db import init_db, get_connection
+    from perception.groups import members, TREND_MIN
+    init_db()
+    g = _group_visible(payload, group_id)
+    m = next((x for x in members(group_id) if x["run_id"] == run_id), None)
+    if not m:
+        raise HTTPException(404, "That organization is not in this group")
+    slug = "".join(ch if ch.isalnum() else "-" for ch in str(m.get("entity_name") or "organization")).strip("-")[:50]
+    buf = io.BytesIO()
+    notes = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        con = get_connection()
+        row = con.execute("SELECT pdf_path FROM analysis_runs WHERE run_id = ?", [run_id]).fetchone()
+        if m.get("rankings"):
+            rrow = con.execute("SELECT pdf_path FROM analysis_runs WHERE run_id = ?", [m["rankings"]["run_id"]]).fetchone()
+        else:
+            rrow = None
+        con.close()
+        if row and row[0] and Path(row[0]).exists():
+            z.write(row[0], f"{slug}_Deep_Diagnostic_{m.get('generated_at') or ''}.pdf")
+        else:
+            notes.append("Deep Diagnostic PDF not on disk.")
+        if rrow and rrow[0] and Path(rrow[0]).exists():
+            z.write(rrow[0], f"{slug}_Competitor_Rankings_{m['rankings'].get('generated_at') or ''}.pdf")
+        else:
+            notes.append("No Competitor Rankings run for this market this month — use 'Run Competitor Rankings' on the group page.")
+        if m.get("trend_ready"):
+            try:
+                city, _, state = (m.get("location") or "").partition(",")
+                ent = await asyncio.get_running_loop().run_in_executor(None, lambda: _tracked_for_member(
+                    m.get("entity_name") or "", city.strip(), state.strip(), m.get("entity_type") or "practice",
+                    m.get("specialty") or g.get("default_specialty"), payload.get("email") or payload.get("role") or ""))
+                pts = _entity_points(ent)
+                pdf = await asyncio.get_running_loop().run_in_executor(None, lambda: _trend_report_file(ent, pts, payload.get("brand", "original")))
+                _record_trend_download(ent, pts, pdf, payload.get("email") or payload.get("role") or "")
+                z.write(str(pdf), f"{slug}_Trend_Report.pdf")
+            except Exception as exc:
+                notes.append(f"Trend report could not be rendered ({type(exc).__name__}).")
+        else:
+            notes.append(m.get("trend_note") or f"Trend report available after {TREND_MIN} monthly reports.")
+        if notes:
+            z.writestr("README.txt", "\n".join(notes) + "\n")
+    buf.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buf, media_type="application/zip",
+                             headers={"Content-Disposition": f'attachment; filename="{slug}_latest_reports.zip"'})
 
 
 @app.get("/api/groups/{group_id}/trend/{run_id}.pdf")

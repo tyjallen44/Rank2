@@ -8078,6 +8078,8 @@ async function openGroupPage(id, highlightRunId) {
       <td style="font-size:12px;color:var(--muted);white-space:nowrap">${m.generated_at || ''}</td>
       <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
       <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Download this organization's latest report">⬇ PDF</a>` : ''}
+        ${m.has_pdf ? `<a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/bundle/${m.run_id}.zip?token=${encodeURIComponent(_token)}" title="One zip with the latest Deep Diagnostic, this month's Competitor Rankings for its market${m.trend_ready ? ' and the Trend report' : ' (Trend report once it has 3 monthly data points)'}">⬇ Latest reports</a>` : ''}
+        ${m.rankings ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.rankings.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Competitor Rankings for ${_learnEsc((m.market || {}).location || '')} · ${_learnEsc((m.market || {}).specialty || '')} — run ${m.rankings.generated_at}">≡ Rankings</a>` : `<span style="font-size:11px;color:var(--muted);margin:0 6px" title="No Competitor Rankings run for this market this month — use 'Run Competitor Rankings' above">no Rankings this month</span>`}
         ${m.trend_ready ? `<a class="btn btn-ghost btn-sm" href="/api/groups/${g.id}/trend/${m.run_id}.pdf?token=${encodeURIComponent(_token)}" title="Trend report: this organization's ${m.trend_points} monthly scores, with pillar movement and notes">📈 Trend</a>` : `<span style="font-size:11px;color:var(--muted);margin:0 6px" title="A Trend report needs three monthly data points; each monthly Deep Diagnostic adds one">${_learnEsc(m.trend_note || '')}</span>`}
         <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member: it joins the ranking and the median' : 'Mark as a prospect: shown in amber with the rank it would hold, left out of the median and ranks'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
@@ -8097,6 +8099,7 @@ async function openGroupPage(id, highlightRunId) {
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')" title="Run a Deep Diagnostic on one organization; the report joins this group when it finishes">+ Add an organization</button>
         ${_capReport('events') ? `<button class="btn btn-secondary btn-sm" onclick="groupUploadList('${g.id}')" title="Upload a spreadsheet (name, city, state, optional website) and run a report for every row; all of them join this group">⬆ Upload a list</button>` : ''}
+        ${_capReport('rankings') ? `<button class="btn btn-secondary btn-sm" onclick="groupRunRankings('${g.id}', this)" title="Competitor Rankings for every market in this group (each row's city/state, the group specialty, 25 miles) that has no run this month — one run per market, shared by its members">≡ Run Competitor Rankings${ms.filter(m => !m.rankings).length ? ` (${new Set(ms.filter(m => !m.rankings && m.market).map(m => (m.market.key || '') + '|' + (m.market.location || '').toLowerCase())).size} markets)` : ''}</button>` : ''}
         <a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/export.csv?token=${encodeURIComponent(_token)}" title="Download the ranked table: rank, status, scores, pillars, evidence, website access, what needs attention, dates and who ran each report">⬇ CSV</a>
         ${dv.flagged ? `<button class="btn btn-ghost btn-sm${_groupFlagOnly ? ' on' : ''}" id="group-flag-only" onclick="groupToggleFlagOnly()" title="Show only the reports the delivery check flagged — missing spot check, physician rows, fixed-shape summary, readable website, resolved specialty, printed benchmark, or over 90 days old">⚠ Needs attention (${dv.flagged})</button>` : ''}
         ${prospects.length ? `<span id="group-status-chips" style="display:inline-flex;gap:4px;align-items:center" title="Show members, prospects, or both">
@@ -8142,6 +8145,17 @@ async function openGroupPage(id, highlightRunId) {
       for (const rid of open) { if (document.getElementById('gdet-' + rid)) groupToggleMember(id, rid); }
     } catch (e) { /* next tick */ }
   }, 20000);
+}
+async function groupRunRankings(gid, btn) {
+  if (!confirm('Run Competitor Rankings for every market in this group that has no run this month? Markets shared by several members run once.')) return;
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api(`/api/groups/${gid}/rankings`, { method: 'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not start'));
+    const d = await r.json();
+    _flash(`Competitor Rankings started for ${d.started} market${d.started === 1 ? '' : 's'}${d.already_this_month ? ` · ${d.already_this_month} already run this month` : ''}`);
+    setTimeout(() => openGroupPage(gid), 1500);
+  } catch (e) { alert(e.message); btn.disabled = false; btn.innerHTML = orig; }
 }
 async function groupRerun(btn, gid, runId, name) {
   if (!confirm(`Re-run ${name} now? This starts a fresh Deep Diagnostic with the same settings (spot check on) and attaches it to the group.`)) return;

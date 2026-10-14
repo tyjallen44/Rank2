@@ -917,6 +917,13 @@ def _apply_verified_quality(rankings: list, quality: dict | None) -> None:
         _p0.tier_scores.clinical_outcomes_safety = _ob
 
 
+def market_key(specialty: str | None, entity_type: str | None, aggregate: bool, patient_perspective: bool) -> str:
+    """The synthetic entity_name a market (Competitor Rankings / Patient Pulse) run is stored under —
+    one analysis per market regardless of display format."""
+    return "__market__{}_{}_{}_{}".format((specialty or "any").lower().replace(" ", "_"), (entity_type or "hospital"),
+                                         "agg" if aggregate else "single", "pp" if patient_perspective else "mkt")
+
+
 def _sync_entity_scores(rankings: list, city: str, state: str, run_profile: str | None,
                         run_id: str, override_today_lock: bool, source: str) -> None:
     """Canonical entity-score sync (shared across reports).
@@ -1213,12 +1220,7 @@ def analyze_location(
         # Full Report, teaser or not) share ONE analysis per market, so their data
         # is identical. Format/target/teaser affect rendering only, applied per
         # request via _apply_format on cache hits.
-        _mkey = "__market__{}_{}_{}_{}".format(
-            (specialty or "any").lower().replace(" ", "_"),
-            (entity_type or "hospital"),
-            "agg" if aggregate else "single",
-            "pp" if patient_perspective else "mkt",
-        )
+        _mkey = market_key(specialty, entity_type, aggregate, patient_perspective)
 
     # Cache logic for market reports (Patient Pulse, hospital/specialty market)
     if _mkey and not override_today_lock:

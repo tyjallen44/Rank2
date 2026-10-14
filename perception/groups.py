@@ -293,6 +293,25 @@ def members(group_id: str) -> list[dict]:
         for m in ranked:
             m["rldatix_customer"] = False
             m["contacts"] = []
+    # Competitor Rankings for each member's market: the row's city/state + the specialty (member's, else the
+    # group default), 25-mile radius, practice rubric — this month's run when there is one.
+    try:
+        from .analyzer import market_key
+        from .db import latest_market_run
+        g0 = get_group(group_id) or {}
+        seen_mk: dict = {}
+        for m in ranked:
+            spec = (m.get("specialty") or g0.get("default_specialty") or "").strip()
+            mk = market_key(spec or None, "practice", True, True)
+            loc = (m.get("location") or "").strip()
+            m["market"] = {"location": loc, "specialty": spec, "key": mk}
+            if (mk, loc.lower()) not in seen_mk:
+                seen_mk[(mk, loc.lower())] = latest_market_run(mk, loc)
+            r = seen_mk[(mk, loc.lower())]
+            m["rankings"] = ({"run_id": r["run_id"], "generated_at": r["generated_at"], "has_pdf": bool(r.get("pdf_path"))} if r else None)
+    except Exception:
+        for m in ranked:
+            m["market"], m["rankings"] = None, None
     # Trend data points (scored Deep Diagnostic runs) — the Trend report is offered at TREND_MIN.
     try:
         from .db import trend_point_counts

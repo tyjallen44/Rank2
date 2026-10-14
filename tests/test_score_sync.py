@@ -46,3 +46,10 @@ def test_market_pass_adopts_the_deep_diagnostic_score(monkeypatch):
     AN._sync_entity_scores(r, "Memphis", "TN", "practice_procedural", "run2", False, source="market")
     assert [p.name for p in r] == ["Other Clinic", "Brand Ortho"] and r[1].ai_visibility_score == 77 and r[1].tier_scores.access_fit == 59
     assert puts and puts[0][0][0] == "Other Clinic" and puts[0][1]["overwrite"] is False      # market seeds without overwriting
+
+
+def test_market_key_matches_the_rankings_form():
+    from perception.analyzer import market_key
+    assert market_key("Orthopedics", "practice", True, True) == "__market__orthopedics_practice_agg_pp"
+    assert market_key("Sports Medicine", "practice", True, True) == "__market__sports_medicine_practice_agg_pp"
+    assert market_key(None, None, False, False) == "__market__any_hospital_single_mkt"

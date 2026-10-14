@@ -2280,6 +2280,19 @@ def list_all_trend_reports(limit: int = 500) -> list[dict]:
     return out
 
 
+def latest_market_run(market_key: str, location: str) -> Optional[dict]:
+    """This month's Competitor Rankings run for a market (synthetic entity_name + 'City, ST'), with its PDF."""
+    con = get_connection()
+    row = con.execute(
+        """SELECT run_id, generated_at, pdf_path FROM analysis_runs
+           WHERE LOWER(entity_name) = LOWER(?) AND LOWER(location) = LOWER(?) AND generated_at >= ? AND result_json IS NOT NULL
+           ORDER BY generated_at DESC, run_id DESC LIMIT 1""", [market_key, location, cache_cutoff(30)]).fetchone()
+    con.close()
+    if not row:
+        return None
+    return {"run_id": row[0], "generated_at": str(row[1])[:10] if row[1] else None, "pdf_path": row[2]}
+
+
 def trend_point_counts(names: list) -> dict:
     """{lower-cased entity name: scored Deep Diagnostic runs} — the Trend data points an entity has."""
     names = sorted({(n or "").strip().lower() for n in names if (n or "").strip()})

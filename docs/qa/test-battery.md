@@ -4068,3 +4068,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | History | Every Trend report produced — emailed by Trends or downloaded from Trends / a group — appears in the Downloads menu of the Deep Diagnostic row it was built from ("📈 Trend report — sent 2026-10-01 · 4 points"), downloadable. Repeat downloads of the same file do not add rows. [ui] |
 | T4 | Trends page → download the Trend report | Also recorded and surfaced in History. [ui] |
 | R1 | Unit | `tests/test_groups.py::test_trend_gate_note` passes; emailing behaviour unchanged (no emails from this chunk). |
+
+## GROUPS-RANKINGS-AND-BUNDLE — Competitor Rankings per market + Latest reports zip (chunk 4) (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page toolbar → **≡ Run Competitor Rankings (N markets)** | Starts one Rankings run per distinct market (row city/state + specialty, 25 miles, practice rubric) that has no run this calendar month; markets shared by several members run once; confirm dialog; flash with counts. Runs appear in History. [ui] |
+| T2 | Group row after the market's run finishes | **≡ Rankings** link opens that market's Rankings PDF (hover shows market and date); before that, "no Rankings this month". The member's score in Rankings equals its Deep Diagnostic score (shared canonical score, same month). [ui][pdf] |
+| T3 | Group row → **⬇ Latest reports** | A zip with the Deep Diagnostic PDF, this month's Competitor Rankings PDF, and the Trend report when the organization has 3+ points; a README.txt explains anything missing ("Trend report available after 3 monthly reports (N so far)"). [ui] |
+| T4 | ⬇ CSV | New "Rankings this month" (date) and "Trend points" columns. [api] |
+| R1 | Unit | `tests/test_score_sync.py::test_market_key_matches_the_rankings_form` passes; the Rankings page's own cache key is unchanged (one analysis per market). |
