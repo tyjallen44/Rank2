@@ -4078,3 +4078,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T3 | Group row → **⬇ Latest reports** | A zip with the Deep Diagnostic PDF, this month's Competitor Rankings PDF, and the Trend report when the organization has 3+ points; a README.txt explains anything missing ("Trend report available after 3 monthly reports (N so far)"). [ui] |
 | T4 | ⬇ CSV | New "Rankings this month" (date) and "Trend points" columns. [api] |
 | R1 | Unit | `tests/test_score_sync.py::test_market_key_matches_the_rankings_form` passes; the Rankings page's own cache key is unchanged (one analysis per market). |
+
+## JOBS-RUNNER — uploads run as Cloud Run Jobs tasks (chunk 4½) (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deploy | `gcloud run jobs describe rank2-worker` exists after the deploy (same image, `python -m perception.jobs`, 24 h task timeout, 1 retry, same secrets and /data mount). The service has RUN_JOBS_NAME / GCP_PROJECT / GCP_REGION env. [infra] |
+| T2 | Upload a list (any size) | The run response has `mode: "job"`; the upload page shows "Running as a background job (parallel tasks)…" and refreshes every 15 s from the event status (rows update, progress bar, Complete → downloads). Server log: "[jobs] launched rank2-worker for event <id> (N tasks)". `N = ceil(organizations / 15)`, max 10. [ui][log] |
+| T3 | While the job runs: deploy a new version of the app | The upload keeps running to completion (it is not inside the web container); History / Groups show the reports as they land. [infra] |
+| T4 | Job task log | "[job] kind=event … task i/N", one line per organization, "[job] task i/N finished"; the last task builds the CSV / ZIP and marks the event complete; the creator still gets the completion email. [log] |
+| T5 | Resume on a job-mode event | Also launched as a job over the pending organizations only. [ui] |
+| R1 | Fallback | If the job cannot be launched (env unset or API error), the upload runs in-process exactly as before (`mode: "thread"`, SSE stream). `tests/test_jobs_runner.py` passes. |

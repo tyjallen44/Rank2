@@ -13797,7 +13797,7 @@ async function evSubmitRun() {
     });
     if (!r.ok) throw new Error(await errDetail(r, 'Failed to start event analysis run'));
     const data = await r.json();
-    _evEventId = data.event_id;
+    _evEventId = data.event_id; _evJobMode = (data.mode === 'job' || !data.job_id);
     _evTotal   = entities.length;
     _evDone    = 0;
     _evSkipped = 0;
@@ -13873,7 +13873,40 @@ function evUpdateEntityRow(entityId, name, status, score, grade, band) {
   }
 }
 
+let _evPollTimer = null;
+let _evJobMode = false;   // the upload runs as a Cloud Run Job (no SSE stream) → poll the event status
+function evPollProgress(eventId) {
+  // Cloud Run Jobs mode: progress lives in the event rows, refreshed every 15 s until complete.
+  const box = document.getElementById('ev-stream-box');
+  const seen = new Set();
+  box.textContent += 'Running as a background job (parallel tasks) — this page refreshes every 15 s; you can leave and come back via History.\n';
+  evSetPhase('starting', 'done'); evSetPhase('analyzing', 'active');
+  document.getElementById('ev-prog-sub').textContent = 'Running analyses…';
+  const tick = async () => {
+    try {
+      const r = await api(`/api/event/${eventId}/status`); if (!r.ok) return;
+      const d = await r.json();
+      _evTotal = d.total_count || _evTotal; _evDone = d.done_count || 0; _evSkipped = d.skip_count || 0;
+      (d.entities || []).forEach(e => {
+        const st = e.status || 'pending';
+        if (st === 'done' && !seen.has(e.id)) { seen.add(e.id); box.textContent += `✓  ${e.resolved_name || e.input_name}  —  ${e.pulse_score ?? ''} ${e.letter_grade || ''}\n`; box.scrollTop = box.scrollHeight; }
+        if ((st === 'skipped' || st === 'failed') && !seen.has(e.id)) { seen.add(e.id); box.textContent += `✗  ${e.resolved_name || e.input_name}  —  ${st}${e.error_msg ? ' · ' + e.error_msg : ''}\n`; }
+        evUpdateEntityRow(e.id, e.resolved_name || e.input_name, st === 'done' ? 'done' : (st === 'running' ? 'running' : (st === 'pending' ? 'pending' : 'skipped')), e.pulse_score, e.letter_grade, e.band_label);
+      });
+      evUpdateProgressBar();
+      if (d.status === 'complete' || d.status === 'done') {
+        clearInterval(_evPollTimer); _evPollTimer = null;
+        evSetPhase('analyzing', 'done'); evSetPhase('finalizing', 'done');
+        document.getElementById('ev-prog-sub').textContent = 'Complete';
+        evShowComplete();
+      }
+    } catch (e) { /* next tick */ }
+  };
+  if (_evPollTimer) clearInterval(_evPollTimer);
+  tick(); _evPollTimer = setInterval(tick, 15000);
+}
 function evStreamProgress(eventId) {
+  if (!_evJobMode) { /* SSE below */ } else { evPollProgress(eventId); return; }
   const es  = new EventSource(`/api/event/${eventId}/stream?token=${encodeURIComponent(_token)}`);
   const box = document.getElementById('ev-stream-box');
   let firstEntity = true;

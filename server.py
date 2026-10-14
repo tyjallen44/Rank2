@@ -883,6 +883,10 @@ _pool = ThreadPoolExecutor(max_workers=2)
 
 
 def _put(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, event: Any) -> None:
+    if loop is None or queue is None:            # job process (perception/jobs.py): no SSE listener
+        if event is not None and isinstance(event, dict) and event.get("type") in ("log", "phase", "entity_done", "entity_skip", "error"):
+            print(f"[job] {event.get('text') or event.get('name') or ''}".rstrip(), flush=True)
+        return
     asyncio.run_coroutine_threadsafe(queue.put(event), loop)
 
 
@@ -2094,6 +2098,54 @@ def _new_job(role: str, brand: str = "original", email: Optional[str] = None) ->
                      "brand": brand, "email": email, "started_at": time.time(),
                      "owner": _owner_key(email, role)}
     return job_id
+
+
+def _job_stub(role: str = "admin", brand: str = "original", email: Optional[str] = None, label: Optional[str] = None) -> str:
+    """A job record for a process with no web event loop (Cloud Run Jobs task): the same dict the
+    threads read, with no SSE queue — emits print to the task log instead."""
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {"status": "running", "loop": None, "queue": None, "role": role, "brand": brand, "email": email,
+                     "started_at": time.time(), "owner": _owner_key(email, role), "label": label}
+    return job_id
+
+
+# ── Cloud Run Jobs launcher ───────────────────────────────────────────────────
+# RUN_JOBS_NAME names the Cloud Run Job (same image, `python -m perception.jobs`); when it is set the
+# bulk work runs there — parallel tasks, 24 h each, retried, untouched by deploys — and the web app only
+# tracks progress through the event rows. Unset (or a launch failure) → the in-process thread pool.
+def _jobs_enabled() -> bool:
+    return bool(os.environ.get("RUN_JOBS_NAME")) and bool(os.environ.get("GCP_PROJECT")) and bool(os.environ.get("GCP_REGION"))
+
+
+def _task_count(n_entities: int, per_task: int = 15, max_tasks: int = 10) -> int:
+    import math
+    return max(1, min(max_tasks, math.ceil(max(n_entities, 1) / per_task)))
+
+
+def _launch_cloud_run_job(kind: str, event_id: str, n_entities: int) -> Optional[str]:
+    """Start the worker job with env overrides. Returns the operation name, or None when jobs are off /
+    the launch failed (caller falls back to the thread pool)."""
+    if not _jobs_enabled():
+        return None
+    import httpx as _hx
+    project, region, name = os.environ["GCP_PROJECT"], os.environ["GCP_REGION"], os.environ["RUN_JOBS_NAME"]
+    try:
+        tok = _hx.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+                      headers={"Metadata-Flavor": "Google"}, timeout=5).json()["access_token"]
+        body = {"overrides": {"taskCount": _task_count(n_entities),
+                              "containerOverrides": [{"env": [{"name": "PULSE_JOB_KIND", "value": kind},
+                                                               {"name": "PULSE_EVENT_ID", "value": event_id}]}]}}
+        r = _hx.post(f"https://run.googleapis.com/v2/projects/{project}/locations/{region}/jobs/{name}:run",
+                     headers={"Authorization": f"Bearer {tok}"}, json=body, timeout=30)
+        if r.status_code >= 300:
+            print(f"[jobs] launch failed {r.status_code}: {r.text[:300]}", flush=True)
+            return None
+        op = (r.json() or {}).get("name")
+        print(f"[jobs] launched {name} for {kind} {event_id} ({_task_count(n_entities)} tasks): {op}", flush=True)
+        return op
+    except Exception as exc:
+        print(f"[jobs] launch error: {type(exc).__name__}: {exc}", flush=True)
+        return None
 
 
 def _owner_key(email: Optional[str], role: Optional[str]) -> str:
@@ -6806,15 +6858,20 @@ async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_us
         practice_content=req.practice_content,
         group_id=(req.group_id or "").strip() or None,
         spotcheck=bool(req.spotcheck),
+        created_by=payload.get("email"), group_role=(req.group_role or "member"),
     )
     create_event_entities(entities_db)
 
+    if _launch_cloud_run_job("event", event_id, len(entities_db)):
+        from perception.db import set_event_run_mode
+        set_event_run_mode(event_id, "job")
+        return {"event_id": event_id, "job_id": None, "mode": "job", "tasks": _task_count(len(entities_db))}
     job_id = _new_job(role, brand, payload.get("email"))
     _event_job_map[event_id] = job_id
     _pool.submit(_run_event_job, job_id, event_id, entities_db, req.entity_type, req.include_teaser,
                  req.override_cache, req.auto_practice_composite, req.practice_content,
                  (req.group_id or "").strip() or None, bool(req.spotcheck), (req.group_role or "member"))
-    return {"event_id": event_id, "job_id": job_id}
+    return {"event_id": event_id, "job_id": job_id, "mode": "thread"}
 
 
 @app.post("/api/event/{event_id}/resume")
@@ -6841,6 +6898,10 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
         _g = _gg(run["group_id"])
         if _g and _g.get("type_hint") in ("practice", "hospital"):
             _etype = _g["type_hint"]
+    if _launch_cloud_run_job("event", event_id, len(pending)):
+        from perception.db import set_event_run_mode
+        set_event_run_mode(event_id, "job")
+        return {"event_id": event_id, "job_id": None, "mode": "job", "pending": len(pending)}
     _pool.submit(_run_event_job, job_id, event_id, pending,
                  _etype,
                  bool(run.get("include_teaser")),
@@ -6848,7 +6909,7 @@ async def event_resume(event_id: str, payload: dict = Depends(get_current_user_p
                  bool(run.get("auto_practice_composite")),
                  bool(run.get("practice_content")),
                  run.get("group_id") or None, bool(run.get("spotcheck")), run.get("group_role") or "member")
-    return {"event_id": event_id, "job_id": job_id, "pending": len(pending)}
+    return {"event_id": event_id, "job_id": job_id, "pending": len(pending), "mode": "thread"}
 
 
 def _run_event_job(
@@ -6860,8 +6921,10 @@ def _run_event_job(
     group_id: Optional[str] = None,
     spotcheck: bool = False,
     group_role: str = "member",
+    task_mode: bool = False,
 ) -> None:
-    """Background: analyze all entities in the event, 5 at a time."""
+    """Background: analyze all entities in the event, 5 at a time. task_mode: this process is one
+    Cloud Run Jobs task holding a shard — it builds the CSV / ZIP only if it finds nothing pending."""
     import re as _re
     import threading
     from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
@@ -7224,6 +7287,11 @@ def _run_event_job(
         import zipfile as _zf
         ev_entities = get_event_entities(event_id)
         ev          = get_event_run(event_id)
+        if task_mode and any((e.get("status") or "") not in ("done", "skipped", "failed", "error") for e in ev_entities):
+            # Other tasks are still working; the last one to finish builds the files.
+            job["status"] = "done"
+            job["result"] = {"event_id": event_id, "partial": True}
+            return
 
         def _ascii_grade(g: str) -> str:
             return (g or "").replace("−", "-").replace("—", "N/A").replace("–", "-")

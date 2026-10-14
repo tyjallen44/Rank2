@@ -46,6 +46,7 @@ fi
 # ── Config ────────────────────────────────────────────────────────────────────
 REGION="us-central1"
 SERVICE="rank2"
+WORKER_JOB="rank2-worker"
 
 # ── SSO / Email config (edit these before deploying) ─────────────────────────
 GOOGLE_CLIENT_ID="883710187036-ruiomm1h40c6947uo8qn06su95fci1uq.apps.googleusercontent.com"
@@ -155,10 +156,30 @@ gcloud run deploy "$SERVICE" \
   --max-instances=10 \
   --session-affinity \
   --no-cpu-throttling \
-  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
+  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},RUN_JOBS_NAME=${WORKER_JOB},GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION}" \
   --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest,DATABASE_URL=rank2-db-url:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest" \
   --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount="volume=rank2-data,mount-path=/data"
+# ── Worker job: the same image, started per batch (uploads, monthly sets) as parallel tasks ──
+# perception/jobs.py reads PULSE_JOB_KIND / PULSE_EVENT_ID from the run overrides the app sends.
+echo "==> Deploying worker job ${WORKER_JOB}..."
+JOB_VERB=$(gcloud run jobs describe "$WORKER_JOB" --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1 && echo update || echo create)
+gcloud run jobs "$JOB_VERB" "$WORKER_JOB" \
+  --image="$IMAGE_TAG" \
+  --region="$REGION" \
+  --project="$PROJECT_ID" \
+  --quiet \
+  --memory=4Gi \
+  --cpu=2 \
+  --tasks=1 \
+  --max-retries=1 \
+  --task-timeout=24h \
+  --command=python \
+  --args=-m,perception.jobs \
+  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION}" \
+  --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest,DATABASE_URL=rank2-db-url:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest" \
+  --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
+  --add-volume-mount="volume=rank2-data,mount-path=/data" || echo "WARNING: worker job deploy failed — uploads fall back to in-process threads"
 # NOTE: The /data volume now holds only generated reports (REPORTS_DIR); the
 # database moved off GCS FUSE to Postgres (Neon) via the DATABASE_URL secret.
 # Once this revision is verified, max-instances can be raised past 2 safely —

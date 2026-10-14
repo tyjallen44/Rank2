@@ -910,6 +910,9 @@ def _init_db_impl() -> None:
     for _c in ("include_teaser", "override_cache", "auto_practice_composite", "practice_content", "spotcheck"):
         if _c not in _er_cols:
             con.execute(f"ALTER TABLE event_runs ADD COLUMN {_c} BOOLEAN DEFAULT FALSE")
+    for _c, _d in (("created_by", "VARCHAR"), ("group_role", "VARCHAR"), ("run_mode", "VARCHAR")):   # jobs runner (perception/jobs.py)
+        if _c not in _er_cols:
+            con.execute(f"ALTER TABLE event_runs ADD COLUMN {_c} {_d}")
     con.execute("""
         CREATE TABLE IF NOT EXISTS ai_access_scans (
             id         VARCHAR PRIMARY KEY,
@@ -1167,18 +1170,27 @@ def create_event_run(
     include_teaser: bool = False, override_cache: bool = False,
     auto_practice_composite: bool = False, practice_content: bool = False,
     group_id: Optional[str] = None, spotcheck: bool = False,
+    created_by: Optional[str] = None, group_role: Optional[str] = None, run_mode: Optional[str] = None,
 ) -> None:
     from datetime import datetime
     con = get_connection()
     con.execute(
         "INSERT INTO event_runs (id, event_name, event_date, entity_type, csv_filename, "
         "total_count, done_count, skip_count, status, user_role, "
-        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id, spotcheck) "
-        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?, ?, ?, ?, ?, ?, ?)",
+        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id, spotcheck, "
+        "created_by, group_role, run_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [event_id, event_name, event_date, entity_type, csv_filename, total_count, role,
          bool(include_teaser), bool(override_cache), bool(auto_practice_composite),
-         bool(practice_content), datetime.utcnow(), group_id or None, bool(spotcheck)],
+         bool(practice_content), datetime.utcnow(), group_id or None, bool(spotcheck),
+         created_by or None, group_role or None, run_mode or None],
     )
+    con.close()
+
+
+def set_event_run_mode(event_id: str, run_mode: str) -> None:
+    con = get_connection()
+    con.execute("UPDATE event_runs SET run_mode = ? WHERE id = ?", [run_mode, event_id])
     con.close()
 
 
@@ -1268,7 +1280,8 @@ def get_event_run(event_id: str) -> Optional[dict]:
     row = con.execute(
         "SELECT id, event_name, event_date, entity_type, csv_filename, total_count, "
         "done_count, skip_count, status, user_role, enriched_csv_path, zip_path, "
-        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id, spotcheck "
+        "include_teaser, override_cache, auto_practice_composite, practice_content, created_at, group_id, spotcheck, "
+        "created_by, group_role, run_mode "
         "FROM event_runs WHERE id = ?",
         [event_id],
     ).fetchone()
@@ -1278,7 +1291,8 @@ def get_event_run(event_id: str) -> Optional[dict]:
     cols = ["id", "event_name", "event_date", "entity_type", "csv_filename",
             "total_count", "done_count", "skip_count", "status", "user_role",
             "enriched_csv_path", "zip_path", "include_teaser", "override_cache",
-            "auto_practice_composite", "practice_content", "created_at", "group_id", "spotcheck"]
+            "auto_practice_composite", "practice_content", "created_at", "group_id", "spotcheck",
+            "created_by", "group_role", "run_mode"]
     return dict(zip(cols, row))
 
 
