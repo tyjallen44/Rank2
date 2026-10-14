@@ -2281,6 +2281,32 @@ def list_trend_reports(entity_id: str) -> list[dict]:
     return out
 
 
+def _ensure_bundle_links(con) -> None:
+    con.execute("""CREATE TABLE IF NOT EXISTS bundle_links (
+        token VARCHAR PRIMARY KEY, group_id VARCHAR NOT NULL, run_id VARCHAR NOT NULL, email VARCHAR,
+        created_at TIMESTAMP NOT NULL)""")
+
+
+def create_bundle_link(group_id: str, run_id: str, email: str = "") -> str:
+    """A secure, expiring download token for an organization's latest-reports bundle (emailed)."""
+    import secrets as _secrets
+    tok = _secrets.token_urlsafe(24)
+    con = get_connection()
+    _ensure_bundle_links(con)
+    con.execute("INSERT INTO bundle_links (token, group_id, run_id, email, created_at) VALUES (?, ?, ?, ?, ?)",
+                [tok, group_id, run_id, email or "", _dt_cls.utcnow()])
+    con.close()
+    return tok
+
+
+def get_bundle_link(token: str) -> Optional[dict]:
+    con = get_connection()
+    _ensure_bundle_links(con)
+    row = con.execute("SELECT token, group_id, run_id, email, created_at FROM bundle_links WHERE token = ?", [token]).fetchone()
+    con.close()
+    return dict(zip(["token", "group_id", "run_id", "email", "created_at"], row)) if row else None
+
+
 def list_all_trend_reports(limit: int = 500) -> list[dict]:
     """Every Trend report produced (emailed or downloaded), newest first — surfaced in History."""
     con = get_connection()

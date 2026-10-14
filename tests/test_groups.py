@@ -160,3 +160,14 @@ def test_trend_gate_note():
     assert TREND_MIN == 3
     assert trend_note(0) == "Trend report available after 3 monthly reports (0 so far)"
     assert trend_note(2).endswith("(2 so far)") and trend_note(3) == "" and trend_note(7) == ""
+
+
+def test_monthly_entities_from_members():
+    from perception.groups import monthly_entities
+    g = {"id": "g1", "name": "The OrthoForum", "default_specialty": "Orthopedics"}
+    ms = [{"entity_name": "Brand Ortho", "location": "Memphis, TN", "specialty": "", "status": "member", "rldatix_customer": True},
+          {"entity_name": "Prospect Co", "location": "Austin, TX", "specialty": "Spine", "status": "prospect"},
+          {"entity_name": "No Location", "location": "", "status": "member"}]
+    rows = monthly_entities(g, ms, "ev1")
+    assert len(rows) == 1 and rows[0]["input_city"] == "Memphis" and rows[0]["input_state"] == "TN"
+    assert rows[0]["input_specialty"] == "Orthopedics" and rows[0]["input_customer"] == "yes" and rows[0]["resolved_name"] == "Brand Ortho"

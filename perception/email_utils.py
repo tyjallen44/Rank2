@@ -288,3 +288,35 @@ def send_trend_alert(email: str, entity_name: str, *, latest: int, previous: int
     """
     atts = _attach([pdf_path]) if pdf_path else None
     _send(email, f"{'▲' if up else '▼'} {abs(delta)} — {entity_name} AI Visibility score now {latest}", _wrap(body), attachments=atts)
+
+
+def send_monthly_bundle(email: str, name: Optional[str], organization: str, group_name: str, month_label: str,
+                        download_url: str, attachments: Optional[list], included: list, pending_note: str = "") -> None:
+    """The organization's monthly set (Deep Diagnostic, Competitor Rankings, Trend) — PDFs attached and a
+    secure link to the same bundle; `included` lists what is attached, `pending_note` explains anything not yet available."""
+    display = name or "there"
+    items = "".join(f"<li>{x}</li>" for x in included)
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">Your {month_label} AI Visibility reports</h2>
+    <p>Hi {display},</p>
+    <p style="margin-bottom:8px">Attached are this month's reports for <strong>{organization}</strong>,
+    prepared for members of <strong>{group_name}</strong>:</p>
+    <ul style="margin:0 0 12px 18px">{items}</ul>
+    {f'<p style="font-size:13px;color:#5A6E72">{pending_note}</p>' if pending_note else ''}
+    <p style="margin:20px 0">{_btn(download_url, "Download the reports")}</p>
+    <p style="font-size:12px;color:#5A6E72;margin-bottom:0">The link is unique to you and expires in 30 days.
+    Questions about your results? Reply to this email.</p>
+    """
+    _send(email, f"{organization} — {month_label} AI Visibility reports", _wrap(body), attachments)
+
+
+def send_monthly_summary(email: str, group_name: str, month_label: str, stats: dict, group_url: str) -> None:
+    """Coordinator summary after a group's monthly run."""
+    rows = "".join(f"<tr><td style='padding:3px 10px 3px 0;color:#5A6E72'>{k}</td><td style='padding:3px 0'><strong>{v}</strong></td></tr>"
+                   for k, v in stats.items())
+    body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">{group_name} — {month_label} monthly reports</h2>
+    <table style="border-collapse:collapse;font-size:14px">{rows}</table>
+    <p style="margin:20px 0">{_btn(group_url, "Open the group")}</p>
+    """
+    _send(email, f"{group_name} — {month_label} monthly reports sent", _wrap(body))

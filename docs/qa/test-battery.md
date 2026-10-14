@@ -4089,3 +4089,14 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Job task log | "[job] kind=event … task i/N", one line per organization, "[job] task i/N finished"; the last task builds the CSV / ZIP and marks the event complete; the creator still gets the completion email. [log] |
 | T5 | Resume on a job-mode event | Also launched as a job over the pending organizations only. [ui] |
 | R1 | Fallback | If the job cannot be launched (env unset or API error), the upload runs in-process exactly as before (`mode: "thread"`, SSE stream). `tests/test_jobs_runner.py` passes. |
+
+## MONTHLY-SET — scheduler + delivery (chunk 5) (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group → ✎ Edit details | New switch "Monthly reports on the 1st — Deep Diagnostic + Competitor Rankings + Trend, emailed to each organization's recipients"; the group header shows "Monthly reports: on/off · last run <date> · <status>" and, for admins, "run the monthly set now". [ui] |
+| T2 | Admin → "run the monthly set now" (or Cloud Scheduler `rank2-monthly-reports` at 02:00 Central on the 1st → `POST /api/scheduler/monthly`) | A batch "<group> — <Month YYYY> monthly reports" starts for every MEMBER (prospects excluded) with spot check and content analysis on, as a Cloud Run Job when available; visible in History as an Event with its reports attached to the group. [ui] |
+| T3 | When the batch finishes | Competitor Rankings run once per distinct market (row city/state + specialty, 25 mi) lacking a run this month; each member with recipients gets one email per recipient: "<Organization> — <Month YYYY> AI Visibility reports" with the bundle zip attached (Deep Diagnostic, Competitor Rankings, Trend when it has 3 points) and a secure link (`/api/public/bundle/<token>`, 30 days); members without recipients are counted, not emailed; the group creator gets a summary email with counts; the header status reads "<Month>: N emails sent · F failed · W without recipients · R Rankings run". [email][ui] |
+| T4 | Manual runs (form, upload, Re-run) | Send nothing — only the monthly set emails. [email] |
+| T5 | Public link after 30 days | 410 "This link has expired." [api] |
+| R1 | Unit | `tests/test_groups.py::test_monthly_entities_from_members` passes; groups without the switch are untouched by the scheduler. |

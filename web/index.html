@@ -8095,7 +8095,8 @@ async function openGroupPage(id, highlightRunId) {
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
       <div>${_soleGroup() ? '' : `<button class="btn btn-ghost btn-sm" onclick="loadGroupsPage()">← All groups</button>`}
         <div style="font-size:20px;font-weight:700;margin-top:6px">${_learnEsc(g.name)}</div>
-        ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}${bench}${strip}</div>
+        ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" title="Monthly reports: on the 1st, every member gets a Deep Diagnostic, Competitor Rankings for its market and (after 3 data points) a Trend report, emailed to its recipients">Monthly reports: <strong>${g.monthly_reports ? 'on' : 'off'}</strong>${g.monthly_last_run_at ? ` · last run ${_learnEsc(String(g.monthly_last_run_at).slice(0, 10))}` : ''}${g.monthly_last_status ? ` · ${_learnEsc(g.monthly_last_status)}` : ''}${_role === 'admin' ? ` · <a href="#" onclick="groupMonthlyRunNow('${g.id}');return false" title="Run this month's set for every member now — the same thing the scheduler does on the 1st">run the monthly set now</a>` : ''}</div>${bench}${strip}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')" title="Run a Deep Diagnostic on one organization; the report joins this group when it finishes">+ Add an organization</button>
         ${_capReport('events') ? `<button class="btn btn-secondary btn-sm" onclick="groupUploadList('${g.id}')" title="Upload a spreadsheet (name, city, state, optional website) and run a report for every row; all of them join this group">⬆ Upload a list</button>` : ''}
@@ -8121,6 +8122,7 @@ async function openGroupPage(id, highlightRunId) {
       ${_role === 'admin' ? `<div class="fg"><label class="fl">Visible to accounts on preset <span style="color:var(--muted);font-weight:400">(blank = unrestricted users only)</span></label>
         <select id="ge-preset" class="fi" style="width:auto;min-width:260px"><option value="">— none —</option>${(_adminCatalog.presets || []).map(p => `<option value="${p.id}" ${p.id === g.preset ? 'selected' : ''}>${_learnEsc(p.label)}</option>`).join('')}${(!(_adminCatalog.presets || []).length && g.preset) ? `<option value="${_learnEsc(g.preset)}" selected>${_learnEsc(g.preset)}</option>` : ''}</select></div>` : ''}
       <label class="aggregate-toggle" style="margin:6px 0 12px"><input type="checkbox" id="ge-show-pdf" ${g.show_on_pdf ? 'checked' : ''}><span class="agg-label">Print each member's rank and the group median on its report (once the group has 10 organizations)</span></label>
+      <label class="aggregate-toggle" style="margin:0 0 12px" title="On the 1st of every month (02:00 Central): a Deep Diagnostic for every member, Competitor Rankings for each member's market, and the Trend report once an organization has 3 monthly data points — emailed (PDFs attached + secure link) to each organization's recipients, with a summary to the group's creator"><input type="checkbox" id="ge-monthly" ${g.monthly_reports ? 'checked' : ''}><span class="agg-label">Monthly reports on the 1st — Deep Diagnostic + Competitor Rankings + Trend, emailed to each organization's recipients</span></label>
       <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="groupSaveEdit('${g.id}')">Save</button><button class="btn btn-ghost" onclick="document.getElementById('group-edit').classList.add('hidden')">Cancel</button></div>
       <div id="ge-err" class="err hidden mt8"></div>
     </div>
@@ -8145,6 +8147,16 @@ async function openGroupPage(id, highlightRunId) {
       for (const rid of open) { if (document.getElementById('gdet-' + rid)) groupToggleMember(id, rid); }
     } catch (e) { /* next tick */ }
   }, 20000);
+}
+async function groupMonthlyRunNow(gid) {
+  if (!confirm('Run the monthly set now? A Deep Diagnostic for every member (spot check and content analysis on), then Competitor Rankings for each market, then the emails to each organization\'s recipients. This can take a few hours for a large group.')) return;
+  try {
+    const r = await api(`/api/groups/${gid}/monthly/run-now`, { method: 'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not start'));
+    const d = await r.json();
+    _flash(`Monthly set started: ${d.started} organization${d.started === 1 ? '' : 's'}${d.mode === 'job' ? ' (background job)' : ''}`);
+    setTimeout(() => openGroupPage(gid), 1500);
+  } catch (e) { alert(e.message); }
 }
 async function groupRunRankings(gid, btn) {
   if (!confirm('Run Competitor Rankings for every market in this group that has no run this month? Markets shared by several members run once.')) return;
@@ -8465,7 +8477,8 @@ async function groupSaveEdit(id) {
   const name = document.getElementById('ge-name').value.trim();
   if (!name) { err.textContent = 'The group needs a name.'; err.classList.remove('hidden'); return; }
   const body = { name, description: document.getElementById('ge-desc').value.trim(), type_hint: document.getElementById('ge-type').value,
-                 show_on_pdf: document.getElementById('ge-show-pdf').checked, default_specialty: document.getElementById('ge-spec').value.trim() };
+                 show_on_pdf: document.getElementById('ge-show-pdf').checked, default_specialty: document.getElementById('ge-spec').value.trim(),
+                 monthly_reports: !!document.getElementById('ge-monthly')?.checked };
   const ps = document.getElementById('ge-preset'); if (ps) body.preset = ps.value || null;
   await _groupPut(id, body, 'Group updated'); openGroupPage(id);
 }

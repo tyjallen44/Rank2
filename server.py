@@ -1187,6 +1187,7 @@ class GroupRequest(BaseModel):
     show_on_pdf: Optional[bool] = True
     archived: Optional[bool] = None
     default_specialty: Optional[str] = None   # prefilled on the Deep Diagnostic form for this group
+    monthly_reports: Optional[bool] = None    # Deep Diagnostic + Competitor Rankings + Trend for every member on the 1st, emailed
 
 
 class GroupRunsRequest(BaseModel):
@@ -1236,7 +1237,7 @@ async def groups_update(group_id: str, req: GroupRequest, payload: dict = Depend
         raise HTTPException(403, "Only an administrator can change a group's settings")
     from perception.specialties import normalize_specialty
     fields = {"name": (req.name or "").strip() or None, "description": req.description, "type_hint": req.type_hint,
-              "show_on_pdf": req.show_on_pdf, "archived": req.archived,
+              "show_on_pdf": req.show_on_pdf, "archived": req.archived, "monthly_reports": req.monthly_reports,
               "default_specialty": (normalize_specialty(req.default_specialty) if req.default_specialty is not None else None)}
     if (req.default_specialty or "").strip() and (req.type_hint or "mixed") == "mixed":
         fields["type_hint"] = "practice"      # a default specialty means a practice group
@@ -5992,57 +5993,223 @@ async def groups_run_rankings(group_id: str, payload: dict = Depends(get_current
     return {"started": started, "already_this_month": skipped, "markets": len(markets)}
 
 
-@app.get("/api/groups/{group_id}/bundle/{run_id}.zip")
-async def groups_bundle_zip(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
-    """The organization's latest reports in one zip: Deep Diagnostic, this month's Competitor Rankings for
-    its market, and the Trend report when it has enough data points."""
+def _bundle_zip_bytes(group: dict, m: dict, by: str, brand: str = "original") -> tuple:
+    """(zip bytes, slug, included labels, notes) — the organization's latest reports: Deep Diagnostic, this
+    month's Competitor Rankings for its market, the Trend report when it has enough points. Sync."""
     import io, zipfile
-    from perception.db import init_db, get_connection
-    from perception.groups import members, TREND_MIN
-    init_db()
-    g = _group_visible(payload, group_id)
-    m = next((x for x in members(group_id) if x["run_id"] == run_id), None)
-    if not m:
-        raise HTTPException(404, "That organization is not in this group")
+    from perception.db import get_connection
+    from perception.groups import TREND_MIN
     slug = "".join(ch if ch.isalnum() else "-" for ch in str(m.get("entity_name") or "organization")).strip("-")[:50]
     buf = io.BytesIO()
-    notes = []
+    notes, included = [], []
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         con = get_connection()
-        row = con.execute("SELECT pdf_path FROM analysis_runs WHERE run_id = ?", [run_id]).fetchone()
-        if m.get("rankings"):
-            rrow = con.execute("SELECT pdf_path FROM analysis_runs WHERE run_id = ?", [m["rankings"]["run_id"]]).fetchone()
-        else:
-            rrow = None
+        row = con.execute("SELECT pdf_path FROM analysis_runs WHERE run_id = ?", [m["run_id"]]).fetchone()
+        rrow = con.execute("SELECT pdf_path FROM analysis_runs WHERE run_id = ?", [m["rankings"]["run_id"]]).fetchone() if m.get("rankings") else None
         con.close()
         if row and row[0] and Path(row[0]).exists():
-            z.write(row[0], f"{slug}_Deep_Diagnostic_{m.get('generated_at') or ''}.pdf")
+            z.write(row[0], f"{slug}_Deep_Diagnostic_{m.get('generated_at') or ''}.pdf"); included.append("Deep Diagnostic")
         else:
             notes.append("Deep Diagnostic PDF not on disk.")
         if rrow and rrow[0] and Path(rrow[0]).exists():
-            z.write(rrow[0], f"{slug}_Competitor_Rankings_{m['rankings'].get('generated_at') or ''}.pdf")
+            z.write(rrow[0], f"{slug}_Competitor_Rankings_{m['rankings'].get('generated_at') or ''}.pdf"); included.append("Competitor Rankings")
         else:
-            notes.append("No Competitor Rankings run for this market this month — use 'Run Competitor Rankings' on the group page.")
+            notes.append("No Competitor Rankings run for this market this month.")
         if m.get("trend_ready"):
             try:
                 city, _, state = (m.get("location") or "").partition(",")
-                ent = await asyncio.get_running_loop().run_in_executor(None, lambda: _tracked_for_member(
-                    m.get("entity_name") or "", city.strip(), state.strip(), m.get("entity_type") or "practice",
-                    m.get("specialty") or g.get("default_specialty"), payload.get("email") or payload.get("role") or ""))
+                ent = _tracked_for_member(m.get("entity_name") or "", city.strip(), state.strip(), m.get("entity_type") or "practice",
+                                          m.get("specialty") or group.get("default_specialty"), by)
                 pts = _entity_points(ent)
-                pdf = await asyncio.get_running_loop().run_in_executor(None, lambda: _trend_report_file(ent, pts, payload.get("brand", "original")))
-                _record_trend_download(ent, pts, pdf, payload.get("email") or payload.get("role") or "")
-                z.write(str(pdf), f"{slug}_Trend_Report.pdf")
+                pdf = _trend_report_file(ent, pts, brand)
+                _record_trend_download(ent, pts, pdf, by)
+                z.write(str(pdf), f"{slug}_Trend_Report.pdf"); included.append(f"Trend report ({len(pts)} monthly data points)")
             except Exception as exc:
                 notes.append(f"Trend report could not be rendered ({type(exc).__name__}).")
         else:
             notes.append(m.get("trend_note") or f"Trend report available after {TREND_MIN} monthly reports.")
         if notes:
             z.writestr("README.txt", "\n".join(notes) + "\n")
-    buf.seek(0)
-    from fastapi.responses import StreamingResponse
-    return StreamingResponse(buf, media_type="application/zip",
-                             headers={"Content-Disposition": f'attachment; filename="{slug}_latest_reports.zip"'})
+    return buf.getvalue(), slug, included, notes
+
+
+@app.get("/api/groups/{group_id}/bundle/{run_id}.zip")
+async def groups_bundle_zip(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
+    """The organization's latest reports in one zip (see _bundle_zip_bytes)."""
+    from perception.db import init_db
+    from perception.groups import members
+    init_db()
+    g = _group_visible(payload, group_id)
+    m = next((x for x in members(group_id) if x["run_id"] == run_id), None)
+    if not m:
+        raise HTTPException(404, "That organization is not in this group")
+    data, slug, _, _ = await asyncio.get_running_loop().run_in_executor(
+        None, lambda: _bundle_zip_bytes(g, m, payload.get("email") or payload.get("role") or "", payload.get("brand", "original")))
+    from fastapi.responses import Response
+    return Response(content=data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{slug}_latest_reports.zip"'})
+
+
+@app.get("/api/public/bundle/{token}")
+async def public_bundle_download(token: str):
+    """Secure, expiring (30 days) link to an organization's monthly bundle — the link in the monthly email."""
+    from datetime import datetime as _dt, timedelta as _td
+    from perception.db import init_db, get_bundle_link
+    from perception.groups import get_group, members
+    init_db()
+    rec = get_bundle_link("".join(ch for ch in token if ch.isalnum() or ch in "-_"))
+    if not rec:
+        raise HTTPException(404, "This link is invalid or has expired.")
+    created = rec.get("created_at")
+    if created and (_dt.utcnow() - created) > _td(days=30):
+        raise HTTPException(410, "This link has expired.")
+    g = get_group(rec["group_id"]) or {}
+    m = next((x for x in members(rec["group_id"]) if x["run_id"] == rec["run_id"]), None)
+    if not m:
+        # the organization was re-run since: serve its latest reports
+        ms = members(rec["group_id"])
+        m = next((x for x in ms if x.get("entity_name")), None)
+    if not m:
+        raise HTTPException(404, "Reports not found.")
+    data, slug, _, _ = await asyncio.get_running_loop().run_in_executor(None, lambda: _bundle_zip_bytes(g, m, "public link"))
+    from fastapi.responses import Response
+    return Response(content=data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{slug}_monthly_reports.zip"'})
+
+
+# ── Monthly set: Deep Diagnostic + Competitor Rankings + Trend for every member, emailed ───────────
+def _month_label(d=None) -> str:
+    from perception.db import local_today
+    d = d or local_today()
+    return d.strftime("%B %Y")
+
+
+async def _start_monthly_run(g: dict, started_by: str, brand: str = "original") -> dict:
+    """Create the month's batch for a group (every member, group settings: spot check on, content analysis on)
+    and run it — as a Cloud Run Job when available, else in-process. Delivery happens when the batch finishes."""
+    from perception.db import init_db, create_event_run, create_event_entities, local_today
+    from perception.groups import members, monthly_entities, update_group
+    init_db()
+    ms = members(g["id"])
+    event_id = str(uuid.uuid4())
+    rows = monthly_entities(g, ms, event_id)
+    if not rows:
+        update_group(g["id"], monthly_last_status="no members to run")
+        return {"group_id": g["id"], "started": 0}
+    etype = "practice" if (g.get("type_hint") or "practice") in ("practice", "mixed") else g["type_hint"]
+    create_event_run(event_id=event_id, event_name=f"{g['name']} — {_month_label()} monthly reports", event_date=local_today().isoformat(),
+                     entity_type=etype, csv_filename=None, total_count=len(rows), role="admin",
+                     include_teaser=False, override_cache=False, auto_practice_composite=False, practice_content=True,
+                     group_id=g["id"], spotcheck=True, created_by=started_by, group_role="member", run_mode="monthly")
+    create_event_entities(rows)
+    update_group(g["id"], monthly_last_run_at=datetime.utcnow(), monthly_last_status=f"running: {len(rows)} organizations", monthly_last_event_id=event_id)
+    if _launch_cloud_run_job("event", event_id, len(rows)):
+        return {"group_id": g["id"], "event_id": event_id, "started": len(rows), "mode": "job"}
+    job_id = _new_job("admin", brand, started_by)
+    _event_job_map[event_id] = job_id
+    _pool.submit(_run_event_job, job_id, event_id, rows, etype, False, False, False, True, g["id"], True, "member")
+    return {"group_id": g["id"], "event_id": event_id, "started": len(rows), "mode": "thread"}
+
+
+def _monthly_deliver(event_id: str, emit=None) -> None:
+    """After a monthly batch finishes: Competitor Rankings for every market in the group, then each member's
+    bundle (PDFs attached + secure link) to its recipients, then a summary to the coordinator. Sync, fail-soft."""
+    from perception.db import get_event_run, set_run_role, create_bundle_link, local_today
+    from perception.groups import get_group, members, update_group
+    from perception.email_utils import send_monthly_bundle, send_monthly_summary
+    import base64
+    log = (lambda t: (emit({"type": "log", "text": t}) if emit else None, print(f"[monthly] {t}", flush=True)))
+    ev = get_event_run(event_id) or {}
+    g = get_group(ev.get("group_id") or "") or {}
+    if not g:
+        return
+    month = _month_label()
+    brand = "original"
+    ms = members(g["id"])
+    # 1. Competitor Rankings — one run per distinct market without a run this month
+    from perception.analyzer import analyze_location, market_key
+    seen = set(); ran = 0
+    for m in ms:
+        mk = m.get("market") or {}
+        loc, spec = (mk.get("location") or "").strip(), (mk.get("specialty") or "").strip()
+        k = (mk.get("key"), loc.lower())
+        if not loc or not spec or k in seen:
+            continue
+        seen.add(k)
+        if m.get("rankings"):
+            continue
+        city, _, state = loc.partition(",")
+        try:
+            log(f"Competitor Rankings: {loc} · {spec}")
+            res = analyze_location(city=city.strip(), state=state.strip(), specialty=spec, aggregate=True, radius_miles=25,
+                                   patient_perspective=True, teaser_report=False, simplified=True, obscure_competitors=False,
+                                   entity_type="practice", individual_report=False, output_dir=REPORTS_DIR, on_event=lambda _e: None, brand=brand)
+            set_run_role(res.run_id, "admin", "monthly reports")
+            ran += 1
+        except Exception as exc:
+            log(f"Rankings failed for {loc} / {spec}: {type(exc).__name__}: {exc}")
+    ms = members(g["id"])          # re-read: rankings now attached to markets
+    # 2. Each member's bundle to its recipients
+    sent = failed = no_recipients = 0
+    base = os.environ.get("APP_URL", "https://careclimb.com").rstrip("/")
+    for m in ms:
+        if (m.get("status") or "member") != "member":
+            continue
+        contacts = m.get("contacts") or []
+        if not contacts:
+            no_recipients += 1
+            continue
+        try:
+            data, slug, included, notes = _bundle_zip_bytes(g, m, "monthly reports", brand)
+            attachments = [{"filename": f"{slug}_{month.replace(' ', '_')}_reports.zip", "content": base64.b64encode(data).decode()}]
+            pending = next((n for n in notes if n.startswith("Trend report available")), "")
+            for c in contacts:
+                try:
+                    tok = create_bundle_link(g["id"], m["run_id"], c.get("email") or "")
+                    send_monthly_bundle(c["email"], c.get("name"), m.get("entity_name") or "", g["name"], month,
+                                        f"{base}/api/public/bundle/{tok}", attachments, included, pending)
+                    sent += 1
+                except Exception as exc:
+                    failed += 1
+                    log(f"Email failed for {m.get('entity_name')} → {c.get('email')}: {type(exc).__name__}")
+        except Exception as exc:
+            failed += 1
+            log(f"Bundle failed for {m.get('entity_name')}: {type(exc).__name__}: {exc}")
+    status = f"{month}: {sent} email{'s' if sent != 1 else ''} sent · {failed} failed · {no_recipients} without recipients · {ran} Rankings run"
+    update_group(g["id"], monthly_last_status=status, monthly_last_run_at=datetime.utcnow())
+    log(status)
+    # 3. Coordinator summary
+    for to in {x for x in (g.get("created_by"), ev.get("created_by")) if x and "@" in x}:
+        try:
+            send_monthly_summary(to, g["name"], month, {"Organizations run": ev.get("total_count") or len(ms), "Reports completed": ev.get("done_count") or 0,
+                                                       "Emails sent": sent, "Email failures": failed, "Organizations without recipients": no_recipients,
+                                                       "Competitor Rankings markets run": ran}, f"{base}/#groups")
+        except Exception as exc:
+            log(f"Summary email failed → {to}: {type(exc).__name__}")
+
+
+@app.post("/api/scheduler/monthly")
+async def scheduler_monthly(request: Request):
+    """Called by Cloud Scheduler on the 1st (02:00 US Central): start the monthly set for every group with the switch on."""
+    secret = request.headers.get("X-Scheduler-Secret", "")
+    expected = os.environ.get("SCHEDULER_SECRET", "")
+    if expected and secret != expected:
+        raise HTTPException(403, "invalid scheduler secret")
+    from perception.groups import list_monthly_groups
+    out = []
+    for g in list_monthly_groups():
+        try:
+            out.append(await _start_monthly_run(g, "scheduler"))
+        except Exception as exc:
+            out.append({"group_id": g["id"], "error": f"{type(exc).__name__}: {exc}"})
+    return {"started": out}
+
+
+@app.post("/api/groups/{group_id}/monthly/run-now")
+async def groups_monthly_run_now(group_id: str, payload: dict = Depends(require_admin)):
+    """Admin: run this month's set for the group right now (the scheduler does the same on the 1st)."""
+    g = _group_visible(payload, group_id)
+    return await _start_monthly_run(g, payload.get("email") or "admin", payload.get("brand", "original"))
 
 
 @app.get("/api/groups/{group_id}/trend/{run_id}.pdf")
@@ -7332,6 +7499,11 @@ def _run_event_job(
             zf.write(csv_path, csv_name)   # include the CSV in the ZIP too
 
         finalize_event_run(event_id, str(csv_path), str(zip_path))
+        if (ev or {}).get("run_mode") == "monthly":
+            try:
+                _monthly_deliver(event_id, emit)
+            except Exception as _mx:
+                print(f"[monthly] delivery failed for event {event_id}: {type(_mx).__name__}: {_mx}", flush=True)
 
         # ── Automatic AI Website Access Scan on the event's CSV ─────────────
         # Every attendee's website is tested for AI-crawler access; the result joins the

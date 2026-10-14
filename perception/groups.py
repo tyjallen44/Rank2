@@ -44,6 +44,11 @@ def ensure_tables(con) -> None:
     cols = {r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name='groups'").fetchall()}
     if "default_specialty" not in cols:
         con.execute("ALTER TABLE groups ADD COLUMN default_specialty VARCHAR")
+    # Monthly reports on the 1st: Deep Diagnostic + Competitor Rankings + Trend for every member, emailed
+    for c, d in (("monthly_reports", "BOOLEAN DEFAULT FALSE"), ("monthly_last_run_at", "TIMESTAMP"),
+                 ("monthly_last_status", "VARCHAR"), ("monthly_last_event_id", "VARCHAR")):
+        if c not in cols:
+            con.execute(f"ALTER TABLE groups ADD COLUMN {c} {d}")
     con.execute("""
         CREATE TABLE IF NOT EXISTS group_runs (
             group_id  VARCHAR NOT NULL,
@@ -58,7 +63,8 @@ def ensure_tables(con) -> None:
         con.execute("ALTER TABLE group_runs ADD COLUMN member_status VARCHAR DEFAULT 'member'")   # member | prospect
 
 
-_COLS = ["id", "name", "description", "type_hint", "preset", "show_on_pdf", "archived", "created_by", "created_at", "default_specialty"]
+_COLS = ["id", "name", "description", "type_hint", "preset", "show_on_pdf", "archived", "created_by", "created_at", "default_specialty",
+         "monthly_reports", "monthly_last_run_at", "monthly_last_status", "monthly_last_event_id"]
 
 
 def _row(r) -> dict:
@@ -66,6 +72,8 @@ def _row(r) -> dict:
     d["created_at"] = str(d["created_at"]) if d.get("created_at") else None
     d["show_on_pdf"] = bool(d.get("show_on_pdf"))
     d["archived"] = bool(d.get("archived"))
+    d["monthly_reports"] = bool(d.get("monthly_reports"))
+    d["monthly_last_run_at"] = str(d["monthly_last_run_at"])[:16] if d.get("monthly_last_run_at") else None
     return d
 
 
@@ -89,7 +97,8 @@ def get_group(group_id: str) -> Optional[dict]:
 
 
 def update_group(group_id: str, **fields) -> Optional[dict]:
-    allowed = {"name", "description", "type_hint", "preset", "show_on_pdf", "archived", "default_specialty"}
+    allowed = {"name", "description", "type_hint", "preset", "show_on_pdf", "archived", "default_specialty",
+               "monthly_reports", "monthly_last_run_at", "monthly_last_status", "monthly_last_event_id"}
     sets, vals = [], []
     for k, v in fields.items():
         if k in allowed and v is not None:
@@ -425,6 +434,30 @@ def context_for_pdf(group_id: str, run_id: str, entity_name: str, location: str)
     if ctx["ready"]:
         ctx.update({"rank": b.get("rank"), "total": b.get("total"), "median": b.get("median"), "q1": b.get("q1"), "q3": b.get("q3")})
     return ctx
+
+
+def list_monthly_groups() -> list[dict]:
+    """Active groups with the monthly switch on."""
+    return [g for g in list_groups(None, False) if g.get("monthly_reports")]
+
+
+def monthly_entities(group: dict, members: list[dict], event_id: str) -> list[dict]:
+    """The event rows for a monthly run: every MEMBER (prospects are not reported on), one row per
+    organization, resolved by name + 'City, ST', specialty from the member else the group default."""
+    import uuid as _uuid
+    rows = []
+    for i, m in enumerate(members, 1):
+        if (m.get("status") or "member") != "member":
+            continue
+        city, _, st = (m.get("location") or "").partition(",")
+        if not (m.get("entity_name") and city.strip() and st.strip()):
+            continue
+        rows.append({"id": _uuid.uuid4().hex[:16], "event_id": event_id, "row_num": i,
+                     "input_name": m["entity_name"], "input_city": city.strip(), "input_state": st.strip().upper(),
+                     "input_url": "", "input_customer": "yes" if m.get("rldatix_customer") else "",
+                     "input_specialty": (m.get("specialty") or group.get("default_specialty") or ""),
+                     "resolved_name": m["entity_name"], "resolved_addr": ""})
+    return rows
 
 
 def ordinal(n: int) -> str:
