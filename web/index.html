@@ -8081,6 +8081,7 @@ async function openGroupPage(id, highlightRunId) {
         ${m.has_pdf ? `<a class="btn btn-secondary btn-sm" href="/api/groups/${g.id}/bundle/${m.run_id}.zip?token=${encodeURIComponent(_token)}" title="One zip with the latest Deep Diagnostic, this month's Competitor Rankings for its market${m.trend_ready ? ' and the Trend report' : ' (Trend report once it has 3 monthly data points)'}">⬇ Latest reports</a>` : ''}
         ${m.rankings ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.rankings.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Competitor Rankings for ${_learnEsc((m.market || {}).location || '')} · ${_learnEsc((m.market || {}).specialty || '')} — run ${m.rankings.generated_at}">≡ Rankings</a>` : `<span style="font-size:11px;color:var(--muted);margin:0 6px" title="No Competitor Rankings run for this market this month — use 'Run Competitor Rankings' above">no Rankings this month</span>`}
         ${m.trend_ready ? `<a class="btn btn-ghost btn-sm" href="/api/groups/${g.id}/trend/${m.run_id}.pdf?token=${encodeURIComponent(_token)}" title="Trend report: this organization's ${m.trend_points} monthly scores, with pillar movement and notes">📈 Trend</a>` : `<span style="font-size:11px;color:var(--muted);margin:0 6px" title="A Trend report needs three monthly data points; each monthly Deep Diagnostic adds one">${_learnEsc(m.trend_note || '')}</span>`}
+        <button class="btn btn-ghost btn-sm" ${(m.contacts || []).length ? `onclick="groupSendBundle(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')}, ${(m.contacts || []).length})" title="Email this organization's latest reports (PDFs attached + secure link) to its ${(m.contacts || []).length} recipient${(m.contacts || []).length === 1 ? '' : 's'} now"` : 'disabled title="Add report recipients in the expanded row first"'}>✉ Send to recipients</button>
         <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member: it joins the ranking and the median' : 'Mark as a prospect: shown in amber with the rank it would hold, left out of the median and ranks'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')" title="Take this organization out of the group — every run of it in this group; the reports stay in History">Remove</button>` : ''}</td></tr>
@@ -8096,7 +8097,7 @@ async function openGroupPage(id, highlightRunId) {
       <div>${_soleGroup() ? '' : `<button class="btn btn-ghost btn-sm" onclick="loadGroupsPage()">← All groups</button>`}
         <div style="font-size:20px;font-weight:700;margin-top:6px">${_learnEsc(g.name)}</div>
         ${g.description ? `<div style="color:var(--muted);font-size:13px">${_learnEsc(g.description)}</div>` : ''}
-        <div style="font-size:12px;color:var(--muted);margin-top:4px" title="Monthly reports: on the 1st, every member gets a Deep Diagnostic, Competitor Rankings for its market and (after 3 data points) a Trend report, emailed to its recipients">Monthly reports: <strong>${g.monthly_reports ? 'on' : 'off'}</strong>${g.monthly_last_run_at ? ` · last run ${_learnEsc(String(g.monthly_last_run_at).slice(0, 10))}` : ''}${g.monthly_last_status ? ` · ${_learnEsc(g.monthly_last_status)}` : ''}${_role === 'admin' ? ` · <a href="#" onclick="groupMonthlyRunNow('${g.id}');return false" title="Run this month's set for every member now — the same thing the scheduler does on the 1st">run the monthly set now</a>` : ''}</div>${bench}${strip}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" title="Monthly reports: on the 1st, every member gets a Deep Diagnostic, Competitor Rankings for its market and (after 3 data points) a Trend report, emailed to its recipients">Monthly reports: <strong>${g.monthly_reports ? 'on' : 'off'}</strong>${g.monthly_last_run_at ? ` · last run ${_learnEsc(String(g.monthly_last_run_at).slice(0, 10))}` : ''}${g.monthly_last_status ? ` · ${_learnEsc(g.monthly_last_status)}` : ''}${g.monthly_cost_usd != null ? ` · <span title="Model and API cost recorded for the last monthly run (Deep Diagnostics, spot checks, content analysis, Rankings)">cost $${Number(g.monthly_cost_usd).toFixed(2)}</span>` : ''}${_role === 'admin' ? ` · <a href="#" onclick="groupMonthlyRunNow('${g.id}');return false" title="Run this month's set for every member now — the same thing the scheduler does on the 1st">run the monthly set now</a>` : ''}</div>${bench}${strip}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="groupRunReport('${g.id}')" title="Run a Deep Diagnostic on one organization; the report joins this group when it finishes">+ Add an organization</button>
         ${_capReport('events') ? `<button class="btn btn-secondary btn-sm" onclick="groupUploadList('${g.id}')" title="Upload a spreadsheet (name, city, state, optional website) and run a report for every row; all of them join this group">⬆ Upload a list</button>` : ''}
@@ -8147,6 +8148,17 @@ async function openGroupPage(id, highlightRunId) {
       for (const rid of open) { if (document.getElementById('gdet-' + rid)) groupToggleMember(id, rid); }
     } catch (e) { /* next tick */ }
   }, 20000);
+}
+async function groupSendBundle(btn, gid, runId, name, n) {
+  if (!confirm(`Email ${name}'s latest reports to its ${n} recipient${n === 1 ? '' : 's'} now? (Deep Diagnostic, this month's Competitor Rankings, Trend when available — PDFs attached plus a secure link.)`)) return;
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api(`/api/groups/${gid}/send/${runId}`, { method: 'POST' });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not send'));
+    const d = await r.json();
+    _flash(`Sent to ${d.sent.length} recipient${d.sent.length === 1 ? '' : 's'}${d.failed.length ? ` · ${d.failed.length} failed` : ''} — ${(d.included || []).join(', ')}`);
+  } catch (e) { alert(e.message); }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
 }
 async function groupMonthlyRunNow(gid) {
   if (!confirm('Run the monthly set now? A Deep Diagnostic for every member (spot check and content analysis on), then Competitor Rankings for each market, then the emails to each organization\'s recipients. This can take a few hours for a large group.')) return;

@@ -4114,3 +4114,11 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 |---|---|---|
 | T1 | Upload in job mode → completion | The event ZIP downloads correctly (built in memory, written once — no GCS FUSE OutOfOrderError in the task log); the task log no longer shows "auto AI access scan failed: no running event loop". [log] |
 | R1 | Regression | Thread-mode uploads still start the automatic AI Website Access Scan; the ZIP contents are unchanged. |
+
+## GROUPS-SEND-AND-COST — Send to recipients + monthly run cost (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group row → **✉ Send to recipients** (organization with recipients) | Confirm dialog; one email per recipient "<Organization> — <Month YYYY> AI Visibility reports" with the bundle zip attached and a secure 30-day link; flash lists what was included and any failures. Disabled with a hint when the organization has no recipients. [ui][email] |
+| T2 | Group header after a monthly run (or any upload) | "cost $X.XX" — the model/API cost recorded for that batch (Deep Diagnostics, spot checks, content analysis, Rankings run during delivery), summed across job tasks; `/api/event/{id}/status` returns `cost_usd`. [ui][api] |
+| R1 | Regression | Uploads unchanged apart from recording their cost; Admin → Operations cost summary now shows "event" rows. |

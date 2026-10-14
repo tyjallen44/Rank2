@@ -3275,6 +3275,16 @@ def record_run_cost(job_id: str, run_id, kind: str, label: str, acc: dict) -> No
     con.close()
 
 
+def event_cost(event_id: str) -> Optional[float]:
+    """Total model / API cost recorded for a batch (sum of its run_costs rows), or None when nothing was recorded."""
+    if not event_id:
+        return None
+    con = get_connection()
+    row = con.execute("SELECT SUM(cost_usd), COUNT(*) FROM run_costs WHERE run_id = ?", [event_id]).fetchone()
+    con.close()
+    return float(row[0]) if row and row[1] and row[0] is not None else None
+
+
 def cost_summary(days: int = 30) -> dict:
     """Totals and averages per kind for the last `days` days, plus the most recent runs."""
     from datetime import datetime, timedelta

@@ -1337,7 +1337,12 @@ async def groups_detail(group_id: str, payload: dict = Depends(get_current_user_
             running.append({"job_id": jid, "entity_name": j.get("entity_name") or j.get("label") or "",
                             "started_at": j.get("started_at"), "email": j.get("email") or ""})
     from perception.delivery import summarize as _delivery_summary
+    from perception.db import event_cost
     ms = members(group_id)
+    try:
+        g = {**g, "monthly_cost_usd": event_cost(g.get("monthly_last_event_id") or "")}
+    except Exception:
+        pass
     return {"group": g, "members": ms, "benchmark": benchmark(group_id), "running": running, "delivery": _delivery_summary(ms)}
 
 
@@ -6063,6 +6068,40 @@ async def groups_bundle_zip(group_id: str, run_id: str, payload: dict = Depends(
                     headers={"Content-Disposition": f'attachment; filename="{slug}_latest_reports.zip"'})
 
 
+@app.post("/api/groups/{group_id}/send/{run_id}")
+async def groups_send_bundle(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
+    """One-off: email this organization's latest reports (Deep Diagnostic, this month's Rankings, Trend when ready)
+    to its recipients — PDFs attached plus a secure 30-day link. The monthly set does the same on the 1st."""
+    from perception.db import init_db, create_bundle_link
+    from perception.groups import members
+    from perception.email_utils import send_monthly_bundle
+    import base64
+    init_db()
+    g = _group_visible(payload, group_id)
+    m = next((x for x in members(group_id) if x["run_id"] == run_id), None)
+    if not m:
+        raise HTTPException(404, "That organization is not in this group")
+    contacts = m.get("contacts") or []
+    if not contacts:
+        raise HTTPException(400, "This organization has no report recipients yet — add them in the expanded row first.")
+    who = payload.get("email") or payload.get("role") or ""
+    data, slug, included, notes = await asyncio.get_running_loop().run_in_executor(None, lambda: _bundle_zip_bytes(g, m, who, payload.get("brand", "original")))
+    label = _month_label()
+    attachments = [{"filename": f"{slug}_{label.replace(' ', '_')}_reports.zip", "content": base64.b64encode(data).decode()}]
+    pending = next((n for n in notes if n.startswith("Trend report available")), "")
+    base = os.environ.get("APP_URL", "https://careclimb.com").rstrip("/")
+    sent, failed = [], []
+    for c in contacts:
+        try:
+            tok = create_bundle_link(group_id, run_id, c.get("email") or "")
+            await asyncio.get_running_loop().run_in_executor(None, lambda c=c, tok=tok: send_monthly_bundle(
+                c["email"], c.get("name"), m.get("entity_name") or "", g["name"], label, f"{base}/api/public/bundle/{tok}", attachments, included, pending))
+            sent.append(c["email"])
+        except Exception as exc:
+            failed.append(f"{c.get('email')}: {type(exc).__name__}")
+    return {"sent": sent, "failed": failed, "included": included}
+
+
 @app.get("/api/public/bundle/{token}")
 async def public_bundle_download(token: str):
     """Secure, expiring (30 days) link to an organization's monthly bundle — the link in the monthly email."""
@@ -7116,6 +7155,8 @@ def _run_event_job(
     emit  = lambda e: _put(loop, queue, e)
     brand = job.get("brand", "original")
     role  = job["role"]
+    job["kind"] = job.get("kind") or "event"
+    _cost.begin(job_id, "event")          # the batch's cost accumulator (finished → run_costs, run_id = event id)
 
     try:
         from perception.db import (
@@ -7157,6 +7198,7 @@ def _run_event_job(
 
         def _run_one(entity: dict, pass_num: int = 1) -> bool:
             """Returns True on success, False on failure."""
+            _cost.begin(job_id, "event")          # pool thread: book this organization's calls to the batch
             entity_id     = entity["id"]
             resolved_name = entity["resolved_name"]
             city          = entity["input_city"]
@@ -7590,9 +7632,11 @@ async def event_status(event_id: str, _: str = Depends(require_auth)):
     if not ev:
         raise HTTPException(404, "Event not found")
     entities = get_event_entities(event_id)
+    from perception.db import event_cost
     return {
         **{k: str(v) if k == "created_at" else v for k, v in ev.items()},
         "entities": entities,
+        "cost_usd": event_cost(event_id),
     }
 
 
