@@ -1078,12 +1078,12 @@ label.fl .help-link { text-transform:none; letter-spacing:0; font-size:11px; }
   <div class="done"><button type="button" onclick="closePulseVideo()">Close and return to sign in</button></div>
 </div>
 <script>
-const _PULSE_VIDEO_ID = '1235182980', _PULSE_VIDEO_H = 'ab7660e1f5';
+const _PULSE_VIDEO_ID = '1235929610', _PULSE_VIDEO_H = '';   // Vimeo 'Healthcare Journeys Now Begin With AI' (public: no h= hash)
 let _pulsePlayer = null;
 function openPulseVideo() {
   const ov = document.getElementById('video-overlay'), host = document.getElementById('video-frame');
   ov.classList.remove('ended');
-  host.innerHTML = `<iframe title="PulseAI Video" src="https://player.vimeo.com/video/${_PULSE_VIDEO_ID}?h=${_PULSE_VIDEO_H}&autoplay=1&dnt=1&title=0&byline=0&portrait=0" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>`;
+  host.innerHTML = `<iframe title="PulseAI Video — Healthcare Journeys Now Begin With AI" src="https://player.vimeo.com/video/${_PULSE_VIDEO_ID}?${_PULSE_VIDEO_H ? 'h=' + _PULSE_VIDEO_H + '&' : ''}autoplay=1&dnt=1&badge=0&autopause=0&title=0&byline=0&portrait=0" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>`;
   ov.classList.add('open');
   document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', _pulseVideoEsc);
