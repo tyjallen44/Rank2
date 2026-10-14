@@ -8078,6 +8078,7 @@ async function openGroupPage(id, highlightRunId) {
       <td style="font-size:12px;color:var(--muted);white-space:nowrap">${m.generated_at || ''}</td>
       <td style="font-size:12px;color:var(--muted)">${m.ran_by ? _learnEsc(String(m.ran_by).split('@')[0]) : '—'}</td>
       <td style="white-space:nowrap">${m.has_pdf ? `<a class="btn btn-ghost btn-sm" href="/api/reports/${m.run_id}/pdf?token=${encodeURIComponent(_token)}" title="Download this organization's latest report">⬇ PDF</a>` : ''}
+        ${m.trend_ready ? `<a class="btn btn-ghost btn-sm" href="/api/groups/${g.id}/trend/${m.run_id}.pdf?token=${encodeURIComponent(_token)}" title="Trend report: this organization's ${m.trend_points} monthly scores, with pillar movement and notes">📈 Trend</a>` : `<span style="font-size:11px;color:var(--muted);margin:0 6px" title="A Trend report needs three monthly data points; each monthly Deep Diagnostic adds one">${_learnEsc(m.trend_note || '')}</span>`}
         <button class="btn btn-ghost btn-sm" ${rr ? 'disabled title="A re-run is already in progress"' : `onclick="groupRerun(this, '${g.id}', '${m.run_id}', ${_jsq(m.entity_name || '')})" title="Run a fresh Deep Diagnostic with this report's settings; the new run replaces this one in the group"`}>↻ Re-run</button>
         ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="groupSetStatus('${g.id}','${m.run_id}','${isProspect ? 'member' : 'prospect'}')" title="${isProspect ? 'Count this organization as a member: it joins the ranking and the median' : 'Mark as a prospect: shown in amber with the rank it would hold, left out of the median and ranks'}">${isProspect ? '✓ Make member' : 'Mark prospect'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="groupRemoveRun('${g.id}','${m.run_id}')" title="Take this organization out of the group — every run of it in this group; the reports stay in History">Remove</button>` : ''}</td></tr>
@@ -9667,7 +9668,8 @@ async function loadHistory() {
   //    sections load when their control is expanded.
   try {
     await loadGroupsList(true);
-    const [runsResp, caResp] = await Promise.all([api(_histQueryUrl()), api('/api/content-analysis/runs')]);
+    const [runsResp, caResp, trResp] = await Promise.all([api(_histQueryUrl()), api('/api/content-analysis/runs'), api('/api/trends/reports')]);
+    try { _cachedTrendReports = trResp.ok ? await trResp.json() : []; } catch (e) { _cachedTrendReports = []; }
     const data = await runsResp.json();
     _historyRuns = data.runs || []; _histHasMore = !!data.has_more; _histSince = data.since || null;
     _histShowingAll = (_histFilters.range === 'all'); _histFilteredTotal = data.filtered_total ?? null;
@@ -9749,6 +9751,13 @@ function evPickUpload(id, kind) {
   inp.click();
 }
 
+let _cachedTrendReports = [];   // every Trend report produced (emailed / downloaded) — attached to the run it was built from
+function _trendFilesFor(run) {
+  const tok = encodeURIComponent(_token);
+  const nm = String(run.entity_name || run.network_name || '').trim().toLowerCase();
+  const mine = (_cachedTrendReports || []).filter(t => t.has_pdf && (t.run_id === run.run_id || (!t.run_id && nm && String(t.entity_name || '').trim().toLowerCase() === nm)));
+  return mine.slice(0, 3).map(t => [`📈 Trend report — ${t.kind === 'download' ? 'downloaded' : 'sent'} ${String(t.sent_at || '').slice(0, 10)}${t.snapshots ? ` · ${t.snapshots} points` : ''} (PDF)`, `/api/track/reports/${t.id}/pdf?token=${tok}`]);
+}
 function _dlCell(run, caRuns) {
   const isNet = run.report_type === 'network' || run.entity_type === 'hospital_network';
   const tok = encodeURIComponent(_token);
@@ -9756,6 +9765,7 @@ function _dlCell(run, caRuns) {
   const acts = [];    // [label, onclickJs]
   _histRunIndex[run.run_id] = run;
   const emailAct = ['✉ Email report…', `emailReport('${run.run_id}', this)`];
+  _trendFilesFor(run).forEach(f => files.push(f));
 
   // Compare Two: one combined head-to-head PDF (teaser variant is baked in when chosen).
   if (run.report_type === 'comparison') {

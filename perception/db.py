@@ -2267,6 +2267,35 @@ def list_trend_reports(entity_id: str) -> list[dict]:
     return out
 
 
+def list_all_trend_reports(limit: int = 500) -> list[dict]:
+    """Every Trend report produced (emailed or downloaded), newest first — surfaced in History."""
+    con = get_connection()
+    rows = con.execute(f"SELECT {', '.join(_TR_COLS)} FROM trend_reports ORDER BY sent_at DESC LIMIT ?", [int(limit)]).fetchall()
+    con.close()
+    out = []
+    for r in rows:
+        d = dict(zip(_TR_COLS, r))
+        d["sent_at"] = str(d["sent_at"]) if d.get("sent_at") else None
+        out.append(d)
+    return out
+
+
+def trend_point_counts(names: list) -> dict:
+    """{lower-cased entity name: scored Deep Diagnostic runs} — the Trend data points an entity has."""
+    names = sorted({(n or "").strip().lower() for n in names if (n or "").strip()})
+    if not names:
+        return {}
+    con = get_connection()
+    marks = ", ".join("?" for _ in names)
+    rows = con.execute(
+        f"""SELECT LOWER(a.entity_name), COUNT(*) FROM analysis_runs a
+            JOIN ranked_providers p ON p.run_id = a.run_id AND p.rank = 1
+            WHERE a.individual_report = TRUE AND p.ai_visibility_score IS NOT NULL AND LOWER(a.entity_name) IN ({marks})
+            GROUP BY LOWER(a.entity_name)""", names).fetchall()
+    con.close()
+    return {r[0]: int(r[1]) for r in rows}
+
+
 def get_trend_report(report_id: str) -> Optional[dict]:
     con = get_connection()
     r = con.execute(f"SELECT {', '.join(_TR_COLS)} FROM trend_reports WHERE id = ?", [report_id]).fetchone()

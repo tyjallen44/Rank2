@@ -4058,3 +4058,13 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | After saving | A "✉ N" badge appears next to the organization's name (hover lists the recipients); the CSV gains a "Recipients" column ("Name <email>; …"). [ui][api] |
 | T3 | Remove all rows and Save | Badge disappears; no recipients stored. [ui] |
 | R1 | Regression | RLDatix customer checkbox, Fix roster and Re-discover unchanged; `tests/test_groups.py::test_set_contacts_cleans_and_dedupes` passes. No emails are sent by this chunk. |
+
+## TRENDS-IN-GROUPS-AND-HISTORY — Trend reports everywhere, 3-point gate (chunk 3) (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group row for an organization with fewer than 3 scored Deep Diagnostics | In the actions area a muted note "Trend report available after 3 monthly reports (N so far)" instead of a Trend button. [ui] |
+| T2 | Group row with 3+ scored runs | A **📈 Trend** button downloads the Trend report (the organization's monthly scores, pillar movement, notes). First use enrols the organization in Trends (monthly) automatically — it appears on the Trends page without separate setup. [ui][pdf] |
+| T3 | History | Every Trend report produced — emailed by Trends or downloaded from Trends / a group — appears in the Downloads menu of the Deep Diagnostic row it was built from ("📈 Trend report — sent 2026-10-01 · 4 points"), downloadable. Repeat downloads of the same file do not add rows. [ui] |
+| T4 | Trends page → download the Trend report | Also recorded and surfaced in History. [ui] |
+| R1 | Unit | `tests/test_groups.py::test_trend_gate_note` passes; emailing behaviour unchanged (no emails from this chunk). |

@@ -5894,9 +5894,83 @@ async def track_report_pdf(entity_id: str, payload: dict = Depends(get_current_u
         raise HTTPException(404, "No snapshots yet — run the entity at least once first.")
     pdf_path = await asyncio.get_running_loop().run_in_executor(
         None, lambda: _trend_report_file(entity, points, payload.get("brand", "original")))
+    _record_trend_download(entity, points, pdf_path, payload.get("email") or payload.get("role") or "")
     slug = "".join(ch if ch.isalnum() else "-" for ch in str(entity.get("display_name") or entity.get("entity_name") or "entity")).strip("-")[:60]
     return FileResponse(str(pdf_path), media_type="application/pdf",
-                        headers={"Content-Disposition": f'attachment; filename="{slug}_AI_Reputation_Trend_Report.pdf"'})
+                        headers={"Content-Disposition": f'attachment; filename="{slug}_AI_Visibility_Trend_Report.pdf"'})
+
+
+@app.get("/api/trends/reports")
+async def trend_reports_all(_: str = Depends(require_auth)):
+    """Every Trend report produced (emailed or downloaded), newest first — for History."""
+    from perception.db import init_db, list_all_trend_reports
+    init_db()
+    rows = list_all_trend_reports()
+    for r in rows:
+        r["has_pdf"] = bool(r.get("pdf_path") and Path(r["pdf_path"]).exists())
+        r.pop("pdf_path", None)
+    return rows
+
+
+@app.get("/api/groups/{group_id}/trend/{run_id}.pdf")
+async def groups_trend_pdf(group_id: str, run_id: str, payload: dict = Depends(get_current_user_payload)):
+    """Trend report for a group member (its scored Deep Diagnostic runs are the data points). Offered only
+    once the organization has TREND_MIN points; enrols it in Trends (monthly) on first use."""
+    from perception.db import init_db, get_connection
+    from perception.groups import TREND_MIN, trend_note
+    init_db()
+    g = _group_visible(payload, group_id)
+    con = get_connection()
+    row = con.execute("SELECT entity_name, location, entity_type, specialty, service_line, parent_system FROM analysis_runs WHERE run_id = ?", [run_id]).fetchone()
+    con.close()
+    if not row:
+        raise HTTPException(404, "Run not found")
+    name, loc, etype, spec, sl, ps = row
+    city, _, state = (loc or "").partition(",")
+    entity = await asyncio.get_running_loop().run_in_executor(None, lambda: _tracked_for_member(
+        name or "", city.strip(), state.strip(), etype or "practice", spec or g.get("default_specialty"),
+        payload.get("email") or payload.get("role") or "", sl, ps))
+    points = _entity_points(entity)
+    scored = [p for p in points if p.get("ai_visibility_score") is not None]
+    if len(scored) < TREND_MIN:
+        raise HTTPException(409, trend_note(len(scored)))
+    pdf_path = await asyncio.get_running_loop().run_in_executor(None, lambda: _trend_report_file(entity, points, payload.get("brand", "original")))
+    _record_trend_download(entity, points, pdf_path, payload.get("email") or payload.get("role") or "")
+    slug = "".join(ch if ch.isalnum() else "-" for ch in str(name or "entity")).strip("-")[:60]
+    return FileResponse(str(pdf_path), media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{slug}_AI_Visibility_Trend_Report.pdf"'})
+
+
+def _tracked_for_member(name: str, city: str, state: str, entity_type: str = "practice", specialty: Optional[str] = None,
+                        created_by: str = "", service_line: Optional[str] = None, parent_system: Optional[str] = None) -> dict:
+    """The tracked entity (Trends) for an organization — the existing active one by name + state, else a
+    new monthly one. Group members are enrolled this way so Trend reports need no separate setup."""
+    from perception.db import list_tracked_entities, create_tracked_entity
+    nm, st = _normalize_input(name).strip().lower(), (state or "").upper().strip()
+    dups = [e for e in list_tracked_entities() if e.get("active") and (e.get("entity_name") or "").strip().lower() == nm
+            and (e.get("state") or "").upper().strip() == st]
+    if dups:
+        return sorted(dups, key=lambda e: str(e.get("created_at") or ""))[0]
+    et = entity_type if entity_type in ("hospital", "practice", "service_line", "community_health", "hospital_network") else "practice"
+    return create_tracked_entity(entity_name=_normalize_input(name), city=_normalize_input(city), state=st,
+                                 specialty=_normalize_input(specialty) if specialty else None, aggregate=True,
+                                 schedule="monthly", created_by=created_by or "groups", notes="Enrolled from a group",
+                                 entity_type=et, service_line=service_line, parent_system=parent_system)
+
+
+def _record_trend_download(entity: dict, points: list, pdf_path: Path, by: str) -> None:
+    """A downloaded Trend report is a report produced — surfaced in History like an emailed one.
+    One row per rendered file (repeat downloads of the same file do not add rows)."""
+    try:
+        from perception.db import list_trend_reports, record_trend_report
+        last = (list_trend_reports(str(entity.get("id"))) or [None])[0]
+        if last and str(last.get("pdf_path")) == str(pdf_path):
+            return
+        scored = [p for p in points if p.get("ai_visibility_score") is not None]
+        record_trend_report(str(entity["id"]), entity.get("entity_name") or "", (points[-1] or {}).get("run_id"), str(pdf_path),
+                            by, [], kind="download", snapshots=len(scored), latest_score=(scored[-1].get("ai_visibility_score") if scored else None))
+    except Exception as exc:
+        print(f"[trend] record download failed: {type(exc).__name__}: {exc}", flush=True)
 
 
 def _trend_report_file(entity: dict, points: list, brand: str = "original") -> Path:

@@ -17,6 +17,14 @@ from typing import Any, Optional
 from .db import get_connection
 
 GROUP_MIN = 10          # members before a rank / median is printed on a PDF
+TREND_MIN = 3           # monthly data points before a Trend report is offered
+
+
+def trend_note(points: int) -> str:
+    """The downloads-area wording while a Trend report is not yet available."""
+    if points >= TREND_MIN:
+        return ""
+    return f"Trend report available after {TREND_MIN} monthly reports ({points} so far)"
 
 
 def ensure_tables(con) -> None:
@@ -285,6 +293,17 @@ def members(group_id: str) -> list[dict]:
         for m in ranked:
             m["rldatix_customer"] = False
             m["contacts"] = []
+    # Trend data points (scored Deep Diagnostic runs) — the Trend report is offered at TREND_MIN.
+    try:
+        from .db import trend_point_counts
+        tp = trend_point_counts([m.get("entity_name") for m in ranked])
+        for m in ranked:
+            m["trend_points"] = int(tp.get((m.get("entity_name") or "").strip().lower(), 0))
+            m["trend_ready"] = m["trend_points"] >= TREND_MIN
+            m["trend_note"] = trend_note(m["trend_points"])
+    except Exception:
+        for m in ranked:
+            m["trend_points"], m["trend_ready"], m["trend_note"] = 0, False, trend_note(0)
     # Delivery check: what each latest report is missing before it goes out.
     from .delivery import check_result, spotcheck_required
     g = get_group(group_id) or {}

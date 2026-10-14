@@ -153,3 +153,10 @@ def test_set_contacts_cleans_and_dedupes(monkeypatch):
     assert saved == [{"name": "Jane Doe", "email": "jane@brand.com"}, {"name": "", "email": "ops@brand.com"}]
     import json
     assert json.loads(store["contacts_json"]) == saved
+
+
+def test_trend_gate_note():
+    from perception.groups import trend_note, TREND_MIN
+    assert TREND_MIN == 3
+    assert trend_note(0) == "Trend report available after 3 monthly reports (0 so far)"
+    assert trend_note(2).endswith("(2 so far)") and trend_note(3) == "" and trend_note(7) == ""
