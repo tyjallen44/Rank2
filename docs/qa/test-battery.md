@@ -4049,3 +4049,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Trends entity on the monthly schedule | "Next run" shows the 1st of next month (02:00–03:00 Central), not +30 days. [ui] |
 | T5 | Report dates | A run started late evening Central shows that Central date as its generated / data date. [pdf] |
 | R1 | Unit | `tests/test_month_cache.py` (3 tests) passes; 90-day roster cache unchanged. |
+
+## GROUPS-RECIPIENTS — report recipients per organization (chunk 2) (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Group page → expand an organization → Organization → **Report recipients** | Rows of Name + Email with ✕, "+ Add recipient", "Save recipients". Any number of recipients; invalid emails are refused with a message; duplicates collapse. Saved on the organization (survives re-runs and re-uploads). [ui] |
+| T2 | After saving | A "✉ N" badge appears next to the organization's name (hover lists the recipients); the CSV gains a "Recipients" column ("Name <email>; …"). [ui][api] |
+| T3 | Remove all rows and Save | Badge disappears; no recipients stored. [ui] |
+| R1 | Regression | RLDatix customer checkbox, Fix roster and Re-discover unchanged; `tests/test_groups.py::test_set_contacts_cleans_and_dedupes` passes. No emails are sent by this chunk. |

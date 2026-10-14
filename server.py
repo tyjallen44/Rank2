@@ -1351,7 +1351,7 @@ async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_pay
     g = _group_visible(payload, group_id)
     buf = _io.StringIO(); w = _csv.writer(buf)
     w.writerow(["Rank", "Status", "Organization", "Location", "Specialty", "Type", "Pulse Score", "Pillar 1", "Pillar 2", "Pillar 3", "Pillar 4",
-                "Evidence", "Website access", "Needs attention", "Findings", "RLDatix customer", "Report date", "Run by", "Run id"])
+                "Evidence", "Website access", "Needs attention", "Findings", "RLDatix customer", "Recipients", "Report date", "Run by", "Run id"])
     for m in members(group_id):
         p = m["pillars"]
         w.writerow([m.get("rank") or (f"would rank {m['would_rank']}" if m.get("would_rank") else ""), m.get("status") or "member",
@@ -1361,6 +1361,7 @@ async def groups_csv(group_id: str, payload: dict = Depends(get_current_user_pay
                     "; ".join(f["label"] for f in (m.get("flags") or []) if f.get("kind", "report") == "report"),
                     "; ".join(f["label"] for f in (m.get("flags") or []) if f.get("kind") == "finding"),
                     "yes" if m.get("rldatix_customer") else "",
+                    "; ".join(f"{c.get('name')} <{c.get('email')}>" if c.get("name") else c.get("email", "") for c in (m.get("contacts") or [])),
                     m.get("generated_at") or "", m.get("ran_by") or "", m["run_id"]])
     safe = re.sub(r"[^A-Za-z0-9]+", "-", g["name"]).strip("-")[:40] or "group"
     return Response(buf.getvalue(), media_type="text/csv",
@@ -6332,6 +6333,28 @@ async def org_customer_flag(req: CustomerFlagRequest, payload: dict = Depends(ge
     await asyncio.get_running_loop().run_in_executor(None, lambda: set_customer(
         _normalize_input(req.name), _normalize_input(req.city), (req.state or "").upper().strip(), req.customer, by=who, entity_type=req.entity_type))
     return {"ok": True, "customer": req.customer}
+
+
+class ContactsRequest(BaseModel):
+    name: str
+    city: str
+    state: str
+    contacts: List[dict] = []          # [{name, email}]
+    entity_type: str = "practice"
+    group_id: Optional[str] = None
+
+
+@app.put("/api/org/contacts")
+async def org_contacts_save(req: ContactsRequest, payload: dict = Depends(get_current_user_payload)):
+    """Report recipients for an organization (group page): the people who receive its monthly reports.
+    Any number of {name, email}; stored on the organization so every later month uses them."""
+    from perception.graph import set_contacts
+    if req.group_id:
+        _group_visible(payload, req.group_id)
+    who = payload.get("email") or payload.get("name") or ""
+    saved = await asyncio.get_running_loop().run_in_executor(None, lambda: set_contacts(
+        _normalize_input(req.name), _normalize_input(req.city), (req.state or "").upper().strip(), req.contacts, by=who, entity_type=req.entity_type))
+    return {"ok": True, "contacts": saved}
 
 
 class RosterSaveRequest(BaseModel):

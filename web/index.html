@@ -8070,7 +8070,7 @@ async function openGroupPage(id, highlightRunId) {
     const runBadge = rr ? `<div style="margin-top:3px;font-size:11px;color:var(--teal);display:flex;align-items:center;gap:6px"><span class="spinner" style="width:10px;height:10px"></span> Re-run in progress${_since(rr.started_at) ? ' · started ' + _since(rr.started_at) : ''}${rr.email ? ' · ' + _learnEsc(String(rr.email).split('@')[0]) : ''} · <a href="#" onclick="_lastPage='groups'; startProgress('${rr.job_id}', ${_jsq((m.entity_name || '') + ' — Deep Diagnostic')}, false); return false">View progress</a></div>` : '';
     return `<tr id="grow-${m.run_id}" data-search="${_learnEsc([m.entity_name, m.location, m.specialty, m.ran_by, isProspect ? 'prospect' : 'member'].filter(Boolean).join(' ').toLowerCase())}" data-flagged="${fl.length ? '1' : '0'}" data-findings="${fnd.length ? '1' : '0'}" data-status="${isProspect ? 'prospect' : 'member'}" ${isNew ? 'style="background:#eaf7ee"' : (isProspect ? 'style="background:#fdf6e3"' : (rr ? 'style="background:#f4f9f8"' : ''))}>
       <td style="text-align:center;font-weight:700">${isProspect ? `<span style="font-size:11px;color:#7a5a00;white-space:nowrap" title="Not a member: shown where it would rank among members; left out of the median">would be<br>${m.would_rank ?? '—'}</span>` : (m.rank ?? '—')}</td>
-      <td><div style="font-weight:600;cursor:pointer" onclick="groupToggleMember('${g.id}','${m.run_id}')" title="Show this organization's score history and checklist">${_learnEsc(m.entity_name || '')} <span style="font-size:11px;color:var(--muted)">▾</span>${isNew ? ' <span class="badge bg-teal" style="font-size:10px">new</span>' : ''}${isProspect ? ' <span class="badge" style="font-size:10px;background:#fdf3dc;color:#7a5a00">prospect</span>' : ''}</div><div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>${runBadge}</td>
+      <td><div style="font-weight:600;cursor:pointer" onclick="groupToggleMember('${g.id}','${m.run_id}')" title="Show this organization's score history and checklist">${_learnEsc(m.entity_name || '')} <span style="font-size:11px;color:var(--muted)">▾</span>${isNew ? ' <span class="badge bg-teal" style="font-size:10px">new</span>' : ''}${isProspect ? ' <span class="badge" style="font-size:10px;background:#fdf3dc;color:#7a5a00">prospect</span>' : ''}<span id="gcontacts-${m.run_id}">${(m.contacts || []).length ? ` <span class="badge" style="font-size:10px;background:#eef2f5;color:#4a5a6a" title="${_learnEsc((m.contacts || []).map(c => (c.name ? c.name + ' <' + c.email + '>' : c.email)).join('\n'))}">✉ ${(m.contacts || []).length}</span>` : ''}</span></div><div style="font-size:12px;color:var(--muted)">${_learnEsc(m.location || '')}${m.specialty ? ' · ' + _learnEsc(m.specialty) : ''}</div>${runBadge}</td>
       <td style="text-align:center;font-weight:800;font-size:16px;color:${_scoreColor(m.score)}">${m.score ?? '—'}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${pv.map((v, i) => `${pl[i]} <strong style="color:${_scoreColor(v)}">${v ?? '—'}</strong>`).join(' · ')}</td>
       <td>${_confChip(m.confidence, '')}${flagBadge}</td>
@@ -8256,6 +8256,8 @@ async function groupToggleMember(gid, runId) {
          <span style="font-size:11px;color:var(--muted);margin-left:6px">Locations and physicians, confirmed once for every later run.</span>` : '';
     const org = H('Organization') + `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0 0 8px" title="Marks this organization as an RLDatix customer: a ✓ in the RLDatix column here and a small indicator on the cover of every later report">
         <input type="checkbox" ${m0.rldatix_customer ? 'checked' : ''} onchange="groupSetCustomer('${gid}','${runId}',this.checked)" style="accent-color:var(--teal);width:15px;height:15px"> RLDatix customer</label>
+      <div class="gdet-sub">Report recipients <span style="font-weight:400;color:var(--muted)">— who receives this organization's monthly reports (any number)</span></div>
+      <div id="gcon-${runId}">${_contactsEditorHtml(runId, m0.contacts || [])}</div>
       ${roster}<div id="groster-${runId}"></div>`;
     cell.innerHTML = `<div class="gdet">${hist}${check}${deliver}${org}</div>`;
   } catch (e) { cell.innerHTML = `<span class="err">${_learnEsc(e.message)}</span>`; }
@@ -8376,6 +8378,42 @@ async function groupRosterSave(runId) {
     const d = await r.json();
     if (msg) msg.innerHTML = `✓ Confirmed ${d.locations} location${d.locations === 1 ? '' : 's'} and ${d.physicians} physician${d.physicians === 1 ? '' : 's'}. Use ↻ Re-run to produce the report with this roster.`;
     _flash('Roster confirmed');
+  } catch (e) { if (msg) msg.textContent = e.message; }
+}
+function _contactsEditorHtml(runId, contacts) {
+  const rows = (contacts.length ? contacts : [{ name: '', email: '' }]).map((c, i) => `<div class="gcon-row" style="display:flex;gap:6px;margin-bottom:4px;align-items:center">
+      <input class="fi" placeholder="Name" value="${_learnEsc(c.name || '')}" data-k="name" style="flex:1;padding:5px 8px;font-size:12px">
+      <input class="fi" type="email" placeholder="email@practice.com" value="${_learnEsc(c.email || '')}" data-k="email" style="flex:1.4;padding:5px 8px;font-size:12px">
+      <button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()" title="Remove this recipient">✕</button></div>`).join('');
+  return `<div id="gcon-rows-${runId}">${rows}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin:2px 0 10px">
+      <button class="btn btn-ghost btn-sm" onclick="groupContactsAddRow('${runId}')">+ Add recipient</button>
+      <button class="btn btn-secondary btn-sm" onclick="groupContactsSave('${runId}')">Save recipients</button>
+      <span id="gcon-msg-${runId}" style="font-size:12px;color:var(--muted)"></span></div>`;
+}
+function groupContactsAddRow(runId) {
+  const host = document.getElementById('gcon-rows-' + runId); if (!host) return;
+  host.insertAdjacentHTML('beforeend', `<div class="gcon-row" style="display:flex;gap:6px;margin-bottom:4px;align-items:center">
+      <input class="fi" placeholder="Name" data-k="name" style="flex:1;padding:5px 8px;font-size:12px">
+      <input class="fi" type="email" placeholder="email@practice.com" data-k="email" style="flex:1.4;padding:5px 8px;font-size:12px">
+      <button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()" title="Remove this recipient">✕</button></div>`);
+  host.lastElementChild.querySelector('input[data-k="name"]').focus();
+}
+async function groupContactsSave(runId) {
+  const m = _groupMembersById[runId] || {}; const msg = document.getElementById('gcon-msg-' + runId);
+  const contacts = [...document.querySelectorAll(`#gcon-rows-${runId} .gcon-row`)].map(r => ({ name: r.querySelector('[data-k="name"]').value.trim(), email: r.querySelector('[data-k="email"]').value.trim() })).filter(c => c.email);
+  const bad = contacts.find(c => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email));
+  if (bad) { if (msg) msg.textContent = `"${bad.email}" is not a valid email address.`; return; }
+  const lp = String(m.location || '').split(','); const city = (lp[0] || '').trim(), state = (lp[1] || '').trim();
+  if (msg) msg.textContent = 'Saving…';
+  try {
+    const r = await api('/api/org/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: m.entity_name || '', city, state, contacts, entity_type: m.entity_type || 'practice', group_id: _groupOpenId }) });
+    if (!r.ok) throw new Error(await errDetail(r, 'Could not save'));
+    const d = await r.json(); m.contacts = d.contacts || [];
+    if (msg) msg.textContent = `✓ ${m.contacts.length} recipient${m.contacts.length === 1 ? '' : 's'} saved.`;
+    const badge = document.getElementById('gcontacts-' + runId);
+    if (badge) badge.innerHTML = m.contacts.length ? ` <span class="badge" style="font-size:10px;background:#eef2f5;color:#4a5a6a" title="${_learnEsc(m.contacts.map(c => (c.name ? c.name + ' <' + c.email + '>' : c.email)).join('\n'))}">✉ ${m.contacts.length}</span>` : '';
   } catch (e) { if (msg) msg.textContent = e.message; }
 }
 async function groupSetCustomer(gid, runId, flag) {

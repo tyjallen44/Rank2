@@ -84,7 +84,9 @@ def init_graph(con=None) -> None:
                  # RLDatix customer flag (set on the group page; printed on the report cover)
                  "ALTER TABLE org_graph ADD COLUMN is_customer BOOLEAN",
                  "ALTER TABLE org_graph ADD COLUMN customer_set_by VARCHAR",
-                 "ALTER TABLE org_graph ADD COLUMN customer_set_at TIMESTAMP"):
+                 "ALTER TABLE org_graph ADD COLUMN customer_set_at TIMESTAMP",
+                 # report recipients (JSON list of {name, email}) — who gets this organization's monthly reports
+                 "ALTER TABLE org_graph ADD COLUMN contacts_json VARCHAR"):
         try:
             con.execute(stmt)
         except Exception:
@@ -235,6 +237,66 @@ def set_customer(name: str, city: str, state: str, flag: bool, by: str | None = 
                            VALUES (?, ?, ?, ?, ?, 'analysis', ?)""", [key, name, entity_type or "practice", city, state, now])
         con.execute("UPDATE org_graph SET is_customer = ?, customer_set_by = ?, customer_set_at = ?, updated_at = ? WHERE org_key = ?",
                     [bool(flag), by or "", now, now, key])
+    finally:
+        con.close()
+
+
+def set_contacts(name: str, city: str, state: str, contacts: list, by: str | None = None, entity_type: str = "practice") -> list:
+    """Replace the organization's report recipients: [{name, email}] (emails lower-cased, de-duplicated,
+    invalid ones dropped). Creates an unconfirmed org row when none exists. Returns the saved list."""
+    key = org_key(name, city, state)
+    now = datetime.utcnow()
+    clean, seen = [], set()
+    for c in contacts or []:
+        em = (c.get("email") or "").strip().lower()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", em) or em in seen:
+            continue
+        seen.add(em)
+        clean.append({"name": (c.get("name") or "").strip()[:80], "email": em})
+    con = get_connection()
+    try:
+        init_graph(con)
+        if not con.execute("SELECT 1 FROM org_graph WHERE org_key = ?", [key]).fetchone():
+            con.execute("""INSERT INTO org_graph (org_key, name, entity_type, city, state, source, updated_at)
+                           VALUES (?, ?, ?, ?, ?, 'analysis', ?)""", [key, name, entity_type or "practice", city, state, now])
+        con.execute("UPDATE org_graph SET contacts_json = ?, updated_at = ? WHERE org_key = ?",
+                    [json.dumps(clean) if clean else None, now, key])
+    finally:
+        con.close()
+    return clean
+
+
+def get_contacts(name: str, city: str, state: str) -> list:
+    con = get_connection()
+    try:
+        init_graph(con)
+        row = con.execute("SELECT contacts_json FROM org_graph WHERE org_key = ?", [org_key(name, city, state)]).fetchone()
+        return json.loads(row[0]) if row and row[0] else []
+    except Exception:
+        return []
+    finally:
+        con.close()
+
+
+def contacts_for(items: list) -> dict:
+    """{org_key: [{name, email}]} for every (name, city, state) in `items` that has recipients."""
+    keys = {org_key(n, c, s) for n, c, s in items if n}
+    if not keys:
+        return {}
+    con = get_connection()
+    try:
+        init_graph(con)
+        out = {}
+        for k in keys:
+            row = con.execute("SELECT contacts_json FROM org_graph WHERE org_key = ?", [k]).fetchone()
+            if row and row[0]:
+                try:
+                    out[k] = json.loads(row[0])
+                except Exception:
+                    pass
+        return out
+    except Exception:
+        return {}
     finally:
         con.close()
 

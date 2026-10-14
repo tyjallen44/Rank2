@@ -127,3 +127,29 @@ def test_location_rows_one_per_office():
     assert len(rows) == 3, [x["name"] + "|" + (x.get("address") or "") for x in rows]
     assert rows[0].get("anchor") and rows[0]["address"].startswith("1 Anchor Way")
     assert {x["address"].split(",")[0] for x in rows[1:]} == {"601 Rockmead Dr", "11800 FM 1960 W"}
+
+
+def test_set_contacts_cleans_and_dedupes(monkeypatch):
+    from perception import graph as G2
+    store = {}
+    class _Con:
+        def execute(self, sql, params=None):
+            s = sql.strip().upper()
+            if s.startswith("SELECT 1"):
+                class R:
+                    def fetchone(self_inner): return (1,)
+                return R()
+            if s.startswith("UPDATE ORG_GRAPH SET CONTACTS_JSON"):
+                store["contacts_json"] = params[0]
+            class R2:
+                def fetchone(self_inner): return None
+                def fetchall(self_inner): return []
+            return R2()
+        def close(self): pass
+    monkeypatch.setattr(G2, "get_connection", lambda: _Con())
+    monkeypatch.setattr(G2, "init_graph", lambda con=None: None)
+    saved = G2.set_contacts("Brand", "Memphis", "TN", [{"name": " Jane Doe ", "email": "Jane@Brand.com"}, {"name": "dup", "email": "jane@brand.com"},
+                                                      {"name": "bad", "email": "not-an-email"}, {"name": "", "email": "ops@brand.com"}], by="ty")
+    assert saved == [{"name": "Jane Doe", "email": "jane@brand.com"}, {"name": "", "email": "ops@brand.com"}]
+    import json
+    assert json.loads(store["contacts_json"]) == saved
