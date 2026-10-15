@@ -493,10 +493,10 @@ def _aas_parse_csv(raw: bytes) -> list[dict]:
 def _aas_lookup_website(name: str, city: str, state: str) -> str:
     """Rows without a URL: the Google listing, then the entity graph (same as the form lookup)."""
     try:
-        from perception.data.places import fetch_provider, clean_website
+        from perception.data.places import fetch_provider, base_website
         read, _ = fetch_provider(_normalize_input(name), _normalize_input(city), (state or "").upper().strip())
         if read is not None and getattr(read, "website", None):
-            return clean_website(read.website)
+            return base_website(read.website)
     except Exception:
         pass
     try:
@@ -6738,14 +6738,15 @@ async def org_website(name: str, city: str = "", state: str = "", payload: dict 
         try:
             read, _ = fetch_provider(_normalize_input(name), _normalize_input(city), (state or "").upper().strip())
             if read is not None and getattr(read, "website", None):
-                from perception.data.places import clean_website
-                return {"found": True, "website": clean_website(read.website), "source": "google", "listing": read.matched_name}
+                from perception.data.places import base_website
+                return {"found": True, "website": base_website(read.website), "source": "google", "listing": read.matched_name}
         except Exception:
             pass
         try:
             g = get_org(_normalize_input(name), _normalize_input(city), (state or "").upper().strip())
             if g and g.get("website"):
-                return {"found": True, "website": g["website"], "source": "confirmed roster"}
+                from perception.data.places import base_website
+                return {"found": True, "website": base_website(g["website"]), "source": "confirmed roster"}
         except Exception:
             pass
         return {"found": False}

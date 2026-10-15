@@ -4174,3 +4174,16 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T6 | Bypass | On a Down ChatGPT or Gemini row, **Allow runs without** → status Bypassed, banner clears, reports run and spot checks skip that assistant; **Require again** probes it and sets OK or Down. Claude cannot be bypassed (it is the scoring model). [ui] |
 | T7 | Preflight | Event Prep "Run" and the monthly set probe all providers first (a few seconds) and refuse to start if one is Down. Cloud Scheduler `rank2-provider-check` probes daily at 07:00 Central (`POST /api/scheduler/providers`). [code] |
 | R1 | Unit | `tests/test_provider_health.py` — window judging, alert-once, bypass semantics, probe recovery/failure, key scrubbing, unconfigured providers. Spot-check retry tests still pass. |
+
+## WEBSITE-BASE-URL — the website presented for confirmation is the base address only (2026-10-15)
+
+**Scope:** `perception/data/places.py::base_website` (scheme + lower-cased host; no path, query or fragment; bare hosts get https://); used by `GET /api/org/website` (Google listing and confirmed-roster sources) and `server._aas_lookup_website`; client `_baseWebsite()` applied to the Deep Diagnostic pre-fill from the search result and to Event Prep's confirm-step URL field (spreadsheet URL or Google candidate). What the user types or edits is left untouched. NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Deep Diagnostic → pick an organization whose Google listing links a deep page (e.g. AdventHealth Central Texas → …/hospital/adventhealth-central-texas) | Website box shows `https://www.adventhealth.com`; note says "From the Google listing". |
+| T2 | Hospital Network → Find → roster step | System website shows the base address only. |
+| T3 | Trends add / group website lookups (same route) | Base address. |
+| T4 | Event Prep confirm step, row with a spreadsheet URL carrying utm parameters or a path | URL field pre-filled with the base address, source label unchanged; editing the field keeps the user's text. |
+| T5 | Type `https://example.org/our-doctors` yourself and tick | Left as typed (the run crawls from that address). |
+| R1 | Regression | `none` still accepted on Deep Diagnostic; AI Website Access Scan rows without a URL still resolve via the lookup (now base); pytest unchanged. |

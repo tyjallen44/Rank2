@@ -558,6 +558,26 @@ def clean_website(url):
         return url
 
 
+def base_website(url):
+    """The site address the user is asked to confirm: scheme + host only. Google listings
+    (and spreadsheets) often point at a deep page or carry tracking parameters; the crawl and
+    the AI-access test start at the homepage, so that is what is shown."""
+    if not url:
+        return None
+    try:
+        from urllib.parse import urlsplit
+        u = url.strip()
+        if "://" not in u:
+            u = "https://" + u
+        p = urlsplit(u)
+        host = (p.netloc or "").lower().split("@")[-1]
+        if not host:
+            return clean_website(url)
+        return f"{p.scheme or 'https'}://{host}"
+    except Exception:
+        return clean_website(url)
+
+
 def fetch_footprint(
     org: str,
     city: str | None = None,

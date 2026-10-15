@@ -7137,7 +7137,7 @@ async function _irWebsiteLookup() {
   const inp = document.getElementById('ir-website'), ok = document.getElementById('ir-website-ok'), note = document.getElementById('ir-website-note');
   if (!inp) return;
   ok.checked = false; _irWebsiteFound = null; _irWebsiteChanged();
-  const pre = (_irSelected && _irSelected.website) || '';
+  const pre = _baseWebsite((_irSelected && _irSelected.website) || '');
   if (pre) { inp.value = pre; _irWebsiteFound = 'google'; note.textContent = 'From the Google listing. Tick the box if this is right, or correct it.'; return; }
   inp.value = ''; note.textContent = 'Looking up the website…';
   try {
@@ -7146,6 +7146,12 @@ async function _irWebsiteLookup() {
     if (d.found && d.website) { inp.value = d.website; _irWebsiteFound = d.source; note.textContent = `From ${d.source === 'google' ? 'the Google listing' : 'your confirmed roster'}. Tick the box if this is right, or correct it.`; }
     else note.innerHTML = 'No website found on the Google listing — enter it and tick the box. <span style="color:var(--muted)">If the organization truly has no website, enter <code>none</code>.</span>';
   } catch (_) { note.textContent = 'Could not look up the website — enter it and tick the box.'; }
+}
+// The address shown for confirmation is the base site (scheme + host): deep pages and tracking
+// parameters from Google listings or spreadsheets are dropped. What the user types is left alone.
+function _baseWebsite(u) {
+  u = String(u || '').trim(); if (!u) return '';
+  try { const x = new URL(/^[a-z]+:\/\//i.test(u) ? u : 'https://' + u); return (x.protocol || 'https:') + '//' + x.hostname.toLowerCase(); } catch (_) { return u; }
 }
 function _irWebsiteEdited() { const ok = document.getElementById('ir-website-ok'); if (ok) { ok.checked = false; } _irWebsiteChanged(); }
 function _irWebsiteChanged() { _irRefreshRunGate(); }
@@ -13818,7 +13824,7 @@ function evShowConfirmation() {
     }
 
     const cand0 = (row.candidates || [])[0] || {};
-    const urlSeed = (row.input_url || '').trim() || (cand0.website || '');
+    const urlSeed = _baseWebsite((row.input_url || '').trim() || (cand0.website || ''));
     const urlSrc = (row.input_url || '').trim() ? 'from your spreadsheet' : (cand0.website ? 'from the Google listing' : 'none found — enter it');
     div.innerHTML = `
       ${statusIcon}
@@ -13844,7 +13850,7 @@ function evCandidateChanged(idx) {
   const row = _evRows[idx]; const sel = document.getElementById(`ev-sel-${idx}`); const url = document.getElementById(`ev-url-${idx}`);
   if (!row || !sel || !url) return;
   const c = row.candidates[parseInt(sel.value) || 0] || {};
-  if (url.dataset.auto === '1') { url.value = c.website || ''; const src = document.getElementById(`ev-url-src-${idx}`); if (src) src.textContent = c.website ? 'from the Google listing' : 'none found — enter it'; }
+  if (url.dataset.auto === '1') { url.value = _baseWebsite(c.website || ''); const src = document.getElementById(`ev-url-src-${idx}`); if (src) src.textContent = c.website ? 'from the Google listing' : 'none found — enter it'; }
   evMarkGroupOverlap();
 }
 function _evOrgKey(name, city) {
