@@ -263,7 +263,8 @@ def _physician_facts(ctx: "_Ctx") -> Optional[dict]:
         sample = len(phys) if ctx.entity_type in ("practice", "service_line") else HOSPITAL_CAP
         ctx.emit({"type": "phase", "name": "physicians", "text": f"Checking {min(len(phys), sample)} physicians against the NPI registry and the website"})
         _site = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)
-        f = _pf.verify_physicians(phys, locs, ctx.state, pages, sample=sample, site_url=_site)
+        f = _pf.verify_physicians(phys, locs, ctx.state, pages, sample=sample, site_url=_site,
+                                  org_name=(getattr(ctx, "org_name", None) or ctx.entity_name))
         ctx.evidence_text += _pf.evidence_lines(f)
         s = _pf.summary(f)
         if s:

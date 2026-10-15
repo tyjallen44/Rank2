@@ -22,3 +22,67 @@ def test_linkage_and_cert_from_stubbed_registry(monkeypatch):
 
 def test_no_physicians_is_skipped():
     assert pf.verify_physicians([], [], "NV", [])["status"] == "skipped"
+
+
+# ── Phase 2 (2.1): linkage matching ──────────────────────────────────────────
+
+def _rec(npi, zips=(), mailing=None, practice=()):
+    return {"number": npi,
+            "addresses": [{"address_purpose": "LOCATION", "postal_code": z} for z in zips] + ([{"address_purpose": "MAILING", "postal_code": mailing}] if mailing else []),
+            "practiceLocations": [{"postal_code": z} for z in practice]}
+
+
+def _roster(*zips):
+    return [{"address": f"{100 + i} Main St, Town, TN {z}"} for i, z in enumerate(zips)]
+
+
+def test_secondary_practice_locations_and_org_registry_addresses_count(monkeypatch):
+    monkeypatch.setattr(pf, "_nppes_lookup_physician", lambda n, s: {"Ann Second": [_rec("1", zips=("10001",), practice=("38120",))],
+                                                                      "Bob Admin": [_rec("2", zips=("38199",))]}[n])
+    monkeypatch.setattr(pf, "_org_registry_zips", lambda org, st: {"38199"})      # the group's NPI-2 billing office
+    f = pf.verify_physicians([{"name": "Ann Second"}, {"name": "Bob Admin"}], _roster("38120", "38138", "38117"), "TN", [], org_name="OrthoSouth")
+    by = {r["name"]: r for r in f["rows"]}
+    assert by["Ann Second"]["linked"] is True            # via practiceLocations
+    assert by["Bob Admin"]["linked"] is True             # via the org's own registry address
+    assert f["linkage_pct"] == 100 and "38199" in f["org_zips"]
+
+
+def test_known_npi_never_falls_back_to_a_stranger(monkeypatch):
+    monkeypatch.setattr(pf, "_nppes_by_number", lambda npi: [])
+    monkeypatch.setattr(pf, "_nppes_lookup_physician", lambda n, s: [_rec("999", zips=("38120",))])   # same name, different person
+    monkeypatch.setattr(pf, "_org_registry_zips", lambda org, st: set())
+    f = pf.verify_physicians([{"name": "John Smith", "npi": "123"}], _roster("38120", "38138", "38117"), "TN", [])
+    assert f["rows"][0]["registry"] == "not found" and f["rows"][0]["linked"] is None
+
+
+def test_thin_roster_is_not_measurable(monkeypatch):
+    monkeypatch.setattr(pf, "_nppes_lookup_physician", lambda n, s: [_rec("1", zips=("10001",))])
+    monkeypatch.setattr(pf, "_org_registry_zips", lambda org, st: set())
+    f = pf.verify_physicians([{"name": f"Doc {i} Smith"} for i in range(4)], _roster("38120") + [{"address": "Memphis, TN"}] * 5, "TN", [])
+    assert f["linkage_pct"] is None and "too few" in f["linkage_note"]
+    assert "NOT MEASURABLE" in pf.evidence_lines(f)
+
+
+def test_single_office_practice_is_measurable(monkeypatch):
+    monkeypatch.setattr(pf, "_nppes_lookup_physician", lambda n, s: [_rec("1", zips=("38120",))])
+    monkeypatch.setattr(pf, "_org_registry_zips", lambda org, st: set())
+    f = pf.verify_physicians([{"name": "Ann Here"}], _roster("38120"), "TN", [])
+    assert f["linkage_pct"] == 100
+
+
+def test_central_registration_is_not_measurable(monkeypatch):
+    monkeypatch.setattr(pf, "_nppes_lookup_physician", lambda n, s: [_rec(n, zips=("30301",))])   # everyone at one billing ZIP
+    monkeypatch.setattr(pf, "_org_registry_zips", lambda org, st: set())
+    f = pf.verify_physicians([{"name": f"Doc{i} Jones"} for i in range(6)], _roster("30309", "30318", "30327"), "GA", [])
+    assert f["linkage_pct"] is None and "central registration" in f["linkage_note"]
+
+
+def test_unread_physician_pages_are_unknown_not_unverifiable(monkeypatch):
+    monkeypatch.setattr(pf, "_nppes_lookup_physician", lambda n, s: [])
+    monkeypatch.setattr(pf, "_org_registry_zips", lambda org, st: set())
+    pages = [{"url": "x", "text": "Dr. Ann Read is board certified by the American Board of Orthopaedic Surgery. " * 3}]
+    f = pf.verify_physicians([{"name": "Ann Read"}, {"name": "Zed Unread"}], _roster("38120"), "TN", pages)
+    by = {r["name"]: r for r in f["rows"]}
+    assert by["Ann Read"]["cert_stated"] is True and by["Zed Unread"]["cert_stated"] is None
+    assert f["cert_checked"] == 1 and f["cert_unread"] == 1 and f["board_cert_unverifiable"] is False
+    assert "MEASUREMENT LIMIT: 1 of 2" in pf.evidence_lines(f)
