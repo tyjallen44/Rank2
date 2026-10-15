@@ -43,9 +43,17 @@ _WORD = r"[A-Z][a-z'’\-]+(?:[A-Z][a-z'’\-]+)?"
 _NAME_CORE = r"(?:" + _WORD + r")(?:\s+(?:[A-Z]\.?|" + _WORD + r")){0,2}\s+(?:" + _WORD + r")(?:\s+(?:Jr|Sr|II|III|IV)\.?)?"
 _NAME_WITH_CRED = re.compile(r"(?:Dr\.?\s+)?(?P<name>" + _NAME_CORE + r")\s*,\s*(?P<cred>(?:" + _CRED_TOKEN + r")(?:\s*[,/&]?\s*(?:" + _CRED_TOKEN + r"))*)(?![A-Za-z])")
 _DR_NAME = re.compile(r"\bDr\.?\s+(?P<name>" + _NAME_CORE + r")")
-_NOT_NAME = re.compile(r"\b(Center|Clinic|Hospital|Institute|Orthop|Medical|Health|Surgery|Surgical|Physical|Therapy|Sports|Spine|Hand|Foot|"
-                       r"Care|Group|Associates|Specialists|Appointment|Patient|Portal|Locations?|Services?|Contact|About|Request|Schedule|"
+_NOT_NAME = re.compile(r"\b(Center|Clinic|Hospital|Institute|Orthop\w*|Medical|Health|Surgery|Surgical|Surgeons?|Physical|Therapy|Therapists?|Sports|Spine|Hand|Foot|"
+                       r"Care|Group|Associates|Specialists?|Physicians?|Providers?|Extenders?|Practitioners?|Assistants?|Nurses?|Staff|Clinicians?|"
+                       r"Appointment|Patient|Portal|Locations?|Services?|Contact|About|Request|Schedule|"
                        r"Read|More|View|Profile|Learn|Meet|Our|Team|Welcome|Privacy|Policy|Terms|Login|Pay|Bill|Careers?|News|Blog|Home)\b", re.I)
+# Role / specialty words glued to the front of a scraped name ("Specialist David Doman",
+# "Orthopedics Nathan Kukowski"): stripped at any length before the person test.
+_ROLE_PREFIX = re.compile(r"^(?:(?:specialists?|orthop\w*|surgeons?|physicians?|providers?|doctors?|sports|medicine|spine|hand|foot|ankle|joint|"
+                          r"pediatric|pediatrics|trauma|total|general|physical|therapy|therapist|pain|team|staff|clinic|clinical|md|do|dr)\s+)+",
+                          re.I)
+# Multi-word surname particles kept with the surname for keys ("Den Hartog", "Van Dyke", "De La Cruz").
+_PARTICLES = {"den", "van", "von", "de", "del", "della", "di", "da", "la", "le", "du", "st", "mc", "mac", "ter", "ten", "op", "el", "al", "bin"}
 _STOP_FIRST = {"the", "a", "an", "our", "new", "all", "dr", "doctor", "meet", "view", "read", "more", "learn", "find", "request", "schedule",
                "call", "contact", "about", "patient", "physical", "sports", "orthopedic", "orthopaedic", "spine", "hand", "foot", "joint",
                "book", "pay", "online", "urgent", "walk", "total", "north", "south", "east", "west", "main", "general"}
@@ -70,13 +78,48 @@ def is_physician_cred(cred: str) -> Optional[bool]:
     return None
 
 
+def _name_parts(name: str) -> list[str]:
+    return [p for p in re.sub(r"[^A-Za-z \-']", " ", name or "").split()
+            if p and not re.fullmatch(r"(dr|md|do|mr|ms|mrs|jr|sr|ii|iii|iv|phd|dpm|pa|np|pa-c)\.?", p, re.I)]
+
+
+def surname(name: str) -> str:
+    """'den hartog' — the last word plus any surname particles before it."""
+    parts = [p.lower() for p in _name_parts(name)]
+    if not parts:
+        return ""
+    i = len(parts) - 1
+    while i > 0 and parts[i - 1] in _PARTICLES:
+        i -= 1
+    return " ".join(parts[i:])
+
+
 def name_key(name: str) -> str:
-    """'smith j' — last name + first initial; nicknames and middle names do not split a person."""
-    parts = [p for p in re.sub(r"[^A-Za-z \-']", " ", name or "").split()
-             if p and not re.fullmatch(r"(dr|md|do|mr|ms|mrs|jr|sr|ii|iii|iv|phd|dpm|pa|np|pa-c)\.?", p, re.I)]
+    """'smith j' — surname + first initial; nicknames and middle names do not split a person."""
+    parts = _name_parts(name)
     if len(parts) < 2:
         return (name or "").strip().lower()
-    return f"{parts[-1].lower()} {parts[0][0].lower()}"
+    return f"{surname(name)} {parts[0][0].lower()}"
+
+
+def same_person(a: str, b: str) -> bool:
+    """Two scraped / registry forms of one person: same surname and compatible given names —
+    'R. Vaughan Massie' ~ 'Vaughan Massie', 'Taylor Den Hartog' ~ 'Den Hartog', 'J. Smith' ~ 'John Smith'."""
+    if not a or not b:
+        return False
+    sa, sb = surname(a), surname(b)
+    if not sa or sa != sb:
+        return False
+    ga = [p.lower().rstrip(".") for p in _name_parts(a)[:-len(sa.split())] if p]
+    gb = [p.lower().rstrip(".") for p in _name_parts(b)[:-len(sb.split())] if p]
+    if not ga or not gb:
+        return True                                   # surname only on one side ("Den Hartog")
+    fa, fb = {g for g in ga if len(g) > 1}, {g for g in gb if len(g) > 1}
+    if fa and fb:
+        return fa <= fb or fb <= fa                   # one name's given tokens are a subset of the other's
+    # One side carries initials only ("J. Smith"): an initial must match a given name's first letter.
+    ia, ib = {g[0] for g in ga}, {g[0] for g in gb}
+    return bool(ia & ib)
 
 
 def _clean_name(raw: str) -> str:
@@ -87,6 +130,8 @@ def _clean_name(raw: str) -> str:
     n = re.sub(r"(?:\s+(?:click|here|more|view|profile|bio|read|learn|details|schedule|book|appointment|website|email|call|now))+\s*$", "", n, flags=re.I).strip(" ,")
     # button / label words glued to the FRONT of a name ("Book Now Darin Tessier", "Meet Jane Doe")
     n = re.sub(r"^(?:(?:book|now|call|schedule|meet|request|see|contact|visit|with|about|from|welcome|introducing|featuring)\s+)+", "", n, flags=re.I).strip(" ,")
+    n = _ROLE_PREFIX.sub("", n).strip(" ,")                      # "Specialist David Doman" → "David Doman"
+    n = re.sub(r"\s+(?:Dr|Doctor)\.?$", "", n, flags=re.I).strip(" ,")   # "Sam Lee Dr" from a line break before the next "Dr."
     if n.isupper():                                              # registry names arrive upper-case
         n = " ".join(w.capitalize() if not re.fullmatch(r"(II|III|IV)", w) else w for w in n.split())
         n = re.sub(r"\b(Mc|Mac|O')([a-z])", lambda m: m.group(1) + m.group(2).upper(), n)
@@ -106,6 +151,8 @@ def _looks_like_person(name: str) -> bool:
     if not (2 <= len(words) <= 5):
         return False
     if words[0].lower().rstrip(".") in _STOP_FIRST or _NOT_NAME.search(name):
+        return False
+    if _ROLE_PREFIX.match(name + " "):                # a role word is still at the front: not a person
         return False
     return all(re.match(r"^[A-Z][a-zA-Z'’\-\.]*$", w) or re.fullmatch(r"(Jr|Sr|II|III|IV)\.?", w) for w in words)
 
@@ -187,9 +234,14 @@ def _dedupe_people(items: list[dict]) -> list[dict]:
         if not k or len(k) < 4:
             continue
         if k not in seen:
-            seen[k] = dict(p)
-            order.append(k)
-            continue
+            # Second pass: the same person under a fuller / shorter form ("R. Vaughan Massie" vs
+            # "Vaughan Massie", "Den Hartog" vs "Taylor Den Hartog") or the same NPI joins the first.
+            alias = next((x for x in order if (p.get("npi") and seen[x].get("npi") == p.get("npi")) or same_person(seen[x]["name"], p["name"])), None)
+            if alias is None:
+                seen[k] = dict(p)
+                order.append(k)
+                continue
+            k = alias
         cur = seen[k]
         if not cur.get("credential") and p.get("credential"):
             cur["credential"] = p["credential"]
@@ -197,8 +249,15 @@ def _dedupe_people(items: list[dict]) -> list[dict]:
             cur["bio_url"] = p["bio_url"]
         if not cur.get("specialty") and p.get("specialty"):
             cur["specialty"] = p["specialty"]
-        if len(p["name"]) > len(cur["name"]) and " " in p["name"]:
-            cur["name"] = p["name"]          # keep the fuller form (middle initial)
+        if not cur.get("npi") and p.get("npi"):
+            cur["npi"] = p["npi"]
+        # Keep the fuller form (first name / middle initial) — but a name read from a bio link or
+        # the registry outranks one scraped from running text, which can swallow a neighbour's word.
+        _p_src = bool(p.get("bio_url") or p.get("npi")); _c_src = bool(cur.get("bio_url") or cur.get("npi"))
+        if (_p_src or not _c_src) and (len(_name_parts(p["name"])) > len(_name_parts(cur["name"])) or (len(p["name"]) > len(cur["name"]) and " " in p["name"])):
+            cur["name"] = p["name"]
+        elif _p_src and not _c_src:
+            cur["name"] = p["name"]
     return [seen[k] for k in order]
 
 
