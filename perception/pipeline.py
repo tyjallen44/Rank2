@@ -598,12 +598,15 @@ class PracticeAdapter(_Adapter):
         # key for the registry and knowledge-base lookups; the anchor stays the Google evidence.
         if ctx.entity_type == "practice" and ctx.aggregate:
             _resolved = resolve_org_name(ctx.entity_name, ctx.city, (getattr(ctx, "website_facts", None) or {}).get("site_name") or "")
-            if _resolved and _resolved.lower() != ctx.entity_name.lower() and not ctx.org_name:
+            if _resolved and _resolved != ctx.entity_name and not ctx.org_name:
+                # A case-only difference ('Orthosouth' → 'OrthoSouth') still becomes the title: the
+                # website's own spelling is the brand's (2.4).
                 ctx.org_name = _resolved
                 ctx.org_name_source = "website" if _resolved.lower() != strip_city_suffix(ctx.entity_name, ctx.city).lower() else "entity"
                 if not ctx.report_title:
                     ctx.report_title = _resolved
-                emit({"type": "text", "text": f"Organization: {_resolved} (the analyzed listing '{ctx.entity_name}' is one office of it)"})
+                if _resolved.lower() != ctx.entity_name.lower():
+                    emit({"type": "text", "text": f"Organization: {_resolved} (the analyzed listing '{ctx.entity_name}' is one office of it)"})
         # Physician roster: website directory → NPPES → model, every physician (no sample) — unless
         # the form confirmed one. Specialty practices only; service lines keep the registry path.
         _have_roster = any((lst or []) for lst in (ctx.physician_roster or {}).values())
