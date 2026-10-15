@@ -4187,3 +4187,18 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Event Prep confirm step, row with a spreadsheet URL carrying utm parameters or a path | URL field pre-filled with the base address, source label unchanged; editing the field keeps the user's text. |
 | T5 | Type `https://example.org/our-doctors` yourself and tick | Left as typed (the run crawls from that address). |
 | R1 | Regression | `none` still accepted on Deep Diagnostic; AI Website Access Scan rows without a URL still resolve via the lookup (now base); pytest unchanged. |
+
+## GROUP-DD-PARITY — group-launched Deep Diagnostics use the same inputs and produce the same report as a form run (2026-10-15)
+
+**Scope:** `server._graph_after_run` (factored from `_job_run_individual`, now also called by `_run_event_job`); event path (group CSV upload, monthly set, Event Prep) takes the entity graph's roster / anchor / website when one exists and shows the base website; hospitals on the event path get `_finalize_hospital_combined` (Content Improvement Keys) like a form run; `_rerun_request_from_result` prefers the graph's confirmed website (base address). NEEDS BROWSER TESTING.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Run a practice from the Deep Diagnostic form (confirm roster + website), then on its group row click ↻ Re-run | Re-run log says "locations taken from the confirmed roster (entity graph)"; website in the new report equals the confirmed base address; same pillar scores within normal model variance. |
+| T2 | Group CSV upload containing that same practice | Same roster and website used (log line as T1); report carries Physicians Checked, listing quality, combined content report — identical sections to the form run. |
+| T3 | Group CSV upload with a hospital (or a hospital group's monthly set) | Hospital report now includes the Content Improvement Keys section and the Content-Analysis companion file, as a form run does. Log: "Content analysis for <name> (Content Improvement Keys)". |
+| T4 | After T2 / T3, open the organization's roster (Fix roster / Trends add) | Entity graph shows locations written by the analysis (practice: audited profiles + registry physicians; hospital: related campuses). |
+| T5 | Organization with no graph record, uploaded with a blank URL | Website from the Google listing, base address; offices resolved afresh (unchanged behaviour). |
+| R1 | Regression | Form run unchanged (graph write identical, now via helper); Event Prep for non-group lists unchanged apart from hospital content and graph write; `PULSE_EVENT_PIPELINE=legacy` still skips all of it; pytest unchanged (440 pass / same 15 pre-existing). |
+
+**Remaining difference (by design):** headless paths do not ask the user to confirm the website, roster or practice profile; they take what the graph / list / classifier provide.

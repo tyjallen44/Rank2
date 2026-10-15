@@ -1278,6 +1278,15 @@ def _rerun_request_from_result(result, group_id: str) -> "AnalyzeRequest":
     et = result.entity_type or "hospital"
     is_practice = et in ("practice", "service_line")
     website = getattr(p, "website_url", None) if p else None
+    try:
+        from perception.graph import get_org as _g_get_rr
+        from perception.data.places import base_website as _bw_rr
+        _gorg = _g_get_rr(_normalize_input(result.entity_name), _normalize_input(city.strip()), state.strip().upper())
+        if _gorg and _gorg.get("website"):
+            website = _gorg["website"]          # the address a user confirmed on a form wins over the model's read
+        website = _bw_rr(website) or website
+    except Exception:
+        pass
     anchor = None
     physicians: list[dict] = []
     for cr in (result.practice_composite_rows or []):
@@ -1890,6 +1899,32 @@ def _run_type_analyzer(etype: str, job: dict, entity_name: str, city: str, state
                             parent_system=job.get("parent_system"), **common)
 
 
+def _graph_after_run(result, entity_name: str, city: str, state: str, etype: str) -> None:
+    """Entity graph after any Deep Diagnostic (form run, group re-run, group upload, monthly set):
+    practices refresh location details from the profile audit and physicians from the registry
+    check; hospitals store the related campuses the analysis found. Never raises."""
+    is_practice = etype in ("practice", "service_line")
+    try:
+        from perception.graph import upsert_org as _g_upsert
+        if is_practice and result.profile_audit and result.profile_audit.get("profiles"):
+            _graph_write(_g_upsert, entity_name, city, state, etype,
+                         website=(result.rankings[0].website_url if result.rankings else None),
+                         locations=[{"name": p["name"], "city": p.get("city"), "place_id": p.get("place_id"), "website": p.get("website")}
+                                    for p in result.profile_audit["profiles"] if p.get("place_id")], source="analysis")
+            _pf_rows = ((getattr(result, "physician_facts", None) or {}).get("rows") or [])
+            if _pf_rows:
+                _graph_write(_g_upsert, entity_name, city, state, etype,
+                             physicians=[{"name": r.get("name"), "npi": r.get("npi"), "credential": r.get("credential"), "specialty": r.get("specialty")}
+                                         for r in _pf_rows if r.get("name")], source="analysis")
+        elif etype == "hospital" and result.rankings:
+            _p = result.rankings[0]
+            _graph_write(_g_upsert, entity_name, city, state, "hospital", website=_p.website_url,
+                         locations=[{"name": l.name, "address": l.address, "rating": l.google_rating, "review_count": l.google_review_count}
+                                    for l in (_p.consolidated_locations or [])], source="analysis")
+    except Exception as _gx:
+        print(f"[graph] post-run write failed: {type(_gx).__name__}: {_gx}", flush=True)
+
+
 def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
                         specialty: Optional[str], aggregate: bool, radius_miles: Optional[int],
                         etype: str) -> None:
@@ -1919,27 +1954,7 @@ def _job_run_individual(job_id: str, entity_name: str, city: str, state: str,
             _profile_audit(result, job, emit)            # Place Details per confirmed profile
         if not is_practice:
             _ensure_individual_teaser(result, job)       # practice teaser comes from the combined render below
-        # entity graph: practices refresh location details from the audit; hospitals store the
-        # related campuses the analysis found (unconfirmed candidates); FQHC sites came in via the form
-        try:
-            from perception.graph import upsert_org as _g_upsert
-            if is_practice and result.profile_audit and result.profile_audit.get("profiles"):
-                _graph_write(_g_upsert, entity_name, city, state, etype,
-                             website=(result.rankings[0].website_url if result.rankings else None),
-                             locations=[{"name": p["name"], "city": p.get("city"), "place_id": p.get("place_id"), "website": p.get("website")}
-                                        for p in result.profile_audit["profiles"] if p.get("place_id")], source="analysis")
-                _pf_rows = ((getattr(result, "physician_facts", None) or {}).get("rows") or [])
-                if _pf_rows:
-                    _graph_write(_g_upsert, entity_name, city, state, etype,
-                                 physicians=[{"name": r.get("name"), "npi": r.get("npi"), "credential": r.get("credential"), "specialty": r.get("specialty")}
-                                             for r in _pf_rows if r.get("name")], source="analysis")
-            elif etype == "hospital" and result.rankings:
-                _p = result.rankings[0]
-                _graph_write(_g_upsert, entity_name, city, state, "hospital", website=_p.website_url,
-                             locations=[{"name": l.name, "address": l.address, "rating": l.google_rating, "review_count": l.google_review_count}
-                                        for l in (_p.consolidated_locations or [])], source="analysis")
-        except Exception as _gx:
-            print(f"[graph] post-run write failed: {type(_gx).__name__}: {_gx}", flush=True)
+        _graph_after_run(result, entity_name, city, state, etype)
         if job.get("roster_from_graph"):
             emit({"type": "text", "text": "\nLocations taken from your confirmed roster (entity graph) — no discovery needed."})
 
@@ -7317,19 +7332,35 @@ def _run_event_job(
                         _etype = ("community_health" if entity_type == "fqhc"
                                   else ("service_line" if _sl.get("is_service_line") else "practice") if entity_type == "practice"
                                   else "hospital")
+                        # Same inputs as a form run: the entity graph's roster, anchor and website win when the
+                        # organization has one (confirmed on a form or written by an earlier analysis); otherwise
+                        # the list's URL column, then the Google listing, and every office is resolved afresh.
+                        _gorg = None
+                        if _etype in ("practice", "service_line"):
+                            from perception.graph import get_org as _g_get_ev
+                            _gorg = _graph_write(_g_get_ev, _normalize_input(resolved_name), _normalize_input(city), (state or "").upper().strip())
                         _site = (entity.get("input_url") or "").strip()
+                        if not _site and _gorg and _gorg.get("website"):
+                            _site = _gorg["website"]
                         if not _site:
                             _site = _aas_lookup_website(resolved_name, city, state)
+                        if _site:
+                            from perception.data.places import base_website as _bw
+                            _site = _bw(_site) or _site
                         _ejob = {
                             "brand": brand, "force_rerun": override_cache, "override_today_lock": override_cache,
                             "website": _site or None, "city": city,
                             "service_line": _sl.get("service_line"), "parent_system": _sl.get("parent_system"),
-                            # None → the pipeline resolves every office (website → NPPES → Google) exactly as a
-                            # single Deep Diagnostic does; the composite table then covers the whole roster.
-                            "confirmed_siblings": None,
+                            # Graph roster when there is one; None → the pipeline resolves every office
+                            # (website → NPPES → Google) exactly as a single Deep Diagnostic does.
+                            "confirmed_siblings": (_gorg or {}).get("locations") or None,
+                            "anchor_listing": (_gorg or {}).get("anchor"),
+                            "roster_from_graph": bool((_gorg or {}).get("locations")),
                             "practice_composite": entity_type == "practice",
                             "physician_composite": entity_type == "practice",   # every physician: Google + platforms
                         }
+                        if _ejob["roster_from_graph"]:
+                            emit({"type": "log", "text": f"  {resolved_name}: locations taken from the confirmed roster (entity graph)"})
                         _agg = auto_practice_composite if entity_type == "fqhc" else True
                         _quiet = lambda _e: None
                         _spec = None
@@ -7365,6 +7396,7 @@ def _run_event_job(
                                         result.website_facts = {k: v for k, v in _f.items() if k != "site_pages"}
                                 except Exception:
                                     pass
+                        _graph_after_run(result, resolved_name, city, state, _etype)
                         try:
                             _wf = getattr(result, "website_facts", None) or {}
                             from perception.data.website_facts import ai_access_problem as _aap
@@ -7434,6 +7466,19 @@ def _run_event_job(
                             emit({"type": "log", "text": f"  {resolved_name}: spot check failed ({type(_sx).__name__})"})
                     if group_id:
                         _group_attach(result, {"group_id": group_id, "group_role": group_role, "email": (_jobs.get(job_id) or {}).get("email")}, emit)
+                    # Hospitals get the Content Improvement Keys folded in, exactly as a form run does.
+                    if not _legacy and _etype == "hospital":
+                        _hc_job = {"teaser_report": include_teaser, "brand": brand,
+                                   "content_urls": [entity.get("input_url")] if (entity.get("input_url") or "").strip() else ([_site] if _site else [])}
+                        def _hc_emit(ev, _n=resolved_name):
+                            if ev.get("type") == "phase":
+                                emit({"type": "log", "text": f"  {_n}: {ev.get('text', ev.get('name', ''))}"})
+                        emit({"type": "log", "text": f"Content analysis for {resolved_name} (Content Improvement Keys)"})
+                        try:
+                            _finalize_hospital_combined(result, resolved_name, city, state, brand, _hc_job, _hc_emit)
+                        except Exception as _hce:
+                            emit({"type": "log", "text": f"⚠ Content analysis failed for {resolved_name} ({type(_hce).__name__}: {str(_hce)[:160]}); base report kept"})
+                            print(f"[event][content] {resolved_name}: {type(_hce).__name__}: {_hce}", flush=True)
                     # Practice attendees always get the combined report (content analysis + drafted prescription).
                     if entity_type == "practice":
                         print(f"[event][content] start {resolved_name} (flag={practice_content})", flush=True)
