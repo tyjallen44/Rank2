@@ -516,7 +516,7 @@ class PracticeAdapter(_Adapter):
             ctx.entity_name, ctx.city, ctx.state, aggregate=ctx.aggregate,
             confirmed_siblings=ctx.confirmed_siblings, service_line=ctx.service_line,
             parent_system=ctx.parent_system, org_name=ctx.org_name, emit=emit, force_rerun=ctx.force_rerun,
-            website=_site, anchor_listing=ctx.anchor_listing, report=ctx.location_resolution,
+            website=_site, anchor_listing=ctx.anchor_listing, report=ctx.location_resolution, specialty=ctx.specialty,
         )
         if ctx.org_name and not ctx.report_title:
             ctx.report_title = _merge_casing(ctx.org_name, ctx.entity_name)

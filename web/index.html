@@ -11848,7 +11848,8 @@ async function teFindMore() {
     const brand = _teServiceLine ? `${_teServiceLine.parent_system} ${_teServiceLine.service_line}` : (_teSelected.original_name || _teSelected.name);
     const exclude = [_teSelected.place_id].concat(_teDiscovered.map(x => x.place_id)).filter(Boolean);
     const r = await api('/api/practice/find-more', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brand, city: _teResolvedCity, state: _teResolvedState, exclude_place_ids: exclude }) });
+      body: JSON.stringify({ brand, city: _teResolvedCity, state: _teResolvedState, exclude_place_ids: exclude,
+                             website: _teSelected.website || '', specialty: (document.getElementById('te-specialty')?.value || '') }) });
     if (!r.ok) throw new Error(await errDetail(r, 'Search failed'));
     const data = await r.json();
     const known = new Set(_teDiscovered.map(x => (x.original_name || x.name).toLowerCase() + '|' + _irStreet(x.address).toLowerCase()));

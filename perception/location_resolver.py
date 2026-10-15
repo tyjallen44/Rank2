@@ -33,8 +33,17 @@ _STREET_TYPES = {"st", "street", "ave", "avenue", "rd", "road", "blvd", "bouleva
                  "hwy", "highway", "way", "ct", "court", "pl", "place", "cir", "circle", "trl", "trail", "pike", "loop", "ter", "terrace",
                  "sq", "square", "plz", "plaza", "expy", "expressway", "n", "s", "e", "w", "ne", "nw", "se", "sw", "north", "south", "east",
                  "west", "suite", "ste", "unit", "bldg", "building", "floor", "fl"}
-_LABELS = re.compile(r"^(address|phone|fax|hours|directions|get directions|map|location|locations|office|our locations|contact|contact us|"
-                     r"call|tel|telephone|email|appointments?|schedule|book|view map|learn more|read more|details|visit|home|menu)[:.]?$", re.I)
+_LABELS = re.compile(r"^(address|phone|fax|hours|directions|get directions|map|location|locations|office|offices|our locations|contact|contact us|"
+                     r"call|tel|telephone|email|appointments?|schedule|book|view map|learn more|read more|details|visit|home|menu|"
+                     r"(?:office|our|all|clinic|view|find|other|more|additional)\s+locations?(?:\s*(?:&|and)\s*hours)?|locations?\s*(?:&|and)\s*hours|"
+                     r"hours of operation|mailing address|billing address|billing|remit to|remittance|corporate(?:\s+office)?|headquarters|"
+                     r"main office|administrative office|business office|physical address|street address)[:.]?$", re.I)
+# A heading line above an address that marks it as NOT a patient-facing office.
+_NOT_OFFICE = re.compile(r"\b(mailing|billing|remit|remittance|p\.?\s?o\.?\s?box|post office box|corporate|headquarters|payments?|"
+                         r"administrative|accounts? (?:payable|receivable)|lockbox)\b", re.I)
+# schema.org node types whose address is not an office of the practice.
+_NON_PLACE_TYPES = {"person", "event", "offer", "product", "jobposting", "review", "article", "newsarticle", "blogposting", "webpage",
+                    "website", "breadcrumblist", "contactpoint", "postaladdress", "imageobject", "videoobject", "faqpage", "question"}
 # Street is greedy within its line (a comma or line break ends it); the city is the capitalized
 # word(s) just before ", ST 12345". Without a comma a multi-word city may lose its first word —
 # the address still resolves; the Google pin works on street + ZIP.
@@ -87,6 +96,94 @@ def brand_matches(brand: str, listing_name: str, *, min_overlap: float = 0.5) ->
     squashed_b = re.sub(r"[^a-z0-9]", "", (brand or "").lower())
     squashed_l = re.sub(r"[^a-z0-9]", "", (listing_name or "").lower())
     return bool(squashed_b) and len(squashed_b) >= 6 and squashed_b in squashed_l
+
+
+# Google Places primary types that are never an office of a medical practice (unless the practice is one).
+_WRONG_TYPES = {"hospital", "dentist", "dental_clinic", "veterinary_care", "pharmacy", "drugstore", "city_hall", "local_government_office",
+                "courthouse", "post_office", "police", "fire_station", "school", "primary_school", "secondary_school", "university",
+                "general_contractor", "electrician", "plumber", "roofing_contractor", "hvac_contractor", "landscaper", "lawyer",
+                "accounting", "insurance_agency", "real_estate_agency", "bank", "church", "gym", "restaurant", "store", "lodging",
+                "car_dealer", "car_repair", "gas_station", "park", "library", "community_center", "chamber_of_commerce"}
+_SPECIALTY_WORDS = {"orthopedic", "orthopedics", "orthopaedic", "orthopaedics", "ortho", "sports", "medicine", "medical", "spine", "joint",
+                    "bone", "surgery", "surgical", "surgeons", "surgeon", "physicians", "physician", "doctors", "doctor", "md", "clinic",
+                    "clinics", "health", "healthcare", "care", "therapy", "rehab", "rehabilitation", "urgent", "pain", "hand", "foot", "ankle",
+                    "pediatric", "pediatrics", "dermatology", "cardiology", "neurology", "oncology", "urology", "ophthalmology", "eye",
+                    "ent", "fertility", "plastic", "imaging", "radiology", "physical", "wellness", "specialists", "specialist", "associates",
+                    "group", "center", "centers", "institute", "practice"}
+
+
+def _host(url: str) -> str:
+    try:
+        h = urlparse(url if "://" in (url or "") else "https://" + (url or "")).netloc.lower()
+    except Exception:
+        return ""
+    return h.split("@")[-1].split(":")[0].replace("www.", "")
+
+
+def _place_tokens(*texts: str) -> set[str]:
+    out: set[str] = set()
+    for t in texts:
+        out |= {w for w in re.findall(r"[a-z0-9]+", (t or "").lower()) if len(w) > 1}
+    return out
+
+
+def listing_belongs(brand: str, cand: dict, *, domain: str = "", city: str = "", state: str = "",
+                    specialty: str = "", min_overlap: float = 0.5) -> tuple[bool, str]:
+    """Brand-identity test for a Google listing: does it belong to this practice?
+
+    Accepts on the practice's own website domain. Otherwise the listing must be a healthcare
+    place that is not a hospital / dental / other wrong-category business, and its name must
+    share the brand's distinctive words — with the market's and the listing's own place names
+    treated as generic, so 'West Des Moines City Hall' never matches 'DMOS – West Des Moines'.
+    An acronym ('GCO') carries a match only beside a specialty word ('GCO Orthopedics'), never
+    alone ('GCO Landscape'). Returns (accepted, reason)."""
+    name = cand.get("name") or ""
+    host = _host(cand.get("website") or "")
+    if domain and host and (host == domain or host.endswith("." + domain)):
+        return True, "domain"
+    types = {str(t).lower() for t in (cand.get("types") or [])}
+    primary = str(cand.get("primary_type") or "").lower()
+    if types or primary:
+        from .data.places import _is_healthcare
+        spec = (specialty or "").lower()
+        wrong = _WRONG_TYPES - ({"hospital"} if "hospital" in spec else set()) - ({"dentist", "dental_clinic"} if "dent" in spec else set())
+        if primary in wrong or (types & wrong and not _is_healthcare(list(types - wrong))):
+            return False, f"category:{primary or ','.join(sorted(types & wrong))}"
+        if not _is_healthcare(list(types) + ([primary] if primary else [])):
+            return False, f"not-healthcare:{primary or ','.join(sorted(types)[:3])}"
+    cand_city, cand_state = _city_state_of(cand.get("address", ""))
+    place = _place_tokens(city, state, cand_city, cand_state, _STATE_NAMES.get((state or "").upper(), ""))
+    bt, lt = _brand_tokens(brand) - place, _brand_tokens(name)
+    distinctive = bt - _GENERIC
+    lname = (name or "").lower()
+    has_specialty_word = bool(lt & _SPECIALTY_WORDS)
+    if distinctive:
+        if len(distinctive & lt) / len(distinctive) >= min_overlap:
+            return True, "name"
+        acr = _acronym(brand)
+        if acr and len(acr) >= 3 and re.search(r"\b" + re.escape(acr) + r"\b", lname) and has_specialty_word:
+            return True, "acronym+specialty"
+        squashed_b = re.sub(r"[^a-z0-9]", "", " ".join(sorted(distinctive)))
+        squashed_l = re.sub(r"[^a-z0-9]", "", lname)
+        if len(squashed_b) >= 6 and squashed_b in squashed_l:
+            return True, "squashed"
+        return False, "name"
+    # Only generic / place words in the brand ("Orthopedic Associates", "Des Moines Orthopaedic
+    # Surgeons"): every non-place word of the brand must appear in the listing name.
+    words = {w for w in re.findall(r"[a-z0-9]+", (brand or "").lower()) if w not in {"the", "of", "and", "at", "for"}} - place
+    if words and words <= lt:
+        return True, "all-words"
+    return False, "name"
+
+
+_STATE_NAMES = {"AL": "alabama", "AK": "alaska", "AZ": "arizona", "AR": "arkansas", "CA": "california", "CO": "colorado", "CT": "connecticut",
+                "DE": "delaware", "FL": "florida", "GA": "georgia", "HI": "hawaii", "ID": "idaho", "IL": "illinois", "IN": "indiana", "IA": "iowa",
+                "KS": "kansas", "KY": "kentucky", "LA": "louisiana", "ME": "maine", "MD": "maryland", "MA": "massachusetts", "MI": "michigan",
+                "MN": "minnesota", "MS": "mississippi", "MO": "missouri", "MT": "montana", "NE": "nebraska", "NV": "nevada", "NH": "new hampshire",
+                "NJ": "new jersey", "NM": "new mexico", "NY": "new york", "NC": "north carolina", "ND": "north dakota", "OH": "ohio", "OK": "oklahoma",
+                "OR": "oregon", "PA": "pennsylvania", "RI": "rhode island", "SC": "south carolina", "SD": "south dakota", "TN": "tennessee",
+                "TX": "texas", "UT": "utah", "VT": "vermont", "VA": "virginia", "WA": "washington", "WV": "west virginia", "WI": "wisconsin",
+                "WY": "wyoming", "DC": "district of columbia"}
 
 
 def street_key(address: str) -> str:
@@ -173,7 +270,11 @@ def _jsonld_locations(soup) -> list[dict]:
         addr = node.get("address")
         if isinstance(addr, list):
             addr = addr[0] if addr else None
-        if isinstance(addr, dict) and addr.get("streetAddress"):
+        _t = node.get("@type")
+        _types = {str(x).lower() for x in (_t if isinstance(_t, list) else [_t]) if x}
+        _street = str((addr or {}).get("streetAddress") or "") if isinstance(addr, dict) else ""
+        if isinstance(addr, dict) and _street and not (_types & _NON_PLACE_TYPES) \
+                and not _NOT_OFFICE.search(_street) and not re.search(r"\bp\.?\s?o\.?\s?box\b", _street, re.I):
             city, st, z = addr.get("addressLocality") or "", addr.get("addressRegion") or "", addr.get("postalCode") or ""
             full = ", ".join(p for p in (addr.get("streetAddress"), city, f"{st} {z}".strip()) if p)
             tel = node.get("telephone")
@@ -209,6 +310,13 @@ def _text_locations(text: str, brand: str) -> list[dict]:
         city = " ".join(parts)
         start_line = joined.count("\n", 0, m.start())
         end_line = joined.count("\n", 0, m.end())
+        if re.search(r"\bp\.?\s?o\.?\s?box\b", street, re.I):
+            continue
+        # A mailing / billing / corporate address is not an office: the label sits on the address
+        # line or within the three lines above it.
+        _above = " ".join(lines[i] for i in range(max(0, start_line - 3), start_line + 1) if 0 <= i < len(lines))
+        if _NOT_OFFICE.search(_above):
+            continue
         name = ""
         for i in range(start_line - 1, max(-1, start_line - 7), -1):
             cand = lines[i] if 0 <= i < len(lines) else ""
@@ -382,8 +490,9 @@ def _search(name: str, city: Optional[str], state: Optional[str], n: int = 10) -
         return []
 
 
-def pin_office_to_google(brand: str, office: dict, state: str, *, exclude: set[str]) -> Optional[dict]:
-    """One Google listing for a website office: same street (and ZIP), name belongs to the brand."""
+def pin_office_to_google(brand: str, office: dict, state: str, *, exclude: set[str], domain: str = "", specialty: str = "") -> Optional[dict]:
+    """One Google listing for a website office: same street (and ZIP), name belongs to the brand
+    (domain match, or a healthcare listing carrying the brand's words)."""
     addr, city = office.get("address", ""), office.get("city") or ""
     street = re.sub(r"[,\s]*(Suite|Ste\.?|Unit|#)\s*[\w-]+.*$", "", addr.split(",")[0]).strip()
     tried: list[dict] = []
@@ -392,13 +501,14 @@ def pin_office_to_google(brand: str, office: dict, state: str, *, exclude: set[s
             if c.get("place_id") in exclude or c in tried:
                 continue
             tried.append(c)
-            if same_office(addr, c.get("address", "")) and brand_matches(brand, c.get("name", ""), min_overlap=0.34):
+            if same_office(addr, c.get("address", "")) and listing_belongs(brand, c, domain=domain, city=city, state=state,
+                                                                         specialty=specialty, min_overlap=0.34)[0]:
                 return c
     return None
 
 
 def google_snowball(brand: str, city: str, state: str, *, seeds: Optional[list[str]] = None, exclude: Optional[set[str]] = None,
-                    max_queries: int = 14, states: Optional[set] = None) -> dict:
+                    max_queries: int = 14, states: Optional[set] = None, domain: str = "", specialty: str = "") -> dict:
     """Brand-name listings around the market: brand variants, then every city seen in a found address
     (and the given seed cities) becomes its own query. Listings outside `states` (default: the home
     state) are dropped — a same-named practice in another state is not an office of this one.
@@ -408,6 +518,7 @@ def google_snowball(brand: str, city: str, state: str, *, seeds: Optional[list[s
     seen = set(exclude or ())
     allowed = {s.upper() for s in (states or {state}) if s}
     out: list[dict] = []
+    rejected: list[dict] = []          # debug log for the run record — never printed in the report
 
     def _city_of(addr: str) -> str:
         parts = [p.strip() for p in str(addr or "").split(",")]
@@ -422,11 +533,18 @@ def google_snowball(brand: str, city: str, state: str, *, seeds: Optional[list[s
             pid = c.get("place_id")
             if not pid or pid in seen:
                 continue
-            if not brand_matches(brand, c.get("name", "")):
+            ok, why = listing_belongs(brand, c, domain=domain, city=city, state=state, specialty=specialty)
+            if not ok:
+                seen.add(pid)
+                rejected.append({"name": c.get("name"), "address": c.get("address"), "place_id": pid, "reason": why})
                 continue
             if allowed and _state_of(c) and _state_of(c) not in allowed:
+                seen.add(pid)
+                rejected.append({"name": c.get("name"), "address": c.get("address"), "place_id": pid, "reason": "state"})
                 continue
             seen.add(pid)
+            c = dict(c)
+            c["match"] = why
             out.append(c)
 
     variants = [(brand, None, state), (brand, city, state), (f"{brand} clinic", None, state), (f"{brand} near {city}", None, state)]
@@ -453,7 +571,7 @@ def google_snowball(brand: str, city: str, state: str, *, seeds: Optional[list[s
                 _take(_search(acronym.upper(), cty, state, 20))
             nxt.extend(_city_of(c.get("address")) for c in out[before:])
         frontier = nxt
-    return {"candidates": out, "queries": n + len(variants)}
+    return {"candidates": out, "queries": n + len(variants), "rejected": rejected}
 
 
 def display_name(brand: str, google_name: Optional[str], website_name: Optional[str], city: str) -> str:
@@ -465,8 +583,16 @@ def display_name(brand: str, google_name: Optional[str], website_name: Optional[
     if distinct and g.lower() != brand.lower():
         return g
     w = (website_name or "").strip()
-    if w and w.lower() != brand.lower():
-        return w if (_brand_tokens(w) & _brand_tokens(brand)) else f"{brand} – {w}"
+    if w and w.lower() != brand.lower() and not _LABELS.match(w) and not _NOT_OFFICE.search(w):
+        if _brand_tokens(w) & _brand_tokens(brand):
+            return w
+        # "Brand – <heading>" only when the heading is a short office descriptor that names this
+        # office's own city (or a one/two-word descriptor without another place in it) — a page
+        # section heading ("Office Locations", "West Des Moines – Ankeny") never becomes a location.
+        wt = {t for t in re.findall(r"[a-z0-9]+", w.lower())}
+        ct = {t for t in re.findall(r"[a-z0-9]+", (city or "").lower())}
+        if len(wt) <= 4 and not re.search(r"[–—]|\s-\s", w) and (not ct or ct <= wt or len(wt) <= 2):
+            return f"{brand} – {w}"
     return f"{brand} – {city}" if city else (g or brand)
 
 
@@ -524,7 +650,8 @@ def apply_confirmed_locations(confirmed: list[dict], resolved: list[dict], *, ha
 
 def resolve_locations(entity_name: str, city: str, state: str, *, website: Optional[str] = None,
                       anchor_listing: Optional[dict] = None, emit: Optional[Callable] = None,
-                      force_rerun: bool = False, allow_model: bool = True, use_registry: bool = True) -> dict:
+                      force_rerun: bool = False, allow_model: bool = True, use_registry: bool = True,
+                      specialty: Optional[str] = None) -> dict:
     """Every office of the practice except the anchor, each with its sources and gap flags.
 
     Returns {"siblings": [...], "parent_org_name": str, "resolution": {...}} where each sibling is
@@ -576,6 +703,7 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
             pass
     anchor_pid = anchor.get("place_id")
     anchor_addr = anchor.get("address") or ""
+    domain = _host(website or "")
 
     # 1. website
     _emit(f"Reading {brand}'s website for its office list…" if website else "No website known — skipping the website office list")
@@ -599,7 +727,7 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
     if offices:
         _emit(f"Pinning {len(offices)} website office{'s' if len(offices) != 1 else ''} to Google listings…")
     for o in offices:
-        c = pin_office_to_google(brand, o, state, exclude=used)
+        c = pin_office_to_google(brand, o, state, exclude=used, domain=domain, specialty=specialty or "")
         _cty = o.get("city") or _city_state_of((c or {}).get("address", ""))[0] or city
         s = {"name": display_name(brand, (c or {}).get("name"), o["name"], _cty), "entity_type": "practice",
              "city": _cty,
@@ -619,7 +747,10 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
     # registry holds an organizational record (metro spill-over such as Memphis → Southaven, MS).
     allowed_states = {(state or "").upper()} | {(o.get("state") or "").upper() for o in (web.get("locations") or [])} | {st.upper() for _, st in npp}
     allowed_states.discard("")
-    snow = google_snowball(brand, city, state, seeds=seeds, exclude=used, states=allowed_states)
+    snow = google_snowball(brand, city, state, seeds=seeds, exclude=used, states=allowed_states, domain=domain, specialty=specialty or "")
+    if snow.get("rejected"):
+        _emit(f"Google: {len(snow['rejected'])} listing{'s' if len(snow['rejected']) != 1 else ''} near the brand name rejected "
+              f"(not this practice: {', '.join(r['name'] for r in snow['rejected'][:4])}{'…' if len(snow['rejected']) > 4 else ''})")
     duplicates: list[dict] = [{"name": c.get("name"), "place_id": c.get("place_id"), "address": c.get("address"), "of": "the analyzed listing"}
                               for c in snow["candidates"] if anchor_addr and same_office(c.get("address", ""), anchor_addr)]
     extra = [c for c in snow["candidates"] if not (anchor_addr and same_office(c.get("address", ""), anchor_addr))]
@@ -670,6 +801,7 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
         "website_only": [s["name"] for s in siblings if s.get("google_missing")],
         "google_only": [s["name"] for s in siblings if s.get("website_missing")],
         "duplicates": duplicates,
+        "rejected": snow.get("rejected") or [],
         "anchor_website": next(({"name": o.get("name"), "address": o["address"], "phone": o.get("phone") or ""}
                                 for o in (web.get("locations") or []) if anchor_addr and same_office(o["address"], anchor_addr)), None),
     }

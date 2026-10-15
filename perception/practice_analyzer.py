@@ -722,7 +722,7 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
                              parent_system: Optional[str], org_name: Optional[str],
                              emit, force_rerun: bool, website: Optional[str] = None,
                              anchor_listing: Optional[dict] = None,
-                             report: Optional[dict] = None) -> tuple[Optional[list[str]], Optional[list[dict]], Optional[str]]:
+                             report: Optional[dict] = None, specialty: Optional[str] = None) -> tuple[Optional[list[str]], Optional[list[dict]], Optional[str]]:
     """Establish the location roster for an aggregate run.
 
     Returns (location_roster, aggregate_siblings, org_name). location_roster is
@@ -745,7 +745,7 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
                     try:
                         from .location_resolver import resolve_locations, apply_confirmed_locations
                         _res = resolve_locations(entity_name, city, state, website=website, anchor_listing=anchor_listing,
-                                                 emit=emit, force_rerun=force_rerun)
+                                                 emit=emit, force_rerun=force_rerun, specialty=specialty)
                         _merged, _drift = apply_confirmed_locations(list(confirmed_siblings), _res["siblings"], hard=True)
                         for _m in _merged:          # keep what the form confirmed (names, place ids) on top
                             _m["sources"] = [x for x in _m.get("sources") or [] if x != "confirmed"] or _m.get("sources") or []
@@ -786,7 +786,7 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
             from .location_resolver import resolve_locations, apply_confirmed_locations
             emit({"type": "phase", "name": "discovery", "text": f"Finding every {entity_name} location"})
             _res = resolve_locations(entity_name, city, state, website=website, anchor_listing=anchor_listing,
-                                     emit=emit, force_rerun=force_rerun)
+                                     emit=emit, force_rerun=force_rerun, specialty=specialty)
             _siblings, _discovered_org_name = _res["siblings"], _res.get("parent_org_name") or ""
             # A roster this team confirmed (entity graph) is the roster; the resolver enriches it and
             # reports drift — so bulk uploads and re-runs honour the confirmation without a form.
@@ -1207,7 +1207,7 @@ def analyze_practice(
     _location_roster, _aggregate_siblings, org_name = _resolve_practice_roster(
         entity_name, city, state, aggregate=aggregate, confirmed_siblings=confirmed_siblings,
         service_line=service_line, parent_system=parent_system, org_name=org_name,
-        emit=emit, force_rerun=force_rerun,
+        emit=emit, force_rerun=force_rerun, specialty=specialty,
     )
 
     # If org_name is set and no custom report_title provided, default title to org_name
