@@ -41,7 +41,7 @@ def test_audit_counts_and_names():
     assert q["category"]["counts"] == {"orthopedic_surgeon": 2, "doctor": 1} and not q["category"]["consistent"] and q["category"]["generic"] == ["Brand – East"]
     assert q["status"]["closed"] == ["Brand – Bartlett"] and q["duplicates"] == dups
     assert q["recency"]["compared"] == 2 and q["recency"]["fresh"] == 1 and q["recency"]["stale"] == ["Brand – East"] and q["recency"]["no_reviews"] == ["Brand – Bartlett"]
-    assert q["physicians"] == {"total": 3, "with_google": 2, "at_office": 1, "elsewhere": ["Dr. B"]}
+    assert q["physicians"] == {"total": 3, "with_google": 2, "at_office": 1, "elsewhere": ["Dr. B"], "office_set_credible": True}
     text = " ".join(LQ.issues(q))
     for needle in ("Google phone differs", "Brand – East", "different Google categories", "marked closed", "second Google profile", "no Google review in 90 days",
                    "no reviews at all", "not one of the practice's offices: Dr. B"):

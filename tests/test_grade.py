@@ -542,7 +542,7 @@ def test_smart_title_preserves_state_abbreviation():
 
 def test_smart_title_preserves_medical_acronyms():
     from server import _smart_title
-    assert _smart_title("MRI CENTER OF MOBILE") == "MRI Center Of Mobile"
+    assert _smart_title("MRI CENTER OF MOBILE") == "MRI Center of Mobile"   # small words stay lower (cleanup 2.4)
     assert _smart_title("ENT ASSOCIATES") == "ENT Associates"
 
 
