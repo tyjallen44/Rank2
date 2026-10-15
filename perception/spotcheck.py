@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Optional
@@ -131,10 +134,22 @@ def run_openai(query: str) -> Optional[dict]:
     from openai import OpenAI
     client = OpenAI(api_key=key)
     # max_tool_calls bounds spend: one patient question needs a handful of searches, not seven.
-    resp = client.responses.create(model=_OPENAI_MODEL, tools=[{"type": "web_search"}],
-                                   include=["web_search_call.action.sources"],
-                                   max_tool_calls=int(os.environ.get("SPOTCHECK_OPENAI_MAX_SEARCHES", "3")),
-                                   instructions=_SYS, input=query)
+    from openai import RateLimitError
+    for attempt in range(_RETRIES + 1):
+        try:
+            resp = client.responses.create(model=_OPENAI_MODEL, tools=[{"type": "web_search"}],
+                                           include=["web_search_call.action.sources"],
+                                           max_tool_calls=int(os.environ.get("SPOTCHECK_OPENAI_MAX_SEARCHES", "3")),
+                                           instructions=_SYS, input=query)
+            break
+        except RateLimitError as exc:
+            # "no credits remaining" / insufficient_quota is a billing wall — retrying cannot help.
+            msg = str(exc)
+            if attempt >= _RETRIES or "credit" in msg.lower() or "insufficient_quota" in msg:
+                raise
+            wait = _retry_wait(attempt, None)
+            print(f"[spotcheck] ChatGPT 429 — retry {attempt + 1}/{_RETRIES} in {wait:.0f}s", flush=True)
+            time.sleep(wait)
     text, cites, n_searches = "", [], 0
     for item in getattr(resp, "output", []) or []:
         t = getattr(item, "type", "")
@@ -161,6 +176,22 @@ def run_openai(query: str) -> Optional[dict]:
     return {"assistant": "ChatGPT", "text": text, "citations": _dedupe(cites)}
 
 
+# Rate limits, not budget: a bulk run (5 organizations × 8 threads × 2 passes) fires ~40 grounded
+# requests at once and Gemini answers 429 to the burst. Cap the concurrency and back off on 429/503
+# instead of recording an error (which prints as "no answers · N errors" in the PDF).
+_GEMINI_GATE = threading.BoundedSemaphore(max(1, int(os.environ.get("SPOTCHECK_GEMINI_CONCURRENCY", "4"))))
+_RETRIES = max(0, int(os.environ.get("SPOTCHECK_RETRIES", "4")))
+
+
+def _retry_wait(attempt: int, retry_after: Optional[str]) -> float:
+    try:
+        if retry_after:
+            return min(60.0, max(1.0, float(retry_after)))
+    except ValueError:
+        pass
+    return min(30.0, 2.0 * (2 ** attempt)) + random.uniform(0, 1)
+
+
 def run_gemini(query: str) -> Optional[dict]:
     key = (os.environ.get("GEMINI_API_KEY") or "").strip()
     if not key:
@@ -170,8 +201,18 @@ def run_gemini(query: str) -> Optional[dict]:
                "contents": [{"parts": [{"text": query}]}],
                "tools": [{"google_search": {}}],
                "generationConfig": {"maxOutputTokens": 700}}
-    resp = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={key}",
-                      json=payload, timeout=90)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={key}"
+    for attempt in range(_RETRIES + 1):
+        with _GEMINI_GATE:
+            resp = httpx.post(url, json=payload, timeout=90)
+        if resp.status_code in (429, 503) and attempt < _RETRIES:
+            wait = _retry_wait(attempt, resp.headers.get("retry-after"))
+            print(f"[spotcheck] Gemini {resp.status_code} — retry {attempt + 1}/{_RETRIES} in {wait:.0f}s: {resp.text[:200].replace(chr(10), ' ')}", flush=True)
+            time.sleep(wait)
+            continue
+        break
+    if resp.status_code >= 400:
+        print(f"[spotcheck] Gemini {resp.status_code}: {resp.text[:300].replace(chr(10), ' ')}", flush=True)
     resp.raise_for_status()
     data = resp.json()
     cand = (data.get("candidates") or [{}])[0]

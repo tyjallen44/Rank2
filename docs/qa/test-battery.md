@@ -4152,3 +4152,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T4 | Toolbar | A grey bar directly above the table: search box + "Showing X of N · needs attention · show all" note on the left; "+ Add an organization" · "⬆ Upload a list" · "≡ Run Competitor Rankings (N markets)" · "⬇ CSV" · **Manage ▾** on the right. Manage ▾ (admin): ✎ Edit details · Show/Hide benchmark on reports · Run the monthly set now · Archive group (red) · Delete group (red). Non-admin members see no Manage button. [ui] |
 | T5 | Search survives refresh | Type in the toolbar search, let a re-run finish (page re-renders): the search text and filter stay applied. [ui] |
 | R1 | Regression | The old member / prospect button group and the header "Needs attention" button are gone; the completion panel's "Needs attention" shortcut still filters the table; the row Actions ▾ menu, expanded rows, chips and CSV are unchanged. |
+
+## SPOTCHECK-RATE-LIMITS — Gemini / ChatGPT back off on 429 instead of recording errors (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Bulk run with spot check on (5+ organizations) | The spot-check panel in each PDF shows Gemini "N of 8" answers, not "no answers · N errors". Cloud Run logs may show `[spotcheck] Gemini 429 — retry 1/4 in 2s …` lines followed by success; no `Gemini 'xxx' failed: … 429` lines. [ui] |
+| T2 | Concurrency | At most 4 Gemini requests in flight per process (`SPOTCHECK_GEMINI_CONCURRENCY`, default 4); retries honour `Retry-After`, else 2 / 4 / 8 / 16 s with jitter, up to `SPOTCHECK_RETRIES` (default 4). [code] |
+| T3 | ChatGPT with no credits | The "You have no credits remaining" 429 is not retried (it's a billing wall) and still prints as ChatGPT errors until the OpenAI account is funded. [code] |
+| R1 | Unit | `tests/test_spotcheck_retry.py` — 429, 429, 200 → one answer, three calls, Retry-After honoured; permanent 429 raises after the retries; wait bounds. |
