@@ -785,6 +785,10 @@ def _init_db_impl() -> None:
         _c = {r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name=?", [_t]).fetchall()}
         if "cost_usd" not in _c:
             con.execute(f"ALTER TABLE {_t} ADD COLUMN cost_usd DOUBLE PRECISION")
+        if _t == "comparison_runs":
+            for _col in ("comparison_json", "brand"):      # narrative + brand: the PDF can be rebuilt after an instance recycle
+                if _col not in _c:
+                    con.execute(f"ALTER TABLE comparison_runs ADD COLUMN {_col} VARCHAR")
     # Groups (associations / cohorts / programs) — perception/groups.py
     from .groups import ensure_tables as _groups_tables
     _groups_tables(con)
@@ -2201,15 +2205,19 @@ def create_tracked_entity(
 
 def create_comparison_run(cid: str, run_id_a: str, run_id_b: str, entity_a: str, entity_b: str,
                           location_a: str, location_b: str, specialty: Optional[str],
-                          pdf_path: str, teaser: bool, user_role: str, ran_by: Optional[str]) -> None:
-    from datetime import datetime, date as _date
+                          pdf_path: str, teaser: bool, user_role: str, ran_by: Optional[str],
+                          comparison_json: Optional[str] = None, brand: Optional[str] = None) -> None:
+    """The comparison narrative (JSON of ComparisonSummary) and brand are stored so the PDF can be
+    rebuilt from the two stored results when the file is gone (instance recycle)."""
+    from datetime import datetime
     con = get_connection()
     con.execute(
         """INSERT INTO comparison_runs (id, run_id_a, run_id_b, entity_a, entity_b, location_a, location_b,
-                                        specialty, pdf_path, teaser, user_role, ran_by, generated_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                        specialty, pdf_path, teaser, user_role, ran_by, generated_at, created_at,
+                                        comparison_json, brand)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [cid, run_id_a, run_id_b, entity_a, entity_b, location_a, location_b, specialty, pdf_path,
-         bool(teaser), user_role, ran_by, _local_today(), datetime.utcnow()])
+         bool(teaser), user_role, ran_by, local_today(), datetime.utcnow(), comparison_json, brand])
     # Side runs that exist only to feed this comparison (no PDF of their own) are tagged so
     # History shows the comparison row instead of two empty clinic rows.
     for rid in (run_id_a, run_id_b):
@@ -2220,7 +2228,17 @@ def create_comparison_run(cid: str, run_id_a: str, run_id_b: str, entity_a: str,
 
 
 _CMP_COLS = ["id", "run_id_a", "run_id_b", "entity_a", "entity_b", "location_a", "location_b",
-             "specialty", "pdf_path", "teaser", "user_role", "ran_by", "generated_at", "created_at"]
+             "specialty", "pdf_path", "teaser", "user_role", "ran_by", "generated_at", "created_at",
+             "comparison_json", "brand"]
+
+
+def set_comparison_pdf(cid: str, pdf_path: str, comparison_json: Optional[str] = None) -> None:
+    con = get_connection()
+    if comparison_json:
+        con.execute("UPDATE comparison_runs SET pdf_path = ?, comparison_json = ? WHERE id = ?", [pdf_path, comparison_json, cid])
+    else:
+        con.execute("UPDATE comparison_runs SET pdf_path = ? WHERE id = ?", [pdf_path, cid])
+    con.close()
 
 
 def get_comparison_run(cid: str) -> Optional[dict]:
@@ -3181,24 +3199,32 @@ def _suggest_index(role: str = None) -> list:
     rows = list(found.values())
     for o in rows:
         o.setdefault("tracked", False)
-        o["_hay"] = " ".join(x for x in (o.get("name"), o.get("parent_system"), o.get("city")) if x).lower()
+        o["_hay"] = " ".join(x for x in (o.get("name"), o.get("parent_system"), o.get("city"), o.get("state")) if x).lower()
     _SUGGEST_CACHE[key] = (_time.time(), rows)
     return rows
 
 
-def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = None) -> list:
+def suggest_entities(q: str, role: str = None, limit: int = 8, kinds: list = None, field: str = "name") -> list:
     """Organizations this team has already analyzed or tracked, matching `q`, most recent
     first (prefix matches first). Sources: Deep Diagnostic runs, Hospital Network runs,
-    tracked entities. kinds: hospital | service_line | specialty | community_health | network."""
+    tracked entities. kinds: hospital | service_line | specialty | community_health | network.
+    field: which launch-form box is being typed in — "name" matches name / parent / city / state
+    anywhere; "city" matches the organization's city by prefix; "state" its state code by prefix."""
     from datetime import date as _date
     q = (q or "").strip()
     if len(q) < 2:
         return []
     ql = q.lower()
-    today = _local_today()
+    today = local_today()
     out = []
     for o in _suggest_index(role):
-        if ql not in o["_hay"]:
+        if field == "city":
+            if not (o.get("city") or "").lower().startswith(ql):
+                continue
+        elif field == "state":
+            if not (o.get("state") or "").lower().startswith(ql.strip().lower()):
+                continue
+        elif ql not in o["_hay"]:
             continue
         if kinds and o["kind"] not in kinds:
             continue

@@ -7723,7 +7723,8 @@ function _attachSuggest(inputId, onPick, opts) {
   const render = () => {
     if (!total()) { hide(); return; }
     const q = inp.value.trim();
-    box.innerHTML = (items.length ? `<div class="sg-head">Already analyzed by your team <a href="#" class="help-link" onmousedown="event.preventDefault();event.stopPropagation();showHelp('suggestions',event);return false" style="font-weight:600;text-transform:none;letter-spacing:0">ⓘ</a></div>` : '') +
+    const headTxt = opts.field === 'city' ? 'Already analyzed by your team in this city' : opts.field === 'state' ? 'Already analyzed by your team in this state' : 'Already analyzed by your team';
+    box.innerHTML = (items.length ? `<div class="sg-head">${headTxt} <a href="#" class="help-link" onmousedown="event.preventDefault();event.stopPropagation();showHelp('suggestions',event);return false" style="font-weight:600;text-transform:none;letter-spacing:0">ⓘ</a></div>` : '') +
       items.map((it, i) => `<div class="sg-item ${i === active ? 'on' : ''}" data-i="${i}"><div class="sg-name">${_learnEsc(it.name)}</div><div class="sg-meta">${_learnEsc(_sgMeta(it))}</div></div>`).join('') +
       (opts.onNew ? `<div class="sg-new ${active === items.length ? 'on' : ''}" data-i="${items.length}">＋ Analyze “${_learnEsc(q)}” as a new organization →</div>` : '');
     place(); box.classList.remove('hidden'); open = true;
@@ -7735,7 +7736,7 @@ function _attachSuggest(inputId, onPick, opts) {
     if (q.length < 2) { items = []; hide(); return; }
     timer = setTimeout(async () => {
       try {
-        const r = await api(`/api/entities/suggest?q=${encodeURIComponent(q)}${opts.kinds ? '&kinds=' + encodeURIComponent(opts.kinds) : ''}`);
+        const r = await api(`/api/entities/suggest?q=${encodeURIComponent(q)}${opts.kinds ? '&kinds=' + encodeURIComponent(opts.kinds) : ''}${opts.field ? '&field=' + opts.field : ''}`);
         const d = r.ok ? await r.json() : [];
         if (q !== inp.value.trim()) return;          // stale response
         items = d; active = -1; render();
@@ -7802,9 +7803,19 @@ function _initSuggest() {
   _attachSuggest('ir-name',    _irPickSuggest, { kinds: 'hospital,service_line,specialty,community_health,network' });
   _attachSuggest('cmp-a-name', it => _cmpPickSuggest('a', it), { kinds: 'hospital,service_line,specialty,network' });
   _attachSuggest('cmp-b-name', it => _cmpPickSuggest('b', it), { kinds: 'hospital,service_line,specialty,network' });
-  _attachSuggest('te-name',    it => { if (it.kind === 'network') { setTeType('network'); document.getElementById('te-name').value = it.name; document.getElementById('te-city').value = it.city || ''; document.getElementById('te-state').value = it.state || ''; teDiscoverNetwork(it.name, it.city || '', it.state || ''); } else _tePickSuggest(it); }, { kinds: 'hospital,service_line,specialty,community_health,network' });
+  const _teOnPick = it => { if (it.kind === 'network') { setTeType('network'); document.getElementById('te-name').value = it.name; document.getElementById('te-city').value = it.city || ''; document.getElementById('te-state').value = it.state || ''; teDiscoverNetwork(it.name, it.city || '', it.state || ''); } else _tePickSuggest(it); };
+  _attachSuggest('te-name',    _teOnPick, { kinds: 'hospital,service_line,specialty,community_health,network' });
   _attachSuggest('pp-target',  _ppPickSuggest, { kinds: 'hospital,specialty' });
   _attachSuggest('np-name',    _npPickSuggest, { kinds: 'network' });
+  // The city and state boxes suggest too: organizations the team already analyzed in that city /
+  // state, picked the same way (the whole form fills in).
+  const _cityState = (prefix, onPick, kinds) => { _attachSuggest(`${prefix}-city`, onPick, { kinds, field: 'city' }); _attachSuggest(`${prefix}-state`, onPick, { kinds, field: 'state' }); };
+  _cityState('ir',    _irPickSuggest, 'hospital,service_line,specialty,community_health,network');
+  _cityState('cmp-a', it => _cmpPickSuggest('a', it), 'hospital,service_line,specialty,network');
+  _cityState('cmp-b', it => _cmpPickSuggest('b', it), 'hospital,service_line,specialty,network');
+  _cityState('te',    _teOnPick, 'hospital,service_line,specialty,community_health,network');
+  _cityState('pp',    _ppPickSuggest, 'hospital,specialty');
+  _cityState('np',    _npPickSuggest, 'network');
   _attachSuggest('home-search-input', _homePickSuggest, { onNew: q => { navigate('individual'); setIrType(['hospital','service_line','specialty','community_health'].find(_irTypeAllowed) || 'hospital'); const el = document.getElementById('ir-name'); if (el) { el.value = q; el.focus(); } } });
 }
 

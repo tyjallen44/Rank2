@@ -390,9 +390,11 @@ async def team_emails(_: dict = Depends(get_current_user_payload)):
 
 
 @app.get("/api/entities/suggest")
-async def entities_suggest(q: str = "", limit: int = 8, kinds: str = "",
+async def entities_suggest(q: str = "", limit: int = 8, kinds: str = "", field: str = "name",
                            payload: dict = Depends(get_current_user_payload)):
-    """Typeahead: organizations this team already analyzed or tracked."""
+    """Typeahead: organizations this team already analyzed or tracked. `field` is the launch-form
+    box being typed in (name | city | state) so the city and state boxes suggest too."""
+    field = field if field in ("name", "city", "state") else "name"
     from perception.db import init_db, suggest_entities
     init_db()
     ks = [k.strip() for k in (kinds or "").split(",") if k.strip()]
@@ -407,7 +409,7 @@ async def entities_suggest(q: str = "", limit: int = 8, kinds: str = "",
         if not ks:
             return []
     rows = await asyncio.get_running_loop().run_in_executor(
-        None, lambda: suggest_entities(q, role=payload.get("role"), limit=max(1, min(int(limit or 8), 15)) * (3 if not caps.get("unrestricted") else 1), kinds=ks))
+        None, lambda: suggest_entities(q, role=payload.get("role"), limit=max(1, min(int(limit or 8), 15)) * (3 if not caps.get("unrestricted") else 1), kinds=ks, field=field))
     if not caps.get("unrestricted"):
         rows = _scope_history_rows(rows, payload)
     return rows[:max(1, min(int(limit or 8), 15))]
@@ -2666,7 +2668,9 @@ def _job_run_comparison(job_id: str, req_dict: dict) -> None:
                 getattr(result_b, "report_title", None) or result_b.entity_name,
                 f"{req_dict['city_a']}, {req_dict['state_a']}", f"{req_dict['city_b']}, {req_dict['state_b']}",
                 result_a.specialty or result_b.specialty, str(pdf_path),
-                bool(req_dict.get("teaser_report")), job.get("role", ""), job.get("email"))
+                bool(req_dict.get("teaser_report")), job.get("role", ""), job.get("email"),
+                comparison_json=(comparison.model_dump_json() if hasattr(comparison, "model_dump_json") else None),
+                brand=job.get("brand", "original"))
         except Exception as _pexc:
             emit({"type": "text", "text": f"\n(could not save the comparison to History: {type(_pexc).__name__})"})
         job["status"] = "done"
@@ -2708,16 +2712,60 @@ async def download_comparison_pdf(job_id: str, _: str = Depends(require_auth)):
     job = _jobs.get(job_id)
     if job and job.get("status") == "done":
         pdf_path = job.get("result", {}).get("pdf_path")
-    if not pdf_path:
+    if not pdf_path or not Path(pdf_path).exists():
         init_db()
-        rec = get_comparison_run("".join(ch for ch in job_id if ch.isalnum()))
-        pdf_path = rec.get("pdf_path") if rec else None
+        cid = "".join(ch for ch in job_id if ch.isalnum())
+        rec = get_comparison_run(cid)
+        if not rec:
+            raise HTTPException(404, "Comparison report not found")
+        # The file is rebuilt from the two stored results and the stored narrative when it is gone
+        # (instance recycle, or a comparison older than the persisted path), so the link survives restarts.
+        p = await asyncio.get_running_loop().run_in_executor(None, lambda: _comparison_file(cid))
+        pdf_path = str(p) if p else None
     if not pdf_path:
         raise HTTPException(404, "Comparison report not found")
     pdf = Path(pdf_path)
     if not pdf.exists():
         raise HTTPException(404, "PDF file not found on disk")
     return FileResponse(str(pdf), media_type="application/pdf", filename=pdf.name)
+
+
+def _comparison_file(cid: str) -> Optional[Path]:
+    """The comparison PDF for a persisted comparison id: the stored file when it exists, else
+    rebuilt into REPORTS_DIR from the two stored results (analysis_runs.result_json) and the
+    stored narrative (comparison_runs.comparison_json; re-synthesized once for rows without it)."""
+    from perception.db import get_comparison_run, get_connection, set_comparison_pdf
+    rec = get_comparison_run(cid)
+    if not rec:
+        return None
+    if rec.get("pdf_path") and Path(rec["pdf_path"]).exists():
+        return Path(rec["pdf_path"])
+    from perception.models import AnalysisResult, ComparisonSummary
+    from perception.pdf import render_comparison_pdf
+    results = {}
+    con = get_connection()
+    try:
+        for k in ("run_id_a", "run_id_b"):
+            row = con.execute("SELECT result_json FROM analysis_runs WHERE run_id = ?", [rec.get(k)]).fetchone() if rec.get(k) else None
+            if not row or not row[0]:
+                return None
+            results[k] = AnalysisResult.model_validate_json(row[0])
+    finally:
+        con.close()
+    a, b = results["run_id_a"], results["run_id_b"]
+    stored = rec.get("comparison_json")
+    if stored:
+        comparison = ComparisonSummary.model_validate_json(stored)
+    else:
+        from perception.analyzer import build_comparison_prompt, synthesize_comparison, _get_client
+        sys_prompt, user_prompt = build_comparison_prompt(a, b)
+        comparison = synthesize_comparison(_get_client(), sys_prompt, user_prompt)
+        stored = comparison.model_dump_json()
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    out = REPORTS_DIR / (Path(rec["pdf_path"]).name if rec.get("pdf_path") else f"Pulse-Comparison_{cid}.pdf")
+    render_comparison_pdf(a, b, comparison, out, brand=rec.get("brand") or "original", teaser=bool(rec.get("teaser")))
+    set_comparison_pdf(cid, str(out), None if rec.get("comparison_json") else stored)
+    return out
 
 
 @app.get("/api/jobs/{job_id}")
@@ -6233,6 +6281,7 @@ def _month_label(d=None) -> str:
 async def _start_monthly_run(g: dict, started_by: str, brand: str = "original") -> dict:
     """Create the month's batch for a group (every member, group settings: spot check on, content analysis on)
     and run it — as a Cloud Run Job when available, else in-process. Delivery happens when the batch finishes."""
+    from datetime import datetime
     from perception.db import init_db, create_event_run, create_event_entities, local_today
     from perception.groups import members, monthly_entities, update_group
     init_db()
@@ -6265,6 +6314,7 @@ async def _start_monthly_run(g: dict, started_by: str, brand: str = "original") 
 def _monthly_deliver(event_id: str, emit=None) -> None:
     """After a monthly batch finishes: Competitor Rankings for every market in the group, then each member's
     bundle (PDFs attached + secure link) to its recipients, then a summary to the coordinator. Sync, fail-soft."""
+    from datetime import datetime
     from perception.db import get_event_run, set_run_role, create_bundle_link, local_today
     from perception.groups import get_group, members, update_group
     from perception.email_utils import send_monthly_bundle, send_monthly_summary

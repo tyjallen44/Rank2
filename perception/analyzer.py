@@ -455,7 +455,8 @@ def _gather_individual_evidence(entity_name: str, city: str, state: str, entity_
             quality = _quality.fetch_hospital_quality(entity_name, city, state)
             text += _quality.evidence_lines(quality)
         except Exception as exc:
-            console.print(f"[yellow]⚠[/yellow] Quality signals fetch failed ({exc}); proceeding without.")
+            import logging
+            logging.getLogger(__name__).warning("Quality signals fetch failed (%s); proceeding without.", exc)
             quality = None
     return text, read, quality
 
