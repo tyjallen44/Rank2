@@ -79,7 +79,7 @@ def verify_physicians(physicians: list, roster_locations: list, state: str, site
         try:
             from .website_facts import _fetch_bio_pages
             bios = _fetch_bio_pages(site_url, [p.get("url") for p in site_pages if p.get("url")],
-                                    physician_names=[p.get("name") for p in physicians[:sample]], max_bios=sample + 4)
+                                    physician_names=[p.get("name") for p in physicians[:sample]], max_bios=min(sample + 4, 60))
             site_pages += bios
             bio_urls = [b["url"] for b in bios]
         except Exception:

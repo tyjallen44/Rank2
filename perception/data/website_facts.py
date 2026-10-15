@@ -213,7 +213,8 @@ def _fetch_bio_pages(site_url: str, directory_urls: list, *, max_bios: int = 12,
         for u in candidates:
             try:
                 r = client.get(u)
-                if r.status_code == 200 and "text/html" in r.headers.get("content-type", "") and len(r.text) > 2000:
+                if r.status_code == 200 and "text/html" in r.headers.get("content-type", "") and len(r.text) > 2000 \
+                        and not (urlparse(str(r.url)).path in ("", "/") and urlparse(u).path not in ("", "/")):   # soft-404 → homepage
                     dir_html, dir_url = r.text, str(r.url); seen.add(_norm_url(u)); seen.add(_norm_url(dir_url)); break
             except Exception:
                 continue
@@ -255,15 +256,31 @@ def _fetch_bio_pages(site_url: str, directory_urls: list, *, max_bios: int = 12,
                     b.close()
                 except Exception:
                     pass
+        browser = None
+        browser_used = 0
         for href in links[:max_bios]:
             try:
                 r = client.get(href)
+                t = ""
                 if r.status_code == 200 and "text/html" in r.headers.get("content-type", ""):
                     t = BeautifulSoup(r.text, "html.parser").get_text(" ", strip=True)
-                    if len(t) > 300:
-                        out.append({"url": href, "text": t[:20000]})
+                if len(t) <= 300 and browser_used < 8:
+                    # A script-rendered bio comes back as a shell: render it (bounded, it is slow).
+                    if browser is None:
+                        browser = _BrowserFetcher()
+                    browser_used += 1
+                    html, _st = browser.fetch_html(href)
+                    if html:
+                        t = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
+                if len(t) > 300:
+                    out.append({"url": href, "text": t[:20000]})
             except Exception:
                 continue
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
     return out
 
 

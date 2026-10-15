@@ -92,3 +92,38 @@ def test_button_words_in_front_of_names_are_stripped():
     assert PR._clean_name("Now Darin Tessier") == "Darin Tessier"
     assert PR._clean_name("Book Now Lydia Lee") == "Lydia Lee"
     assert PR._clean_name("Darin Tessier") == "Darin Tessier"
+
+
+# ── Phase 2 (2.2): directory coverage ─────────────────────────────────────────
+
+def test_person_from_sitemap_slug():
+    p = PR._person_from_slug("https://brand.example/doctors/alan-b-carter-md")
+    assert p and p["name"] == "Alan B. Carter" and p["credential"] == "MD" and p["bio_url"].endswith("alan-b-carter-md")
+    assert PR._person_from_slug("https://brand.example/doctors/request-appointment") is None
+    assert PR._person_from_slug("https://brand.example/locations/east-office") is None
+    assert PR._person_from_slug("https://brand.example/providers/pat-kim-pa-c")["credential"] == "PA-C"
+
+
+def test_sitemap_bios_join_the_directory_read(monkeypatch):
+    class F:
+        browser = None
+        def __init__(self): self.pages = {
+            "https://brand.example/": "<html><a href='/doctors/'>Our Doctors</a></html>",
+            "https://brand.example/sitemap.xml": "<urlset><url><loc>https://brand.example/doctors/alan-b-carter-md</loc></url><url><loc>https://brand.example/doctors/jane-doe-do</loc></url><url><loc>https://brand.example/about</loc></url></urlset>",
+            "https://brand.example/doctors/": "<html>" + "<p>Featured: Dr. Sam Lee</p>" + "x" * 3000 + "</html>"}
+        def html(self, url, allow_browser=True): return self.pages.get(url)
+        def close(self): pass
+    res = PR.website_physicians("https://brand.example", fetcher=F())
+    names = {p["name"] for p in res["physicians"]}
+    assert {"Alan B. Carter", "Jane Doe", "Sam Lee"} <= names and res["sitemap_bios"] == 2
+
+
+def test_not_on_website_requires_credible_directory_coverage(monkeypatch):
+    web = [{"name": "Only One", "credential": "MD", "specialty": "", "bio_url": ""}]
+    npp = [{"name": f"Reg Doc{i}", "npi": str(i), "credential": "MD", "specialty": ""} for i in range(10)]
+    _env(monkeypatch, web=web, npp=npp)
+    res = PR.resolve_physicians("Brand Ortho", "Memphis", "TN", website="https://brand.example")
+    assert not any(p["website_missing"] for p in res["physicians"])          # 1 of 10 found: a crawl limitation
+    cov = res["resolution"]["directory_coverage"]
+    assert cov == {"website": 1, "registry": 10, "credible": False, "pct": 10}
+    assert res["resolution"]["registry_only"] == []

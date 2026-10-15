@@ -265,6 +265,55 @@ def _dedupe_people(items: list[dict]) -> list[dict]:
     return [seen[k] for k in order]
 
 
+_SLUG_CRED = re.compile(r"-(md|do|dpm|phd|pa-?c|np|dpt|facs|faaos)(?=-|$)", re.I)
+
+
+def _person_from_slug(url: str) -> Optional[dict]:
+    """'/doctors/alan-b-carter-md' → {name: 'Alan B. Carter', credential: 'MD'}: a bio URL from the
+    sitemap names its physician even when the page itself is script-rendered."""
+    slug = (urlparse(url).path.rstrip("/").rsplit("/", 1)[-1] or "").lower()
+    if not slug or not _BIO_PATH.search(urlparse(url).path):
+        return None
+    creds = [m.group(1).upper().replace("PAC", "PA-C") for m in _SLUG_CRED.finditer(slug)]
+    core = _SLUG_CRED.sub("", slug)
+    toks = [w for w in re.split(r"[-_]+", core) if w and not w.isdigit()]
+    if not (2 <= len(toks) <= 5) or any(len(w) > 20 for w in toks):
+        return None
+    words = [(w.upper() + ".") if len(w) == 1 else w.capitalize() for w in toks]
+    name = _clean_name(" ".join(words))
+    if not _looks_like_person(name):
+        return None
+    return {"name": name, "credential": ", ".join(dict.fromkeys(creds)), "specialty": "", "bio_url": url}
+
+
+def _sitemap_urls(fetch, origin: str, host: str, *, limit: int = 3000) -> list[str]:
+    """URLs from /sitemap.xml (one level of sitemap index followed). Fail-soft, no browser."""
+    out: list[str] = []
+    try:
+        xml = fetch(origin + "/sitemap.xml", allow_browser=False)
+    except TypeError:
+        xml = fetch(origin + "/sitemap.xml")
+    except Exception:
+        xml = None
+    if not xml:
+        return out
+    locs = re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", xml, re.I)
+    children = [u for u in locs if re.search(r"sitemap[^/]*\.xml$", u, re.I)][:12]
+    pages = [u for u in locs if u not in children]
+    for c in children:
+        try:
+            cx = fetch(c, allow_browser=False)
+        except TypeError:
+            cx = fetch(c)
+        except Exception:
+            cx = None
+        if cx:
+            pages += re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", cx, re.I)
+        if len(pages) > limit:
+            break
+    return [u for u in pages if urlparse(u).netloc.lower().replace("www.", "") == host][:limit]
+
+
 def website_physicians(site_url: Optional[str], *, hint_urls: Optional[list] = None, fetcher=None, emit: Optional[Callable] = None) -> dict:
     """{"status": measured|none|unreachable|skipped, "directory", "pages_read", "physicians": [...], "midlevels": [...]}.
     Reads the provider directory (hinted pages, homepage links, common paths), follows pagination
@@ -283,6 +332,7 @@ def website_physicians(site_url: Optional[str], *, hint_urls: Optional[list] = N
     pages_read = 0
     best: list[dict] = []
     best_url = None
+    sitemap_people: list[dict] = []
     try:
         home = f.html(origin + "/")
         if home is None:
@@ -290,6 +340,18 @@ def website_physicians(site_url: Optional[str], *, hint_urls: Optional[list] = N
         pages_read += 1
         soup = BeautifulSoup(home, "html.parser")
         cands: list[str] = [u for u in (hint_urls or []) if u and urlparse(u).netloc.lower().replace("www.", "") == host]
+        # The sitemap names every bio page the site publishes — the most complete directory there is,
+        # and it does not depend on a script-rendered listing.
+        sm_urls = _sitemap_urls(f.html, origin, host)
+        for u in sm_urls:
+            per = _person_from_slug(u)
+            if per:
+                sitemap_people.append(per)
+            elif re.search(r"/(providers?|physicians?|doctors?|our-team|find-a-(doctor|provider))/?$", urlparse(u).path, re.I) and u not in cands:
+                cands.append(u)
+        sitemap_people = _dedupe_people(sitemap_people)
+        if emit and sitemap_people:
+            emit({"type": "text", "text": f"Sitemap lists {len(sitemap_people)} physician bio page{'s' if len(sitemap_people) != 1 else ''}"})
         for a in soup.find_all("a", href=True):
             href = urljoin(origin, a["href"].strip())
             path, text = urlparse(href).path or "/", a.get_text(" ", strip=True)
@@ -365,8 +427,9 @@ def website_physicians(site_url: Optional[str], *, hint_urls: Optional[list] = N
                             m = _NAME_WITH_CRED.search(h1.get_text(" ", strip=True))
                             more = [{"name": t, "credential": _clean_cred(m.group("cred")) if m else "", "specialty": "", "bio_url": sub}]
                     people = _dedupe_people(people + more)
-            if len(people) < 3 and _DIR_LINK.search(urlparse(href).path or "") and len(html) > 2000:
-                # Thin result on a page that is clearly the directory: it is probably script-rendered.
+            if len(people) < 8 and _DIR_LINK.search(urlparse(href).path or "") and len(html) > 2000:
+                # Thin result on a page that is clearly the directory: it is probably script-rendered
+                # (or lists a handful of featured doctors with a "load more" control).
                 try:
                     if f.browser is None:
                         f.browser = f._browser_cls()
@@ -377,19 +440,22 @@ def website_physicians(site_url: Optional[str], *, hint_urls: Optional[list] = N
                     pass
             if len(people) > len(best):
                 best, best_url = people, href
-            if len(best) >= 3 and tried >= 2:
-                break
+            if len(best) >= 25 and tried >= 3:
+                break                       # a real directory; three index pages is enough
             if emit and people:
                 emit({"type": "text", "text": f"Website directory {urlparse(href).path}: {len(people)} name{'s' if len(people) != 1 else ''}"})
     finally:
         if own:
             f.close()
+    if sitemap_people:
+        best = _dedupe_people(best + sitemap_people)
+        best_url = best_url or origin + "/sitemap.xml"
     phys = [p for p in best if is_physician_cred(p.get("credential", "")) is not False]
     mids = [p for p in best if is_physician_cred(p.get("credential", "")) is False]
     for p in phys:
         p["sources"] = ["website"]
     return {"status": "measured" if phys else ("none" if pages_read else "unreachable"), "directory": best_url,
-            "pages_read": pages_read, "physicians": phys, "midlevels": mids}
+            "pages_read": pages_read, "physicians": phys, "midlevels": mids, "sitemap_bios": len(sitemap_people)}
 
 
 def merge_confirmed_physicians(confirmed: list[dict], resolved: list[dict]) -> tuple[list[dict], dict]:
@@ -469,6 +535,9 @@ def resolve_physicians(entity_name: str, city: str, state: str, *, website: Opti
         npp = []
     if npp:
         _emit(f"NPI registry: {len(npp)} physician{'s' if len(npp) != 1 else ''} registered at {brand}'s addresses")
+    # "Not on the website" is a finding only when the directory read is credible: at least 70% of the
+    # registry's physicians were found on the site. A thin read is a crawl limitation, not a gap.
+    credible = web.get("status") == "measured" and (not npp or len(web_phys) >= 0.7 * len(npp))
     by_key: dict[str, dict] = {}
     order: list[str] = []
     for p in web_phys:
@@ -498,7 +567,7 @@ def resolve_physicians(entity_name: str, city: str, state: str, *, website: Opti
                 e["sources"].append("nppes")
         else:
             by_key[k] = {"name": r.get("name"), "npi": r.get("npi"), "credential": r.get("credential") or "", "specialty": r.get("specialty") or "",
-                         "bio_url": "", "sources": ["nppes"], "website_missing": web.get("status") == "measured", "npi_missing": False}
+                         "bio_url": "", "sources": ["nppes"], "website_missing": credible, "npi_missing": False}
             order.append(k)
     # website names the cascade did not return: look each one up by name
     unmatched = [k for k in order if "nppes" not in by_key[k]["sources"] and "website" in by_key[k]["sources"]]
@@ -546,7 +615,9 @@ def resolve_physicians(entity_name: str, city: str, state: str, *, website: Opti
     resolution = {
         "total": len(physicians), "capped": capped, "cap": cap,
         "website": {"status": web.get("status"), "directory": web.get("directory"), "count": len(web_phys), "pages_read": web.get("pages_read", 0),
-                    "midlevels": len(web.get("midlevels") or [])},
+                    "midlevels": len(web.get("midlevels") or []), "sitemap_bios": web.get("sitemap_bios", 0)},
+        "directory_coverage": {"website": len(web_phys), "registry": len(npp), "credible": credible,
+                               "pct": round(100 * len(web_phys) / len(npp)) if npp else None},
         "nppes": {"count": len(npp)},
         "both": sum(1 for p in physicians if "website" in p["sources"] and "nppes" in p["sources"]),
         "model": {"used": model_used, "count": len(physicians) if model_used else 0},
