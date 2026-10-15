@@ -1744,7 +1744,10 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
     rep = _build_practice_reputation(result)
     emit({"type": "phase", "name": "content",
           "text": "Analyzing content: website, Wikidata, Wikipedia, and listings/reputation"})
-    findings = analyze_content(entity_name, urls, city, state,
+    # The organization (report title / resolved brand), not the anchor office, is the subject of the
+    # Wikidata / Wikipedia lookups and of every draft (2.3 / 3.1).
+    org_label = (getattr(result, "report_title", None) or "").strip() or entity_name
+    findings = analyze_content(org_label, urls, city, state,
                                entity_kind="practice", reputation=rep, on_event=emit)
     findings.run_id = result.run_id
 
@@ -1758,7 +1761,7 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
         facts = {"website_urls": snap.get("website_urls", []), "specialty": result.specialty,
                  "wikidata_qid": snap.get("wikidata_qid"), "wikipedia_article": snap.get("wikipedia_article")}
         try:
-            drafts = draft_findings(entity_name, result.location, "practice", facts, fdicts)
+            drafts = draft_findings(org_label, result.location, "practice", facts, fdicts)
         except Exception:
             drafts = {}
         for f in fdicts:

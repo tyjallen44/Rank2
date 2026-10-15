@@ -37,6 +37,7 @@ from .db import local_today as _local_today
 
 import json
 import os
+from .location_resolver import strip_city_suffix
 import uuid
 from datetime import date
 from pathlib import Path
@@ -234,6 +235,63 @@ def _merge_casing(org_name: str, typed_name: str) -> str:
                     for w in (org_name or "").split())
 
 
+def resolve_org_name(entity_name: str, city: str, site_name: str) -> str:
+    """The brand to report on. The website's own name wins when it shares a distinctive word with the
+    entity name or its acronym ('Illinois Bone & Joint Institute' for 'IBJI Doctors' Office - Chicago');
+    otherwise the entity name minus its own city suffix. Never a generic page title."""
+    from .location_resolver import strip_city_suffix, _brand_tokens, _acronym, strip_city_suffix, _GENERIC
+    base = strip_city_suffix(entity_name or "", city or "")
+    sn = (site_name or "").strip()
+    if not sn or len(sn) < 3:
+        return base
+    st, et = _brand_tokens(sn), _brand_tokens(base)
+    if not st:
+        return base
+    distinctive_e = et - _GENERIC
+    shared = (st & et) - _GENERIC
+    acr_s, acr_e = _acronym(sn), _acronym(base)
+    acr_ok = bool(acr_s) and (acr_s in et or acr_s == acr_e) or bool(acr_e) and acr_e in st
+    if shared or acr_ok or (not distinctive_e and et <= st):
+        return sn
+    return base
+
+
+def measurement_limits_block(location_resolution: Optional[dict], physician_resolution: Optional[dict], physician_facts: Optional[dict]) -> str:
+    """Evidence lines that tell the model what our OWN measurement could not do, so a crawl limit,
+    an ambiguous registry match or an excluded listing is never written up as the practice's
+    weakness (report-quality cleanup 2.7)."""
+    lines: list[str] = []
+    lr = location_resolution or {}
+    if lr:
+        rej = lr.get("rejected") or []
+        if rej:
+            lines.append(f"{len(rej)} Google listings near the brand name were EXCLUDED by our matching as not this practice; they are not part of the roster and must not be mentioned.")
+        w = lr.get("website") or {}
+        if w.get("status") in ("none", "unreachable"):
+            lines.append("The website's office list could not be read by our crawler (" + ("no list found" if w.get("status") == "none" else "site unreachable")
+                         + "); offices came from Google and the registry. Do not describe the website as lacking a locations page on this basis.")
+        if (lr.get("model") or {}).get("used"):
+            lines.append("Some roster entries are model recall (marked UNVERIFIED in the roster) — treat them as unconfirmed, not as the practice's confirmed footprint.")
+    pr = physician_resolution or {}
+    if pr:
+        cov = pr.get("directory_coverage") or {}
+        w = pr.get("website") or {}
+        if cov and cov.get("credible") is False:
+            lines.append(f"Our read of the website's provider directory found {cov.get('website')} of {cov.get('registry')} registry physicians"
+                         f"{' (' + str(cov.get('pct')) + '%)' if cov.get('pct') is not None else ''} — a CRAWL LIMITATION (script-rendered or paginated directory), "
+                         "not evidence that physicians are missing from the site. Do not call physicians 'not on the website' or 'possibly departed'.")
+        elif w.get("status") in ("none", "unreachable"):
+            lines.append("The website's provider directory could not be read by our crawler; physicians came from the NPI registry. Do not describe the site as lacking provider pages on this basis.")
+    pf = physician_facts or {}
+    if pf.get("status") == "measured":
+        amb = sum(1 for r in (pf.get("rows") or []) if r.get("registry") == "ambiguous")
+        if amb:
+            lines.append(f"{amb} physician name(s) matched several registry records (ambiguous) and were left out of the linkage measurement — not a practice gap.")
+    if not lines:
+        return ""
+    return "\n=== Measurement limits (our crawl / matching — do NOT present these as practice weaknesses) ===\n" + "\n".join(f"- {l}" for l in lines) + "\n"
+
+
 def _physician_facts(ctx: "_Ctx") -> Optional[dict]:
     """NPI-registry linkage + certification statements for the practice's physicians (fail-soft)."""
     try:
@@ -266,6 +324,7 @@ def _physician_facts(ctx: "_Ctx") -> Optional[dict]:
         f = _pf.verify_physicians(phys, locs, ctx.state, pages, sample=sample, site_url=_site,
                                   org_name=(getattr(ctx, "org_name", None) or ctx.entity_name))
         ctx.evidence_text += _pf.evidence_lines(f)
+        ctx.evidence_text += measurement_limits_block(None, getattr(ctx, "physician_resolution", None), f)
         s = _pf.summary(f)
         if s:
             ctx.emit({"type": "text", "text": "\n" + s[0].upper() + s[1:] + "."})
@@ -530,8 +589,21 @@ class PracticeAdapter(_Adapter):
         ctx.evidence_text += _suffix
         ctx.roster_fp = (_prac._roster_key(ctx.entity_name, ctx.aggregate_siblings)
                          if ctx.aggregate_siblings is not None else "")
+        ctx.evidence_text += measurement_limits_block(ctx.location_resolution, None, None)
         # Website facts verified by crawl (identity sub-score + quality claims).
         ctx.website_facts = _website_facts(ctx, "practice")
+        # The organization is not the anchor listing (2.3): resolve a brand name from the website's own
+        # Organization schema / og:site_name / title when it agrees with the entity name, else from the
+        # entity name without its city suffix. It becomes the prompt subject, the report title and the
+        # key for the registry and knowledge-base lookups; the anchor stays the Google evidence.
+        if ctx.entity_type == "practice" and ctx.aggregate:
+            _resolved = resolve_org_name(ctx.entity_name, ctx.city, (getattr(ctx, "website_facts", None) or {}).get("site_name") or "")
+            if _resolved and _resolved.lower() != ctx.entity_name.lower() and not ctx.org_name:
+                ctx.org_name = _resolved
+                ctx.org_name_source = "website" if _resolved.lower() != strip_city_suffix(ctx.entity_name, ctx.city).lower() else "entity"
+                if not ctx.report_title:
+                    ctx.report_title = _resolved
+                emit({"type": "text", "text": f"Organization: {_resolved} (the analyzed listing '{ctx.entity_name}' is one office of it)"})
         # Physician roster: website directory → NPPES → model, every physician (no sample) — unless
         # the form confirmed one. Specialty practices only; service lines keep the registry path.
         _have_roster = any((lst or []) for lst in (ctx.physician_roster or {}).values())
@@ -541,7 +613,7 @@ class PracticeAdapter(_Adapter):
                 _site = getattr(ctx, "website", None) or (getattr(ctx.read, "website", None) if ctx.read is not None else None)
                 _hints = [p.get("url") for p in ((getattr(ctx, "website_facts", None) or {}).get("site_pages") or []) if p.get("url")]
                 emit({"type": "phase", "name": "physicians", "text": f"Finding every {ctx.entity_name} physician"})
-                _pr = resolve_physicians(ctx.entity_name, ctx.city, ctx.state, website=_site, hint_urls=_hints, emit=emit)
+                _pr = resolve_physicians(getattr(ctx, "org_name", None) or ctx.entity_name, ctx.city, ctx.state, website=_site, hint_urls=_hints, emit=emit)
                 _phys, _res = _pr["physicians"], dict(_pr["resolution"])
                 try:
                     from .graph import get_org

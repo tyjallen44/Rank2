@@ -717,6 +717,14 @@ def _save_practice_extras(
 # Phase helpers — shared by analyze_practice and perception.pipeline
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _roster_label(s: dict) -> str:
+    """Roster line for the prompt: the office name, tagged UNVERIFIED when it is model recall only."""
+    srcs = set(s.get("sources") or [])
+    if srcs and srcs <= {"model"}:
+        return f"{s['name']} (UNVERIFIED — model recall, not confirmed by the website, Google or the registry)"
+    return s["name"]
+
+
 def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggregate: bool,
                              confirmed_siblings: Optional[list], service_line: Optional[str],
                              parent_system: Optional[str], org_name: Optional[str],
@@ -777,7 +785,7 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
             )
             _aggregate_siblings = list(_siblings or [])
             if _siblings:
-                _location_roster = [entity_name] + [s["name"] for s in _siblings]
+                _location_roster = [entity_name] + [_roster_label(s) for s in _siblings]
             if not org_name and _sl_brand:
                 org_name = _sl_brand
         else:
@@ -814,7 +822,7 @@ def _resolve_practice_roster(entity_name: str, city: str, state: str, *, aggrega
                                                                  "google_missing", "website_missing", "phone")} for s in _siblings]
             _aggregate_siblings = list(_siblings or [])
             if _siblings:
-                _location_roster = [entity_name] + [s["name"] for s in _siblings]
+                _location_roster = [entity_name] + [_roster_label(s) for s in _siblings]
             # Use discovered org name as fallback when not provided by frontend
             if not org_name and _discovered_org_name:
                 org_name = _discovered_org_name

@@ -254,6 +254,47 @@ def _schema_types(html: str) -> set:
     return {str(t) for t in types}
 
 
+_ORG_TYPES_FOR_NAME = {"medicalorganization", "organization", "medicalclinic", "medicalbusiness", "localbusiness", "physiciansoffice", "hospital", "healthandbeautybusiness"}
+
+
+def site_name_from_home(soup) -> str:
+    """The organization's own name as the website states it: schema.org Organization name first,
+    then og:site_name, then the brand part of <title>. '' when none is usable."""
+    import json as _json
+    try:
+        for s in soup.find_all("script", type=re.compile(r"ld\+json", re.I)):
+            try:
+                data = _json.loads(s.string or s.get_text() or "")
+            except Exception:
+                continue
+            stack = [data]
+            while stack:
+                node = stack.pop()
+                if isinstance(node, list):
+                    stack.extend(node); continue
+                if not isinstance(node, dict):
+                    continue
+                t = node.get("@type")
+                types = {str(x).lower() for x in (t if isinstance(t, list) else [t]) if x}
+                nm = node.get("name")
+                if types & _ORG_TYPES_FOR_NAME and isinstance(nm, str) and 2 < len(nm.strip()) < 80:
+                    return nm.strip()
+                stack.extend(v for v in node.values() if isinstance(v, (dict, list)))
+        og = soup.find("meta", attrs={"property": "og:site_name"})
+        if og and (og.get("content") or "").strip():
+            return og["content"].strip()[:80]
+        t = soup.find("title")
+        if t and t.get_text(strip=True):
+            parts = re.split(r"\s*[|\u2013\u2014\-:]\s*", t.get_text(strip=True))
+            cand = max(parts, key=len) if len(parts) > 1 else parts[0]
+            cand = cand.strip()
+            if 2 < len(cand) < 80 and not re.search(r"\b(home|welcome|homepage)\b", cand, re.I):
+                return cand
+    except Exception:
+        pass
+    return ""
+
+
 def _crawl_site(client: httpx.Client, url: str, page_budget: int,
                 browser: "_BrowserFetcher | None" = None) -> dict:
     """Fetch homepage + a few key linked same-domain pages. Returns a snapshot."""
@@ -269,6 +310,7 @@ def _crawl_site(client: httpx.Client, url: str, page_budget: int,
     snap["pages"] = 1
     snap["schema_types"] |= _schema_types(home)
     soup = BeautifulSoup(home, "html.parser")
+    snap["site_name"] = site_name_from_home(soup)
     _home_text = soup.get_text(" ", strip=True)
     snap["home_text_len"] = len(_home_text)
     snap["text_sample"] = _home_text[:20000]

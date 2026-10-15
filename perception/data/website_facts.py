@@ -146,6 +146,7 @@ def fetch_website_facts(url: Optional[str], *, page_budget: int = 8) -> dict:
     facts = {
         "status": "measured", "url": url, "pages": snap.get("pages", 0),
         "org_schema": bool(types & (ORG_SCHEMA - {"Physician"})),
+        "site_name": snap.get("site_name") or "",
         "physician_schema": ("Physician" in types) or any(p.get("physician_schema") for p in kp),
         "physician_pages": len(provider_pages),
         "sitemap": bool(snap.get("sitemap")),
