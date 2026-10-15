@@ -1290,6 +1290,11 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
   </nav>
 
   <div id="main">
+    <!-- Provider outage banner: shown to everyone while an outside API (Claude / ChatGPT / Gemini / Google Places) is down and reports are paused -->
+    <div id="provider-banner" class="hidden" style="background:#fee2e2;color:#991b1b;border:1px solid #f5b5b5;border-radius:8px;padding:10px 14px;margin:0 0 14px;font-size:13px;display:none;align-items:flex-start;gap:10px">
+      <span style="font-size:16px;line-height:1">⚠</span><div style="flex:1" id="provider-banner-text"></div>
+      <span id="provider-banner-admin" style="white-space:nowrap"></span>
+    </div>
 
     <!-- ── New Analysis ─────────────────────────────────────────────────── -->
     <div id="page-new" class="page active">
@@ -2450,6 +2455,14 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
 
       <!-- Operations panel: every job on this server, all users -->
       <div id="admin-ops-panel" style="display:none">
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">
+            <div><div style="font-weight:600;font-size:15px">Provider health</div>
+              <div style="font-size:12px;color:var(--muted)">The outside APIs Pulse depends on. A provider is marked <strong>down</strong> when half its calls in 30 minutes fail or a spot check gets no answers from it — every administrator is emailed, a banner shows, and new reports are refused until it is re-checked or allowed to run without.</div></div>
+            <button class="btn btn-secondary btn-sm" id="prov-check-btn" onclick="adminProvidersCheck()" title="One tiny call to each provider; each becomes OK or down accordingly (also runs every morning at 7 Central and before every bulk or monthly run)">↻ Re-check now</button>
+          </div>
+          <div id="admin-providers"><div class="empty" style="padding:14px 0"><div>Loading…</div></div></div>
+        </div>
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">
             <div style="font-weight:600;font-size:15px">Analysis runs on this server</div>
@@ -4657,6 +4670,7 @@ function showApp() {
   document.getElementById('set-password-screen').style.display   = 'none';
   document.getElementById('forgot-password-screen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
+  loadProviderBanner();
   document.getElementById('sb-user-name').textContent = _displayName || 'Admin';
   const adminBtn = document.getElementById('nav-admin');
   if (adminBtn) adminBtn.style.display = (_role === 'admin' || _role === 'integrations_admin') ? 'flex' : 'none';
@@ -11126,9 +11140,72 @@ async function loadAdminCosts(days) {
 }
 
 let _adminOpsTimer = null;
+// ── Provider health: banner for everyone, table + actions for administrators ──
+let _providerTimer = null;
+async function loadProviderBanner() {
+  clearTimeout(_providerTimer);
+  try {
+    const r = await api('/api/providers/status'); if (!r.ok) return;
+    const d = await r.json();
+    const b = document.getElementById('provider-banner'); if (!b) return;
+    if (d.blocked) {
+      document.getElementById('provider-banner-text').textContent = d.blocked;
+      document.getElementById('provider-banner-admin').innerHTML = _role === 'admin'
+        ? `<a href="#" onclick="navigate('admin'); setTimeout(() => switchAdminTab('ops'), 50); return false" style="color:#991b1b;font-weight:600">Open Operations →</a>` : '';
+      b.style.display = 'flex'; b.classList.remove('hidden');
+    } else { b.style.display = 'none'; b.classList.add('hidden'); }
+  } catch (e) { /* next poll */ }
+  finally { _providerTimer = setTimeout(loadProviderBanner, 5 * 60 * 1000); }
+}
+function _providerRows(rows, blocked) {
+  const when = (iso) => iso ? new Date(iso.endsWith('Z') ? iso : iso + 'Z').toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+  const pill = (s) => s === 'ok' ? '<span class="badge bg-teal" style="font-size:10px">OK</span>'
+    : s === 'bypassed' ? '<span class="badge" style="background:#fdf3dc;color:#7a5a00;font-size:10px" title="Reports run without this provider">Bypassed</span>'
+    : '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px">Down</span>';
+  return `<table class="tbl" style="width:100%"><thead><tr><th style="text-align:left">Provider</th><th style="text-align:left">Status</th><th style="text-align:left">Last success</th><th style="text-align:left">Last error</th><th style="text-align:right" title="Calls recorded in the last 24 hours (spot checks, Places lookups, probes) and how many failed">24 h</th><th></th></tr></thead><tbody>
+    ${rows.map(p => `<tr>
+      <td style="font-weight:600;white-space:nowrap">${_learnEsc(p.label)}${p.configured ? '' : ' <span style="font-size:11px;color:var(--muted)">(no key)</span>'}</td>
+      <td style="white-space:nowrap">${p.configured ? pill(p.status) : '—'}${p.status !== 'ok' && p.since ? `<div style="font-size:11px;color:var(--muted)">since ${when(p.since)}${p.changed_by ? ' · ' + _learnEsc(String(p.changed_by).split('@')[0]) : ''}</div>` : ''}</td>
+      <td style="font-size:12px;color:var(--muted);white-space:nowrap">${when(p.last_ok_at)}</td>
+      <td style="font-size:12px;max-width:380px"><span style="color:var(--muted)">${when(p.last_error_at)}</span>${p.last_error ? `<div style="font-family:monospace;font-size:11px;word-break:break-word" title="${_learnEsc(p.last_error)}">${_learnEsc(p.last_error.slice(0, 160))}</div>` : ''}</td>
+      <td style="text-align:right;font-size:12px;white-space:nowrap">${p.calls_24h}${p.failures_24h ? ` <span style="color:#991b1b">· ${p.failures_24h} failed</span>` : ''}</td>
+      <td style="text-align:right;white-space:nowrap">${p.configured && p.status === 'down' && p.provider !== 'claude' ? `<button class="btn btn-ghost btn-sm" onclick="adminProviderAct('${p.provider}','bypass')" title="Run reports without ${_learnEsc(p.label)} (spot checks skip it) until you require it again">Allow runs without</button>` : ''}
+        ${p.status === 'bypassed' ? `<button class="btn btn-ghost btn-sm" onclick="adminProviderAct('${p.provider}','require')" title="Probe ${_learnEsc(p.label)} and require it again">Require again</button>` : ''}</td></tr>`).join('')}
+  </tbody></table>${blocked ? `<div class="err" style="margin-top:10px">${_learnEsc(blocked)}</div>` : ''}`;
+}
+async function loadAdminProviders() {
+  const host = document.getElementById('admin-providers'); if (!host) return;
+  try {
+    const r = await api('/api/providers/status'); if (!r.ok) throw new Error(await errDetail(r, 'Failed to load'));
+    const d = await r.json();
+    host.innerHTML = _providerRows(d.providers || [], d.blocked);
+  } catch (e) { host.innerHTML = `<div class="err">${_learnEsc(e.message)}</div>`; }
+}
+async function adminProvidersCheck() {
+  const btn = document.getElementById('prov-check-btn'); if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Checking…'; }
+  try {
+    const r = await api('/api/admin/providers/check', { method: 'POST' }); if (!r.ok) throw new Error(await errDetail(r, 'Check failed'));
+    const d = await r.json();
+    document.getElementById('admin-providers').innerHTML = _providerRows(d.providers || [], d.blocked);
+    const bad = (d.results || []).filter(x => x.ok === false);
+    _flash(bad.length ? `${bad.length} provider${bad.length === 1 ? '' : 's'} failing: ${bad.map(x => x.provider).join(', ')}` : 'All providers answered');
+    loadProviderBanner();
+  } catch (e) { alert(e.message); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = '↻ Re-check now'; } }
+}
+async function adminProviderAct(provider, act) {
+  if (act === 'bypass' && !confirm(`Run reports without ${provider}? Spot checks will skip it and its column will be missing from reports until you require it again.`)) return;
+  try {
+    const r = await api(`/api/admin/providers/${provider}/${act}`, { method: 'POST' }); if (!r.ok) throw new Error(await errDetail(r, 'Could not update'));
+    const d = await r.json();
+    document.getElementById('admin-providers').innerHTML = _providerRows(d.providers || [], d.blocked);
+    loadProviderBanner();
+  } catch (e) { alert(e.message); }
+}
 async function loadAdminOps() {
   loadAdminMaint();
   loadAdminCosts(30);
+  loadAdminProviders();
   const host = document.getElementById('admin-ops-table');
   const meta = document.getElementById('admin-ops-meta');
   clearTimeout(_adminOpsTimer);

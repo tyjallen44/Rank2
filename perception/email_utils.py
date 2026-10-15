@@ -310,6 +310,29 @@ def send_monthly_bundle(email: str, name: Optional[str], organization: str, grou
     _send(email, f"{organization} — {month_label} AI Visibility reports", _wrap(body), attachments)
 
 
+def send_provider_alert(email: str, provider: str, kind: str, error: str) -> None:
+    """Administrators: an outside API stopped answering (reports are paused) — or came back."""
+    ops_url = f"{APP_URL}/#admin"
+    if kind == "down":
+        body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;color:#991b1b">{provider} is not responding — reports are paused</h2>
+    <p style="margin:6px 0">Pulse could not get answers from <strong>{provider}</strong>. New reports are refused until an administrator
+    re-checks the providers or allows runs without {provider}.</p>
+    <p style="margin:6px 0 16px;font-family:monospace;font-size:12px;background:#f6f6f6;padding:8px 10px;border-radius:6px">{error or 'no detail'}</p>
+    <p style="margin:6px 0 20px;color:#5A6E72;font-size:13px">Admin → Operations → Provider health: <em>Re-check now</em> once the account is fixed, or
+    <em>Allow runs without {provider}</em> to continue with the other assistants.</p>
+    {_btn(ops_url, "Open Operations")}
+    """
+        _send(email, f"{provider} is down — reports paused", _wrap(body))
+    else:
+        body = f"""
+    <h2 style="margin:0 0 12px;font-size:20px;">{provider} is answering again</h2>
+    <p style="margin:6px 0 20px">A probe call succeeded; reports can be started again.</p>
+    {_btn(ops_url, "Open Operations")}
+    """
+        _send(email, f"{provider} recovered", _wrap(body))
+
+
 def send_monthly_summary(email: str, group_name: str, month_label: str, stats: dict, group_url: str) -> None:
     """Coordinator summary after a group's monthly run."""
     rows = "".join(f"<tr><td style='padding:3px 10px 3px 0;color:#5A6E72'>{k}</td><td style='padding:3px 0'><strong>{v}</strong></td></tr>"

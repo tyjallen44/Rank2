@@ -892,9 +892,32 @@ def _put(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, event: Any) -> N
 
 def _job_error(exc: Exception) -> str:
     s = str(exc)
+    # The scoring model itself failing (auth, credits, rate limit, outage) counts against Claude's health.
+    mod = type(exc).__module__ or ""
+    if mod.startswith("anthropic") and type(exc).__name__ in ("AuthenticationError", "PermissionDeniedError", "RateLimitError", "InternalServerError", "APIConnectionError", "APIStatusError"):
+        try:
+            from perception.provider_health import record
+            record("claude", False, f"{type(exc).__name__}: {s}")
+        except Exception:
+            pass
     if "529" in s or "overloaded" in s.lower():
         return "__OVERLOADED__"
     return s
+
+
+def _provider_gate(preflight: bool = False, by: str = "run") -> None:
+    """Refuse to start a report while an outside API is down (administrators were emailed when it went
+    down). preflight=True first probes every provider — used before bulk and monthly runs so an outage is
+    caught before hundreds of reports are produced with holes in them."""
+    from perception import provider_health as ph
+    if preflight:
+        try:
+            ph.probe_all(by)
+        except Exception as exc:
+            print(f"[providers] preflight failed: {type(exc).__name__}: {exc}", flush=True)
+    msg = ph.blocked_message()
+    if msg:
+        raise HTTPException(503, msg)
 
 
 def _ensure_individual_teaser(result, job: dict) -> None:
@@ -2097,6 +2120,7 @@ def _job_run_batch(job_id: str, groups: List[dict]) -> None:
 
 
 def _new_job(role: str, brand: str = "original", email: Optional[str] = None) -> str:
+    _provider_gate()                      # every web-started analysis passes through here
     job_id = str(uuid.uuid4())
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
@@ -6142,6 +6166,11 @@ async def _start_monthly_run(g: dict, started_by: str, brand: str = "original") 
     from perception.db import init_db, create_event_run, create_event_entities, local_today
     from perception.groups import members, monthly_entities, update_group
     init_db()
+    try:
+        await asyncio.to_thread(_provider_gate, True, f"monthly:{started_by}")
+    except HTTPException as exc:
+        update_group(g["id"], monthly_last_status=f"paused: {str(exc.detail)[:160]}")
+        raise
     ms = members(g["id"])
     event_id = str(uuid.uuid4())
     rows = monthly_entities(g, ms, event_id)
@@ -6255,6 +6284,60 @@ async def scheduler_monthly(request: Request):
         except Exception as exc:
             out.append({"group_id": g["id"], "error": f"{type(exc).__name__}: {exc}"})
     return {"started": out}
+
+
+# ── Provider health (Claude / ChatGPT / Gemini / Google Places) ──────────────
+@app.get("/api/providers/status")
+async def providers_status(payload: dict = Depends(get_current_user_payload)):
+    """Everyone sees whether reports are paused (the banner); administrators also get the per-provider rows."""
+    from perception import provider_health as ph
+    rows = await asyncio.to_thread(ph.status)
+    out = {"blocked": ph.blocked_message(), "contact": ph.CONTACT_EMAIL}
+    if payload.get("role") == "admin":
+        out["providers"] = rows
+    return out
+
+
+@app.post("/api/admin/providers/check")
+async def providers_check(payload: dict = Depends(require_admin)):
+    """Re-check: one tiny call to each configured provider; each becomes ok or down accordingly."""
+    from perception import provider_health as ph
+    results = await asyncio.to_thread(ph.probe_all, payload.get("email") or "admin")
+    return {"results": results, "providers": ph.status(), "blocked": ph.blocked_message()}
+
+
+@app.post("/api/admin/providers/{provider}/bypass")
+async def providers_bypass(provider: str, payload: dict = Depends(require_admin)):
+    """Allow reports to run without this provider (spot checks skip it) until it is required again."""
+    from perception import provider_health as ph
+    if provider not in ph.PROVIDERS:
+        raise HTTPException(404, "unknown provider")
+    if provider == "claude":
+        raise HTTPException(400, "Claude is the scoring model — reports cannot run without it")
+    ph.bypass(provider, payload.get("email") or "admin")
+    return {"providers": ph.status(), "blocked": ph.blocked_message()}
+
+
+@app.post("/api/admin/providers/{provider}/require")
+async def providers_require(provider: str, payload: dict = Depends(require_admin)):
+    """End a bypass: probe the provider; it becomes ok or down."""
+    from perception import provider_health as ph
+    if provider not in ph.PROVIDERS:
+        raise HTTPException(404, "unknown provider")
+    r = await asyncio.to_thread(ph.require, provider, payload.get("email") or "admin")
+    return {"result": r, "providers": ph.status(), "blocked": ph.blocked_message()}
+
+
+@app.post("/api/scheduler/providers")
+async def scheduler_providers(request: Request):
+    """Called by Cloud Scheduler every morning: probe every provider so an outage is emailed before the day's runs."""
+    secret = request.headers.get("X-Scheduler-Secret", "")
+    expected = os.environ.get("SCHEDULER_SECRET", "")
+    if expected and secret != expected:
+        raise HTTPException(403, "invalid scheduler secret")
+    from perception import provider_health as ph
+    results = await asyncio.to_thread(ph.probe_all, "scheduler")
+    return {"results": results, "blocked": ph.blocked_message()}
 
 
 @app.post("/api/groups/{group_id}/monthly/run-now")
@@ -6976,6 +7059,7 @@ _event_job_map: dict[str, str] = {}   # event_id -> job_id
 async def event_upload(file: UploadFile = File(...), payload: dict = Depends(get_current_user_payload)):
     """Parse an event CSV and resolve each row via Google Places (batches of 5)."""
     _require_report(payload, "events")
+    _provider_gate()
     import csv
     import io as _io
 
@@ -7028,6 +7112,7 @@ async def event_upload(file: UploadFile = File(...), payload: dict = Depends(get
 async def event_run(req: EventRunRequest, payload: dict = Depends(get_current_user_payload)):
     """Create an event run record and kick off batch analysis."""
     _require_report(payload, "events")
+    await asyncio.to_thread(_provider_gate, True, payload.get("email") or "upload")   # probe first: a bulk run is the costly place to find out
     from perception.db import init_db, create_event_run, create_event_entities
     role  = payload["role"]
     brand = payload.get("brand", "original")

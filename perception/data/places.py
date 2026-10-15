@@ -28,6 +28,15 @@ from ..config import settings
 
 _SEARCH_TEXT = "https://places.googleapis.com/v1/places:searchText"
 
+
+def _health(provider: str, ok: bool, error: str = "") -> None:
+    """Tell provider health how the call went (never raises)."""
+    try:
+        from ..provider_health import record
+        record(provider, ok, error or None)
+    except Exception:
+        pass
+
 # Common corporate/health tokens that shouldn't count toward a name match —
 # almost every hospital name contains some of these, so matching on them alone
 # would let "Anytown Medical Center" masquerade as the intended provider.
@@ -204,8 +213,10 @@ def fetch_google_rating(
         )
         resp.raise_for_status()
         places = resp.json().get("places", [])
+        _health("places", True)
     except httpx.HTTPStatusError as exc:
         body = exc.response.text[:400] if exc.response else ""
+        _health("places", False, f"{exc} | {body}")
         return GoogleRead(query=query, verified=False, reason=f"Places lookup failed: {exc} | {body}")
     except (httpx.HTTPError, ValueError) as exc:
         return GoogleRead(query=query, verified=False, reason=f"Places lookup failed: {exc}")
@@ -281,8 +292,10 @@ def fetch_provider(
         )
         resp.raise_for_status()
         places = resp.json().get("places", [])
+        _health("places", True)
     except httpx.HTTPStatusError as exc:
         body = exc.response.text[:400] if exc.response else ""
+        _health("places", False, f"{exc} | {body}")
         return (
             GoogleRead(query=query, verified=False, reason=f"Places lookup failed: {exc} | {body}"),
             Footprint(query=query, note="footprint sample unavailable"),

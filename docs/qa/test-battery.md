@@ -4161,3 +4161,16 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | T2 | Concurrency | At most 4 Gemini requests in flight per process (`SPOTCHECK_GEMINI_CONCURRENCY`, default 4); retries honour `Retry-After`, else 2 / 4 / 8 / 16 s with jitter, up to `SPOTCHECK_RETRIES` (default 4). [code] |
 | T3 | ChatGPT with no credits | The "You have no credits remaining" 429 is not retried (it's a billing wall) and still prints as ChatGPT errors until the OpenAI account is funded. [code] |
 | R1 | Unit | `tests/test_spotcheck_retry.py` — 429, 429, 200 → one answer, three calls, Retry-After honoured; permanent 429 raises after the retries; wait bounds. |
+
+## PROVIDER-HEALTH — outside-API outages surface to administrators and pause reports (2026-10-14)
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Admin → Operations → **Provider health** | A card above the runs table: Claude · ChatGPT · Gemini · Google Places, each with OK / Down / Bypassed, last success, last error (key scrubbed), 24-hour calls and failures, and **↻ Re-check now**. [ui] |
+| T2 | Outage detection | When a provider fails ≥ 50% of its calls in 30 minutes (minimum 4 calls) or a spot check gets zero answers from it, it goes Down: every active admin account (plus ty.allen@rldatix.com) receives one "<Provider> is down — reports paused" email with the error text; no second email while it stays down. [email] |
+| T3 | Reports paused | While any provider is Down, every attempt to start a report (Deep Diagnostic, Rankings, Compare, Network, Student Health, Event Prep upload/run, group Add / Upload / Rankings, monthly set) is refused with "Reports are paused: <Provider> is not responding (<error>) since <time>. The administrators have been notified; for help contact ty.allen@rldatix.com." Scheduler monthly runs record `paused: …` on the group. [ui] |
+| T4 | Banner | A red banner at the top of every page for every signed-in user while reports are paused; administrators see "Open Operations →" on it. Clears within 5 minutes of recovery (or immediately after Re-check). [ui] |
+| T5 | Recovery | **Re-check now** probes each provider with one tiny call; a Down provider that answers returns to OK and admins get a "<Provider> recovered" email; one that fails stays Down with the fresh error. Runs are allowed again as soon as nothing is Down. [ui][email] |
+| T6 | Bypass | On a Down ChatGPT or Gemini row, **Allow runs without** → status Bypassed, banner clears, reports run and spot checks skip that assistant; **Require again** probes it and sets OK or Down. Claude cannot be bypassed (it is the scoring model). [ui] |
+| T7 | Preflight | Event Prep "Run" and the monthly set probe all providers first (a few seconds) and refuse to start if one is Down. Cloud Scheduler `rank2-provider-check` probes daily at 07:00 Central (`POST /api/scheduler/providers`). [code] |
+| R1 | Unit | `tests/test_provider_health.py` — window judging, alert-once, bypass semantics, probe recovery/failure, key scrubbing, unconfigured providers. Spot-check retry tests still pass. |

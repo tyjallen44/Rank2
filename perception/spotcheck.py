@@ -298,11 +298,13 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
     """Run the 8 queries against every configured assistant; return the observed panel."""
     queries = build_queries(entity_name, city, state, specialty, entity_type)
     aliases = [entity_name] + [a for a in (aliases or []) if a]
+    from . import provider_health as _ph
     runners = [("Claude", run_claude)]
-    if (os.environ.get("OPENAI_API_KEY") or "").strip():
+    if _ph.active("chatgpt"):            # configured and not bypassed by an administrator
         runners.append(("ChatGPT", run_openai))
-    if (os.environ.get("GEMINI_API_KEY") or "").strip():
+    if _ph.active("gemini"):
         runners.append(("Gemini", run_gemini))
+    _pkey = {"Claude": "claude", "ChatGPT": "chatgpt", "Gemini": "gemini"}
     passes = _PASSES
     if emit:
         emit({"type": "text", "text": f"\nObserved check: asking {len(queries)} patient questions of {', '.join(n for n, _ in runners)}"
@@ -314,6 +316,7 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
             r = fn(q["query"])
             if not r:
                 return None
+            _ph.record(_pkey.get(name, name.lower()), True)
             named = parse_answer(r["text"])
             us = [i for i, n in enumerate(named) if _is_us(n, aliases)]
             return {"assistant": name, "key": q["key"], "category": q.get("category", ""), "pass": p, "query": q["query"], "named": named,
@@ -321,8 +324,9 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
                     "competitors": [n for i, n in enumerate(named) if i not in us][:6],
                     "citations": r["citations"][:12], "answer": (r["text"] or "")[:1200]}
         except Exception as exc:
-            print(f"[spotcheck] {name} '{q['key']}' failed: {type(exc).__name__}: {str(exc)[:160]}", flush=True)
-            return {"assistant": name, "key": q["key"], "category": q.get("category", ""), "pass": p, "query": q["query"], "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+            print(f"[spotcheck] {name} '{q['key']}' failed: {type(exc).__name__}: {_ph.scrub(exc, 160)}", flush=True)
+            _ph.record(_pkey.get(name, name.lower()), False, f"{type(exc).__name__}: {exc}")
+            return {"assistant": name, "key": q["key"], "category": q.get("category", ""), "pass": p, "query": q["query"], "error": f"{type(exc).__name__}: {_ph.scrub(exc, 120)}"}
 
     jobs = [(n, fn, q, p) for p in range(1, passes + 1) for n, fn in runners for q in queries]
     with ThreadPoolExecutor(max_workers=8) as ex:
@@ -349,6 +353,8 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
                               "avg_rank": round(sum(ranks) / len(ranks), 1) if ranks else None,
                               "direct_ok": any(r["key"] == "direct" and r["mentioned"] for r in rs),
                               "rate_by_pass": _rates, "rate_range": [min(_rates), max(_rates)] if _rates else None})
+        if errs and not rs:      # a whole run with no answers from this assistant: it is down, whatever the window says
+            _ph.mark_down(_pkey.get(name, name.lower()), errs[0].get("error") or "no answers", by="spotcheck")
     comp: dict = {}
     for r in results:
         for c in r.get("competitors") or []:
