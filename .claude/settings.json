@@ -12,7 +12,17 @@
       "Bash(.venv/bin/python -m pytest tests -q -x)",
       "Bash(PYTHONPATH=. .venv/bin/python -m pytest tests -q)",
       "Bash(PYTHONPATH=. .venv/bin/python -m pytest tests -q -x)",
-      "Bash(.venv/bin/python --version)"
+      "Bash(.venv/bin/python --version)",
+      "Bash(.venv/bin/python -m pytest *)",
+      "Bash(gcloud secrets versions access latest --secret=ACCESS_PASSWORD --project=rank2-499218 *)",
+      "Bash(gcloud run services describe *)",
+      "Bash(gcloud run revisions list *)",
+      "Bash(gcloud scheduler jobs list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run list *)",
+      "Bash(comm *)",
+      "Bash(.venv/bin/python scripts/fixture_replay.py *)",
+      "Bash(.venv/bin/python scripts/fixture_replay.py)"
     ]
   }
 }
