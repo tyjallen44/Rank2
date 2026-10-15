@@ -110,6 +110,10 @@ def same_person(a: str, b: str) -> bool:
     sa, sb = surname(a), surname(b)
     if not sa or sa != sb:
         return False
+    # A bare one-word name ("Doc") is too little to call the same person; a surname-only form
+    # counts only when the surname itself is more than one word ("Den Hartog").
+    if min(len(_name_parts(a)), len(_name_parts(b))) < 2:
+        return False
     ga = [p.lower().rstrip(".") for p in _name_parts(a)[:-len(sa.split())] if p]
     gb = [p.lower().rstrip(".") for p in _name_parts(b)[:-len(sb.split())] if p]
     if not ga or not gb:
@@ -479,6 +483,12 @@ def resolve_physicians(entity_name: str, city: str, state: str, *, website: Opti
         if not k:
             continue
         npp_keys[k] = r
+        if k not in by_key:
+            alias = next((x for x in order if same_person(by_key[x]["name"], r.get("name") or "")), None)
+            if alias is not None:
+                k = alias                                 # "Den Hartog" on the site is "Taylor Den Hartog" in the registry
+                if len(_name_parts(r.get("name") or "")) > len(_name_parts(by_key[k]["name"])):
+                    by_key[k]["name"] = r.get("name")
         if k in by_key:
             e = by_key[k]
             e["npi"] = r.get("npi")

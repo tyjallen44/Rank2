@@ -4220,3 +4220,12 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | R1 | Regression | Hospital reports, Network and Community Health untouched; pytest 460 pass / 8 skipped / same 15 pre-existing failures. |
 
 **[SCORE] prediction (to compare after the live re-run):** GCO 63 → 62–65; DMOS 64 → 65–68 (clean roster: competitor reviews leave Pillar 2; linkage zips change); OrthoSouth 79 → 79–80; IBJI 69 → 69–70. The 2.x commits (linkage, crawl coverage) are where the larger moves are expected.
+
+### CLEANUP-P1 follow-ups from the live re-run (2026-10-15, same day)
+| # | Issue seen in the re-run | Fix / acceptance |
+|---|---|---|
+| F1 | GCO: a listing named exactly "Georgia Carolina Orthopedics" was rejected because Google typed it only `point_of_interest` | Uninformative types (point_of_interest, establishment, health, premise…) never reject; the name test decides. |
+| F2 | GCO: "Maxwell J. Vogel, MD - Georgia Carolina Orthopedics" (a doctor's own profile) listed as an office | Listings named "<Person>, MD/DO/DPM/PA-C/NP - …" rejected with reason `physician-profile`. |
+| F3 | DMOS: "DMOS … - Urbandale" and "Dmos … - West Des Moines – Urbandale" as two rows ("4850 NW 100th St" vs "4850 100th St") | `street_key` skips a leading directional unless it names the street ("East Rd"); brand loses its own city suffix (`strip_city_suffix`) before any "Brand – City" name is synthesized. |
+| F4 | DMOS / OrthoSouth: confirmed-roster (entity graph) rows that are city-only ("West Des Moines, IA, USA"), duplicates of a resolved office, or the anchor itself | `dedupe_roster` applied when a graph roster is read (form run, group / event path) and inside the confirmed-roster merge; the post-run graph write skips the anchor and duplicate profiles and stores the address. |
+| F5 | DMOS: "Dr. Den Hartog — no NPI" beside "Taylor Den Hartog" | Registry names join a website name that is the same person (`same_person`) instead of opening a second row; one-word names never merge. |

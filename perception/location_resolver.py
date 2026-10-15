@@ -112,6 +112,48 @@ _SPECIALTY_WORDS = {"orthopedic", "orthopedics", "orthopaedic", "orthopaedics", 
                     "group", "center", "centers", "institute", "practice"}
 
 
+_UNINFORMATIVE_TYPES = {"point_of_interest", "establishment", "health", "premise", "street_address", "geocode", "subpremise"}
+_PHYSICIAN_LISTING = re.compile(r"^(?:dr\.?\s+)?[A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]*\.?){0,3},?\s+(?:M\.?D\.?|D\.?O\.?|D\.?P\.?M\.?|PA-?C|NP|DPT)\b(?:\s*[-–—|:]\s*.*)?$")
+_DIRECTIONALS = {"n", "s", "e", "w", "ne", "nw", "se", "sw", "north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest"}
+
+
+def strip_city_suffix(brand: str, city: str) -> str:
+    """'Dmos Orthopaedic Centers - West Des Moines' → 'Dmos Orthopaedic Centers': the analyzed
+    listing's own city is not part of the brand, so synthesized office names never read
+    'Brand - City – OtherCity'."""
+    b = (brand or "").strip()
+    if city:
+        b2 = re.sub(r"\s*[-–—|:]\s*" + re.escape(city.strip()) + r"(?:\s*,?\s*[A-Z]{2})?\s*$", "", b, flags=re.I).strip()
+        if len(b2) >= 4:
+            b = b2
+    return b
+
+
+def dedupe_roster(locs: list[dict], *, anchor_place_id: Optional[str] = None, anchor_address: str = "") -> list[dict]:
+    """Confirmed rosters accumulate across runs: the same office under two names, a row that is
+    the anchor itself, or an address with no street number ('West Des Moines, IA'). One row per
+    office, by Google place id then street; city-only addresses and the anchor are dropped."""
+    out: list[dict] = []
+    seen_pid: set[str] = set()
+    for l in locs or []:
+        addr = (l.get("address") or "").strip()
+        pid = l.get("place_id") or ""
+        if addr and not re.match(r"\s*\d", addr):
+            continue                                  # "West Des Moines, IA, USA" is not an office address
+        if anchor_place_id and pid and pid == anchor_place_id:
+            continue
+        if anchor_address and addr and same_office(addr, anchor_address):
+            continue
+        if pid and pid in seen_pid:
+            continue
+        if addr and any(same_office(addr, k.get("address") or "") for k in out):
+            continue                                  # same street (ZIP agreeing or absent): one office
+        if pid:
+            seen_pid.add(pid)
+        out.append(l)
+    return out
+
+
 def _host(url: str) -> str:
     try:
         h = urlparse(url if "://" in (url or "") else "https://" + (url or "")).netloc.lower()
@@ -141,8 +183,12 @@ def listing_belongs(brand: str, cand: dict, *, domain: str = "", city: str = "",
     host = _host(cand.get("website") or "")
     if domain and host and (host == domain or host.endswith("." + domain)):
         return True, "domain"
-    types = {str(t).lower() for t in (cand.get("types") or [])}
+    if _PHYSICIAN_LISTING.search(name):
+        return False, "physician-profile"            # "Maxwell J. Vogel, MD - Brand": a doctor's own profile, not an office
+    types = {str(t).lower() for t in (cand.get("types") or [])} - _UNINFORMATIVE_TYPES
     primary = str(cand.get("primary_type") or "").lower()
+    if primary in _UNINFORMATIVE_TYPES:
+        primary = ""
     if types or primary:
         from .data.places import _is_healthcare
         spec = (specialty or "").lower()
@@ -187,9 +233,15 @@ _STATE_NAMES = {"AL": "alabama", "AK": "alaska", "AZ": "arizona", "AR": "arkansa
 
 
 def street_key(address: str) -> str:
-    """'1234 main' — street number + first street word, for matching one office across sources."""
-    m = re.match(r"\s*(\d{1,6})\s+([A-Za-z0-9'.-]+)", address or "")
-    return f"{m.group(1)} {m.group(2).lower().rstrip('.')}" if m else ""
+    """'1234 main' — street number + first street word (a leading directional such as 'NW' is
+    skipped, so '4850 NW 100th St' and '4850 100th St' are one office)."""
+    m = re.match(r"\s*(\d{1,6})\s+([A-Za-z0-9'.-]+)(?:\s+([A-Za-z0-9'.-]+))?", address or "")
+    if not m:
+        return ""
+    first, second = m.group(2).lower().rstrip("."), (m.group(3) or "").lower().rstrip(".")
+    if first in _DIRECTIONALS and second and second not in _STREET_TYPES:
+        first = second                                # "NW 100th St" → "100th"; "East Rd" keeps "east" (it is the street's name)
+    return f"{m.group(1)} {first}"
 
 
 def _zip(address: str) -> str:
@@ -610,7 +662,7 @@ def merge_confirmed_locations(confirmed: list[dict], resolved: list[dict]) -> tu
     out: list[dict] = []
     used: set[int] = set()
     missing: list[str] = []
-    for c in confirmed:
+    for c in dedupe_roster(list(confirmed)):
         hit = next((i for i, r in enumerate(resolved) if i not in used and _match(c, r)), None)
         s = {"name": c.get("original_name") or c.get("name"), "entity_type": "practice", "city": c.get("city") or "", "state": c.get("state") or "",
              "address": c.get("address") or "", "phone": "", "place_id": c.get("place_id"), "rating": c.get("rating"), "review_count": c.get("review_count"),
@@ -688,6 +740,7 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
                                        "google_only": [s["name"] for s in cached if s.get("website_missing")]}}
 
     brand = entity_name.strip()
+    brand_display = strip_city_suffix(brand, city)
     # Anchor: pin it so no sibling can be the same office.
     anchor = dict(anchor_listing or {})
     if not anchor.get("place_id") or not anchor.get("address"):
@@ -729,7 +782,7 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
     for o in offices:
         c = pin_office_to_google(brand, o, state, exclude=used, domain=domain, specialty=specialty or "")
         _cty = o.get("city") or _city_state_of((c or {}).get("address", ""))[0] or city
-        s = {"name": display_name(brand, (c or {}).get("name"), o["name"], _cty), "entity_type": "practice",
+        s = {"name": display_name(brand_display, (c or {}).get("name"), o["name"], _cty), "entity_type": "practice",
              "city": _cty,
              "state": o.get("state") or state, "address": (c or {}).get("address") or o["address"], "phone": o.get("phone") or "",
              "sources": ["website"], "google_missing": c is None, "website_missing": False,
@@ -761,7 +814,7 @@ def resolve_locations(entity_name: str, city: str, state: str, *, website: Optio
             duplicates.append({"name": c.get("name"), "place_id": c.get("place_id"), "address": c.get("address"), "of": dup_of["name"]})
             continue
         cty, st = _city_state_of(c.get("address", ""))
-        s = {"name": display_name(brand, c.get("name"), None, cty or city), "entity_type": "practice", "city": cty or city, "state": st or state,
+        s = {"name": display_name(brand_display, c.get("name"), None, cty or city), "entity_type": "practice", "city": cty or city, "state": st or state,
              "address": c.get("address") or "", "phone": "", "place_id": c["place_id"], "rating": c.get("rating"),
              "review_count": c.get("review_count"), "maps_url": c.get("maps_url"),
              "sources": ["google"], "google_missing": False, "website_missing": web.get("status") == "measured"}

@@ -1907,10 +1907,17 @@ def _graph_after_run(result, entity_name: str, city: str, state: str, etype: str
     try:
         from perception.graph import upsert_org as _g_upsert
         if is_practice and result.profile_audit and result.profile_audit.get("profiles"):
+            _seen_pid: set = set()
+            _locs = []
+            for p in result.profile_audit["profiles"]:
+                if not p.get("place_id") or p.get("is_anchor") or p["place_id"] in _seen_pid:
+                    continue                          # never the anchor, never the same profile twice
+                _seen_pid.add(p["place_id"])
+                _locs.append({"name": p["name"], "city": p.get("city"), "place_id": p.get("place_id"), "website": p.get("website"),
+                              "address": p.get("address") or ""})
             _graph_write(_g_upsert, entity_name, city, state, etype,
                          website=(result.rankings[0].website_url if result.rankings else None),
-                         locations=[{"name": p["name"], "city": p.get("city"), "place_id": p.get("place_id"), "website": p.get("website")}
-                                    for p in result.profile_audit["profiles"] if p.get("place_id")], source="analysis")
+                         locations=_locs, source="analysis")
             _pf_rows = ((getattr(result, "physician_facts", None) or {}).get("rows") or [])
             if _pf_rows:
                 _graph_write(_g_upsert, entity_name, city, state, etype,
@@ -2537,7 +2544,9 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
         else:
             _g = _graph_write(_g_get, entity_name, city, state)
             if _g and _g.get("locations"):
-                _jobs[job_id]["confirmed_siblings"] = _g["locations"]
+                from perception.location_resolver import dedupe_roster as _dr
+                _a = _jobs[job_id].get("anchor_listing") or _g.get("anchor") or {}
+                _jobs[job_id]["confirmed_siblings"] = _dr(_g["locations"], anchor_place_id=_a.get("place_id"), anchor_address=_a.get("address") or "")
                 _jobs[job_id]["anchor_listing"] = _jobs[job_id]["anchor_listing"] or _g.get("anchor")
                 _jobs[job_id]["roster_from_graph"] = True
     _jobs[job_id]["practice_facts"] = req.practice_facts
@@ -7379,7 +7388,9 @@ def _run_event_job(
                             "service_line": _sl.get("service_line"), "parent_system": _sl.get("parent_system"),
                             # Graph roster when there is one; None → the pipeline resolves every office
                             # (website → NPPES → Google) exactly as a single Deep Diagnostic does.
-                            "confirmed_siblings": (_gorg or {}).get("locations") or None,
+                            "confirmed_siblings": (__import__("perception.location_resolver", fromlist=["dedupe_roster"]).dedupe_roster(
+                                _gorg["locations"], anchor_place_id=((_gorg.get("anchor") or {}).get("place_id")),
+                                anchor_address=((_gorg.get("anchor") or {}).get("address") or "")) if (_gorg or {}).get("locations") else None),
                             "anchor_listing": (_gorg or {}).get("anchor"),
                             "roster_from_graph": bool((_gorg or {}).get("locations")),
                             "practice_composite": entity_type == "practice",

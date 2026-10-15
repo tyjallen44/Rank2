@@ -28,8 +28,9 @@ def test_gco_acronym_alone_never_matches():
 def test_gco_real_offices_and_dbas_match():
     assert listing_belongs(GCO, _c("Georgia Carolina Orthopedics - Aiken", "1 Medical Park, Aiken, SC 29801, USA", types=["doctor", "health"], primary="orthopedic_surgeon"),
                            city="Augusta", state="GA", specialty="Orthopedics")[0]
-    assert listing_belongs(GCO, _c("Karim Mahmoud MD - Georgia Carolina Orthopedics", "2 Wheeler Rd, Augusta, GA 30909, USA", types=["doctor"]),
-                           city="Augusta", state="GA", specialty="Orthopedics")[0]
+    ok, why = listing_belongs(GCO, _c("Karim Mahmoud MD - Georgia Carolina Orthopedics", "2 Wheeler Rd, Augusta, GA 30909, USA", types=["doctor"]),
+                              city="Augusta", state="GA", specialty="Orthopedics")
+    assert not ok and why == "physician-profile"           # a doctor's own profile at an office is not a location
     assert listing_belongs(GCO, _c("GCO Orthopedics Thomson", "3 Hill St, Thomson, GA 30824, USA"), city="Augusta", state="GA")[0]
     ok, why = listing_belongs(GCO, _c("Some Other Name", "4 Elm St, Augusta, GA 30901, USA", website="https://www.georgiacarolinaortho.com/aiken"),
                               domain="georgiacarolinaortho.com", city="Augusta", state="GA")
@@ -116,3 +117,41 @@ def test_jsonld_person_and_postal_nodes_are_skipped():
     ]</script>"""
     locs = _jsonld_locations(BeautifulSoup(html, "html.parser"))
     assert [l["name"] for l in locs] == ["IBJI Avondale"]
+
+
+# ── live re-run follow-ups (2026-10-15) ───────────────────────────────────────
+from perception.location_resolver import street_key, strip_city_suffix, dedupe_roster
+
+
+def test_uninformative_google_types_do_not_reject_a_brand_named_listing():
+    ok, why = listing_belongs(GCO, _c("Georgia Carolina Orthopedics", "3650 J Dewey Gray Cir, Augusta, GA 30909, USA", types=["point_of_interest", "establishment"]),
+                              city="Augusta", state="GA", specialty="Orthopedics")
+    assert ok, why
+
+
+def test_physician_profile_listings_are_not_offices():
+    ok, why = listing_belongs(GCO, _c("Maxwell J. Vogel, MD - Georgia Carolina Orthopedics", "2511 Associates Way, Evans, GA 30809, USA", types=["doctor"]),
+                              city="Augusta", state="GA")
+    assert not ok and why == "physician-profile"
+    assert listing_belongs(GCO, _c("Georgia Carolina Orthopedic Urgent Care", "4369 Evans to Locks Rd, Evans, GA 30809, USA", types=["doctor"]), city="Augusta", state="GA")[0]
+
+
+def test_street_key_ignores_leading_directional():
+    assert street_key("4850 NW 100th St, Urbandale, IA 50322") == street_key("4850 100th St, Urbandale, IA 50322") == "4850 100th"
+    assert street_key("210 E DeRenne Ave") == "210 derenne"
+
+
+def test_brand_loses_its_own_city_suffix():
+    assert strip_city_suffix("Dmos Orthopaedic Centers - West Des Moines", "West Des Moines") == "Dmos Orthopaedic Centers"
+    assert strip_city_suffix("OrthoSouth", "Memphis") == "OrthoSouth"
+    assert display_name("Dmos Orthopaedic Centers", None, "Urbandale Clinic", "Urbandale") == "Dmos Orthopaedic Centers – Urbandale Clinic"
+
+
+def test_dedupe_roster_drops_city_only_rows_duplicates_and_anchor():
+    locs = [{"name": "OrthoSouth", "address": "1244 Primacy Pkwy, Memphis, TN 38119", "place_id": "A"},
+            {"name": "OrthoSouth (1244 Primacy Pkwy)", "address": "1244 Primacy Pkwy, Memphis, TN"},
+            {"name": "Dmos – West Des Moines", "address": "West Des Moines, IA, USA", "place_id": "B"},
+            {"name": "Anchor dup", "address": "6286 Briarcrest Ave, Memphis, TN", "place_id": "ANCH"},
+            {"name": "Germantown", "address": "2100 Exeter Rd #200, Germantown, TN 38138", "place_id": "C"}]
+    out = dedupe_roster(locs, anchor_place_id="ANCH")
+    assert [l["name"] for l in out] == ["OrthoSouth", "Germantown"]
