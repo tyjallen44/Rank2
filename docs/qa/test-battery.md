@@ -4248,3 +4248,26 @@ Offline tests: `tests/test_physician_facts.py` (+6), `tests/test_physician_resol
 | R1 | Regression | Hospital / network / community untouched; pytest 496 pass / same 15 pre-existing failures. |
 
 **[SCORE] prediction for the re-run:** DMOS and OrthoSouth lose the "board certification unverifiable" ceiling if their bio pages read (expect 74 → 76–80 for OrthoSouth, DMOS 74 → 72–78 depending on the cert read); IBJI Credentials up (69 → 72–76); GCO ±2.
+
+### CLEANUP-P2 live re-run results (2026-10-15 20:03–20:25 UTC, production build 554579d; run ids gco 31104c81, dmos 1831e192, orthosouth 1ccdb0df, ibji cca540eb)
+
+| Fixture | Score base → P1 → P2 | Pillars P2 (outcomes / credentials / reviews / access) | Ceiling | Linkage | Cert stated / read / unread | Evidence |
+|---|---|---|---|---|---|---|
+| GCO | 63 → 66 → 75 | 70 / 94 / 63 / 64 | none | 100% (25 of 25) | 14 / 26 / 5 | High |
+| DMOS | 64 → 74 → 79 | 71 / 98 / 76 / 66 | lifted (was board-cert) | 100% (24 of 24) | 10 / 15 / 10 | Medium (directory thin: 1 of 24) |
+| OrthoSouth | 79 → 74 → 78 | 65 / 94 / 80 / 74 | lifted (was board-cert) | 100% (43 of 43) | 28 / 40 / 6 | High |
+| IBJI | 69 → 72 → 67 | 48 / 94 / 57 / 63 | none | 70% (98 of 141) | 4 / 19 / 154 | Medium (bio pages read for 19 of 173) |
+
+Verified in the PDFs: "Verified OK — keep doing" (OrthoSouth), "Certification stated on the pages read: N of M", org-name titles for DMOS and IBJI, no "possibly departed", no contaminant listings, Evidence level drops with thin coverage. IBJI's Outcomes pillar returned to the baseline value (47 → 62 → 48): the Phase 1 figure was the outlier, not Phase 2.
+
+### CLEANUP-P2 follow-ups from the live re-run (2026-10-15, evening) — [SCORE] F6–F10, [PRESENTATION] F11
+| # | Issue seen in the re-run | Fix / acceptance |
+|---|---|---|
+| F6 | GCO: "Karim Mahmoud MD - Georgia Carolina Orthopedics" and "Maxwell J. Vogel, MD - …" back in the Locations table — their Google listing links the practice's own website, and the domain test ran before the physician-profile test | `listing_belongs` rejects a physician-profile name before accepting on domain (`tests/test_roster_gates.py`). |
+| F7 | GCO: an office named "Georgia Carolina Orthopedics – Footer" (the page's hidden "Footer" heading sat above the address) | Page-chrome headings (Footer, Header, Quick Links, Site Map, Follow Us, Patient Portal, About Us, Privacy Policy, …) are labels, never office names; the row becomes "Brand – City". |
+| F8 | OrthoSouth: 5 offices confirmed, 3 in the composite — three offices all named "OrthoSouth" collapsed into one row (the composite keys rows by name), so the Locations table showed dashes for Poplar Ave and Kate Bond Rd and the location count read 3 | `_dedupe_sibling_rows`: a repeated display name stays when it is a distinct office (own place id / street) and is renamed "OrthoSouth – Bartlett" (city) or "OrthoSouth – Poplar Ave" (street); repeated place ids and no-id rows on an already-kept street drop. |
+| F9 | DMOS: "Sitemap lists 0 physician bio pages" although dmos.com/sitemap.xml names ~100 `/find-a-provider/<name>-<cred>` pages; the directory read then settled on one bio page (1 of 24, Evidence Medium) | `_BIO_PATH` accepts `/find-a-provider/`, `/our-providers/`, `/meet-our-team/`… ; slug credentials now include ARNP, APRN, FNP, CRNA, PT/DPT, OT, CHT, ATC, PA… so mid-levels are classified, not counted as physicians (`tests/test_physician_resolver.py`). Expect DMOS's directory coverage to become credible and cert read to rise. |
+| F10 | DMOS: "All locations: 4.9★ across 3,393 reviews at 4 Google profiles" while the analyzed listing alone has 6,053 — the re-run request carried no anchor place id, so the profile audit skipped the analyzed listing | The analyzed listing is always audited (taken from the composite's anchor row when the request has none); the "All locations" total can never be smaller than the analyzed listing. |
+| F11 | OrthoSouth cover reads "Orthosouth" although the site names itself "OrthoSouth" — a case-only difference did not become the organization name | Case-only differences apply to the title / prompt subject (no "Organization:" log line for them). |
+| Open | IBJI: bio pages read for only 19 of 173 physicians (JS-rendered bio pages; 6 bio URLs reachable) — Evidence Medium by design, not fixed here | Candidate for a bounded headless read of bio pages in a later phase. |
+| R2 | Regression | pytest 495 pass / same 15 pre-existing failures. NEEDS BROWSER TESTING: re-run GCO, OrthoSouth and DMOS after deploy — expect GCO roster without physician names / "Footer"; OrthoSouth 5 composite rows and cover "OrthoSouth"; DMOS sitemap bios > 0 and an All-locations total ≥ 6,053. |

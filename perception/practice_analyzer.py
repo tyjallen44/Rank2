@@ -717,6 +717,74 @@ def _save_practice_extras(
 # Phase helpers — shared by analyze_practice and perception.pipeline
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _office_city(row: dict) -> str:
+    c = (row.get("city") or "").strip()
+    if c:
+        return c
+    parts = [p.strip() for p in (row.get("address") or "").split(",")]
+    return parts[1] if len(parts) >= 3 else ""
+
+
+def _office_street(row: dict) -> str:
+    first = ((row.get("address") or "").split(",")[0]).strip()
+    return re.sub(r"^\d+[A-Za-z]?\s+", "", re.sub(r"\s+(?:#|ste\.?|suite|unit|bldg\.?|building|fl\.?|floor)\s*\S+.*$", "", first, flags=re.I)).strip()
+
+
+def _distinct_office_name(name: str, row: dict, others: list[dict]) -> str:
+    """'OrthoSouth' three times at three streets → 'OrthoSouth – Bartlett' when the city tells them
+    apart, else 'OrthoSouth – Poplar Ave'. The composite keys its rows by name, so two offices
+    that share one name would otherwise collapse into a single row."""
+    city = _office_city(row)
+    same = [o for o in others if (o.get("name") or "").strip().lower() == name.strip().lower()
+            or (o.get("name") or "").strip().lower().startswith(name.strip().lower() + " – ")]
+    if city and not any(_office_city(o).lower() == city.lower() for o in same):
+        return f"{name} – {city}"
+    street = _office_street(row)
+    return f"{name} – {street}" if street else name
+
+
+def _dedupe_sibling_rows(sibling_roster: list[dict], anchor_pid: Optional[str], is_anchor_duplicate, canon) -> list[dict]:
+    """One row per office: the anchor's own listing and repeated place ids drop out; a row that
+    repeats another's display name stays only when it is a distinct office (its own Google
+    place id or street) and is then renamed so the composite can tell the two apart."""
+    from .location_resolver import same_office
+    deduped: list[dict] = []
+    seen_names: set[str] = set()
+    seen_pids: set[str] = set()
+    for s in sibling_roster:
+        sn = s.get("name", "")
+        sa = s.get("address", "")
+        if s.get("_anchor_dup"):
+            continue   # resolved to the anchor's own listing in the pre-pass
+        pid = s.get("place_id")
+        if pid:
+            # A distinct Google place_id is definitive: same-name clinics at
+            # other streets are real locations, not anchor aliases.
+            if anchor_pid and pid == anchor_pid:
+                continue
+            if pid in seen_pids:
+                continue                      # the same listing under two names: one row
+        elif is_anchor_duplicate(sn, sa):
+            continue
+        elif sa and any(d.get("address") and same_office(sa, d["address"]) for d in deduped):
+            continue                          # no place id and the same street as a row already kept
+        canonical = canon(sn)
+        k = canonical.lower()
+        if k in seen_names:
+            distinct = bool(pid) or bool(sa and not any(d.get("address") and same_office(sa, d["address"]) for d in deduped))
+            if not distinct:
+                continue
+            canonical = _distinct_office_name(canonical, s, deduped)
+            k = canonical.lower()
+            if k in seen_names:
+                continue
+        seen_names.add(k)
+        if pid:
+            seen_pids.add(pid)
+        deduped.append({**s, "name": canonical} if canonical != sn else s)
+    return deduped
+
+
 def _roster_label(s: dict) -> str:
     """Roster line for the prompt: the office name, tagged UNVERIFIED when it is model recall only."""
     srcs = set(s.get("sources") or [])
@@ -1047,27 +1115,7 @@ def _collect_practice_composite(result: AnalysisResult, rankings: list, entity_n
             return name.strip()[len(_brand_prefix):]
         return name.strip()
 
-    deduped: list[dict] = []
-    seen_names: set[str] = set()
-    _anchor_pid = anchor_entry.get("place_id")
-    for s in sibling_roster:
-        sn = s.get("name", "")
-        sa = s.get("address", "")
-        if s.get("_anchor_dup"):
-            continue   # resolved to the anchor's own listing in the pre-pass
-        if s.get("place_id"):
-            # A distinct Google place_id is definitive: same-name clinics at
-            # other streets are real locations, not anchor aliases.
-            if _anchor_pid and s["place_id"] == _anchor_pid:
-                continue
-        elif _is_anchor_duplicate(sn, sa):
-            continue
-        canonical = _canon_sibling(sn)
-        k = canonical.lower()
-        if k not in seen_names:
-            seen_names.add(k)
-            deduped.append({**s, "name": canonical} if canonical != sn else s)
-    sibling_roster = deduped
+    sibling_roster = _dedupe_sibling_rows(sibling_roster, anchor_entry.get("place_id"), _is_anchor_duplicate, _canon_sibling)
 
     roster = [anchor_entry] + sibling_roster
 

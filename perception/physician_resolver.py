@@ -30,12 +30,12 @@ _DIRECTORY_PATHS = ("/doctors", "/providers", "/physicians", "/our-providers", "
                     "/meet-our-doctors", "/staff", "/surgeons", "/our-surgeons", "/specialists", "/medical-staff", "/about/providers",
                     "/about/our-team")
 _DIR_LINK = re.compile(r"provider|physician|doctor|surgeon|our-team|meet-the|meet-our|staff|find-a|specialist|clinician", re.I)
-_BIO_PATH = re.compile(r"(/dr-|/team/|/staff/|/physician[s]?/|/provider[s]?/|/doctor[s]?/|/surgeon[s]?/|/bio[s]?/|/people/|/our-team/|/meet-)", re.I)
+_BIO_PATH = re.compile(r"(/dr-|/(?:find-a-|find-|our-|meet-our-|meet-the-|medical-)?(?:team|staff|physicians?|providers?|doctors?|surgeons?|bios?|people|specialists?|clinicians?)/|/meet-)", re.I)
 _SKIP_LINK = re.compile(r"\.(pdf|jpg|jpeg|png|gif|svg|zip)$|mailto:|tel:|javascript:", re.I)
 _PHYS_CREDS = ("MD", "DO", "DPM", "MBBS", "MBCHB", "MD PHD", "DO PHD")
 _MID_CREDS = ("PA-C", "PA", "NP", "FNP", "FNP-C", "FNP-BC", "APRN", "ANP", "AGNP", "CRNA", "CNP", "DNP", "RN", "BSN", "MSN",
               "DPT", "PT", "MPT", "OT", "OTR", "ATC", "LAT", "PSYD", "LCSW", "RD", "CPO", "CP", "CO", "PHD", "DC", "LPN", "MA", "CMA",
-              "CNM", "PA-S", "PTA", "OTA", "MSPT", "DDS", "DMD", "OD", "AUD")
+              "CNM", "PA-S", "PTA", "OTA", "MSPT", "DDS", "DMD", "OD", "AUD", "ARNP", "CHT", "MBA", "MPH")
 _CRED_TOKEN = r"(?:M\.?D\.?|D\.?O\.?|D\.?P\.?M\.?|Ph\.?D\.?|D\.?D\.?S\.?|D\.?M\.?D\.?|PA-?C|PA|NP|FNP(?:-[BC])?|APRN|CRNA|DNP|CNP|DPT|PT|OT|OTR|ATC|RN|BSN|MSN|LAT|PsyD|LCSW|DC|O\.?D\.?|MBBS|FAAOS|FACS|FAAP|FACC|FACP|FAANS|FAOA|MPH|MBA|MMSPAS|CAQSM|CAQ)"
 _TRAILING_CRED = re.compile(r"(?:[,\s]+(?:" + _CRED_TOKEN + r"))+\s*$")
 _CRED_LIST = re.compile(r"^\s*((?:" + _CRED_TOKEN + r")(?:\s*[,/&]?\s*(?:" + _CRED_TOKEN + r"))*)\s*$")
@@ -265,7 +265,8 @@ def _dedupe_people(items: list[dict]) -> list[dict]:
     return [seen[k] for k in order]
 
 
-_SLUG_CRED = re.compile(r"-(md|do|dpm|phd|pa-?c|np|dpt|facs|faaos)(?=-|$)", re.I)
+_SLUG_CRED = re.compile(r"-(md|do|dpm|phd|pa-?c|pa|np|fnp(?:-?[bc])?|aprn|arnp|anp|agnp|crna|cnp|dnp|rn|bsn|msn|dpt|pt|mpt|ot|otr|atc|cht|lat|"
+                        r"psyd|lcsw|dc|od|aud|dds|dmd|lpn|cma|cnm|pta|ota|facs|faaos|mba|mph)(?=-|$)", re.I)
 
 
 def _person_from_slug(url: str) -> Optional[dict]:

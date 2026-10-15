@@ -127,3 +127,15 @@ def test_not_on_website_requires_credible_directory_coverage(monkeypatch):
     cov = res["resolution"]["directory_coverage"]
     assert cov == {"website": 1, "registry": 10, "credible": False, "pct": 10}
     assert res["resolution"]["registry_only"] == []
+
+
+def test_sitemap_bio_slugs_under_find_a_provider_name_their_physician():
+    from perception.physician_resolver import _person_from_slug, is_physician_cred
+    p = _person_from_slug("https://www.dmos.com/find-a-provider/mauricio-acebey-md")
+    assert p and p["name"] == "Mauricio Acebey" and p["credential"] == "MD" and is_physician_cred(p["credential"]) is True
+    mid = _person_from_slug("https://www.dmos.com/find-a-provider/karissa-junior-arnp")
+    assert mid and mid["credential"] == "ARNP" and is_physician_cred(mid["credential"]) is False
+    pa = _person_from_slug("https://www.dmos.com/find-a-provider/kara-buckingham-pa-c")
+    assert pa and pa["credential"] == "PA-C" and is_physician_cred(pa["credential"]) is False
+    assert _person_from_slug("https://www.dmos.com/find-a-provider") is None
+    assert _person_from_slug("https://www.dmos.com/services/physical-therapy") is None

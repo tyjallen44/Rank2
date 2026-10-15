@@ -37,7 +37,12 @@ _LABELS = re.compile(r"^(address|phone|fax|hours|directions|get directions|map|l
                      r"call|tel|telephone|email|appointments?|schedule|book|view map|learn more|read more|details|visit|home|menu|"
                      r"(?:office|our|all|clinic|view|find|other|more|additional)\s+locations?(?:\s*(?:&|and)\s*hours)?|locations?\s*(?:&|and)\s*hours|"
                      r"hours of operation|mailing address|billing address|billing|remit to|remittance|corporate(?:\s+office)?|headquarters|"
-                     r"main office|administrative office|business office|physical address|street address)[:.]?$", re.I)
+                     r"main office|administrative office|business office|physical address|street address|"
+                     r"footer|header|sidebar|navigation|nav|main content|skip to content|back to top|quick links|site ?map|"
+                     r"follow us|connect(?: with us)?|stay connected|get in touch|reach us|call us|visit us|find us|contact (?:information|details)|"
+                     r"location (?:information|details)|our office|office hours|clinic hours|opening hours|patient portal|pay (?:my |your |a )?bill|"
+                     r"careers|blog|news|resources|faqs?|about(?: us)?|services|specialties|insurance|forms|reviews|testimonials|"
+                     r"copyright|legal|privacy(?: policy)?|terms(?: of (?:use|service))?|newsletter|subscribe|social(?: media)?)[:.]?$", re.I)
 # A heading line above an address that marks it as NOT a patient-facing office.
 _NOT_OFFICE = re.compile(r"\b(mailing|billing|remit|remittance|p\.?\s?o\.?\s?box|post office box|corporate|headquarters|payments?|"
                          r"administrative|accounts? (?:payable|receivable)|lockbox)\b", re.I)
@@ -181,10 +186,10 @@ def listing_belongs(brand: str, cand: dict, *, domain: str = "", city: str = "",
     alone ('GCO Landscape'). Returns (accepted, reason)."""
     name = cand.get("name") or ""
     host = _host(cand.get("website") or "")
+    if _PHYSICIAN_LISTING.search(name):
+        return False, "physician-profile"            # "Maxwell J. Vogel, MD - Brand": a doctor's own profile, not an office — even when it links the practice's own site
     if domain and host and (host == domain or host.endswith("." + domain)):
         return True, "domain"
-    if _PHYSICIAN_LISTING.search(name):
-        return False, "physician-profile"            # "Maxwell J. Vogel, MD - Brand": a doctor's own profile, not an office
     types = {str(t).lower() for t in (cand.get("types") or [])} - _UNINFORMATIVE_TYPES
     primary = str(cand.get("primary_type") or "").lower()
     if primary in _UNINFORMATIVE_TYPES:

@@ -1627,11 +1627,15 @@ def _profile_audit(result, job: dict, emit=None) -> None:
                 if sbl.get("place_id") and sbl["place_id"] not in seen_pids:
                     seen_pids.add(sbl["place_id"])
                     roster.append({"name": sbl.get("name"), "city": sbl.get("city") or "", "place_id": sbl["place_id"]})
-            if not a.get("place_id"):
-                for cr in (getattr(result, "practice_composite_rows", None) or []):
-                    if cr.get("is_anchor") and cr.get("place_id") and cr["place_id"] not in seen_pids:
-                        roster.insert(0, {"name": result.entity_name, "city": job.get("city") or "", "place_id": cr["place_id"]})
-                        break
+        if not any(r.get("is_anchor") for r in roster):
+            # The analyzed listing is always audited — its reviews are the largest share of the
+            # 'All locations' total, so a run whose request carried no anchor place id must not
+            # report a total smaller than the analyzed listing alone.
+            _have = {r["place_id"] for r in roster}
+            for cr in (getattr(result, "practice_composite_rows", None) or []):
+                if cr.get("is_anchor") and cr.get("place_id") and cr["place_id"] not in _have:
+                    roster.insert(0, {"name": result.entity_name, "city": job.get("city") or "", "place_id": cr["place_id"], "is_anchor": True})
+                    break
         if not roster:
             return
         if emit:

@@ -155,3 +155,33 @@ def test_dedupe_roster_drops_city_only_rows_duplicates_and_anchor():
             {"name": "Germantown", "address": "2100 Exeter Rd #200, Germantown, TN 38138", "place_id": "C"}]
     out = dedupe_roster(locs, anchor_place_id="ANCH")
     assert [l["name"] for l in out] == ["OrthoSouth", "Germantown"]
+
+
+# ── Phase 2 live re-run follow-ups (2026-10-15, evening) ─────────────────────
+
+def test_physician_profile_listing_is_rejected_even_on_the_practice_domain():
+    cand = _c("Karim Mahmoud MD - Georgia Carolina Orthopedics", "300 Jones Ave, Waynesboro, GA 30830, USA", types=["doctor"],
+              website="https://www.georgiacarolinaortho.com/providers/karim-mahmoud")
+    ok, why = listing_belongs(GCO, cand, domain="georgiacarolinaortho.com", city="Augusta", state="GA")
+    assert not ok and why == "physician-profile"
+
+
+def test_page_chrome_headings_never_name_an_office():
+    for h in ("Footer", "Header", "Quick Links", "Site Map", "Follow Us", "Patient Portal", "About Us", "Privacy Policy"):
+        assert _LABELS.match(h), h
+    assert display_name("Georgia Carolina Orthopedics", None, "Footer", "Augusta") == "Georgia Carolina Orthopedics – Augusta"
+    assert display_name("Georgia Carolina Orthopedics", None, "Aiken Clinic", "Aiken") == "Georgia Carolina Orthopedics – Aiken Clinic"
+
+
+def test_same_name_offices_keep_their_own_composite_row():
+    from perception.practice_analyzer import _dedupe_sibling_rows
+    rows = [{"name": "OrthoSouth", "address": "1244 Primacy Pkwy, Memphis, TN 38119, USA", "place_id": "A"},
+            {"name": "OrthoSouth", "address": "4515 Poplar Ave #206, Memphis, TN 38117, USA", "place_id": "B"},
+            {"name": "OrthoSouth", "address": "3045 Kate Bond Rd, Bartlett, TN 38133, USA", "place_id": "C"},
+            {"name": "OrthoSouth Germantown | Orthopedic Clinic", "address": "2100 Exeter Rd #200, Germantown, TN 38138, USA", "place_id": "D"},
+            {"name": "OrthoSouth (1244 Primacy Pkwy)", "address": "1244 Primacy Pkwy, Memphis, TN"},          # same street, no place id
+            {"name": "Same listing again", "address": "4515 Poplar Ave #206, Memphis, TN 38117, USA", "place_id": "B"},
+            {"name": "Anchor itself", "address": "6286 Briarcrest Ave, Memphis, TN", "place_id": "ANCH"}]
+    out = _dedupe_sibling_rows(rows, "ANCH", lambda n, a: False, lambda n: n)
+    assert [r["name"] for r in out] == ["OrthoSouth", "OrthoSouth – Poplar Ave", "OrthoSouth – Bartlett", "OrthoSouth Germantown | Orthopedic Clinic"]
+    assert [r["place_id"] for r in out] == ["A", "B", "C", "D"]
