@@ -1599,7 +1599,7 @@ def _profile_audit(result, job: dict, emit=None) -> None:
         roster = []
         a = job.get("anchor_listing") or {}
         if a.get("place_id"):
-            roster.append({"name": result.entity_name, "city": job.get("city") or "", "place_id": a["place_id"]})
+            roster.append({"name": result.entity_name, "city": job.get("city") or "", "place_id": a["place_id"], "is_anchor": True})
         for sbl in (job.get("confirmed_siblings") or []):
             if sbl.get("place_id"):
                 roster.append({"name": sbl.get("original_name") or sbl.get("name"), "city": sbl.get("city") or "", "place_id": sbl["place_id"]})
@@ -1632,7 +1632,7 @@ def _profile_audit(result, job: dict, emit=None) -> None:
             web = d.get("websiteUri") or ""
             wd = _dom(web)
             _rev_times = [rv.get("publishTime") for rv in (d.get("reviews") or []) if rv.get("publishTime")]
-            profiles.append({"name": r["name"], "city": r["city"], "place_id": r["place_id"],
+            profiles.append({"name": r["name"], "city": r["city"], "place_id": r["place_id"], "is_anchor": bool(r.get("is_anchor")),
                              "website": web, "website_domain": wd,
                              "has_phone": bool(d.get("nationalPhoneNumber")), "has_hours": bool(d.get("regularOpeningHours")),
                              "photos": len(d.get("photos") or []), "rating": d.get("rating"), "review_count": d.get("userRatingCount"),
@@ -4991,6 +4991,28 @@ async def admin_report_producers_csv(days: int = 30, _: dict = Depends(require_a
                     headers={"Content-Disposition": f'attachment; filename="report-producers-{days or "all"}d.csv"'})
 
 
+@app.get("/api/admin/runs/{run_id}/result.json")
+async def admin_run_result_json(run_id: str, _: dict = Depends(require_admin)):
+    """Admin: the stored AnalysisResult JSON of a Deep Diagnostic run plus its content findings —
+    used to capture regression fixtures (tests/fixtures/cleanup) from production runs."""
+    import json as _json
+    from perception.db import get_connection, get_content_findings
+    safe = "".join(ch for ch in run_id if ch.isalnum() or ch in "-_")
+    with get_connection() as con:
+        row = con.execute("SELECT run_id, entity_name, location, specialty, entity_type, created_at, result_json "
+                          "FROM analysis_runs WHERE run_id = ?", [safe]).fetchone()
+    if not row:
+        raise HTTPException(404, "Run not found")
+    if not row[6]:
+        raise HTTPException(404, "No stored result for this run")
+    try:
+        cf = get_content_findings(safe)
+    except Exception:
+        cf = None
+    return {"run_id": row[0], "entity_name": row[1], "location": row[2], "specialty": row[3], "entity_type": row[4],
+            "created_at": str(row[5]), "result": _json.loads(row[6]), "content_findings": cf}
+
+
 @app.get("/api/admin/requests")
 async def admin_list_requests(_: dict = Depends(require_admin)):
     from perception.db import init_db
@@ -6967,6 +6989,8 @@ class FindMoreRequest(BaseModel):
     city: str
     state: str
     exclude_place_ids: List[str] = []
+    website: Optional[str] = None
+    specialty: Optional[str] = None
 
 
 @app.post("/api/practice/find-more")
@@ -6974,7 +6998,9 @@ async def practice_find_more(req: FindMoreRequest, _: str = Depends(require_auth
     """Widen the Google search for a multi-office practice: brand variants, then every city seen in
     a found address becomes its own query (perception.location_resolver.google_snowball)."""
     from perception.location_resolver import google_snowball
-    out = google_snowball(_normalize_input(req.brand), req.city, req.state, exclude=set(req.exclude_place_ids or []))
+    from perception.location_resolver import _host
+    out = google_snowball(_normalize_input(req.brand), req.city, req.state, exclude=set(req.exclude_place_ids or []),
+                          domain=_host(req.website or ""), specialty=req.specialty or "")
     return {"candidates": out["candidates"], "queries": out["queries"]}
 
 

@@ -4202,3 +4202,21 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | R1 | Regression | Form run unchanged (graph write identical, now via helper); Event Prep for non-group lists unchanged apart from hospital content and graph write; `PULSE_EVENT_PIPELINE=legacy` still skips all of it; pytest unchanged (440 pass / same 15 pre-existing). |
 
 **Remaining difference (by design):** headless paths do not ask the user to confirm the website, roster or practice profile; they take what the graph / list / classifier provide.
+
+## CLEANUP-P1 — report-quality cleanup, Phase 1 (2026-10-15; four commits: infra, S1 roster, S2 names, P1 presentation)
+
+**Fixtures:** production runs GCO c9957013 (63), DMOS 78df5fe7 (64), OrthoSouth 2728588f (79), IBJI 4ef87f53 (69). `GET /api/admin/runs/{id}/result.json` (admin) exports a stored result; `scripts/capture_fixtures.py` writes them to `tests/fixtures/cleanup/`; `tests/test_cleanup_fixtures.py` is the golden baseline (skips until captured). Offline tests: `tests/test_roster_gates.py` (10), `tests/test_physician_names.py` (5), `tests/test_presentation_phase1.py` (5). NEEDS BROWSER TESTING (re-run the four practices with Force after deploy).
+
+| # | Issue | Acceptance |
+|---|---|---|
+| S1-1.1 | Unrelated businesses | Re-run DMOS: roster has no City Hall / Public Works / Chamber / Schools / OBGYN / MercyOne / UnityPoint / DoctorsNow / Harmony / The Iowa Clinic; GCO has no GCO Landscape / GCO Mechanical. Progress log shows "Google: N listings near the brand name rejected (not this practice: …)". `location_resolution.rejected` carries them with a reason; nothing rejected appears in the PDF. CIK "N of M profiles do not link" recomputes from the clean roster. |
+| S1-1.2 | Phantom rows | No "<Practice> – Office Locations", "– West Des Moines – Ankeny", "(mailing address)", "(flagship / clinical group)" rows; PO Box / mailing / billing addresses never listed; website-only offices still appear with W only. |
+| S2-1.7 | Physician names | GCO physicians table: no "Dr. Physician Extenders", "Dr. Specialist …", "Dr. Orthopedics …"; one row for Vaughan Massie (fullest form), one for Taylor Den Hartog; "Dr." only on MD/DO/DPM rows; "no NPI record" count drops accordingly. |
+| P1-1.3 | Analyzed row | Highlighted anchor row shows the Google listing's Links/Hours/Phone/Photos values (profile audit tags the anchor by place id). |
+| P1-1.4 | Wikipedia | GCO: "No Wikipedia article found … (nearest search hit, 'University of Georgia', is a different subject)", no talk-page draft; checklist public record FAIL not PARTIAL. |
+| P1-1.5 | Website sentence | "Your website X was cited in N of M answers (by …)." or "… was not cited by any assistant." — never "was cited by any assistant". |
+| P1-1.6 | Spot-check coverage | Header lists only assistants that answered; amber "Coverage: Gemini did not answer (60 errors); the figures cover Claude, ChatGPT. Incomplete — rerun recommended." when an assistant answered < 50%. Gemini/ChatGPT retries also cover timeouts, connection errors and 500/502/504. |
+| P1-1.8 | Review totals | Checklist "Review volume" and Evidence line both read "N Google reviews across M profiles (analyzed listing: K)" from the verified profiles — never the anchor's count × the location count. |
+| R1 | Regression | Hospital reports, Network and Community Health untouched; pytest 460 pass / 8 skipped / same 15 pre-existing failures. |
+
+**[SCORE] prediction (to compare after the live re-run):** GCO 63 → 62–65; DMOS 64 → 65–68 (clean roster: competitor reviews leave Pillar 2; linkage zips change); OrthoSouth 79 → 79–80; IBJI 69 → 69–70. The 2.x commits (linkage, crawl coverage) are where the larger moves are expected.
