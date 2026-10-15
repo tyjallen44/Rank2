@@ -76,12 +76,12 @@ def _finding_for(findings, platform: str, *words: str) -> Optional[str]:
 
 
 def _reviews(result) -> tuple[Optional[int], Optional[int]]:
-    """(total reviews, locations) from the best source the run has."""
+    """(Google review total, profiles) from the one canonical computation (perception.review_totals)."""
+    from .review_totals import compute
+    t = compute(result)
+    if t.get("google_total"):
+        return int(t["google_total"]), int(t.get("google_locations") or 1)
     p = next(iter(getattr(result, "rankings", None) or []), None)
-    for cr in getattr(result, "practice_composite_rows", None) or []:
-        if cr.get("is_anchor") and cr.get("total_reviews"):
-            n_loc = 1 + sum(1 for r in result.practice_composite_rows if not r.get("is_anchor") and not r.get("not_established"))
-            return int(cr["total_reviews"]), n_loc
     if p is not None:
         sa = p.google_footprint.system_aggregate
         if sa.available and sa.total_reviews:
@@ -184,7 +184,8 @@ def build_checklist(result, findings=None) -> list[dict]:
         add("review_volume", NA, "No verified review count.")
     else:
         status = PASS if total >= 200 else (PARTIAL if total >= 50 else FAIL)
-        add("review_volume", status, f"{total:,} Google reviews" + (f" across {n_loc} location(s)" if n_loc and n_loc > 1 else "") +
+        from .review_totals import compute as _rt, google_phrase as _gp
+        add("review_volume", status, (_gp(_rt(result)) or f"{total:,} Google reviews") +
             (" (200+ reads as high evidence)." if status != PASS else "."),
             None if status == PASS else _finding_for(findings, "reputation", "review", "rating"))
 

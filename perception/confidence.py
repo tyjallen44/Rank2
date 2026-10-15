@@ -79,9 +79,9 @@ def score_confidence(result) -> Optional[dict]:
     else:
         level = "medium"
 
-    basis = f"{reviews:,} review{'s' if reviews != 1 else ''}"
-    if locations > 1:
-        basis += f" across {locations} locations"
+    from .review_totals import compute as _rt, google_phrase as _gp
+    _t = _rt(result)
+    basis = _gp(_t) if _t.get("google_total") else f"{reviews:,} review{'s' if reviews != 1 else ''}" + (f" across {locations} locations" if locations > 1 else "")
     if reviews < 50:
         basis = ""                       # the "only N reviews" reason already says it
     note = "; ".join([x for x in [basis] + reasons if x])

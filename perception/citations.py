@@ -141,9 +141,15 @@ def analyze(sc: dict) -> dict:
         if choosing_uncited and top3:
             sentence += (f" For the {len(choosing_uncited)} question{'s' if len(choosing_uncited) != 1 else ''} where patients are choosing "
                          f"and your site was not used, they relied on {_join(top3)}.")
+    cited_by = sorted({r.get("assistant") for r in results if "error" not in r and r.get("assistant")
+                       and any(_ours(_dom(u), our) for u in (r.get("citations") or []))}) if our else []
+    cited_answers = sum(1 for r in results if "error" not in r and any(_ours(_dom(u), our) for u in (r.get("citations") or []))) if our else 0
     sc["sourcing"] = {"our_domain": our, "cited_questions": len(cited_rows), "questions": n,
+                      "cited_answers": cited_answers, "answers": sum(1 for r in results if "error" not in r), "cited_by": cited_by,
                       "only_direct": only_direct, "choosing_uncited": len(choosing_uncited),
                       "relied_on": top3, "sentence": sentence}
+    if our:
+        sc["our_domain_cited"] = bool(cited_rows)      # the sourcing analysis sees every citation, not only the top-10 domains
     return sc
 
 

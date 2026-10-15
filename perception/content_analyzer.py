@@ -447,12 +447,36 @@ def _check_website(snaps: list, entity_kind: str) -> list:
 
 # ── Wikidata ──────────────────────────────────────────────────────────────────
 
+_MATCH_STOP = {"the", "of", "and", "at", "for", "in", "a", "an", "llc", "pc", "pa", "inc", "ltd", "md", "group", "center", "centre", "centers",
+               "clinic", "clinics", "associates", "specialists", "institute", "medical", "health", "healthcare", "care", "orthopedic",
+               "orthopedics", "orthopaedic", "orthopaedics", "ortho", "surgery", "surgical", "surgeons", "physicians", "doctors", "hospital",
+               "university", "college", "school", "regional", "community", "family", "sports", "medicine", "spine", "bone", "joint", "office",
+               "offices", "system", "network", "partners", "services", "foundation", "department"}
+_PLACE_WORDS = {"georgia", "carolina", "north", "south", "east", "west", "central", "new", "york", "illinois", "iowa", "texas", "florida",
+                "california", "ohio", "michigan", "virginia", "tennessee", "memphis", "chicago", "atlanta", "augusta", "des", "moines",
+                "america", "american", "united", "states", "national", "pacific", "atlantic", "midwest", "southern", "northern", "valley",
+                "bay", "coast", "mountain", "lake", "river", "city", "county", "metro"}
+
+
+def _match_tokens(text: str) -> set:
+    return {t for t in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(t) >= 3 and t not in _MATCH_STOP}
+
+
 def _name_matches(entity_name: str, candidate: str) -> bool:
-    """True if a search hit plausibly refers to this entity — it must share a
-    distinctive (>=4-char) token with the entity name. Guards against a generic
-    name (e.g. 'Summit Medical Group') matching an unrelated knowledge item."""
-    ename = (entity_name or "").lower()
-    return any(tok in ename for tok in (candidate or "").lower().split() if len(tok) >= 4)
+    """True only when a knowledge-base title is plausibly THIS organization: whole-token equality
+    (never substrings), generic healthcare words ignored, and at least one distinctive non-place
+    token shared — 'University of Georgia' no longer matches 'Georgia Carolina Orthopedics'. A brand
+    made only of place / generic words must appear in full."""
+    et, ct = _match_tokens(entity_name), _match_tokens(candidate)
+    if not et or not ct:
+        return False
+    distinctive = et - _PLACE_WORDS
+    if len(et & ct) / len(ct) < 0.5:
+        return False                                  # the title is mostly about something else ("Summit County, Ohio")
+    if distinctive:
+        shared = distinctive & ct
+        return len(shared) / len(distinctive) >= 0.6
+    return et <= ct
 
 
 def _check_wikidata(client: httpx.Client, entity_name: str, known_website: str,
@@ -527,12 +551,14 @@ def _check_wikipedia(client: httpx.Client, entity_name: str,
     url = "https://en.wikipedia.org/wiki/" + title.replace(" ", "_")
     # Relevance guard: the article must share a distinctive token with the name.
     if not _name_matches(entity_name, title):
+        # Below the match threshold: report no article and draft nothing (a talk-page request to an
+        # unrelated article — 'University of Georgia' — was the worst outcome of the old substring test).
         return ([dict(platform="wikipedia", category="opportunity", severity="low",
                       status="verified",
-                      teaser_summary="No clearly-matching Wikipedia article — worth assessing notability.",
-                      current_state=f"Closest article '{title}' does not clearly match.",
-                      expected_state="An accurate article, if notable.",
-                      remediation_type="talk_page_request", evidence=[url])], None)
+                      teaser_summary="No Wikipedia article found — a notability assessment is worth doing before pursuing one.",
+                      current_state=f"No article matches '{entity_name}' (nearest search hit, '{title}', is a different subject).",
+                      expected_state="If notable, an accurate, well-cited article; if not, effort belongs on Wikidata/directories.",
+                      remediation_type="", evidence=[api])], None)
     return ([dict(platform="wikipedia", category="opportunity", severity="low",
                   status="partial",
                   teaser_summary=f"A possibly-related Wikipedia article was found ('{title}') — confirm it's yours, then review its facts.",

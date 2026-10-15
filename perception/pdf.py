@@ -781,6 +781,31 @@ def _sources_box_html(result: AnalysisResult) -> str:
   </div>"""
 
 
+def website_cited_sentence(sc: dict) -> str:
+    """'Your website X was cited in N of M answers (by Claude, ChatGPT).' or
+    'Your website X was not cited by any assistant.' — never the broken middle form."""
+    dom = _e(sc.get("our_domain") or "")
+    src = sc.get("sourcing") or {}
+    n, m = src.get("cited_answers") or 0, src.get("answers") or sc.get("asked") or 0
+    cited = bool(n) or bool(sc.get("our_domain_cited"))
+    if not cited:
+        return f'Your website <strong>{dom}</strong> was <span style="color:{_RED_BAD};font-weight:700">not cited</span> by any assistant.'
+    by = ", ".join(src.get("cited_by") or [])
+    if n and m:
+        return (f'Your website <strong>{dom}</strong> was <span style="color:{_GREEN_OK};font-weight:700">cited</span> in {n} of {m} answers'
+                + (f" (by {_e(by)})" if by else "") + ".")
+    return f'Your website <strong>{dom}</strong> was <span style="color:{_GREEN_OK};font-weight:700">cited</span>' + (f" by {_e(by)}" if by else " by at least one assistant") + "."
+
+
+def spotcheck_incomplete(sc: dict, floor: float = 0.5) -> bool:
+    """True when any assistant that was asked answered fewer than `floor` of its questions."""
+    for a in sc.get("per_assistant") or []:
+        total = (a.get("asked") or 0) + (a.get("errors") or 0)
+        if total and (a.get("asked") or 0) / total < floor:
+            return True
+    return False
+
+
 def _spotcheck_section(result: AnalysisResult) -> str:
     """'What AI assistants actually said' — observed check panel (never affects the score)."""
     sc = getattr(result, "spotcheck", None)
@@ -809,15 +834,22 @@ def _spotcheck_section(result: AnalysisResult) -> str:
     sub_txt = (f"named in {m} of {n}<br>unprompted answers" + (f"<br>{sc.get('queries')} questions · {passes} passes" if passes > 1 else ""))
     site = ""
     if sc.get("our_domain"):
-        cited = bool(sc.get("our_domain_cited"))
-        verdict = '<span style="color:%s;font-weight:700">%s</span>' % (_GREEN_OK if cited else _RED_BAD, "cited" if cited else "not cited")
-        site = ('<div style="font-size:8.5pt;margin-top:4px">Your website <strong>%s</strong> was %s by any assistant.</div>'
-                % (_e(sc["our_domain"]), verdict))
+        site = '<div style="font-size:8.5pt;margin-top:4px">%s</div>' % website_cited_sentence(sc)
+    answered = [a for a in (sc.get("per_assistant") or []) if a.get("asked")]
+    failed = [a for a in (sc.get("per_assistant") or []) if not a.get("asked") and a.get("errors")]
+    partial = [a for a in answered if a.get("errors")]
+    coverage_note = ""
+    if failed or partial:
+        bits = [f"{_e(a['assistant'])} did not answer ({a['errors']} errors)" for a in failed]
+        bits += [f"{_e(a['assistant'])}: {a['errors']} of {a['asked'] + a['errors']} answers failed" for a in partial]
+        coverage_note = ('<div style="font-size:8pt;color:%s;margin-top:4px"><strong>Coverage:</strong> %s; the figures cover %s.%s</div>'
+                         % (_AMBER_WARN, "; ".join(bits), _e(", ".join(a["assistant"] for a in answered)) or "no assistant",
+                            (" <strong>Incomplete — rerun recommended.</strong>" if spotcheck_incomplete(sc) else "")))
     return f"""
   <div style="margin-top:22px;padding:14px 18px;border:1px solid #d0e4e8;border-radius:8px;page-break-inside:avoid">
     <div class="section-title" style="margin-bottom:6px">What AI Assistants Actually Said</div>
-    <div style="font-size:8.5pt;color:#5a7075;margin-bottom:10px">{sc.get("queries")} patient-style questions asked of {_e(", ".join(sc.get("assistants") or []))} on {_e(sc.get("date"))}
-      — an observational check. It does not change the score above.</div>
+    <div style="font-size:8.5pt;color:#5a7075;margin-bottom:10px">{sc.get("queries")} patient-style questions asked of {_e(", ".join(a["assistant"] for a in answered) or ", ".join(sc.get("assistants") or []))} on {_e(sc.get("date"))}
+      — an observational check. It does not change the score above.</div>{coverage_note}
     <div style="display:flex;gap:18px;align-items:flex-start">
       <div style="flex:0 0 auto;text-align:center;padding:10px 16px;background:#f4f9f8;border-radius:8px">
         <div style="font-size:{'20pt' if len(pct_txt) > 4 else '26pt'};font-weight:800;color:{col};line-height:1">{pct_txt}</div>

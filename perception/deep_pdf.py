@@ -385,6 +385,8 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
                 k = same[0]                                   # name only: join the existing office
             elif same and not any(rows[x].get("address") or x.split("|", 1)[0] != nk for x in same):
                 k = same[0]                                   # the existing row had no address either: it is this office
+            elif same and place_id and not any(rows[x].get("audit") or rows[x].get("composite") for x in same):
+                k = same[0]                                   # the existing row is the model's own entry: this verified record is it
         if k is None:
             k = (place_id or sk or nk) + "|" + nk
             rows[k] = {"name": clean}
@@ -399,19 +401,44 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
         return r
 
     anchor_name = (result.entity_name or "")
-    if p is not None:
+    resolver_ran = bool(getattr(result, "location_resolution", None))
+    au = result.profile_audit or {}
+    anchor_pid = next((prof.get("place_id") for prof in (au.get("profiles") or []) if prof.get("is_anchor") and prof.get("place_id")), None)
+    if not anchor_pid:
+        anchor_pid = next((cr.get("place_id") for cr in (result.practice_composite_rows or []) if cr.get("is_anchor") and cr.get("place_id")), None)
+
+    def _llm_rows():
+        """The model's own location list opens rows only when no resolver / audit data exists; with
+        measured data it may enrich a matched office (by street or name) but never add one — its
+        '(mailing address)' / '(flagship / clinical group)' entries are not places."""
+        if p is None:
+            return
         for loc in p.consolidated_locations or []:
-            r = row(loc.name, loc.address or "")
-            r.setdefault("address", loc.address or "")
+            nk, sk = _norm_name(loc.name), _sk(loc.address or "")
+            if resolver_ran or au.get("profiles"):
+                k = by_street.get(sk) if sk else None
+                if k is None:
+                    same = [x for x in order if x.rsplit("|", 1)[-1] == nk]
+                    k = same[0] if same else None
+                if k is None:
+                    continue
+                r = rows[k]
+            else:
+                r = row(loc.name, loc.address or "")
+                r.setdefault("address", loc.address or "")
             if loc.google_rating is not None:
                 r.setdefault("google_rating", loc.google_rating)
                 r.setdefault("google_count", loc.google_review_count)
-    au = result.profile_audit or {}
+
+    if not (resolver_ran or au.get("profiles")):
+        _llm_rows()                                   # legacy path: the model's list is all there is
     for prof in (au.get("profiles") or []):
         if not prof.get("found"):
             continue
         r = row(prof.get("name") or "", prof.get("address") or "", prof.get("place_id") or "")
         r["audit"] = prof
+        if prof.get("is_anchor"):
+            r["anchor"] = True
         if prof.get("rating") is not None:
             r["google_rating"] = prof.get("rating")
             r["google_count"] = prof.get("review_count")
@@ -425,20 +452,23 @@ def _location_rows(result: AnalysisResult, p: Optional[RankedProvider]) -> list[
             r["google_missing"] = bool(cr.get("google_missing"))
             r["website_missing"] = bool(cr.get("website_missing"))
         if cr.get("is_anchor"):
-            r["anchor"] = True
+            if not any(x.get("anchor") for x in rows.values()) or (anchor_pid and cr.get("place_id") == anchor_pid):
+                r["anchor"] = True
             if cr.get("google_rating") is not None and r.get("google_rating") is None:
                 r["google_rating"] = cr.get("google_rating")
         elif r.get("google_rating") is None and _google_only(cr):
             # The composite found Google alone — show it in the Google column rather than "—".
             r["google_rating"] = cr.get("avg_rating")
             r["google_count"] = cr.get("total_reviews")
-    # The analyzed entity is the anchor row even without a composite
+    if resolver_ran or au.get("profiles"):
+        _llm_rows()                                   # enrich only
+    # The analyzed entity is the anchor row even without a composite: prefer the audited row.
     if p is not None and not any(r.get("anchor") for r in rows.values()):
         want = {_norm_name(p.name), _norm_name(anchor_name)}
-        for k in order:
-            if k.rsplit("|", 1)[-1] in want:
-                rows[k]["anchor"] = True
-                break
+        cands = [k for k in order if k.rsplit("|", 1)[-1] in want]
+        cands.sort(key=lambda k: 0 if rows[k].get("audit") else 1)
+        if cands:
+            rows[cands[0]]["anchor"] = True
     out = [rows[k] for k in order]
     out.sort(key=lambda r: (0 if r.get("anchor") else 1))
     return out
@@ -726,7 +756,8 @@ def _physicians_section(result: AnalysisResult) -> str:
     trs = ""
     for r in rows:
         raw = r["name"]
-        if not any(raw.lower().startswith(t) for t in ("dr.", "pa-", "np ", "rn ", "do ", "md ")):
+        _cred = str((r.get("facts") or {}).get("credential") or (r.get("composite") or {}).get("credential") or r.get("credential") or "").upper().replace(".", "")
+        if not any(raw.lower().startswith(t) for t in ("dr.", "pa-", "np ", "rn ", "do ", "md ")) and (not _cred or any(c in _cred for c in ("MD", "DO", "DPM", "MBBS"))):
             raw = "Dr. " + raw
         tds = [f"<td>{_e(raw)}</td>"]
         if has_sources:

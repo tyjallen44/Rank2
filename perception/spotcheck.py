@@ -134,7 +134,7 @@ def run_openai(query: str) -> Optional[dict]:
     from openai import OpenAI
     client = OpenAI(api_key=key)
     # max_tool_calls bounds spend: one patient question needs a handful of searches, not seven.
-    from openai import RateLimitError
+    from openai import RateLimitError, APIConnectionError, APITimeoutError, InternalServerError
     for attempt in range(_RETRIES + 1):
         try:
             resp = client.responses.create(model=_OPENAI_MODEL, tools=[{"type": "web_search"}],
@@ -149,6 +149,12 @@ def run_openai(query: str) -> Optional[dict]:
                 raise
             wait = _retry_wait(attempt, None)
             print(f"[spotcheck] ChatGPT 429 — retry {attempt + 1}/{_RETRIES} in {wait:.0f}s", flush=True)
+            time.sleep(wait)
+        except (APIConnectionError, APITimeoutError, InternalServerError) as exc:
+            if attempt >= _RETRIES:
+                raise
+            wait = _retry_wait(attempt, None)
+            print(f"[spotcheck] ChatGPT {type(exc).__name__} — retry {attempt + 1}/{_RETRIES} in {wait:.0f}s", flush=True)
             time.sleep(wait)
     text, cites, n_searches = "", [], 0
     for item in getattr(resp, "output", []) or []:
@@ -203,9 +209,18 @@ def run_gemini(query: str) -> Optional[dict]:
                "generationConfig": {"maxOutputTokens": 700}}
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={key}"
     for attempt in range(_RETRIES + 1):
-        with _GEMINI_GATE:
-            resp = httpx.post(url, json=payload, timeout=90)
-        if resp.status_code in (429, 503) and attempt < _RETRIES:
+        try:
+            with _GEMINI_GATE:
+                resp = httpx.post(url, json=payload, timeout=90)
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            # a timeout or dropped connection is as transient as a 503: retry, do not record an error
+            if attempt >= _RETRIES:
+                raise
+            wait = _retry_wait(attempt, None)
+            print(f"[spotcheck] Gemini {type(exc).__name__} — retry {attempt + 1}/{_RETRIES} in {wait:.0f}s", flush=True)
+            time.sleep(wait)
+            continue
+        if resp.status_code in (429, 500, 502, 503, 504) and attempt < _RETRIES:
             wait = _retry_wait(attempt, resp.headers.get("retry-after"))
             print(f"[spotcheck] Gemini {resp.status_code} — retry {attempt + 1}/{_RETRIES} in {wait:.0f}s: {resp.text[:200].replace(chr(10), ' ')}", flush=True)
             time.sleep(wait)

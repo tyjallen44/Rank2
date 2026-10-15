@@ -399,7 +399,7 @@ def collect_platform_data(
             "state":                  p.get("state") or state,
             "entity_type":            p.get("entity_type", "practice"),
             "is_anchor":              bool(p.get("is_anchor", False)),
-            "place_id":               p.get("place_id"),                   # pins this row to ONE office in the Locations table
+            "place_id":               p.get("place_id") or _g_pid,         # pins this row to ONE office in the Locations table
             "address":                p.get("address") or "",
             "sources":                list(p.get("sources") or []),        # location_resolver: website / nppes / google / model
             "google_missing":         bool(p.get("google_missing", False)), # on the website, no Google listing
