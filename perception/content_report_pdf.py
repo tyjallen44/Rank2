@@ -7,6 +7,7 @@ publication-ready content (`draft_content`) is reserved for the remediation
 phase and rendered when present; in the sandbox it's absent.
 """
 from __future__ import annotations
+from html import escape as _esc
 
 import html
 import re
@@ -494,6 +495,10 @@ def _content_body_html(entity_name: str, location: str, findings, report_title: 
         summary = "No content-visibility issues were detected, or sources could not be assessed."
         blocks = '<div class="finding"><div class="fsum">Nothing to detail.</div></div>'
 
+    passed = snap.get("checks_passed") or []
+    if passed:
+        summary += ('<div class="keep-doing" style="margin-top:6px;font-size:8.5pt"><strong>Verified OK — keep doing:</strong> '
+                    + "; ".join(_esc(c.get("summary") or "") for c in passed[:4]) + "</div>")
     urls = ", ".join(snap.get("website_urls", []) or []) or "&mdash;"
     pages = snap.get("pages_crawled", 0)
     sl_section = ""

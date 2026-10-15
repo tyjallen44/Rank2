@@ -149,6 +149,22 @@ def _fallback(result) -> None:
         result.top_recommendation = bullets_to_text(prioritize_first_moves(items))
 
 
+def measured_counts(result) -> dict:
+    """The counts the report itself measured — the only ones the narrative may state as ours."""
+    rows = [r for r in (getattr(result, "practice_composite_rows", None) or []) if not r.get("not_established")]
+    pf = getattr(result, "physician_facts", None) or {}
+    pr = getattr(result, "physician_resolution", None) or {}
+    out = {}
+    if rows:
+        out["locations_verified"] = len(rows)
+    if pf.get("rows"):
+        out["physicians_on_roster"] = len(pf["rows"])
+        out["physicians_registry_found"] = pf.get("registry_found")
+    elif pr.get("total"):
+        out["physicians_on_roster"] = pr["total"]
+    return out
+
+
 _STRUCT_SYSTEM = (
     "You edit healthcare reputation reports for hospital executives. Turn the section you are given "
     "into a one-sentence headline (at most 25 words) that states the main point, followed by 3 to 5 "
@@ -247,6 +263,9 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
         "roadmap_items": roadmap[:12],
         "strengths": list(getattr(p, "key_strengths", None) or [])[:8] if p else [],
         "weaknesses": list(getattr(p, "notable_weaknesses", None) or [])[:8] if p else [],
+        "measured_counts": measured_counts(result),
+        "count_rule": "Use measured_counts for any number of locations or physicians. If the source text states a different figure, "
+                      "attribute it ('the practice describes itself as 100+ providers; we assessed 141') or drop it.",
     }
     if only_assessment:
         material.pop("overview", None); material.pop("verdict", None); material.pop("strengths", None); material.pop("weaknesses", None)

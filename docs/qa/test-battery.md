@@ -4229,3 +4229,22 @@ Commit: names that reached the server already HTML-escaped ('&amp;') were title-
 | F3 | DMOS: "DMOS … - Urbandale" and "Dmos … - West Des Moines – Urbandale" as two rows ("4850 NW 100th St" vs "4850 100th St") | `street_key` skips a leading directional unless it names the street ("East Rd"); brand loses its own city suffix (`strip_city_suffix`) before any "Brand – City" name is synthesized. |
 | F4 | DMOS / OrthoSouth: confirmed-roster (entity graph) rows that are city-only ("West Des Moines, IA, USA"), duplicates of a resolved office, or the anchor itself | `dedupe_roster` applied when a graph roster is read (form run, group / event path) and inside the confirmed-roster merge; the post-run graph write skips the anchor and duplicate profiles and stores the address. |
 | F5 | DMOS: "Dr. Den Hartog — no NPI" beside "Taylor Den Hartog" | Registry names join a website name that is the same person (`same_person`) instead of opening a second row; one-word names never merge. |
+
+## CLEANUP-P2 — report-quality cleanup, Phase 2 (2026-10-15; commits S1 linkage, S2 coverage, S3 evidence/org name, P1 presentation)
+
+Offline tests: `tests/test_physician_facts.py` (+6), `tests/test_physician_resolver.py` (+3), `tests/test_phase2_inputs.py` (9). NEEDS BROWSER TESTING (re-run the four fixtures after deploy; compare with `scripts/fixture_replay.py`).
+
+| # | Issue | Acceptance |
+|---|---|---|
+| S1-2.1 | Linkage 0% | DMOS / OrthoSouth re-run: linkage measured against LOCATION + MAILING + secondary practiceLocations + the group's NPI-2 addresses; "Linked to a confirmed location" is a real percentage or "not measurable (…)" — never 0 of 33 from thin inputs. A known NPI not found by number → "not found", never a same-name stranger. Physicians whose page was not read show "—" (unknown) for certification, not ✗. |
+| S2-2.2 | Thin directory | IBJI re-run: physicians found from sitemap bio slugs (log "Sitemap lists N physician bio pages"); `physician_resolution.directory_coverage` present; no "not on site" tags when coverage < 70%; bio pages rendered when script-built (cert stated count rises). |
+| S3-2.7 | Blame | Evidence block contains "=== Measurement limits …" lines when applicable; Areas for Improvement no longer cite excluded listings, crawl limits or ambiguous registry matches. |
+| S3-2.3 | Org name | IBJI: log "Organization: Illinois Bone & Joint Institute (the analyzed listing 'IBJI Doctors' Office - Chicago-Avondale' is one office of it)"; report title, prompt subject, NPPES cascade, Wikidata/Wikipedia lookup and drafts use the organization name. |
+| P1-2.4 | Casing | Search box no longer uppercases; "OrthoSouth", "DMOS", "IBJI" keep their casing from the Google pick; shouted input becomes "Illinois Bone and Joint Institute". |
+| P1-2.5 | Counts | Executive summary location / physician figures equal the cover tiles; any other figure is attributed to its source. |
+| P1-2.6 | Pass as finding | "Google Business Profiles verified: all N link…" appears as "Verified OK — keep doing" under the findings summary, with no CIK number or draft. |
+| P1-2.8 | Elsewhere | "physician Google profiles pointing at an address that is not one of the practice's offices" only when ≥80% of offices have an address; the group's NPI-2 addresses count as offices. |
+| P1-conf | Evidence level | "Evidence: Medium · … provider directory read was thin (4 of 100 …)" when coverage is thin; High needs credible coverage. Cover tile = physicians on roster. "Analyzed listing: 4.3★ (758 reviews)" + "All locations: 4.8★ across 7,884 reviews at 10 Google profiles" replace "Google front door" for practices. |
+| R1 | Regression | Hospital / network / community untouched; pytest 496 pass / same 15 pre-existing failures. |
+
+**[SCORE] prediction for the re-run:** DMOS and OrthoSouth lose the "board certification unverifiable" ceiling if their bio pages read (expect 74 → 76–80 for OrthoSouth, DMOS 74 → 72–78 depending on the cert read); IBJI Credentials up (69 → 72–76); GCO ±2.

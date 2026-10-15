@@ -137,7 +137,7 @@ def _cover(result: AnalysisResult, p: Optional[RankedProvider], cfg: dict, logo_
     if ed["rubric"] == "practice":
         tiles.append((str(max(1, len(locs))), "Locations<br>Assessed"))
         pf = result.physician_facts or {}
-        n_phys = pf.get("checked") or len(_physician_rows(result))
+        n_phys = len(pf.get("rows") or []) or len(_physician_rows(result))
         if n_phys:
             tiles.append((str(n_phys), "Physicians<br>Checked"))
         else:
@@ -833,7 +833,7 @@ def _phys_sources_cell(f: dict) -> str:
 
 # ── Evidence behind the score ─────────────────────────────────────────────────
 
-def evidence_section_html(p: Optional[RankedProvider], heading: bool = True) -> str:
+def evidence_section_html(p: Optional[RankedProvider], heading: bool = True, result=None) -> str:
     """Public & social ratings, patient voice, quality & accreditation, strengths / areas
     for improvement and 'best for' — as short labelled bullets. Hospital-only signals
     (Leapfrog, CMS stars) only appear for hospital providers. Used by the Deep Diagnostic
@@ -846,8 +846,17 @@ def evidence_section_html(p: Optional[RankedProvider], heading: bool = True) -> 
     fp = p.google_footprint
     sa = fp.system_aggregate
     if fd.verified and fd.rating is not None:
-        label = "Brand / parent Google listing" if sa.available else "Google front door"
-        items.append(f"<strong>{label}:</strong> {fd.rating:.1f}★{_vflag('verified')}")
+        label = "Brand / parent Google listing" if sa.available else ("Analyzed listing" if is_practice else "Google front door")
+        items.append(f"<strong>{label}:</strong> {fd.rating:.1f}★{_vflag('verified')}" + (f' <span style="color:#7a8a9a">({fd.count:,} reviews)</span>' if is_practice and fd.count else ""))
+    if is_practice and result is not None:
+        # The organization's rating is the roster, not one office (2.3): review-weighted across verified profiles.
+        profs = [x for x in ((getattr(result, "profile_audit", None) or {}).get("profiles") or []) if x.get("found") and x.get("rating") is not None and x.get("review_count")]
+        if len(profs) > 1:
+            tot = sum(int(x["review_count"]) for x in profs)
+            avg = sum(float(x["rating"]) * int(x["review_count"]) for x in profs) / tot if tot else None
+            if avg is not None:
+                items.append(f"<strong>All locations:</strong> {avg:.1f}★ across {tot:,} reviews at {len(profs)} Google profiles "
+                             f'<span style="color:#7a8a9a">(review-count-weighted, verified)</span>')
     if sa.available:
         diff = ""
         if fd.verified and fd.rating and sa.rating:
@@ -940,7 +949,7 @@ def entity_summary_html(result: AnalysisResult) -> str:
 .cmp-entity .facility-table th{background:#0F4146;color:#fff;padding:6px 8px;text-align:left;font-size:7.5pt}
 .cmp-entity .facility-table td{padding:5px 8px;border-bottom:1px solid #dde3ea;vertical-align:middle}
 """
-    body = (_reputation_section(result, p, ed, cfg).replace("<h2>AI Visibility</h2>", "") + evidence_section_html(p)
+    body = (_reputation_section(result, p, ed, cfg).replace("<h2>AI Visibility</h2>", "") + evidence_section_html(p, result=result)
             + _locations_section(result, p, ed) + _physicians_section(result))
     return f'<style>{css}</style><div class="cmp-entity">{body}</div>'
 
@@ -1041,7 +1050,7 @@ def build_deep_html(result: AnalysisResult, brand_cfg: dict, content_findings=No
     locations = _locations_section(result, p, ed)
     physicians = _physicians_section(result)
     spot = _spotcheck_section(result)
-    evidence = evidence_section_html(p)
+    evidence = evidence_section_html(p, result=result)
 
     # Roadmap, or the embedded Content Report (practice combined), or the keys box (hospital).
     extra_css = ""

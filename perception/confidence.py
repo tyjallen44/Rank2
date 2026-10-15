@@ -60,8 +60,19 @@ def score_confidence(result) -> Optional[dict]:
     if getattr(result, "rubric_note", ""):
         reasons.append("hospital rubric enforced (analysis read the organization as a practice/clinic network — consider re-running as a practice or community health center)"); penalties += 1
     pf = getattr(result, "physician_facts", None) or {}
+    pr = getattr(result, "physician_resolution", None) or {}
     if pf.get("status") == "measured":
-        reasons.append("physician facts verified from NPI registry + site")
+        n_rows = len(pf.get("rows") or [])
+        unread = pf.get("cert_unread") or 0
+        cov = pr.get("directory_coverage") or {}
+        if cov.get("credible") is False:
+            reasons.append(f"provider directory read was thin ({cov.get('website')} of {cov.get('registry')} registry physicians found on the site)"); penalties += 1
+        elif n_rows and unread / n_rows > 0.5:
+            reasons.append(f"bio pages read for only {n_rows - unread} of {n_rows} physicians"); penalties += 1
+        else:
+            reasons.append("physician facts verified from NPI registry + site")
+        if pf.get("linkage_pct") is None and pf.get("linkage_note"):
+            reasons.append("physician linkage not measurable (" + pf["linkage_note"].split(" (")[0] + ")")
     wf = getattr(result, "website_facts", None) or {}
     if wf.get("status") == "unreachable":
         reasons.append("website unreachable — machine-readability unverified"); penalties += 1

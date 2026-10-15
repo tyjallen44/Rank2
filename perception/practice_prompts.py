@@ -587,8 +587,9 @@ def build_practice_prompt(
         elif location_roster:
             loc_lines = "\n".join(f"  - {loc}" for loc in location_roster)
             aggregate_block = (
-                f"**Multi-location aggregation enabled.** The following confirmed locations "
-                f"operate under {entity_name}:\n{loc_lines}\n\n"
+                f"**Multi-location aggregation enabled.** The following {len(location_roster)} confirmed locations "
+                f"operate under {entity_name} (this measured count — not a figure from the website or press — is the "
+                f"number of locations to state; attribute any other figure to its source):\n{loc_lines}\n\n"
                 "Include ALL of the above locations in this report. List each in "
                 "consolidated_locations with its individual Google rating, review count, "
                 "and address. Tier scores must reflect the full aggregate across ALL "

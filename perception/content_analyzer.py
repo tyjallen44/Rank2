@@ -905,6 +905,10 @@ def analyze_content(entity_name: str, website_urls: list, city: str = "", state:
     except Exception:
         partial = True
 
+    # Passing checks are strengths, not findings: no CIK number, no action plan (2.6).
+    passed = [f for f in raw if f.get("category") == "ok"]
+    raw = [f for f in raw if f.get("category") != "ok"]
+    snapshot["checks_passed"] = [{"platform": f.get("platform"), "summary": f.get("teaser_summary"), "detail": f.get("current_state")} for f in passed]
     # Assign stable IDs, severity-sort (high→low), wrap in models.
     sev_rank = {"high": 0, "medium": 1, "low": 2}
     raw.sort(key=lambda f: sev_rank.get(f.get("severity", "low"), 3))

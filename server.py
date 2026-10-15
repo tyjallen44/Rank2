@@ -59,12 +59,23 @@ _PRESERVE_UPPERCASE: frozenset[str] = frozenset({
 })
 
 
+_SMALL_WORDS = {"and", "of", "the", "for", "at", "in", "on", "to", "by", "&"}
+
+
 def _smart_title(text: str) -> str:
-    """Title-case text while preserving known all-caps acronyms and state codes."""
-    return " ".join(
-        w.upper() if w.upper() in _PRESERVE_UPPERCASE else w.capitalize()
-        for w in text.title().split()
-    )
+    """Title-case ALL-CAPS / all-lower text while preserving known acronyms and state codes;
+    small words ('and', 'of') stay lower except at the start; short all-consonant tokens
+    ('DMOS', 'IBJI') are treated as acronyms."""
+    out = []
+    for i, w in enumerate(text.title().split()):
+        u = w.upper()
+        if u in _PRESERVE_UPPERCASE:
+            out.append(u)
+        elif i and w.lower() in _SMALL_WORDS:
+            out.append(w.lower())
+        else:
+            out.append(w.capitalize() if "'" not in w else w)
+    return " ".join(out)
 
 
 def _normalize_input(text: str | None) -> str | None:
@@ -73,7 +84,13 @@ def _normalize_input(text: str | None) -> str | None:
     if not text:
         return text
     import html as _html
-    return _smart_title(_html.unescape(text.strip()))
+    t = _html.unescape(text.strip())
+    # Only shouted or whispered input is re-cased; a name typed or picked with its own casing
+    # ("OrthoSouth", "DMOS Orthopaedic Centers", "IBJI") is kept exactly as given (2.4).
+    letters = re.sub(r"[^A-Za-z]", "", t)
+    if letters and not (letters.isupper() or letters.islower()):
+        return t
+    return _smart_title(t)
 
 app = FastAPI(title="Pulse", docs_url=None, redoc_url=None)
 

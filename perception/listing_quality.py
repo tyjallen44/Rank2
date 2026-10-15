@@ -99,8 +99,13 @@ def audit(*, offices: list[dict], profiles: list[dict], nppes: list[dict], physi
 
     phys_with = [p for p in physicians if p.get("google_address")]
     office_addrs = [r["google_address"] or r["website_address"] for r in rows if (r["google_address"] or r["website_address"])]
+    office_addrs += [n["address"] for n in nppes if n.get("address")]          # the group's registry addresses are offices too
     at_office = [p for p in phys_with if any(same_office(p["google_address"], a) for a in office_addrs)]
-    elsewhere = [p.get("name") for p in phys_with if p not in at_office]
+    # "Elsewhere" is a finding only when the office set is believed complete: at least 80% of the
+    # roster's offices carry an address we can compare against (2.8).
+    office_cov = (len([r for r in rows if r["google_address"] or r["website_address"]]) / len(rows)) if rows else 0.0
+    credible = office_cov >= 0.8 and len(office_addrs) >= 2
+    elsewhere = [p.get("name") for p in phys_with if p not in at_office] if credible else []
 
     return {
         "offices": rows,
@@ -115,7 +120,8 @@ def audit(*, offices: list[dict], profiles: list[dict], nppes: list[dict], physi
         "status": {"closed": closed},
         "duplicates": list(duplicates or []),
         "recency": {"compared": len(rec_cmp), "fresh": len(rec_cmp) - len(stale), "stale": stale, "no_reviews": no_reviews, "days": STALE_REVIEW_DAYS},
-        "physicians": {"total": len(physicians), "with_google": len(phys_with), "at_office": len(at_office), "elsewhere": elsewhere},
+        "physicians": {"total": len(physicians), "with_google": len(phys_with), "at_office": len(at_office), "elsewhere": elsewhere,
+                       "office_set_credible": credible},
     }
 
 
