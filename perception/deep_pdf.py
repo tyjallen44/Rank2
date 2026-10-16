@@ -232,9 +232,45 @@ def _group_cover_line(result: AnalysisResult) -> str:
         return ""
     from .groups import ordinal
     txt = (f"Prospect for {_e(g['group_name'])}" if g.get("prospect") else f"Member of {_e(g['group_name'])}")
-    if g.get("ready") and g.get("rank") and g.get("total"):
+    if g.get("ready") and g.get("rank") and g.get("total") and g.get("show_rank", True):
         txt += f" &nbsp;·&nbsp; {'would rank ' if g.get('prospect') else ''}{ordinal(int(g['rank']))} of {g['total']} &nbsp;·&nbsp; group median {g.get('median')}"
-    return f'<div style="font-size:8pt;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:-24px 0 28px">{txt}</div>'
+        if g.get("frozen") and g.get("cohort_date"):
+            txt += f" &nbsp;·&nbsp; cohort as of {_e(g['cohort_date'])}"
+    return (f'<div style="font-size:8pt;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:-24px 0 28px">{txt}</div>'
+            + _attribution_cover_line(result))
+
+
+def _attribution_cover_line(result: AnalysisResult) -> str:
+    """4.6: 'Provided to <Association> members by the RLDatix Patient Experience & Growth team'."""
+    a = (getattr(result, "group_context", None) or {}).get("attribution") or {}
+    if not a or not a.get("cover_line", True):
+        return ""
+    logo = (f'<img src="{_e(a["logo_url"])}" alt="" style="height:26px;width:auto;vertical-align:middle;margin-right:10px;'
+            f'background:#fff;border-radius:3px;padding:2px 4px">' if str(a.get("logo_url") or "").startswith("http") else "")
+    return (f'<div style="font-size:8.5pt;color:rgba(255,255,255,0.8);margin:-16px 0 28px">{logo}Provided to '
+            f'<strong>{_e(a.get("association") or "")}</strong> members by the {_e(a.get("team") or "RLDatix Patient Experience & Growth")} team</div>')
+
+
+def path_forward_section(result: AnalysisResult, primary: str = _TEAL) -> str:
+    """4.6: the 'Your Path Forward' slot — after the drafts / action plans and before Data
+    Limitations. Printed for association distributions with attribution on: the offer line, the
+    association's tracked link and its QR code. (The PX&G page design itself arrives as a separate
+    spec and will fill this same slot.)"""
+    a = (getattr(result, "group_context", None) or {}).get("attribution") or {}
+    if not a:
+        return ""
+    from .qr import qr_svg_data_uri
+    url = str(a.get("tracked_url") or "").strip()
+    qr = qr_svg_data_uri(url) if url else ""
+    link = (f'<div style="margin-top:10px;font-size:9pt"><a href="{_e(url)}" style="color:#2e7d9a;text-decoration:none">{_e(url)}</a></div>' if url else "")
+    qr_html = f'<img src="{qr}" alt="QR code" style="width:92px;height:92px;flex-shrink:0">' if qr else ""
+    return (f'<div class="path-forward" style="page-break-inside:avoid;margin:26px 0 8px;padding:18px 22px;border:1.5px solid {primary};border-radius:8px;'
+            f'display:flex;gap:20px;align-items:center">'
+            f'<div style="flex:1"><h2 style="margin:0 0 6px">Your Path Forward</h2>'
+            f'<p style="margin:0;font-size:9.5pt;line-height:1.55;color:#333">Action plans in this report can be implemented by your team, or by ours &mdash; '
+            f'the {_e(a.get("team") or "RLDatix Patient Experience & Growth")} team at RLDatix is glad to help. '
+            f'Write to <a href="mailto:{_e(a.get("email") or "")}" style="color:#2e7d9a;text-decoration:none">{_e(a.get("email") or "")}</a>'
+            f'{" or scan the code" if qr else ""}.</p>{link}</div>{qr_html}</div>')
 
 
 def _group_summary_bullet(result: AnalysisResult) -> Optional[str]:
@@ -242,16 +278,17 @@ def _group_summary_bullet(result: AnalysisResult) -> Optional[str]:
     if not g.get("group_name"):
         return None
     from .groups import ordinal, GROUP_MIN
-    if g.get("ready") and g.get("rank") and g.get("total"):
+    if g.get("ready") and g.get("rank") and g.get("total") and g.get("show_rank", True):
         score = (result.rankings[0].ai_visibility_score if result.rankings else None)
         rel = ""
         if score is not None and g.get("median") is not None:
             diff = int(score) - int(g["median"])
             rel = (f", {abs(diff)} points {'above' if diff > 0 else 'below'} the group median of {g['median']}" if diff
                    else f", at the group median of {g['median']}")
+        when = f" (cohort frozen {g['cohort_date']})" if g.get("frozen") and g.get("cohort_date") else ""
         if g.get("prospect"):
-            return f"Would rank {ordinal(int(g['rank']))} of {g['total']} members of {g['group_name']}{rel}."
-        return f"Ranks {ordinal(int(g['rank']))} of {g['total']} in {g['group_name']}{rel}."
+            return f"Would rank {ordinal(int(g['rank']))} of {g['total']} members of {g['group_name']}{rel}{when}."
+        return f"Ranks {ordinal(int(g['rank']))} of {g['total']} in {g['group_name']}{rel}{when}."
     n = int(g.get("members") or 0)
     lead = f"Evaluated against {g['group_name']}" if g.get("prospect") else f"Part of {g['group_name']}"
     return f"{lead} ({n} member{'s' if n != 1 else ''}); group benchmarks appear once it reaches {GROUP_MIN} members."
@@ -564,6 +601,20 @@ def _tick(v) -> str:
     return '<span style="color:#b0b8c0">—</span>'
 
 
+def location_reconciliation_line(rows: list[dict], rubric: str = "practice") -> str:
+    """4.2: one sentence every count in the report agrees with — 'N locations confirmed (W on the
+    website, G with a Google profile, B both)'. The cover tile shows the same N."""
+    n = len(rows)
+    w = sum(1 for r in rows if "website" in (r.get("sources") or []))
+    g = sum(1 for r in rows if "google" in (r.get("sources") or []) or (r.get("composite") or {}).get("google_count"))
+    b = sum(1 for r in rows if "website" in (r.get("sources") or []) and ("google" in (r.get("sources") or []) or (r.get("composite") or {}).get("google_count")))
+    what = "practice" if rubric == "practice" else "organization"
+    if not any(r.get("sources") for r in rows):
+        return f"{n} location{'s' if n != 1 else ''} confirmed for this {what}."
+    return (f"{n} location{'s' if n != 1 else ''} confirmed for this {what} ({w} on the website, {g} with a Google profile, {b} both)."
+            if n else f"No location confirmed for this {what}.")
+
+
 def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: dict) -> str:
     rows = _location_rows(result, p)
     if not rows:
@@ -573,7 +624,7 @@ def _locations_section(result: AnalysisResult, p: Optional[RankedProvider], ed: 
                    and not _google_only(r["composite"]) and not r["composite"].get("is_anchor") for r in rows)
     au = result.profile_audit or {}
     sm = au.get("summary") or {}
-    intro = f"{len(rows)} location{'s' if len(rows) != 1 else ''} confirmed for this {'practice' if ed['rubric'] == 'practice' else 'organization'}; the highlighted row is the analyzed entity."
+    intro = location_reconciliation_line(rows, ed["rubric"]) + " The highlighted row is the analyzed entity."
     lr = getattr(result, "location_resolution", None) or {}
     has_sources = any(r.get("sources") for r in rows)
     if has_sources and not lr.get("cached") and lr.get("website"):
@@ -1072,9 +1123,12 @@ def build_deep_html(result: AnalysisResult, brand_cfg: dict, content_findings=No
         if content_keys is not None:
             tail += _content_keys_section(content_keys)
 
+    # 4.6: 'Your Path Forward' sits after the drafts / action plans and before Data Limitations.
+    tail += path_forward_section(result, primary)
     disclaimer = f'<div class="disclaimer"><strong>Data Limitations &amp; Disclaimer</strong><br>{_e(result.disclaimer)}</div>' if result.disclaimer else ""
     appendix = _sources_box_html(result) + _methodology_box_html(
-        [_e(l) for l, _ in _pillars(p, result)], edition="practice" if ed["rubric"] == "practice" else "hospital")
+        [_e(l) for l, _ in _pillars(p, result)], edition="practice" if ed["rubric"] == "practice" else "hospital",
+        attribution=(getattr(result, "group_context", None) or {}).get("attribution"))
 
     checklist = _checklist_section(result, content_findings if content_findings is not None else content_keys)
     gated = f"{first_moves}{locations}{physicians}{spot}{evidence}{checklist}{tail}"

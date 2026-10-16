@@ -125,8 +125,20 @@ def audit(*, offices: list[dict], profiles: list[dict], nppes: list[dict], physi
     }
 
 
+def _uniq(xs: list) -> list:
+    """Display lists never repeat a name (4.3): case-insensitive, first spelling kept."""
+    seen, out = set(), []
+    for x in xs or []:
+        k = str(x).strip().lower() if not isinstance(x, dict) else str(x.get("name") or "").strip().lower()
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        out.append(x)
+    return out
+
+
 def _names(xs: list, n: int = 3) -> str:
-    xs = [str(x) for x in xs if x]
+    xs = [str(x) for x in _uniq(xs) if x]
     return ", ".join(xs[:n]) + (f" and {len(xs) - n} more" if len(xs) > n else "")
 
 
@@ -134,6 +146,9 @@ def issues(q: dict) -> list[str]:
     """Short plain sentences for the report and the group page; empty when everything checks out."""
     out: list[str] = []
     ph, ad, npi, cat, st, dup, rec, phy = (q.get(k) or {} for k in ("phone", "address", "npi", "category", "status", "duplicates", "recency", "physicians"))
+    for _d, _k in ((ad, "mismatch"), (npi, "missing"), (cat, "generic"), (st, "closed"), (rec, "stale"), (rec, "no_reviews"), (phy, "elsewhere")):
+        if isinstance(_d, dict) and isinstance(_d.get(_k), list):
+            _d[_k] = _uniq(_d[_k])            # one entry per office in every list and count (4.3)
     if ph.get("mismatch"):
         out.append(f"{len(ph['mismatch'])} office{'s' if len(ph['mismatch']) != 1 else ''} where the Google phone differs from the website: "
                    + "; ".join(f"{m['name']} (site {m['website']}, Google {m['google']})" for m in ph["mismatch"][:3]) + (f" and {len(ph['mismatch']) - 3} more" if len(ph["mismatch"]) > 3 else "") + ".")

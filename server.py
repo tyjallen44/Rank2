@@ -1230,6 +1230,8 @@ class GroupRequest(BaseModel):
     archived: Optional[bool] = None
     default_specialty: Optional[str] = None   # prefilled on the Deep Diagnostic form for this group
     monthly_reports: Optional[bool] = None    # Deep Diagnostic + Competitor Rankings + Trend for every member on the 1st, emailed
+    show_peer_rank: Optional[bool] = None     # 4.5: print rank-of-N / median on members' reports (group name always prints)
+    attribution: Optional[dict] = None        # 4.6: {enabled, association, team, email, cover_line, logo_url, tracked_url}
 
 
 class GroupRunsRequest(BaseModel):
@@ -1280,6 +1282,7 @@ async def groups_update(group_id: str, req: GroupRequest, payload: dict = Depend
     from perception.specialties import normalize_specialty
     fields = {"name": (req.name or "").strip() or None, "description": req.description, "type_hint": req.type_hint,
               "show_on_pdf": req.show_on_pdf, "archived": req.archived, "monthly_reports": req.monthly_reports,
+              "show_peer_rank": req.show_peer_rank, "attribution": req.attribution,
               "default_specialty": (normalize_specialty(req.default_specialty) if req.default_specialty is not None else None)}
     if (req.default_specialty or "").strip() and (req.type_hint or "mixed") == "mixed":
         fields["type_hint"] = "practice"      # a default specialty means a practice group
@@ -1394,7 +1397,29 @@ async def groups_detail(group_id: str, payload: dict = Depends(get_current_user_
         g = {**g, "monthly_cost_usd": event_cost(g.get("monthly_last_event_id") or "")}
     except Exception:
         pass
-    return {"group": g, "members": ms, "benchmark": benchmark(group_id, ms=ms), "running": running, "delivery": _delivery_summary(ms)}
+    cohort = None
+    try:
+        from perception.groups import latest_cohort
+        c = latest_cohort(group_id)
+        if c:
+            cohort = {k: c.get(k) for k in ("id", "taken_at", "taken_by", "event_id", "n", "median", "q1", "q3")}
+    except Exception:
+        cohort = None
+    return {"group": g, "members": ms, "benchmark": benchmark(group_id, ms=ms), "running": running, "delivery": _delivery_summary(ms), "cohort": cohort}
+
+
+@app.post("/api/groups/{group_id}/cohort/freeze")
+async def groups_cohort_freeze(group_id: str, payload: dict = Depends(get_current_user_payload)):
+    """4.5: freeze the peer cohort now (members + scores). Every member report rendered from here on
+    compares against this snapshot until the next freeze; the monthly set freezes one automatically."""
+    from perception.groups import snapshot_cohort
+    _group_visible(payload, group_id)
+    if payload.get("role") != "admin":
+        raise HTTPException(403, "Only an administrator can freeze the cohort")
+    c = snapshot_cohort(group_id, taken_by=payload.get("email") or payload.get("role") or "")
+    if not c:
+        raise HTTPException(400, "No scored members to freeze")
+    return {k: c.get(k) for k in ("id", "taken_at", "taken_by", "n", "median", "q1", "q3")}
 
 
 @app.get("/api/groups/{group_id}/member")
@@ -6291,6 +6316,11 @@ async def _start_monthly_run(g: dict, started_by: str, brand: str = "original") 
         raise
     ms = members(g["id"])
     event_id = str(uuid.uuid4())
+    try:
+        from perception.groups import snapshot_cohort
+        snapshot_cohort(g["id"], taken_by=started_by, event_id=event_id, ms=ms)   # 4.5: one cohort per distribution
+    except Exception:
+        pass
     rows = monthly_entities(g, ms, event_id)
     if not rows:
         update_group(g["id"], monthly_last_status="no members to run")

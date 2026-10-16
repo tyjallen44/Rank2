@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir \
     "uvicorn[standard]>=0.29.0" \
     "python-multipart>=0.0.9" \
     "anthropic>=0.50" \
+    "segno>=1.6" \
     "openai>=1.0" \
     "duckdb>=0.10" \
     "psycopg[binary]>=3.1" \

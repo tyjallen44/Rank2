@@ -307,7 +307,7 @@ def render_content_deep_dive(result: AnalysisResult, pdf_path: Path, findings,
             margin={"top": "0", "bottom": "0.6in", "left": "0", "right": "0"},
             print_background=True, display_header_footer=True,
             header_template="<span></span>",
-            footer_template=_report_footer(_cached_lbl),
+            footer_template=_report_footer(_cached_lbl, _attribution_of(result)),
         )
         browser.close()
 
@@ -342,7 +342,7 @@ def render_pdf(result: AnalysisResult, pdf_path: Path, brand: str = "original") 
             print_background=True,
             display_header_footer=True,
             header_template="<span></span>",
-            footer_template=_report_footer(_cached_lbl),
+            footer_template=_report_footer(_cached_lbl, _attribution_of(result)),
         )
         browser.close()
 
@@ -363,7 +363,7 @@ def render_practice_combined(result: AnalysisResult, findings, pdf_path,
     items = [f.model_dump() if hasattr(f, "model_dump") else f
              for f in (getattr(findings, "findings", []) or [])]
     _cached_lbl = _fmt_cached(getattr(result, "data_collected_at", None) or result.generated_at)
-    _footer = _report_footer(_cached_lbl)
+    _footer = _report_footer(_cached_lbl, _attribution_of(result))
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -412,11 +412,23 @@ def _fmt_cached(gen) -> str:
         return ""
 
 
-def _report_footer(data_label: str) -> str:
-    """Playwright footer shared by every report: prepared-by, data date, page x of y."""
+def _attribution_of(result) -> Optional[dict]:
+    """The association attribution block on a run's group context (4.6), or None."""
+    return (getattr(result, "group_context", None) or {}).get("attribution") or None
+
+
+def _report_footer(data_label: str, attribution: Optional[dict] = None) -> str:
+    """Playwright footer shared by every report: prepared-by, data date, page x of y. With an
+    association attribution: 'Prepared by PulseAI | RLDatix Patient Experience & Growth · <email> · Confidential'."""
+    if attribution:
+        team = (attribution.get("team") or "RLDatix Patient Experience & Growth").replace("RLDatix ", "", 1)
+        email = attribution.get("email") or ""
+        prepared = (f'Prepared by PulseAI | RLDatix {_e(team)}' + (f' &nbsp;&middot;&nbsp; {_e(email)}' if email else "") + ' &nbsp;&middot;&nbsp; Confidential')
+    else:
+        prepared = 'Prepared by PulseAI | RLDatix &nbsp;&mdash;&nbsp; Confidential'
     return ('<div style="width:100%;font-family:Arial,Helvetica,sans-serif;font-size:8px;color:#8a9aaa;'
             'display:flex;justify-content:space-between;align-items:center;padding:0 48px 10px;box-sizing:border-box">'
-            '<span style="letter-spacing:0.05em">Prepared by PulseAI | RLDatix &nbsp;&mdash;&nbsp; Confidential</span>'
+            f'<span style="letter-spacing:0.05em">{prepared}</span>'
             f'<span>{data_label}</span>'
             '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>')
 
@@ -424,7 +436,7 @@ def _report_footer(data_label: str) -> str:
 _METHODOLOGY_URL = "careclimb.com/methodology"
 
 
-def _methodology_box_html(pillars: list[str], n_label: str = "four pillars", edition: str = "hospital") -> str:
+def _methodology_box_html(pillars: list[str], n_label: str = "four pillars", edition: str = "hospital", attribution: Optional[dict] = None) -> str:
     """Compact methodology summary + link to the full public /methodology page. One text for every
     report type (edition tailors two sentences); the full rubric lives online."""
     T, S, BD, TXT, ALT = "#0F4146", "#177B6E", "#d0e4e8", "#3a5a60", "#f8fbfa"
@@ -471,7 +483,9 @@ def _methodology_box_html(pillars: list[str], n_label: str = "four pillars", edi
             "analyses refresh details but never add or remove locations on their own.")
         + f'<p style="margin:0">The complete scoring rubric, data sources and question sets are published at '
         f'<a href="https://{_METHODOLOGY_URL}" style="color:{S};font-weight:700;text-decoration:none">{_METHODOLOGY_URL}</a>.</p>'
-        f'</div>'
+        + (p("Who does the work.", "Action plans can be implemented by your team, or by ours &mdash; the "
+             + _e((attribution or {}).get("team") or "RLDatix Patient Experience & Growth") + " team at RLDatix is glad to help.") if attribution else "")
+        + '</div>'
     )
 
 
@@ -825,7 +839,8 @@ def _spotcheck_section(result: AnalysisResult) -> str:
         f'<td style="text-align:center">{("#" + str(a["avg_rank"])) if a.get("avg_rank") else "—"}</td>'
         f'<td style="text-align:center">{"yes" if a.get("direct_ok") else "no"}</td></tr>'
         for a in sc.get("per_assistant") or [])
-    comps = ", ".join(f'{_e(c["name"])} ({c["count"]})' for c in (sc.get("top_competitors") or [])[:5]) or "—"
+    from .spotcheck import merge_competitors
+    comps = ", ".join(f'{_e(c["name"])} ({c["count"]})' for c in merge_competitors(sc.get("top_competitors") or [])[:5]) or "—"
     doms = ", ".join((f'<strong>{_e(d["domain"])}</strong>' if d.get("ours") else _e(d["domain"])) + f' ({d["count"]})'
                      for d in (sc.get("cited_domains") or [])[:8]) or "—"
     n, m = sc.get("unprompted_asked") or 0, sc.get("unprompted_mentioned") or 0
@@ -2754,7 +2769,7 @@ def render_comparison_pdf(
             print_background=True,
             display_header_footer=True,
             header_template="<span></span>",
-            footer_template=_report_footer(_cached_lbl),
+            footer_template=_report_footer(_cached_lbl, _attribution_of(result_a)),
         )
         browser.close()
 

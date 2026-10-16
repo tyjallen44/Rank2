@@ -8090,6 +8090,7 @@ async function openGroupPage(id, highlightRunId) {
   catch (e) { host.innerHTML = `<div class="err">${_learnEsc(e.message)}</div>`; return; }
   if (_groupOpenId !== id) return;   // the user moved on while this loaded
   const g = d.group, b = d.benchmark, ms = d.members, running = d.running || [];
+  const _grpCohort = d.cohort || null;
   const dv = d.delivery || { flagged: 0, fix: 0, by_flag: {} };
   _groupMembersById = Object.fromEntries(ms.map(m => [m.run_id, m]));
   if (_role === 'admin' && !(_adminCatalog.presets || []).length) { try { const rc = await api('/api/admin/access-catalog'); if (rc.ok) _adminCatalog = await rc.json(); } catch (e) {} }
@@ -8130,6 +8131,7 @@ async function openGroupPage(id, highlightRunId) {
         ${cell('Median', b.median ?? '—', 'The middle Pulse Score of the members; prospects are left out')}
         ${b.q1 != null ? cell('Quartiles', `<span style="font-size:14px">${b.q1} / ${b.median} / ${b.q3}</span>`, 'First quartile / median / third quartile of the members\' Pulse Scores') : ''}
         ${cell('Benchmark on reports', `<span style="font-size:14px">${b.ready && g.show_on_pdf ? 'on' : (g.show_on_pdf ? `after ${Math.max(0, (b.min_members || 10) - (b.scored || 0))} more` : 'off')}</span>`, 'Whether each member\'s PDF prints its rank, the group size and the group median (needs 10 scored organizations and the switch on — Manage ▾)', !dist)}
+        ${cell('Cohort', `<span style="font-size:14px">${_grpCohort ? `frozen ${_grpCohort.taken_at} · ${_grpCohort.n} · median ${_grpCohort.median}` : 'live'}</span>`, 'Frozen: every member report compares against the snapshot (same N, median and date) until the next freeze — the monthly set freezes one automatically; Manage ▾ → Freeze the peer cohort now. Live: each report uses the members as they stand when it renders.', !dist)}
         ${dist}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:9px;padding-top:9px;border-top:1px solid var(--border)">
@@ -8195,6 +8197,7 @@ async function openGroupPage(id, highlightRunId) {
     manage.push(['✎ Edit details', `groupShowEdit('${g.id}')`]);
     manage.push([g.show_on_pdf ? 'Hide benchmark on reports' : 'Show benchmark on reports', `groupTogglePdf('${g.id}', ${g.show_on_pdf ? 'false' : 'true'})`]);
   }
+  if (_role === 'admin') manage.push(['Freeze the peer cohort now', `groupFreezeCohort('${g.id}')`]);
   if (_role === 'admin') manage.push(['Run the monthly set now', `groupMonthlyRunNow('${g.id}')`]);
   if (canEdit) manage.push(['<span style="color:var(--red)">Archive group</span>', `groupArchive('${g.id}')`]);
   if (_role === 'admin') manage.push(['<span style="color:var(--red)">Delete group</span>', `groupDelete('${g.id}', ${_jsq(g.name)}, ${ms.length})`]);
@@ -8229,6 +8232,15 @@ async function openGroupPage(id, highlightRunId) {
       ${_role === 'admin' ? `<div class="fg"><label class="fl">Visible to accounts on preset <span style="color:var(--muted);font-weight:400">(blank = unrestricted users only)</span></label>
         <select id="ge-preset" class="fi" style="width:auto;min-width:260px"><option value="">— none —</option>${(_adminCatalog.presets || []).map(p => `<option value="${p.id}" ${p.id === g.preset ? 'selected' : ''}>${_learnEsc(p.label)}</option>`).join('')}${(!(_adminCatalog.presets || []).length && g.preset) ? `<option value="${_learnEsc(g.preset)}" selected>${_learnEsc(g.preset)}</option>` : ''}</select></div>` : ''}
       <label class="aggregate-toggle" style="margin:6px 0 12px"><input type="checkbox" id="ge-show-pdf" ${g.show_on_pdf ? 'checked' : ''}><span class="agg-label">Print each member's rank and the group median on its report (once the group has 10 organizations)</span></label>
+      <label class="aggregate-toggle" style="margin:0 0 12px" title="Off: the group name still prints on each member's cover, but not its rank, the group size or the median"><input type="checkbox" id="ge-peer-rank" ${g.show_peer_rank !== false ? 'checked' : ''}><span class="agg-label">Peer-rank line on members' reports (rank of N · group median · cohort date)</span></label>
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:0 0 12px">
+        <label class="aggregate-toggle" style="margin:0 0 8px"><input type="checkbox" id="ge-attr-on" ${g.attribution && g.attribution.enabled ? 'checked' : ''}><span class="agg-label"><strong>Association attribution on members' reports</strong> — cover line, running footer, "Your Path Forward" with a tracked link and QR code</span></label>
+        <div class="fg"><label class="fl">Association display name</label><input id="ge-attr-assoc" class="fi" value="${_learnEsc((g.attribution && g.attribution.association) || g.name || '')}"></div>
+        <div class="fg"><label class="fl">Tracked URL <span style="color:var(--muted);font-weight:400">(per association, so leads are attributable; printed and encoded as a QR code)</span></label><input id="ge-attr-url" class="fi" value="${_learnEsc((g.attribution && g.attribution.tracked_url) || '')}" placeholder="https://www.rldatix.com/…?utm_campaign=orthoforum"></div>
+        <div class="fg"><label class="fl">Association logo URL <span style="color:var(--muted);font-weight:400">(optional, shown on the cover)</span></label><input id="ge-attr-logo" class="fi" value="${_learnEsc((g.attribution && g.attribution.logo_url) || '')}" placeholder="https://…/logo.png"></div>
+        <div class="fg"><label class="fl">Contact email</label><input id="ge-attr-email" class="fi" value="${_learnEsc((g.attribution && g.attribution.email) || 'pxgrowth@rldatix.com')}"></div>
+        <label class="aggregate-toggle" style="margin:0"><input type="checkbox" id="ge-attr-cover" ${!g.attribution || g.attribution.cover_line !== false ? 'checked' : ''}><span class="agg-label">Cover line: "Provided to [Association] members by the RLDatix Patient Experience &amp; Growth team"</span></label>
+      </div>
       <label class="aggregate-toggle" style="margin:0 0 12px" title="On the 1st of every month (02:00 Central): a Deep Diagnostic for every member, Competitor Rankings for each member's market, and the Trend report once an organization has 3 monthly data points — emailed (PDFs attached + secure link) to each organization's recipients, with a summary to the group's creator"><input type="checkbox" id="ge-monthly" ${g.monthly_reports ? 'checked' : ''}><span class="agg-label">Monthly reports on the 1st — Deep Diagnostic + Competitor Rankings + Trend, emailed to each organization's recipients</span></label>
       <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="groupSaveEdit('${g.id}')">Save</button><button class="btn btn-ghost" onclick="document.getElementById('group-edit').classList.add('hidden')">Cancel</button></div>
       <div id="ge-err" class="err hidden mt8"></div>
@@ -8597,7 +8609,14 @@ async function groupSaveEdit(id) {
   if (!name) { err.textContent = 'The group needs a name.'; err.classList.remove('hidden'); return; }
   const body = { name, description: document.getElementById('ge-desc').value.trim(), type_hint: document.getElementById('ge-type').value,
                  show_on_pdf: document.getElementById('ge-show-pdf').checked, default_specialty: document.getElementById('ge-spec').value.trim(),
-                 monthly_reports: !!document.getElementById('ge-monthly')?.checked };
+                 monthly_reports: !!document.getElementById('ge-monthly')?.checked,
+                 show_peer_rank: !!document.getElementById('ge-peer-rank')?.checked,
+                 attribution: { enabled: !!document.getElementById('ge-attr-on')?.checked,
+                                association: (document.getElementById('ge-attr-assoc')?.value || '').trim(),
+                                tracked_url: (document.getElementById('ge-attr-url')?.value || '').trim(),
+                                logo_url: (document.getElementById('ge-attr-logo')?.value || '').trim(),
+                                email: (document.getElementById('ge-attr-email')?.value || '').trim(),
+                                cover_line: !!document.getElementById('ge-attr-cover')?.checked } };
   const ps = document.getElementById('ge-preset'); if (ps) body.preset = ps.value || null;
   await _groupPut(id, body, 'Group updated'); openGroupPage(id);
 }
@@ -8610,6 +8629,11 @@ async function groupDelete(id, name, n) {
   } catch (e) { alert(e.message); }
 }
 async function groupRename(id, current) { const n = prompt('New name:', current); if (!n || !n.trim() || n.trim() === current) return; await _groupPut(id, { name: n.trim() }, 'Renamed'); openGroupPage(id); }
+async function groupFreezeCohort(id) {
+  const r = await api(`/api/groups/${id}/cohort/freeze`, { method: 'POST' });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); toast(d.detail || 'Could not freeze the cohort'); return; }
+  const c = await r.json(); toast(`Cohort frozen: ${c.n} organizations, median ${c.median}`); openGroupPage(id);
+}
 async function groupTogglePdf(id, on) { await _groupPut(id, { name: '', show_on_pdf: on }, on ? 'Benchmark will print on members\' reports' : 'Benchmark hidden on reports'); openGroupPage(id); }
 async function groupArchive(id) { if (!confirm('Archive this group? Its members keep their reports; the group disappears from pickers.')) return; await _groupPut(id, { name: '', archived: true }, 'Archived'); loadGroupsPage(); }
 async function groupRemoveRun(gid, runId) {

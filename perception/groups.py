@@ -46,9 +46,27 @@ def ensure_tables(con) -> None:
         con.execute("ALTER TABLE groups ADD COLUMN default_specialty VARCHAR")
     # Monthly reports on the 1st: Deep Diagnostic + Competitor Rankings + Trend for every member, emailed
     for c, d in (("monthly_reports", "BOOLEAN DEFAULT FALSE"), ("monthly_last_run_at", "TIMESTAMP"),
-                 ("monthly_last_status", "VARCHAR"), ("monthly_last_event_id", "VARCHAR")):
+                 ("monthly_last_status", "VARCHAR"), ("monthly_last_event_id", "VARCHAR"),
+                 ("show_peer_rank", "BOOLEAN DEFAULT TRUE"),      # 4.5: the rank-of-N / median line can be turned off per association
+                 ("attribution_json", "VARCHAR")):                # 4.6: association attribution (cover line, footer, tracked URL / QR)
         if c not in cols:
             con.execute(f"ALTER TABLE groups ADD COLUMN {c} {d}")
+    # 4.5: a frozen peer cohort per association distribution — members and scores snapshotted once,
+    # so every member's report in that distribution prints the same N, median and snapshot date.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS group_cohorts (
+            id            VARCHAR PRIMARY KEY,
+            group_id      VARCHAR NOT NULL,
+            event_id      VARCHAR,
+            taken_at      TIMESTAMP NOT NULL,
+            taken_by      VARCHAR,
+            n             INTEGER,
+            median        INTEGER,
+            q1            INTEGER,
+            q3            INTEGER,
+            members_json  VARCHAR
+        )
+    """)
     con.execute("""
         CREATE TABLE IF NOT EXISTS group_runs (
             group_id  VARCHAR NOT NULL,
@@ -64,7 +82,11 @@ def ensure_tables(con) -> None:
 
 
 _COLS = ["id", "name", "description", "type_hint", "preset", "show_on_pdf", "archived", "created_by", "created_at", "default_specialty",
-         "monthly_reports", "monthly_last_run_at", "monthly_last_status", "monthly_last_event_id"]
+         "monthly_reports", "monthly_last_run_at", "monthly_last_status", "monthly_last_event_id", "show_peer_rank", "attribution_json"]
+
+# 4.6 defaults: what an association's reports carry once attribution is switched on.
+ATTRIBUTION_DEFAULTS = {"enabled": False, "association": "", "team": "RLDatix Patient Experience & Growth",
+                        "email": "pxgrowth@rldatix.com", "cover_line": True, "logo_url": "", "tracked_url": ""}
 
 
 def _row(r) -> dict:
@@ -74,6 +96,15 @@ def _row(r) -> dict:
     d["archived"] = bool(d.get("archived"))
     d["monthly_reports"] = bool(d.get("monthly_reports"))
     d["monthly_last_run_at"] = str(d["monthly_last_run_at"])[:16] if d.get("monthly_last_run_at") else None
+    d["show_peer_rank"] = d.get("show_peer_rank") is not False
+    try:
+        a = json.loads(d.get("attribution_json") or "{}") or {}
+    except Exception:
+        a = {}
+    d["attribution"] = {**ATTRIBUTION_DEFAULTS, **{k: v for k, v in a.items() if k in ATTRIBUTION_DEFAULTS}}
+    if not d["attribution"]["association"]:
+        d["attribution"]["association"] = d.get("name") or ""
+    d.pop("attribution_json", None)
     return d
 
 
@@ -98,7 +129,11 @@ def get_group(group_id: str) -> Optional[dict]:
 
 def update_group(group_id: str, **fields) -> Optional[dict]:
     allowed = {"name", "description", "type_hint", "preset", "show_on_pdf", "archived", "default_specialty",
-               "monthly_reports", "monthly_last_run_at", "monthly_last_status", "monthly_last_event_id"}
+               "monthly_reports", "monthly_last_run_at", "monthly_last_status", "monthly_last_event_id",
+               "show_peer_rank", "attribution_json"}
+    if isinstance(fields.get("attribution"), dict):
+        a = {k: v for k, v in fields.pop("attribution").items() if k in ATTRIBUTION_DEFAULTS}
+        fields["attribution_json"] = json.dumps(a)
     sets, vals = [], []
     for k, v in fields.items():
         if k in allowed and v is not None:
@@ -432,17 +467,91 @@ def benchmark(group_id: str, run_id: Optional[str] = None, entity_name: Optional
     return out
 
 
+# ── 4.5 frozen cohort ────────────────────────────────────────────────────────
+
+def _member_key(name: str, location: str) -> str:
+    return f"{(name or '').strip().lower()}|{(location or '').strip().lower()}"
+
+
+def snapshot_cohort(group_id: str, taken_by: str = "", event_id: Optional[str] = None, ms: Optional[list] = None) -> Optional[dict]:
+    """Freeze the group's members and scores (one row per organization, latest run) so every
+    report in a distribution compares against the same cohort. Returns the stored snapshot."""
+    ms = ms if ms is not None else members(group_id)
+    rows = [{"run_id": m["run_id"], "entity_name": m["entity_name"], "location": m["location"], "score": m["score"]}
+            for m in ms if m.get("status") == "member" and m.get("score") is not None]
+    if not rows:
+        return None
+    scores = [r["score"] for r in rows]
+    q1 = q3 = None
+    if len(scores) >= 4:
+        qs = statistics.quantiles(scores, n=4)
+        q1, q3 = round(qs[0]), round(qs[2])
+    cid = uuid.uuid4().hex[:12]
+    con = get_connection()
+    con.execute("INSERT INTO group_cohorts (id, group_id, event_id, taken_at, taken_by, n, median, q1, q3, members_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [cid, group_id, event_id, datetime.utcnow(), taken_by or "", len(scores), round(statistics.median(scores)), q1, q3, json.dumps(rows)])
+    con.close()
+    return latest_cohort(group_id)
+
+
+_COHORT_COLS = ["id", "group_id", "event_id", "taken_at", "taken_by", "n", "median", "q1", "q3", "members_json"]
+
+
+def latest_cohort(group_id: str) -> Optional[dict]:
+    con = get_connection()
+    r = con.execute(f"SELECT {', '.join(_COHORT_COLS)} FROM group_cohorts WHERE group_id = ? ORDER BY taken_at DESC LIMIT 1", [group_id]).fetchone()
+    con.close()
+    if not r:
+        return None
+    d = dict(zip(_COHORT_COLS, r))
+    try:
+        d["members"] = json.loads(d.pop("members_json") or "[]")
+    except Exception:
+        d["members"] = []
+    d["taken_at"] = str(d["taken_at"])[:10] if d.get("taken_at") else None
+    return d
+
+
+def rank_in_cohort(cohort: dict, entity_name: str, location: str, score: Optional[int]) -> Optional[int]:
+    """This organization's rank against the frozen cohort: its own snapshot score is replaced by the
+    score being reported (so a re-run moves the member, not the cohort), an organization absent
+    from the snapshot is placed among the others. N and the median stay the snapshot's. Ties
+    share a rank."""
+    if score is None:
+        return None
+    key = _member_key(entity_name, location)
+    others = [m["score"] for m in (cohort.get("members") or []) if _member_key(m.get("entity_name"), m.get("location")) != key and m.get("score") is not None]
+    return 1 + sum(1 for s in others if s > score)
+
+
 def context_for_pdf(group_id: str, run_id: str, entity_name: str, location: str) -> Optional[dict]:
     """What the PDF prints: the group name always; rank-of-N and median once the group is ready
-    and the group allows it."""
+    and the group allows it — against the frozen cohort when one exists (4.5); the association's
+    attribution block when switched on (4.6)."""
     g = get_group(group_id)
     if not g or g.get("archived"):
         return None
     b = benchmark(group_id, run_id=run_id, entity_name=entity_name, location=location)
     ctx = {"group_id": g["id"], "group_name": g["name"], "members": b["members"], "ready": b["ready"] and bool(g.get("show_on_pdf")),
-           "prospect": bool(b.get("prospect"))}
-    if ctx["ready"]:
+           "prospect": bool(b.get("prospect")), "show_rank": bool(g.get("show_on_pdf")) and bool(g.get("show_peer_rank", True))}
+    cohort = None
+    try:
+        cohort = latest_cohort(group_id)
+    except Exception:
+        cohort = None
+    if cohort and cohort.get("n"):
+        ctx["ready"] = int(cohort["n"]) >= GROUP_MIN and bool(g.get("show_on_pdf"))
+        ctx["frozen"] = True
+        ctx["cohort_date"] = cohort.get("taken_at")
+        if ctx["ready"]:
+            ctx.update({"rank": rank_in_cohort(cohort, entity_name, location, b.get("score")), "total": int(cohort["n"]),
+                        "median": cohort.get("median"), "q1": cohort.get("q1"), "q3": cohort.get("q3")})
+    elif ctx["ready"]:
         ctx.update({"rank": b.get("rank"), "total": b.get("total"), "median": b.get("median"), "q1": b.get("q1"), "q3": b.get("q3")})
+    a = g.get("attribution") or {}
+    if a.get("enabled"):
+        ctx["attribution"] = dict(a)
     return ctx
 
 

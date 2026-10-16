@@ -374,7 +374,7 @@ def run_spotcheck(entity_name: str, city: str, state: str, specialty: Optional[s
     for r in results:
         for c in r.get("competitors") or []:
             comp[c] = comp.get(c, 0) + 1
-    top_comp = sorted(comp.items(), key=lambda kv: -kv[1])[:6]
+    top_comp = [(c["name"], c["count"]) for c in merge_competitors([{"name": n, "count": c} for n, c in comp.items()])][:6]
     domains: dict = {}
     for r in results:
         for u in r.get("citations") or []:
@@ -420,3 +420,44 @@ def summary_sentence(sc: dict) -> str:
     if sc.get("our_domain") is not None:
         parts.append("your website was " + ("cited" if sc.get("our_domain_cited") else "not cited"))
     return "; ".join(p for p in parts if p) + "."
+
+
+# ── 4.4 competitor name variants ──────────────────────────────────────────────
+_GENERIC_TOKENS = {"hospital", "medical", "center", "centre", "health", "healthcare", "system", "clinic", "clinics", "group",
+                   "orthopaedics", "orthopedics", "orthopaedic", "orthopedic", "ortho", "associates", "institute", "physicians",
+                   "pc", "pa", "llc", "inc", "md", "the", "of", "and", "&", "at", "campus", "regional", "specialists", "surgeons",
+                   "surgery", "care", "network", "partners"}
+
+
+def _comp_core(name: str) -> tuple[str, ...]:
+    toks = [t for t in re.findall(r"[a-z0-9]+", (name or "").lower()) if t not in _GENERIC_TOKENS]
+    return tuple(toks)
+
+
+def merge_competitors(items: list[dict]) -> list[dict]:
+    """'Campbell Clinic Orthopaedics (56)' + 'Campbell Clinic (33)' → 'Campbell Clinic Orthopaedics (89)':
+    variants whose distinctive words are the same, or one's are a subset of the other's, are one
+    competitor; the most-named spelling is shown with the combined count. Order: count desc."""
+    groups: list[dict] = []          # {"core": set, "names": {name: count}}
+    for it in sorted(items, key=lambda x: -int(x.get("count") or 0)):
+        name = str(it.get("name") or "").strip()
+        if not name:
+            continue
+        core = set(_comp_core(name))
+        if not core:
+            core = set(re.findall(r"[a-z0-9]+", name.lower()))
+        hit = None
+        for g in groups:
+            if core == g["core"] or (len(core) >= 1 and (core <= g["core"] or g["core"] <= core)):
+                hit = g
+                break
+        if hit is None:
+            groups.append({"core": core, "names": {name: int(it.get("count") or 0)}})
+        else:
+            hit["core"] |= core
+            hit["names"][name] = hit["names"].get(name, 0) + int(it.get("count") or 0)
+    out = []
+    for g in groups:
+        best = max(g["names"].items(), key=lambda kv: (kv[1], len(kv[0])))[0]
+        out.append({"name": best, "count": sum(g["names"].values()), "variants": sorted(n for n in g["names"] if n != best)})
+    return sorted(out, key=lambda x: -x["count"])
