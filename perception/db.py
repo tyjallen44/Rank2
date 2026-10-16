@@ -2683,7 +2683,7 @@ def get_recent_run(
              AND result_json IS NOT NULL
              {type_clause}
              {agg_clause}
-           ORDER BY generated_at DESC, run_id DESC
+           ORDER BY generated_at DESC, created_at DESC NULLS LAST, run_id DESC
            LIMIT 1""",
         params,
     ).fetchone()

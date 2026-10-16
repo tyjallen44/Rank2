@@ -4301,3 +4301,6 @@ Before: two stacked Deep Diagnostic score cards (each a third of the page wide, 
 | R1 | Regression | `tests/test_compare_pdf.py` (4); full suite unchanged otherwise. Deep Diagnostic / network / rankings PDFs untouched. |
 
 Later (Phase 4): a cohort-median tick on each paired bar once the association cohort snapshot exists.
+
+### FIX-CACHE-NEWEST — the shared run cache serves the newest same-day run (2026-10-15)
+Seen on the first live Compare Two after the rebuild: GCO / DMOS had two runs each on 2026-10-15 (Phase 1 re-run, Phase 2 re-run) and the comparison reused the older ones (66 / 74 instead of 75 / 79) because `get_recent_run` ordered by `generated_at` (a DATE) and then by run id. Now `created_at DESC` breaks same-day ties, for Compare Two, Deep Diagnostic, Rankings and groups alike. Acceptance: re-run the comparison → page 1 shows the newest Deep Diagnostic scores for both sides.
