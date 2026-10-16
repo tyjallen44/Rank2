@@ -2551,7 +2551,7 @@ def _comparison_summary_block(comparison) -> str:
     panels_html = ""
     if comparison.similarities or comparison.differences:
         panels_html = (
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px;page-break-inside:avoid">'
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px">'
             '<div style="background:#f0faf7;border-radius:6px;padding:14px 16px">'
             '<div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1a7a4a;margin-bottom:8px">Where They Are Similar</div>'
             f'<ul style="margin:0;padding-left:16px;font-size:9pt;line-height:1.7;color:#333">{sims}</ul>'
@@ -2563,9 +2563,9 @@ def _comparison_summary_block(comparison) -> str:
         )
     return (
         '<div style="margin-bottom:28px">'
-        # title + headline + panels move together; only the verdict may flow across pages
-        '<div style="page-break-inside:avoid">'
-        '<div class="section-title">Comparison Summary</div>'
+        # everything flows: the panels may split across a page so no page is left half empty
+        '<div>'
+        '<div class="section-title" style="page-break-after:avoid">Comparison Summary</div>'
         f'{headline_html}{panels_html}'
         '</div>'
         f'<div style="font-size:9pt;line-height:1.65;color:#333">{verdict_paras}</div>'
@@ -2574,7 +2574,7 @@ def _comparison_summary_block(comparison) -> str:
 
 
 def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
-                      include_disclaimer: bool = True, tag: str = "") -> str:
+                      include_disclaimer: bool = True, tag: str = "", new_page: bool = True) -> str:
     """Full individual-report content for one entity: card + assessment + improvement.
     `tag` ("A" / "B") prefixes the header inside a Compare Two report."""
     p = result.rankings[0] if result.rankings else None
@@ -2623,8 +2623,8 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
   </div>""" if include_disclaimer else ""
 
     return f"""
-  <div style="page-break-before:always">
-    <div class="section-title" style="font-size:13pt;margin-bottom:16px">
+  <div style="{'page-break-before:always' if new_page else 'margin-top:26px'}">
+    <div class="section-title" style="font-size:13pt;margin-bottom:16px;page-break-after:avoid">
       {(_e(tag) + " &middot; ") if tag else ""}{DEEP_DIVE_HEADER_TPL.format(name=name)}
     </div>
     {card_html}
@@ -2698,9 +2698,9 @@ def _build_comparison_html(
 
   <div style="margin-top:22px">{_comparison_summary_block(comparison)}</div>
 
-  {"" if teaser else _entity_deep_dive(result_a, include_roadmap=False, tag="A")}
+  {"" if teaser else _entity_deep_dive(result_a, include_roadmap=False, tag="A", new_page=False)}
 
-  {"" if teaser else _entity_deep_dive(result_b, include_roadmap=False, tag="B")}
+  {"" if teaser else _entity_deep_dive(result_b, include_roadmap=False, tag="B", new_page=False)}
 
   {"" if teaser else (_practice_appendix_html() if (result_a.entity_type == "practice" or result_b.entity_type == "practice") else _appendix_html())}
 

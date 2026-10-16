@@ -339,7 +339,7 @@ def ai_says_html(result_a: AnalysisResult, result_b: AnalysisResult, cfg: dict) 
         cols.append(f'<div style="background:{pale};border-left:3px solid {accent};padding:12px 14px;border-radius:4px">'
                     f'<div style="font-size:8pt;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:{primary};margin-bottom:6px">{tag} &middot; {_e(_name(r))}</div>'
                     f'<div style="font-size:9pt;color:#3a4a5a">{body}</div></div>')
-    return (f'<div style="margin-top:18px;page-break-inside:avoid">'
-            f'<div class="section-title" style="margin-bottom:4px">What AI Assistants Currently See</div>'
+    return (f'<div style="margin-top:18px">'
+            f'<div class="section-title" style="margin-bottom:4px;page-break-after:avoid">What AI Assistants Currently See</div>'
             f'<p style="font-size:8pt;color:{_GREY};margin:0 0 8px">From training memory and live retrieval &middot; Claude, ChatGPT, Gemini.</p>'
             f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">{"".join(cols)}</div></div>')
