@@ -4283,3 +4283,21 @@ Root cause (Ty's screenshot "could not save the comparison to History: NameError
 | T3 | Typeahead — name box | Deep Diagnostic, Compare Two A and B, Trends/Track, Patient Pulse, Hospital Network, home search: typing 2+ characters of an organization, its parent system, its city or its state code lists what the team already ran ("Already analyzed by your team"); pick fills the form (and auto-runs the search where it did before). |
 | T4 | Typeahead — city and state boxes (new) | Typing in the City box lists organizations the team ran in cities starting with that text ("Already analyzed by your team in this city"); typing a state code ("tn") in the State box lists that state's; picking fills name/city/state (and type / specialty) like a name pick. Fewer than 2 characters: nothing. Role scoping unchanged (association accounts see only their own). |
 | R1 | Regression | pytest 498 pass / same 15 pre-existing failures; `node --check` on the page's scripts passes. NEEDS BROWSER TESTING (T1, T3, T4). |
+
+## COMPARE-HEAD-TO-HEAD — Compare Two opening pages rebuilt as a real side-by-side (2026-10-15)
+
+Before: two stacked Deep Diagnostic score cards (each a third of the page wide, page 2 two-thirds blank), a narrative that spilled onto a near-empty page 4, and no page that put the two organizations next to each other. Now (`perception/compare_pdf.py`, wired in `pdf._build_comparison_html`): the detail pages are unchanged Deep Diagnostic blocks, and every figure on the opening pages is the same stored value those pages render. Both sides come from the shared calendar-month run cache (`get_recent_run`), so a Deep Diagnostic run this month is reused as-is.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Scoreboard (page 1, after the cover) | "Head-to-Head": two cards (name, city, website, Pulse Score /100, quartile chip, Evidence line as on the detail pages); then the four pillars as paired bars on one scale — A's bar grows left from the centre, B's right — with the number beside each and the gap in the middle ("B +13", "tie"); bar colours match the detail pages (`_score_bar_color`). Mixed hospital/practice pairs show both labels and a note that pillars are not compared. |
+| T2 | Gap to close | Below the bars, for every pillar where one side trails by ≥5: "<pillar> · <org> trails by N: <failed or partial verified check> — detail (CIK id)"; when no verified check feeds that pillar, the trailing side's own stated weakness that matches the pillar; nothing when neither exists. |
+| T3 | Head-to-Head Facts (page 2) | Table Measured / A / B / Leads: Evidence level, analyzed Google listing (rating, reviews, verified flag), all locations (review-weighted), locations confirmed, physicians on roster, NPI linkage (% or "not measurable"), board certification stated on pages read, named by assistants unprompted (N of 144), own website cited, the ten content checks (✓/◐/✗ + short detail), content checks passed; hospitals add Leapfrog grade, CMS stars, accreditations, U.S. News. "Leads" = better measured value, "—" when equal or not comparable; unmeasured cells read "Not established". |
+| T4 | What AI assistants currently see | Both organizations' headline + bullets in two columns on one block (same content as each detail page's panel). |
+| T5 | Comparison summary | Headline, similar / different panels and the verdict follow the AI views and flow — no forced page break, no near-empty page. |
+| T6 | Detail pages | Unchanged Deep Diagnostic blocks, headed "A · Deep Diagnostic — <name>" / "B · …". Appendix as before. |
+| T7 | Teaser | Cover + scoreboard + facts + AI views + summary only (3 pages); no detail pages, no appendix. |
+| T8 | Rendered locally | Practice pair (GCO vs DMOS, 14 pages), teaser (3 pages), hospital pair and mixed pair from stored production results — see commit. NEEDS BROWSER TESTING: run a Compare Two on production and download from History. |
+| R1 | Regression | `tests/test_compare_pdf.py` (4); full suite unchanged otherwise. Deep Diagnostic / network / rankings PDFs untouched. |
+
+Later (Phase 4): a cohort-median tick on each paired bar once the association cohort snapshot exists.

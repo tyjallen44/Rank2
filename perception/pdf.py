@@ -2574,8 +2574,9 @@ def _comparison_summary_block(comparison) -> str:
 
 
 def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
-                      include_disclaimer: bool = True) -> str:
-    """Full individual-report content for one entity: card + assessment + improvement."""
+                      include_disclaimer: bool = True, tag: str = "") -> str:
+    """Full individual-report content for one entity: card + assessment + improvement.
+    `tag` ("A" / "B") prefixes the header inside a Compare Two report."""
     p = result.rankings[0] if result.rankings else None
     name = _e(result.report_title or result.entity_name or result.location)
 
@@ -2624,7 +2625,7 @@ def _entity_deep_dive(result: AnalysisResult, include_roadmap: bool = True,
     return f"""
   <div style="page-break-before:always">
     <div class="section-title" style="font-size:13pt;margin-bottom:16px">
-      {DEEP_DIVE_HEADER_TPL.format(name=name)}
+      {(_e(tag) + " &middot; ") if tag else ""}{DEEP_DIVE_HEADER_TPL.format(name=name)}
     </div>
     {card_html}
     {assessment_html}
@@ -2660,6 +2661,11 @@ def _build_comparison_html(
     else:
         logo_tag = f'<img class="cover-logo" src="{logo_uri}" alt="RLDatix">' if logo_uri else ""
 
+    # Head-to-head pages (scoreboard with paired pillar bars + gap to close, measured facts
+    # table, 'What AI assistants see' side by side) come from compare_pdf; the detail pages
+    # below them are the Deep Diagnostic blocks, so every figure agrees page to page.
+    from . import compare_pdf as _cmp
+    _fa, _fb = _cmp._findings_for(result_a), _cmp._findings_for(result_b)
     # Reuse the base HTML/CSS from a minimal individual result (entity_a) then override content
     base_html = _build_html(result_a, brand_cfg, _legacy=True)
     # Extract everything up to and including <body>
@@ -2684,18 +2690,19 @@ def _build_comparison_html(
 
 <div class="content">
 
-  <div class="section-title" style="font-size:13pt;margin-bottom:20px">{SECTION_COMPARISON_OVERVIEWS}</div>
+  {_cmp.scoreboard_html(result_a, result_b, brand_cfg, _fa, _fb)}
 
-  {_comparison_overview_block(result_a, "Entity A", mixed_rubric_note=(result_a.entity_type != result_b.entity_type))}
-  {_comparison_overview_block(result_b, "Entity B", mixed_rubric_note=(result_a.entity_type != result_b.entity_type))}
+  {_cmp.facts_html(result_a, result_b, brand_cfg, _fa, _fb)}
 
-  {_comparison_summary_block(comparison)}
+  {_cmp.ai_says_html(result_a, result_b, brand_cfg)}
 
-  {_entity_deep_dive(result_a, include_roadmap=False)}
+  <div style="margin-top:22px">{_comparison_summary_block(comparison)}</div>
 
-  {_entity_deep_dive(result_b, include_roadmap=False)}
+  {"" if teaser else _entity_deep_dive(result_a, include_roadmap=False, tag="A")}
 
-  {_practice_appendix_html() if (result_a.entity_type == "practice" or result_b.entity_type == "practice") else _appendix_html()}
+  {"" if teaser else _entity_deep_dive(result_b, include_roadmap=False, tag="B")}
+
+  {"" if teaser else (_practice_appendix_html() if (result_a.entity_type == "practice" or result_b.entity_type == "practice") else _appendix_html())}
 
 </div>
 </body>
