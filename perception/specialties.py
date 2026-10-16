@@ -87,3 +87,56 @@ def normalize_specialty(text: str | None) -> str | None:
     if best:
         return best
     return " ".join(w if (w.isupper() and len(w) <= 5) else w.capitalize() for w in raw.split())
+
+
+# ── schema.org MedicalSpecialty (3.3) ─────────────────────────────────────────
+# The enumeration as published at https://schema.org/MedicalSpecialty (checked 2026-10-16).
+# There is no "Orthopedic" member: orthopaedics maps to Musculoskeletal, plus Surgical for a
+# surgical group. Drafted JSON-LD may only use values from this set.
+SCHEMA_MEDICAL_SPECIALTIES = frozenset({
+    "Anesthesia", "Audiology", "Cardiovascular", "CommunityHealth", "Dentistry", "Dermatology", "DietNutrition",
+    "Emergency", "Endocrine", "Gastroenterologic", "Genetic", "Geriatric", "Gynecologic", "Hematologic", "Infectious",
+    "LaboratoryScience", "Midwifery", "Musculoskeletal", "Neurologic", "Nursing", "Obstetric", "Oncologic",
+    "Ophthalmology", "Optometric", "Otolaryngologic", "Pathology", "Pediatric", "PharmacySpecialty", "Physiotherapy",
+    "PlasticSurgery", "Podiatric", "PrimaryCare", "Psychiatric", "PublicHealth", "Pulmonary", "Radiography", "Renal",
+    "RespiratoryTherapy", "Rheumatologic", "SpeechPathology", "Surgical", "Toxicologic", "Urologic",
+})
+
+# Pulse canonical specialty → schema.org values. (surgical: bool) — Surgical is added for a surgical group.
+_SCHEMA_MAP: dict[str, tuple[list[str], bool]] = {
+    "Orthopedics": (["Musculoskeletal"], False), "Sports Medicine": (["Musculoskeletal"], False),
+    "Spine": (["Musculoskeletal"], False), "Hand Surgery": (["Musculoskeletal", "Surgical"], True),
+    "Podiatry": (["Podiatric"], False), "Chiropractic": (["Musculoskeletal"], False),
+    "Cardiothoracic Surgery": (["Cardiovascular", "Surgical"], True), "Cardiology": (["Cardiovascular"], False),
+    "Vascular Surgery": (["Cardiovascular", "Surgical"], True), "Dermatology": (["Dermatology"], False),
+    "Family Medicine": (["PrimaryCare"], False), "Internal Medicine": (["PrimaryCare"], False),
+    "Primary Care": (["PrimaryCare"], False), "Student Health": (["PrimaryCare"], False), "Pediatrics": (["Pediatric"], False),
+    "Urology": (["Urologic"], False), "Radiation Oncology": (["Oncologic"], False), "Oncology": (["Oncologic"], False),
+    "Hematology": (["Hematologic"], False), "Psychiatry": (["Psychiatric"], False), "Behavioral Health": (["Psychiatric"], False),
+    "Neurosurgery": (["Neurologic", "Surgical"], True), "Neurology": (["Neurologic"], False),
+    "Gastroenterology": (["Gastroenterologic"], False), "Otolaryngology (ENT)": (["Otolaryngologic"], False),
+    "Ophthalmology": (["Ophthalmology"], False), "Optometry": (["Optometric"], False), "Fertility": (["Gynecologic"], False),
+    "Endocrinology": (["Endocrine"], False), "Rheumatology": (["Rheumatologic"], False), "Pulmonology": (["Pulmonary"], False),
+    "Plastic Surgery": (["PlasticSurgery"], True), "Physical Therapy": (["Physiotherapy"], False),
+    "Physical Medicine & Rehabilitation": (["Physiotherapy"], False), "Bariatric Surgery": (["Surgical"], True),
+    "General Surgery": (["Surgical"], True), "Nephrology": (["Renal"], False), "Dentistry": (["Dentistry"], False),
+    "Orthodontics": (["Dentistry"], False), "Oral & Maxillofacial Surgery": (["Dentistry", "Surgical"], True),
+    "Geriatrics": (["Geriatric"], False), "Infectious Disease": (["Infectious"], False), "Transplant": (["Surgical"], True),
+    "Radiology": (["Radiography"], False), "Obstetrics & Gynecology (OB/GYN)": (["Obstetric", "Gynecologic"], False),
+    "Audiology": (["Audiology"], False), "Anesthesiology": (["Anesthesia"], False), "Emergency Medicine": (["Emergency"], False),
+}
+
+
+def schema_specialties(specialty: str | None, surgical: bool = False) -> list[str]:
+    """Valid schema.org MedicalSpecialty values for a Pulse specialty, in order; [] when the
+    vocabulary has no fitting member (the draft then omits medicalSpecialty rather than invent one).
+    `surgical` adds Surgical for a surgical group (procedural weighting) when the specialty is not
+    surgical by definition."""
+    canon = normalize_specialty(specialty) or (specialty or "").strip()
+    vals, inherently = _SCHEMA_MAP.get(canon, ([], False))
+    out = list(vals)
+    if surgical and out and "Surgical" not in out and not inherently and canon in (
+            "Orthopedics", "Spine", "Sports Medicine", "Urology", "Otolaryngology (ENT)", "Ophthalmology",
+            "Obstetrics & Gynecology (OB/GYN)", "Gastroenterology", "Cardiology", "Podiatry", "Dentistry"):
+        out.append("Surgical")
+    return [v for v in out if v in SCHEMA_MEDICAL_SPECIALTIES]

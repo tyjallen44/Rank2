@@ -382,8 +382,9 @@ def render_practice_combined(result: AnalysisResult, findings, pdf_path,
         _emit(None)
         if not teaser:
             pm = _page_map(pdf_path, items, False) if items else {}
-            if pm:
-                _emit(pm)
+            _emit(pm or {})          # final pass: real page numbers, no marker text in the PDF
+        elif items:
+            _emit({})                # teaser: one real pass without markers
         browser.close()
 
 
@@ -564,7 +565,8 @@ def _assessment_body_html(text: str | None, footnote: bool = False, result=None)
         text = "• " + a["first_move"] + ("\n• " + (text or "").strip() if (text or "").strip() else "")
     if is_bullets(text):
         from .plain import prioritize_first_moves
-        items = prioritize_first_moves([ln.lstrip("• ").strip() for ln in (text or "").splitlines() if ln.strip()])[:5]
+        items = prioritize_first_moves([ln.lstrip("• ").strip() for ln in (text or "").splitlines() if ln.strip()],
+                                       getattr(result, "entity_type", None) if result is not None else None)[:5]
         if a and not any("crawler" in i.lower() and ("allow" in i.lower() or "robots" in i.lower()) for i in items):
             items = [a["first_move"]] + items
         if a:

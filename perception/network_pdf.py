@@ -211,10 +211,9 @@ def render_network_full_detail(result: NetworkResult, pdf_path: str, findings,
                      print_background=True, display_header_footer=True,
                      header_template="<span></span>", footer_template=_footer)
 
-        _emit(None)  # measurement pass
+        _emit(None)  # measurement pass (carries the page-locating markers)
         pm = _page_map(pdf_path, items, bool(service_line)) if items else {}
-        if pm:
-            _emit(pm)  # final pass with real page numbers
+        _emit(pm or {})  # final pass: real page numbers, no marker text in the PDF
         browser.close()
 
 

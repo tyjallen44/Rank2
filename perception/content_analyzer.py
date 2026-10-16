@@ -174,10 +174,13 @@ def _origin(url: str) -> str:
 
 
 def _norm_url(url: str) -> str:
+    """Scheme added when missing; tracking parameters, fragment and trailing slash dropped (3.4),
+    so the crawl, the 'Sources analyzed' line and every draft show the same clean address."""
     url = (url or "").strip()
     if not url:
         return ""
-    return url if "//" in url else "https://" + url
+    from .data.places import canonical_url
+    return canonical_url(url) or url
 
 
 # ── Website crawl ─────────────────────────────────────────────────────────────

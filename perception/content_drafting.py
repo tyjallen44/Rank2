@@ -53,6 +53,22 @@ _SYSTEM = (
     "[VERIFY: physician NPI] — never guess.\n"
     "3. NEVER fabricate citations or references of any kind. If a citation is needed (e.g. a "
     "Wikipedia edit), write [VERIFY: cite a published source] instead.\n"
+    "3a. NAMES: organization-level artifacts (Organization / MedicalOrganization schema, Wikidata, "
+    "Wikipedia, llms.txt, robots.txt) use the ORGANIZATION NAME from FACTS — never the analyzed Google "
+    "listing's name, which is one office. Location-level guidance (Google Business Profile fields, "
+    "per-location schema nodes) uses each location's OWN name and address from the LOCATIONS list; "
+    "never instruct renaming every profile to one location's name, and never copy the analyzed city "
+    "into another location's address.\n"
+    "3b. PRE-FILL: every value present in FACTS (addresses, phones, website, NPIs, bio URLs, Wikidata "
+    "QID) is written into the draft, not replaced by a placeholder. [VERIFY: ...] is only for values "
+    "FACTS does not contain. When PHYSICIANS are listed, Physician schema is one complete block per "
+    "listed physician (name, honorificSuffix from the credential, NPI as identifier, url = bio page, "
+    "worksFor = the organization) — not a single template. When LOCATIONS are listed, the organization "
+    "schema carries one node per location (name, address, telephone) — not one address with placeholders.\n"
+    "3c. medicalSpecialty may ONLY take the schema.org values FACTS lists as valid; if FACTS says there "
+    "is none, omit the property. 'Orthopedic' is not a schema.org value.\n"
+    "3d. Wikidata edits list only properties that have a value; never write a property with 'N/A', "
+    "'not applicable' or 'none'.\n"
     "4. Draft per the finding's remediation type:\n"
     "   - schema_markup: a complete, valid JSON-LD <script type=\"application/ld+json\"> block "
     "(MedicalOrganization, and Physician if a practice), populated from FACTS with placeholders "
@@ -170,25 +186,33 @@ def _draft_recursive(facts_lines: list, batch: list) -> dict:
 
 
 def draft_findings(entity_name: str, location: str, entity_kind: str,
-                   facts: dict, findings: list) -> dict:
+                   facts: dict, findings: list, result=None) -> dict:
     """Return {finding_id: draft_content} for the given findings. Never raises —
     a failed batch contributes nothing rather than aborting the whole run.
     Findings are drafted in batches of _BATCH_SIZE so large reports don't
-    truncate; see _draft_recursive for the split-on-truncation safety net."""
+    truncate; see _draft_recursive for the split-on-truncation safety net.
+
+    `result` (the stored AnalysisResult) supplies the verified facts the drafts are
+    pre-filled from — organization name, every confirmed location with address and
+    phone, every registry-verified physician with NPI and bio page, the valid
+    schema.org medicalSpecialty values (perception.draft_facts). Every draft is then
+    cleaned deterministically (specialty values, tracking parameters, N/A lines)."""
+    from .draft_facts import build_facts, facts_lines as _facts_lines, fix_draft
     draftable = [f for f in findings if (f.get("remediation_type") or "")
                  and f.get("status") != "not_assessed"]
     if not draftable:
         return {}
-
-    facts_lines = [f"- Entity name: {entity_name}", f"- Location: {location}",
-                   f"- Type: {'specialty practice' if entity_kind == 'practice' else 'hospital / health system'}"]
-    for k, label in [("website_urls", "Website URL(s)"), ("specialty", "Specialty"),
-                     ("wikidata_qid", "Wikidata QID"), ("wikipedia_article", "Wikipedia article")]:
-        v = facts.get(k)
-        if v:
-            facts_lines.append(f"- {label}: {v if not isinstance(v, list) else ', '.join(v)}")
+    full = build_facts(result, None, facts) if result is not None else dict(facts or {})
+    full.setdefault("organization", entity_name)
+    facts_lines = _facts_lines(entity_name, location, entity_kind, full)
 
     out = {}
     for i in range(0, len(draftable), _BATCH_SIZE):
         out.update(_draft_recursive(facts_lines, draftable[i:i + _BATCH_SIZE]))
+    kinds = {f.get("finding_id"): (f.get("remediation_type") or "") for f in draftable}
+    for fid, text in list(out.items()):
+        try:
+            out[fid] = fix_draft(text, full.get("schema_specialties") or [], kinds.get(fid, ""))
+        except Exception:
+            pass
     return out

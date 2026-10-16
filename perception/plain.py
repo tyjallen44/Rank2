@@ -31,7 +31,7 @@ PLAIN_TERMS = [
     ("linkage integrity / physician–practice linkage", "whether assistants connect your doctors to your organization"),
     ("NAP consistency", "the same name, address and phone everywhere"),
     ("canonical domain", "one official website address"),
-    ("Schema.org / structured data / JSON-LD / llms.txt / crawlable HTML", "machine-readable pages (leave this to the technical roadmap)"),
+    ("Schema.org / structured data / JSON-LD / llms.txt / crawlable HTML", "machine-readable pages — hand this to your web team; the code is drafted for them in the Content Analysis section of this report"),
     ("weighting profile (procedural / relationship)", "scored as a surgical hospital / scored as a primary-care organization"),
     ("footprint fragmentation", "clinic listings that contradict each other"),
     ("front-door rating", "main Google rating"),
@@ -51,7 +51,10 @@ _SYSTEM = (
     "- Never use these terms (say the plain version instead): "
     + "; ".join(f"'{a}' → '{b}'" for a, b in PLAIN_TERMS) + ".\n"
     "- Technical instructions (schema markup, llms.txt, sitemaps) belong in the roadmap that "
-    "follows, not in these sections — refer to them only as 'technical fixes for your web team'.\n"
+    "follows, not in these sections — refer to them as 'hand this to your web team; the code is "
+    "drafted in this report', never as 'leave this to the roadmap'.\n"
+    "- For a specialty practice, pursuing a Wikipedia article is never a first move (practices "
+    "almost never meet Wikipedia's notability bar); a Wikidata entry may be.\n"
     f"- overview: ONE paragraph, at most {OVERVIEW_WORDS} words: who the organization is, where, "
     "what kind of organization, and one sentence on the bottom line.\n"
     f"- verdict: at most {VERDICT_SENTENCES} sentences: the score out of 100 and its national "
@@ -96,15 +99,30 @@ _MOVE_ORDER = [
 ]
 
 
-def prioritize_first_moves(items: list[str]) -> list[str]:
-    """Stable sort of the first-moves bullets into the fixed priority order."""
+_WIKIPEDIA = re.compile(r"wikipedia", re.I)
+
+
+def drop_wikipedia_moves(items: list[str], entity_type: str | None, has_article: bool = False) -> list[str]:
+    """What to Do First never tells a practice to pursue a Wikipedia article (3.7): practices almost
+    never meet the notability bar, so the finding stays in the content section and the first moves
+    keep the actionable items. Hospitals keep the bullet (they are usually notable), and anyone
+    with an existing article keeps an 'update it' bullet."""
+    kind = (entity_type or "hospital")
+    if has_article or kind not in ("practice", "service_line"):
+        return list(items)
+    return [i for i in items if not _WIKIPEDIA.search(i or "")]
+
+
+def prioritize_first_moves(items: list[str], entity_type: str | None = None, has_article: bool = False) -> list[str]:
+    """Stable sort of the first-moves bullets into the fixed priority order (the Wikipedia bullet
+    dropped for practices)."""
     def rank(s: str) -> int:
         t = (s or "").lower()
         for i, kws in enumerate(_MOVE_ORDER):
             if any(k in t for k in kws):
                 return i
         return len(_MOVE_ORDER)
-    return sorted(items, key=rank)
+    return sorted(drop_wikipedia_moves(items, entity_type, has_article), key=rank)
 
 
 def bullets_to_text(items: list[str]) -> str:
@@ -146,7 +164,7 @@ def _fallback(result) -> None:
         result.top_recommendation = _sentence_bullets(result.top_recommendation)
     if is_bullets(result.top_recommendation):
         items = [ln.lstrip("• ").strip() for ln in result.top_recommendation.splitlines() if ln.strip()]
-        result.top_recommendation = bullets_to_text(prioritize_first_moves(items))
+        result.top_recommendation = bullets_to_text(prioritize_first_moves(items, getattr(result, "entity_type", None)))
 
 
 def measured_counts(result) -> dict:
@@ -299,7 +317,7 @@ def condense(result, *, only_assessment: bool = False, console=None) -> bool:
                 raise ValueError("empty rewrite")
             result.market_overview = _words(ov, OVERVIEW_WORDS + 15)
             result.ai_visibility_verdict = _sentences(vd, VERDICT_SENTENCES)
-        result.top_recommendation = bullets_to_text(prioritize_first_moves(moves[:BULLETS_MAX]))
+        result.top_recommendation = bullets_to_text(prioritize_first_moves(moves, getattr(result, "entity_type", None))[:BULLETS_MAX])
         if not only_assessment and p is not None:
             for key, attr in (("strengths", "key_strengths"), ("weaknesses", "notable_weaknesses")):
                 vals = [str(x).strip() for x in (data.get(key) or []) if str(x).strip()]

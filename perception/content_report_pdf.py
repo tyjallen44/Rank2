@@ -68,11 +68,20 @@ def _draft_label(f: dict) -> str:
     if rows:
         return "Recommended program — one template for all locations (swap [FACILITY]/[CITY] per location)"
     if f.get("remediation_type", "") in _PUBLISHABLE_REMEDIATION:
-        return "Drafted content (ready to publish)"
+        from .draft_facts import placeholder_count
+        n = placeholder_count(f.get("draft_content") or "")
+        if n > 3:
+            return f"Template — {n} [VERIFY] values to fill before publishing"
+        return "Drafted content (ready to publish)" if n == 0 else f"Drafted content — {n} [VERIFY] value{'s' if n != 1 else ''} to confirm, then publish"
     return "Recommended action plan (for your team to implement)"
 
 
-def _hidden_marker(token: str) -> str:
+def _hidden_marker(token: str, page_map=None) -> str:
+    """The page-locating marker exists only in the measurement pass (page_map is None). The final
+    render carries no marker text, so nothing like 'ZZCIK001ZZ' reaches the PDF text layer,
+    search, copy-paste or a screen reader (3.6)."""
+    if page_map is not None:
+        return ""
     return f'<span style="color:#fff;font-size:1px;line-height:0">{token}</span>'
 
 
@@ -211,10 +220,9 @@ def render_content_report_pdf(entity_name: str, location: str, findings, pdf_pat
                 ),
             )
 
-        _emit(None)  # measurement pass
+        _emit(None)  # measurement pass (carries the page-locating markers)
         pm = _page_map(pdf_path, items, bool(service_line)) if items else {}
-        if pm:
-            _emit(pm)  # final pass with real page numbers
+        _emit(pm or {})  # final pass: real page numbers, no marker text in the PDF
         browser.close()
 
 
@@ -262,10 +270,10 @@ def _finding_block(f: dict, page_map=None) -> str:
                       f'(<span class="fid">{_e(f.get("finding_id"))}</span> in <em>Ready-to-publish drafts &amp; action plans</em>).</div>')
     return f"""
     <div class="finding">
-      {_hidden_marker(_anchor_token(f.get("finding_id")))}
+      {_hidden_marker(_anchor_token(f.get("finding_id")), page_map)}
       <div class="fhead">
-        <span class="fid">{_e(f.get("finding_id"))}</span>
-        <span class="sev" style="background:{sc}">{_e(sev)}</span>
+        <span class="fid">{_e(f.get("finding_id"))}&nbsp;</span>
+        <span class="sev" style="background:{sc}">{_e(sev)}&nbsp;</span>
         <span class="plat">{_e(_PLATFORM.get(f.get("platform"), f.get("platform")))}</span>
         <span class="stat"><span style="color:{dot_c}">&#9679;</span> {dot_l}</span>
       </div>
@@ -302,7 +310,7 @@ def _sl_cell(v) -> str:
             f'border-bottom:1px solid #eef4f2;color:{_grade_color(v)}">{txt}</td>')
 
 
-def _service_line_section(summary, scorecards) -> str:
+def _service_line_section(summary, scorecards, page_map=None) -> str:
     """Report 2 'Service-Line Listing Management' section: summary box + scorecard table."""
     if not scorecards:
         return ""
@@ -325,7 +333,7 @@ def _service_line_section(summary, scorecards) -> str:
             f'{_sl_cell(dims.get("reputation"))}{_sl_cell(dims.get("content"))}</tr>')
 
     return f"""<div class="slwrap">
-      {_hidden_marker(_SL_ANCHOR)}
+      {_hidden_marker(_SL_ANCHOR, page_map)}
       <div class="slh">Service-Line Listing Management</div>
       <div class="slbox"><b>{summary.total_lines} service line{'s' if summary.total_lines != 1 else ''} analyzed</b> &mdash; {counts}{avg}.{note}{cross_html}</div>
       <table class="sltbl">
@@ -336,7 +344,7 @@ def _service_line_section(summary, scorecards) -> str:
     </div>"""
 
 
-def _drafts_section(items) -> str:
+def _drafts_section(items, page_map=None) -> str:
     """Appendix: every finding's drafted content / action plan in one continuous run, keyed by
     finding id. Long blocks flow across pages (only each entry's header is kept with its first
     lines) so no page is left mostly blank."""
@@ -347,15 +355,16 @@ def _drafts_section(items) -> str:
     for f in entries:
         sc = _SEV.get(f.get("severity", "low"), "#7a9095")
         blocks += (f'<div class="dentry">'
-                   f'<div class="dhead">{_hidden_marker(_anchor_token(str(f.get("finding_id")) + "DRAFT"))}'
-                   f'<span class="fid">{_e(f.get("finding_id"))}</span>'
-                   f'<span class="sev" style="background:{sc}">{_e(f.get("severity", "low"))}</span>'
+                   f'<div class="dhead">{_hidden_marker(_anchor_token(str(f.get("finding_id")) + "DRAFT"), page_map)}'
+                   f'<span class="fid">{_e(f.get("finding_id"))}&nbsp;</span>'
+                   f'<span class="sev" style="background:{sc}">{_e(f.get("severity", "low"))}&nbsp;</span>'
                    f'<span class="dtitle">{_e(f.get("teaser_summary"))}</span></div>'
                    f'<div class="lbl" style="margin-top:2px">{_e(_draft_label(f))}</div>'
                    f'<pre class="draft">{_e(f.get("draft_content"))}</pre></div>')
     return (f'<div class="drafts"><div class="dintro"><div class="dsec">Ready-to-publish drafts &amp; action plans</div>'
-            f'<div class="dlead">One entry per finding above, in the same order. Replace every [VERIFY: &hellip;] placeholder '
-            f'with a confirmed value before publishing.</div></div>{blocks}</div>')
+            f'<div class="dlead">One entry per finding above, in the same order. Verified values (addresses, phones, NPIs, bio pages) '
+            f'are already filled in; a [VERIFY: &hellip;] placeholder marks a value we could not verify — confirm it before publishing. '
+            f'Entries labelled Template still need several.</div></div>{blocks}</div>')
 
 
 def _contents_section(items, has_service_line: bool, page_map) -> str:
@@ -499,12 +508,13 @@ def _content_body_html(entity_name: str, location: str, findings, report_title: 
     if passed:
         summary += ('<div class="keep-doing" style="margin-top:6px;font-size:8.5pt"><strong>Verified OK — keep doing:</strong> '
                     + "; ".join(_esc(c.get("summary") or "") for c in passed[:4]) + "</div>")
-    urls = ", ".join(snap.get("website_urls", []) or []) or "&mdash;"
+    from .data.places import canonical_url as _canon
+    urls = ", ".join(_canon(u) or u for u in (snap.get("website_urls", []) or []) if u) or "&mdash;"   # no tracking parameters on display (3.4)
     pages = snap.get("pages_crawled", 0)
     sl_section = ""
     if service_line:
         _summary, _cards = service_line
-        sl_section = _service_line_section(_summary, _cards)
+        sl_section = _service_line_section(_summary, _cards, page_map)
     toc = _contents_section(items, bool(sl_section), page_map)
 
     return f"""
@@ -526,7 +536,7 @@ def _content_body_html(entity_name: str, location: str, findings, report_title: 
       {toc}
       {sl_section}
       <div class="wrap">{blocks}</div>
-      {_drafts_section(items)}
+      {_drafts_section(items, page_map)}
       <div class="method"><b>How to read this.</b> Findings are drawn from live checks of your website
         (schema.org structured data, llms.txt, AI-crawler access), Wikidata, and Wikipedia — not estimates.
         Status: <b>Verified</b> = confirmed by direct check; <b>Partial</b> = checked but needs human

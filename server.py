@@ -1532,7 +1532,7 @@ def _finalize_hospital_combined(result, entity_name: str, city: str, state: str,
                  "wikidata_qid": snap.get("wikidata_qid"),
                  "wikipedia_article": snap.get("wikipedia_article")}
         try:
-            drafts = draft_findings(entity_name, result.location, "hospital", facts, fdicts)
+            drafts = draft_findings(entity_name, result.location, "hospital", facts, fdicts, result=result)
         except Exception:
             drafts = {}
         for f in fdicts:
@@ -1784,7 +1784,7 @@ def _finalize_practice_combined(result, entity_name: str, city: str, state: str,
         facts = {"website_urls": snap.get("website_urls", []), "specialty": result.specialty,
                  "wikidata_qid": snap.get("wikidata_qid"), "wikipedia_article": snap.get("wikipedia_article")}
         try:
-            drafts = draft_findings(org_label, result.location, "practice", facts, fdicts)
+            drafts = draft_findings(org_label, result.location, "practice", facts, fdicts, result=result)
         except Exception:
             drafts = {}
         for f in fdicts:
@@ -2577,12 +2577,11 @@ async def start_analysis(req: AnalyzeRequest, payload: dict = Depends(get_curren
                 _jobs[job_id]["roster_from_graph"] = True
     _jobs[job_id]["practice_facts"] = req.practice_facts
     _jobs[job_id]["spotcheck"] = bool(req.spotcheck)
-    _jobs[job_id]["content_urls"] = [
-        (u.strip() if u.strip().lower().startswith(("http://", "https://")) else "https://" + u.strip())
-        for u in (req.content_urls or []) if (u or "").strip()]
+    from perception.data.places import canonical_url as _canon
+    _jobs[job_id]["content_urls"] = [_canon(u) for u in (req.content_urls or []) if (u or "").strip()]
     _w = (req.website or "").strip()
     if _w:
-        _w = _w if _w.lower().startswith(("http://", "https://")) else "https://" + _w
+        _w = _canon(_w)                      # tracking parameters never reach the crawl or the drafts (3.4)
         _jobs[job_id]["website"] = _w
         if not _jobs[job_id]["content_urls"]:
             _jobs[job_id]["content_urls"] = [_w]

@@ -558,6 +558,35 @@ def clean_website(url):
         return url
 
 
+_TRACKING_PARAMS = re.compile(r"^(utm_\w*|scct|fbclid|gclid|dclid|gbraid|wbraid|msclkid|mc_cid|mc_eid|yclid|igshid|ttclid|twclid|"
+                              r"li_fat_id|mkt_tok|trk|trkinfo|s_kwcid|srsltid|_ga|_gl|_hsenc|_hsmi|hsa_\w*|ref|ref_src|source|campaign)$", re.I)
+
+
+def canonical_url(url: str | None) -> str:
+    """The address as it should be crawled, displayed and drafted (3.4): scheme + lower-case host +
+    path, tracking query parameters dropped (UTM, scct, fbclid, gclid, …), other parameters kept,
+    no fragment, no trailing slash except on the root. '' for nothing; a value that is not a URL
+    is returned stripped."""
+    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    u = (url or "").strip()
+    if not u:
+        return ""
+    if "://" not in u:
+        u = "https://" + u
+    try:
+        s = urlsplit(u)
+    except Exception:
+        return (url or "").strip()
+    if not s.netloc:
+        return (url or "").strip()
+    host = s.netloc.lower()
+    path = re.sub(r"/{2,}", "/", s.path or "/")
+    if len(path) > 1:
+        path = path.rstrip("/")
+    keep = [(k, v) for k, v in parse_qsl(s.query, keep_blank_values=True) if not _TRACKING_PARAMS.match(k)]
+    return urlunsplit((s.scheme.lower() or "https", host, path, urlencode(keep, doseq=True), ""))
+
+
 def base_website(url):
     """The site address the user is asked to confirm: scheme + host only. Google listings
     (and spreadsheets) often point at a deep page or carry tracking parameters; the crawl and
