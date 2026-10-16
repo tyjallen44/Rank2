@@ -4307,3 +4307,19 @@ Seen on the first live Compare Two after the rebuild: GCO / DMOS had two runs ea
 
 ### COMPARE-HEAD-TO-HEAD follow-up — no blank space (2026-10-15, Ty: "let the panels split")
 The similar / different panels, the AI-views block and the first detail section all flow: nothing is kept whole, section titles stay with their first lines (`page-break-after:avoid`), and "A · Deep Diagnostic — …" starts right after the verdict instead of on a forced new page (B likewise after A). Acceptance: no page of a comparison ends more than a few lines early except the last page of the appendix.
+
+## MCP-ENDPOINT — PR #6 (tdavis009) merged: optional MCP endpoint, enabled on the next deploy with Pulse sign-in only (2026-10-16)
+
+`POST /mcp` (Streamable HTTP) with nine tools — find entity, content check, run report, get report, compare, network report, history, trend, content draft — mounted on the FastAPI app when `PULSE_MCP_ENABLED=1`. Merged with the flag set on the **web service** line of `deploy.sh` (`PULSE_MCP_ENABLED=1,PULSE_MCP_DAILY_CAP=20`); no OAuth variables, so only a Pulse account holder's own session token (Google SSO or email + password) is accepted — shared team-password tokens are refused. Design notes: `docs/mcp.md`. Nothing changes until the next `deploy`.
+
+| # | Test | Acceptance |
+|---|---|---|
+| T1 | Flag off (today's production) | Every existing route unchanged; `tests/test_mcp_mount.py` asserts no import and no route. |
+| T2 | After the next deploy | `GET /.well-known/oauth-protected-resource` answers; `POST /mcp` without a token → 401 with `WWW-Authenticate: Bearer realm="pulse"`; with a shared-password session token → 401 and the "sign in with your own account" message; with a Google-SSO / email+password token whose `users` row is active → tool list of nine. |
+| T3 | Own runs only | `pulse_history` / `pulse_get_report` / `pulse_trend` return only runs whose `ran_by` is the caller; another user's run id and a missing id give the same message. Market reports excluded. |
+| T4 | Access rules | `pulse_run_report` / `pulse_compare` / `pulse_network_report` refuse a report the account's preset or indicators exclude, with the browser's wording; cap: the 21st paid call in a UTC day is refused naming the caller's own limit. |
+| T5 | Runs land in Pulse | An MCP run shows in Admin → Operations and the caller's own jobs with `source=mcp`, in History attributed to the caller, with the same caches and post-run hooks as a browser run. PDF links carry a 10-minute session token. |
+| T6 | Doc ↔ deploy | `test_docs_quote_the_real_set_env_vars_line` pins `docs/mcp.md` to the web-service `--set-env-vars` line (the Cloud Run Job runner has its own line, not pinned). |
+| R1 | Regression | PR tests 209 pass (`.venv-mcp`, Python 3.11/3.12 with the `mcp` extra); they skip cleanly in an environment without the extra; full suite unchanged (same 15 pre-existing failures). Container is `python:3.11-slim`; the two packages are added to the image. NEEDS BROWSER TESTING (T2–T5 after the deploy, with the colleague's account). |
+
+Open with the author (asked on the PR): shared-scope reads so a colleague can read reports the team produced; a structured report-content tool (findings / narrative sections); a download token scoped to one PDF; persisting ad-hoc jobs so a long run survives Cloud Run's multiple instances.
