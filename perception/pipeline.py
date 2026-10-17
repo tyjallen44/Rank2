@@ -689,8 +689,9 @@ class PracticeAdapter(_Adapter):
             _ov = {}
             if pf.get("linkage_pct") is not None:
                 _ov["linkage"] = (ctx.linkage_integrity_pct, pf["linkage_pct"]); ctx.linkage_integrity_pct = pf["linkage_pct"]
-            # Certification statements: measured and shown in the report, but NOT applied to the ceiling
-            # until bio-page selection is proven on more practices (PULSE_CERT_OVERRIDE=1 enables it).
+            # Certification statements read from the bio pages govern the ceiling when PULSE_CERT_OVERRIDE=1
+            # (set on both Cloud Run env lines in deploy.sh since 2026-10-17, Ty's decision after three live
+            # re-runs showed the model's own flag flipping between runs); unset, the model's flag stands.
             if pf.get("board_cert_unverifiable") is not None and os.environ.get("PULSE_CERT_OVERRIDE") == "1":
                 _ov["cert"] = (ctx.board_cert_unverifiable, pf["board_cert_unverifiable"]); ctx.board_cert_unverifiable = pf["board_cert_unverifiable"]
             if _ov:

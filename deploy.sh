@@ -161,7 +161,7 @@ gcloud run deploy "$SERVICE" \
   --max-instances=10 \
   --session-affinity \
   --no-cpu-throttling \
-  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},RUN_JOBS_NAME=${WORKER_JOB},GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},PULSE_MCP_ENABLED=1,PULSE_MCP_DAILY_CAP=20" \
+  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},RUN_JOBS_NAME=${WORKER_JOB},GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},PULSE_MCP_ENABLED=1,PULSE_MCP_DAILY_CAP=20,PULSE_CERT_OVERRIDE=1" \
   --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest,DATABASE_URL=rank2-db-url:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest" \
   --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount="volume=rank2-data,mount-path=/data"
@@ -181,7 +181,7 @@ gcloud run jobs "$JOB_VERB" "$WORKER_JOB" \
   --task-timeout=24h \
   --command=python \
   --args=-m,perception.jobs \
-  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION}" \
+  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},PULSE_CERT_OVERRIDE=1" \
   --set-secrets="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,ACCESS_PASSWORD=ACCESS_PASSWORD:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest,DATABASE_URL=rank2-db-url:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest" \
   --add-volume="name=rank2-data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount="volume=rank2-data,mount-path=/data" || echo "WARNING: worker job deploy failed — uploads fall back to in-process threads"

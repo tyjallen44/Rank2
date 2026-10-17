@@ -47,7 +47,7 @@ The line, verbatim (the Cloud Run **Job** runner has its own `--set-env-vars` li
 few lines below it and does not need these variables):
 
 ```bash
-  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},RUN_JOBS_NAME=${WORKER_JOB},GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},PULSE_MCP_ENABLED=1,PULSE_MCP_DAILY_CAP=20" \
+  --set-env-vars="REPORTS_DIR=/data/reports,APP_URL=${APP_URL},RESEND_FROM_DOMAIN=${RESEND_FROM_DOMAIN},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},RUN_JOBS_NAME=${WORKER_JOB},GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},PULSE_MCP_ENABLED=1,PULSE_MCP_DAILY_CAP=20,PULSE_CERT_OVERRIDE=1" \
 ```
 
 `--set-env-vars` REPLACES the whole list, so a separate `--update-env-vars` call
