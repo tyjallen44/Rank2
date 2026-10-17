@@ -281,11 +281,14 @@ class _Fetcher:
         self.browser = None
         self.fetched = 0
 
-    def html(self, url: str, *, allow_browser: bool = True) -> Optional[str]:
+    def html(self, url: str, *, allow_browser: bool = True, kinds: tuple = ("text/html",)) -> Optional[str]:
+        """Body of a 200 whose content-type names one of `kinds` ("text/html" by default; a sitemap
+        asks for "xml" too — servers send sitemap.xml as application/xml or text/xml, never text/html)."""
         self.fetched += 1
         try:
             r = self.client.get(url)
-            if r.status_code == 200 and "text/html" in r.headers.get("content-type", ""):
+            ctype = r.headers.get("content-type", "")
+            if r.status_code == 200 and any(k in ctype for k in kinds):
                 return r.text
             blocked = r.status_code in (401, 403, 406, 429, 503)
         except Exception:

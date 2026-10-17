@@ -139,3 +139,22 @@ def test_sitemap_bio_slugs_under_find_a_provider_name_their_physician():
     assert pa and pa["credential"] == "PA-C" and is_physician_cred(pa["credential"]) is False
     assert _person_from_slug("https://www.dmos.com/find-a-provider") is None
     assert _person_from_slug("https://www.dmos.com/services/physical-therapy") is None
+
+
+def test_site_fetcher_returns_xml_only_when_asked():
+    """F9 never fired on production: sitemap.xml is served as application/xml and the site fetcher
+    only returned text/html bodies, so the sitemap read was always empty (DMOS: 100 bio pages, 0 found)."""
+    from perception.location_resolver import _Fetcher
+    from perception.physician_resolver import _sitemap_urls
+
+    class _R:
+        def __init__(self, ctype, text): self.status_code, self.headers, self.text = 200, {"content-type": ctype}, text
+    class _C:
+        def get(self, url):
+            return _R("application/xml; charset=utf-8", "<urlset><url><loc>https://www.dmos.com/find-a-provider/kara-buckingham-pa-c</loc></url>"
+                      "<url><loc>https://www.dmos.com/find-a-provider/jeffrey-davick-md</loc></url></urlset>") if url.endswith(".xml") else _R("text/html", "<html></html>")
+    f = _Fetcher.__new__(_Fetcher); f.client = _C(); f.fetched = 0; f.browser = None
+    assert f.html("https://www.dmos.com/sitemap.xml") is None                                  # default: html only
+    assert f.html("https://www.dmos.com/sitemap.xml", kinds=("text/html", "xml")).startswith("<urlset")
+    urls = _sitemap_urls(f.html, "https://www.dmos.com", "dmos.com")
+    assert len(urls) == 2 and urls[1].endswith("jeffrey-davick-md")

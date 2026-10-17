@@ -290,24 +290,27 @@ def _person_from_slug(url: str) -> Optional[dict]:
 def _sitemap_urls(fetch, origin: str, host: str, *, limit: int = 3000) -> list[str]:
     """URLs from /sitemap.xml (one level of sitemap index followed). Fail-soft, no browser."""
     out: list[str] = []
-    try:
-        xml = fetch(origin + "/sitemap.xml", allow_browser=False)
-    except TypeError:
-        xml = fetch(origin + "/sitemap.xml")
-    except Exception:
-        xml = None
+
+    def _get(u):
+        # The site fetcher only hands back text/html unless told otherwise; a sitemap is XML.
+        try:
+            return fetch(u, allow_browser=False, kinds=("text/html", "xml"))
+        except TypeError:
+            try:
+                return fetch(u)
+            except Exception:
+                return None
+        except Exception:
+            return None
+
+    xml = _get(origin + "/sitemap.xml")
     if not xml:
         return out
     locs = re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", xml, re.I)
     children = [u for u in locs if re.search(r"sitemap[^/]*\.xml$", u, re.I)][:12]
     pages = [u for u in locs if u not in children]
     for c in children:
-        try:
-            cx = fetch(c, allow_browser=False)
-        except TypeError:
-            cx = fetch(c)
-        except Exception:
-            cx = None
+        cx = _get(c)
         if cx:
             pages += re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", cx, re.I)
         if len(pages) > limit:
